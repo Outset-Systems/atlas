@@ -365,3 +365,23 @@ def test_status_does_not_name_the_realm(tmp_path):
     assert body["name"] == settings.APP_BRAND
     assert "the lab" not in body["name"], (
         "/api/status leaks the realm name to anonymous callers: %r" % body["name"])
+
+
+# ── first run: the demo is not an empty realm (W8) ──────────────────────────
+
+def test_the_page_says_when_it_is_showing_the_bundled_demo(tmp_path):
+    from appfixture import fresh_app
+    data = tmp_path / "lab-data.json"          # never written: an unseeded instance
+    demo = fresh_app(ATLAS_FALLBACK="bundled", ATLAS_DATA=str(data),
+                     ATLAS_REVISIONS=str(tmp_path / "rev"))
+    page = demo.app.test_client().get("/").get_data(as_text=True)
+    assert 'data-seeded="0"' in page and 'data-demo="1"' in page
+
+    empty = fresh_app(ATLAS_FALLBACK="empty", ATLAS_DATA=str(data),
+                      ATLAS_REVISIONS=str(tmp_path / "rev"))
+    assert 'data-demo="0"' in empty.app.test_client().get("/").get_data(as_text=True)
+
+    shutil.copy(BUNDLED, data)                 # seeded: the operator's own map
+    seeded = fresh_app(ATLAS_FALLBACK="bundled", ATLAS_DATA=str(data),
+                       ATLAS_REVISIONS=str(tmp_path / "rev"))
+    assert 'data-demo="0"' in seeded.app.test_client().get("/").get_data(as_text=True)

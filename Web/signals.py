@@ -120,6 +120,34 @@ class StaticFileAdapter(_Adapter):
         return _coerce_feed(raw)
 
 
+class DemoFeedAdapter(StaticFileAdapter):
+    """The bundled demo's own status feed, for a first look that moves.
+
+    Only `make_adapters` adds it: no source configured, ATLAS_FALLBACK=bundled,
+    and an image that ships `demo-signals.json` beside the code. It goes silent
+    the moment the instance is seeded with a real dataset, so a first save never
+    leaves the demo's states painted over someone's own map. Adapters are only
+    rebuilt when the settings file changes, hence the check on every fetch.
+    """
+
+    name = "demo"
+
+    def __init__(self, path, data_path):
+        super().__init__(path)
+        self.data_path = data_path
+
+    def _fetch(self):
+        if os.path.exists(self.data_path):
+            return {}
+        return super()._fetch()
+
+
+def demo_feed_path():
+    """The demo feed the public image bundles, or None (the private tree has none)."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "demo-signals.json")
+    return path if os.path.isfile(path) else None
+
+
 class KumaAdapter(_Adapter):
     """Uptime-Kuma metrics/status → node & service states.
 
@@ -549,7 +577,12 @@ def make_adapters():
     file first, ATLAS_SIGNALS_* env second). Empty = degraded (no live data)."""
     import integrations
     adapters = []
-    for name in integrations.enabled_sources():
+    names = integrations.enabled_sources()
+    if not names and settings.FALLBACK == "bundled" and settings.DATA_BACKEND == "file":
+        demo = demo_feed_path()
+        if demo:
+            adapters.append(DemoFeedAdapter(demo, settings.DATA_PATH))
+    for name in names:
         if name == "static":
             adapters.append(StaticFileAdapter(
                 os.environ.get("ATLAS_SIGNALS_FILE", "/data/signals.json")))

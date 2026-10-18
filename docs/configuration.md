@@ -51,7 +51,7 @@ beside `ATLAS_DATA` and rarely need changing.
 | `ATLAS_DATA_BACKEND` | `file` | `file` keeps the dataset as one JSON file. `db` keeps the same dataset in a SQL database through SQLAlchemy (needed for multiple sites and the relay ingest). | no | no |
 | `ATLAS_DB_URL` | `sqlite:////data/atlas.db` | SQLAlchemy URL for the `db` backend and for `cli.py`. A URL that carries a password is shown masked on the Settings screen. | treat as secret if it holds a password (no `_FILE` variant) | no |
 | `ATLAS_SITE` | `default` | Which site the `db` backend serves, and which site the `relay` signals source reads. | no | no |
-| `ATLAS_FALLBACK` | `empty` | What an instance with no dataset shows. `empty`: an empty map that invites you to start charting. `bundled`: the dataset baked into the image (the public image bundles an invented demo lab). The first save writes your own copy to `ATLAS_DATA`. | no | no |
+| `ATLAS_FALLBACK` | `empty` | What an instance with no dataset shows. `empty`: an empty map that invites you to start charting. `bundled`: the dataset baked into the image (the public image bundles an invented demo lab, plus a demo status feed that colours it while no source is configured and the instance is unseeded). The first save writes your own copy to `ATLAS_DATA` and silences the demo feed. | no | no |
 | `ATLAS_POSITIONS` | `<data dir>/positions.json` | Hand-placed marker positions, stored over the dataset. | no | no |
 | `ATLAS_RACK` | `<data dir>/rack.json` | Rack layout overlay. | no | no |
 | `ATLAS_REVISIONS` | `<data dir>/revisions` | Directory of dataset snapshots written on every change (the change log). | no | no |
@@ -162,7 +162,7 @@ misconfigured only removes its markers; the map still draws.
 
 | Variable | Default | What it does | Secret | Settings screen |
 |---|---|---|---|---|
-| `ATLAS_SIGNALS_SOURCES` | (empty) | Comma-separated list of live sources to poll: `prometheus`, `kuma`, `deception` (the decoy feed), `relay` (pushes stored by the ingest API, `db` backend), `static` (a JSON file). Empty means a static map. | no | yes (Sources) |
+| `ATLAS_SIGNALS_SOURCES` | (empty) | Comma-separated list of live sources to poll: `prometheus`, `kuma`, `deception` (the decoy feed), `relay` (pushes stored by the ingest API, `db` backend), `static` (a JSON file). Empty means a static map, except on the bundled demo (`ATLAS_FALLBACK=bundled`, not yet seeded), which reads the image's demo feed and reports it as the `demo` source. | no | yes (Sources) |
 | `ATLAS_SIGNALS_FILE` | `/data/signals.json` | The JSON file the `static` source reads. | no | no |
 | `ATLAS_PROM_URL` | (unset) | Prometheus base URL, for example `http://prometheus:9090`. Feeds host health markers, the card vitals and the built-in charts. | no | yes (Sources) |
 | `ATLAS_LOKI_URL` | (unset) | Loki base URL, for example `http://loki:3100`. Feeds the log-derived charts. | no | yes (Sources) |

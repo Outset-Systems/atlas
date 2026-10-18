@@ -105,7 +105,9 @@ The same tool lists, changes and removes accounts: `user-list`,
 
 **Want to look around first?** Set `ATLAS_FALLBACK=bundled` in `.env` and run
 `up -d` again. The map opens on an invented demo lab (`home.example`,
-`10.77.x.x`). The first change you save turns that demo into your own copy, so
+`10.77.x.x`), with live-looking health from a demo status feed in the image
+(used only while no other source is configured). The first change you save
+turns that demo into your own copy and silences the demo feed, so
 switch back to `empty` before you start charting your own lab, or delete the
 volume (see [Uninstall](#uninstall)) to start over.
 

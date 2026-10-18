@@ -82,13 +82,20 @@ function addSettingsEntry() {
   A.applySettingsFolds?.();   // pick up this section's stored/default fold
 }
 
-/** An unseeded Atlas has nothing to show, so it offers the way in instead. */
+/** An unseeded Atlas has nothing to show, so it offers the way in instead.
+    On the bundled demo there IS a map, so the invite names it and steps off
+    to a corner rather than covering the middle of it. */
 function offerFirstSurvey() {
   if (document.body.dataset.seeded === '1') return;
+  const demo = document.body.dataset.demo === '1';
   const invite = document.createElement('button');
   invite.id = 'first-survey';
-  invite.innerHTML = '<span class="fs-head">THIS REALM IS UNCHARTED</span>' +
-    '<span class="fs-sub">begin the first survey ›</span>';
+  if (demo) invite.classList.add('fs-demo');
+  invite.innerHTML = demo
+    ? '<span class="fs-head">YOU ARE LOOKING AT THE DEMO LAB</span>' +
+      '<span class="fs-sub">chart your own ›</span>'
+    : '<span class="fs-head">THIS REALM IS UNCHARTED</span>' +
+      '<span class="fs-sub">begin the first survey ›</span>';
   invite.addEventListener('click', () => openWizard());
   document.body.append(invite);
 }

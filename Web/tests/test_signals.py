@@ -185,7 +185,52 @@ def test_build_hub_from_env_static(tmp_path, monkeypatch):
 
 def test_build_hub_from_env_empty_is_no_sources(monkeypatch):
     monkeypatch.delenv("ATLAS_SIGNALS_SOURCES", raising=False)
+    monkeypatch.setattr(S, "demo_feed_path", lambda: None)
     assert S.build_hub_from_env().enabled == []
+
+
+# ── The bundled demo's own feed (first run) ──────────────────────────────────
+
+def _demo_setup(tmp_path, monkeypatch, fallback="bundled", backend="file"):
+    import settings
+    feed = tmp_path / "demo-signals.json"
+    feed.write_text(json.dumps({"nodes": {"app-host": {"state": "healthy"}}}), encoding="utf-8")
+    data = tmp_path / "lab-data.json"                 # not created: an unseeded instance
+    monkeypatch.delenv("ATLAS_SIGNALS_SOURCES", raising=False)
+    monkeypatch.setattr(S, "demo_feed_path", lambda: str(feed))
+    monkeypatch.setattr(settings, "FALLBACK", fallback)
+    monkeypatch.setattr(settings, "DATA_BACKEND", backend)
+    monkeypatch.setattr(settings, "DATA_PATH", str(data))
+    return data
+
+
+def test_bundled_demo_with_no_sources_reads_its_own_feed(tmp_path, monkeypatch):
+    _demo_setup(tmp_path, monkeypatch)
+    hub = S.build_hub_from_env()
+    assert hub.enabled == ["demo"]
+    feed = hub.feed()
+    assert feed["nodes"]["app-host"]["state"] == "healthy"
+    assert feed["sources"] == {"demo": "ok"}
+
+
+def test_demo_feed_goes_silent_once_the_instance_is_seeded(tmp_path, monkeypatch):
+    data = _demo_setup(tmp_path, monkeypatch)
+    hub = S.build_hub_from_env()
+    data.write_text("{}", encoding="utf-8")           # the first save writes the operator's own map
+    feed = hub.feed()
+    assert feed["nodes"] == {}
+    assert feed["sources"] == {"demo": "silent"}
+
+
+def test_no_demo_feed_for_an_empty_fallback_or_configured_sources(tmp_path, monkeypatch):
+    _demo_setup(tmp_path, monkeypatch, fallback="empty")
+    assert S.build_hub_from_env().enabled == []
+    _demo_setup(tmp_path, monkeypatch, backend="db")
+    assert S.build_hub_from_env().enabled == []
+    _demo_setup(tmp_path, monkeypatch)
+    monkeypatch.setenv("ATLAS_SIGNALS_SOURCES", "static")
+    monkeypatch.setenv("ATLAS_SIGNALS_FILE", str(tmp_path / "missing.json"))
+    assert S.build_hub_from_env().enabled == ["static"]   # an operator's choice wins
 
 
 def test_read_secret_prefers_env_then_file(tmp_path, monkeypatch):

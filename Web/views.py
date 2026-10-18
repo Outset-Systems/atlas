@@ -32,10 +32,14 @@ def index():
     never be shown a pencil that 403s when they press it.
     """
     title = _realm_title()
+    seeded = atlas().reader.seeded()
     return render_template(
         "index.html",
         editable=settings.writes_enabled() and is_admin(),
-        seeded=atlas().reader.seeded(),
+        seeded=seeded,
+        # an unseeded instance on ATLAS_FALLBACK=bundled is showing the demo,
+        # not an empty realm: the first-survey invite says so (first run, W8)
+        demo=not seeded and settings.FALLBACK == "bundled",
         client_config=settings.client_config(),
         map_image=_map_image(),
         realm_title=title,
