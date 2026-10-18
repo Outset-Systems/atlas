@@ -12,9 +12,11 @@ UNCHARTED_SLUG = "uncharted"
 # A zone imported from a flat device list is a *place*, not a VLAN — but the
 # dataset contract wants vlan/subnet present on every zone. Carry the repo's
 # own unknown-value idiom ("—", as used for absent IPs) in extra_json rather
-# than inventing a VLAN 0: the map label reads "vlan —", and an empty subnet
+# than inventing a VLAN 0: the map label reads "vlan — · —", and the dash
 # keeps the zone out of THE LEDGER's IPAM math instead of fabricating a /24.
-UNKNOWN_ZONE_FIELDS = {"vlan": "—", "subnet": ""}
+# The subnet was "" until 2026-10-18; a blank required field fails strict
+# validation, while "—" is the value the catalogue documents for "none".
+UNKNOWN_ZONE_FIELDS = {"vlan": "—", "subnet": "—"}
 
 
 def slugify(name):

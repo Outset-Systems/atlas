@@ -227,6 +227,49 @@ def test_a_device_list_becomes_drafts_never_a_write(client):
     assert before == after, "drafting must not write anything"
 
 
+def test_drafted_places_are_spread_under_their_realm_not_piled(client):
+    """Twenty scanned or listed devices used to all land at (50, 50). Drafts
+    now grid under their realm's label, after the places already there."""
+    rows = "".join(f"Box {i},10.8.8.{i + 10},physical,sky,,\n" for i in range(7))
+    body = client.post("/api/v2/admin/import/csv", headers=WRITE,
+                       json={"csv": "name,ip,kind,zone,role,url\n" + rows}).get_json()
+    spots = [(n["x"], n["y"]) for n in body["nodes"]]
+    assert len(set(spots)) == len(spots), "every draft gets its own spot"
+    assert all(0 <= x <= 100 and -40 <= y <= 140 for x, y in spots)
+
+    data = client.get("/api/v2/admin/dataset").get_json()["data"]
+    sky = next(z for z in data["zones"] if z["id"] == "sky")
+    residents = {(n["x"], n["y"]) for n in data["nodes"] if n.get("zone") == "sky"}
+    assert not residents & set(spots), "drafts never sit on a place already charted"
+    assert min(y for _, y in spots) >= sky["label_y"], "they start under the realm's label"
+    again = client.post("/api/v2/admin/import/csv", headers=WRITE,
+                        json={"csv": "name,ip,kind,zone,role,url\n" + rows}).get_json()
+    assert [(n["x"], n["y"]) for n in again["nodes"]] == spots, "stable for the same input"
+
+
+def test_place_drafts_handles_realms_without_a_label():
+    import discovery
+    data = {"zones": [{"id": "a"}], "nodes": []}
+    drafts = discovery.place_drafts(data, [{"zone": "a"}, {"zone": "a"}, {"zone": "nowhere"}])
+    assert len({(d["x"], d["y"]) for d in drafts}) == 3
+
+
+def test_survey_sorts_addresses_as_numbers():
+    import discovery
+    order = sorted(["10.0.0.10", "10.0.0.2", "not-an-ip", "10.0.0.1", "fe80::1"],
+                   key=discovery._address_order)
+    assert order == ["10.0.0.1", "10.0.0.2", "10.0.0.10", "fe80::1", "not-an-ip"]
+
+
+def test_a_scanned_device_charts_under_its_short_name():
+    import discovery
+    data = {"zones": [{"id": "main", "subnet": "10.0.0.0/24"}], "nodes": []}
+    nas = discovery.as_node({"ip": "10.0.0.20", "hostname": "nas.home.example"}, data)
+    assert nas["name"] == "NAS" and nas["id"] == "nas" and nas["zone"] == "main"
+    bare = discovery.as_node({"ip": "10.0.0.77"}, data)
+    assert bare["name"] == "10.0.0.77"
+
+
 def test_a_bad_device_list_reports_line_numbers(client):
     csv = "name,ip\nGood,10.0.0.1\nBad,not-an-ip\n"
     r = client.post("/api/v2/admin/import/csv", headers=WRITE, json={"csv": csv})

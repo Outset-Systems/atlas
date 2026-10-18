@@ -94,7 +94,7 @@ function offerFirstSurvey() {
   invite.innerHTML = demo
     ? '<span class="fs-head">YOU ARE LOOKING AT THE DEMO LAB</span>' +
       '<span class="fs-sub">chart your own ›</span>'
-    : '<span class="fs-head">THIS REALM IS UNCHARTED</span>' +
+    : '<span class="fs-head">THIS ATLAS IS UNCHARTED</span>' +
       '<span class="fs-sub">begin the first survey ›</span>';
   invite.addEventListener('click', () => openWizard());
   document.body.append(invite);

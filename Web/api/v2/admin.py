@@ -341,7 +341,7 @@ def discovery_as_nodes():
         node = discovery.as_node(row, data, taken)
         taken.add(node["id"])
         drafts.append(node)
-    return jsonify({"nodes": drafts})
+    return jsonify({"nodes": discovery.place_drafts(data, drafts)})
 
 
 # ── THE REPAIRS — maintenance windows ────────────────────────────────────────
@@ -437,7 +437,7 @@ def import_csv():
             node["links"] = [{"label": row["url_label"] or "Service", "url": row["url"]}]
         taken.add(node["id"])
         drafts.append(node)
-    return jsonify({"nodes": drafts, "count": len(drafts)})
+    return jsonify({"nodes": discovery.place_drafts(data, drafts), "count": len(drafts)})
 
 
 # ── The base render ──────────────────────────────────────────────────────────

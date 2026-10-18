@@ -1,13 +1,13 @@
-/* THE FIRST SURVEY — charting a realm from nothing.
+/* THE FIRST SURVEY — charting a lab from nothing.
 
    The Atlas has always assumed a dataset already existed, because the only
    one that ever mattered was hand-written over a week. For anyone else the
    first screen is an empty map with no way in, and "edit this 1200-line JSON
    file" is not an onboarding.
 
-   Four steps, each of which can be skipped: name the realm, add a segment,
-   then populate it — by hand, from a device list, or from a survey you
-   already ran. Everything after that is the Desk. */
+   Three steps, each of which can be skipped: name the atlas, add a realm (a
+   VLAN or segment, as the Desk calls it), then populate it — by hand, from a
+   device list, or from a survey you run. Everything after that is the Desk. */
 
 import { A, $, esc } from '../config.js';
 import Editor from './store.js';
@@ -17,7 +17,7 @@ import { openDesk, reviewCsv } from './panel.js';
 let root, bodyEl, stepEl;
 let step = 0;
 
-const STEPS = ['THE REALM', 'A FIRST SEGMENT', 'ITS PLACES'];
+const STEPS = ['THE ATLAS', 'A FIRST REALM', 'ITS PLACES'];
 
 function drawSteps() {
   stepEl.innerHTML = STEPS.map((label, i) =>
@@ -60,11 +60,11 @@ function laterNote(what) {
   bodyEl.append(el('p', 'wiz-blurb', `${what} — all in the Desk (E), whenever you want them.`));
 }
 
-/* ── 1. the realm ─────────────────────────────────────────────────────── */
+/* ── 1. the atlas ─────────────────────────────────────────────────────── */
 function stepRealm() {
   step = 0;
   drawSteps();
-  panel('Name your realm',
+  panel('Name your atlas',
     'This is the title on the map and in the Hub. It can change later, like everything ' +
     'else here.');
   const form = buildForm('meta', Editor.data?.meta || {}, { only: ['title'] });
@@ -80,12 +80,12 @@ function stepRealm() {
     }));
 }
 
-/* ── 2. a segment ─────────────────────────────────────────────────────── */
+/* ── 2. a realm ───────────────────────────────────────────────────────── */
 function stepZone() {
   step = 1;
   drawSteps();
   const existing = Editor.entries('zones');
-  panel('Add a segment',
+  panel('Add a realm',
     existing.length
       ? `You have ${existing.length} already. Add another, or move on.`
       : 'A realm is a VLAN or a network segment — every place belongs to one. ' +
@@ -143,8 +143,9 @@ function stepPlaces() {
     () => paste('csv')));
 
   choices.append(choice('◈', 'From a survey',
-    'Paste the output of <code>nmap -sn -oX -</code> run where you already have the ' +
-    'rights. The Atlas never probes the network itself — it reads what you hand it.',
+    `Run <code>${esc(scanCommand())}</code> on a machine in that network, where you ` +
+    'have the right to, and paste what it prints. The Atlas never probes the network ' +
+    'itself — it reads what you hand it.',
     () => paste('nmap')));
 
   bodyEl.append(choices);
@@ -160,17 +161,54 @@ function choice(glyph, title, blurb, onClick) {
   return card;
 }
 
+/** The survey command for the realms charted so far: a ping sweep of every
+    subnet they name, printed as the XML the Atlas reads. A realm with no
+    addressing (`—`) or a typo adds nothing; with none left, a placeholder. */
+function scanCommand() {
+  const nets = Editor.entries('zones')
+    .map((z) => String(z.subnet || '').trim())
+    .filter((s) => /^[0-9a-f.:]+\/\d{1,3}$/i.test(s));
+  return `nmap -sn -oX - ${nets.length ? [...new Set(nets)].join(' ') : '<your subnet, e.g. 192.168.1.0/24>'}`;
+}
+
+/** A command the reader copies: shown whole, selectable, with a copy button
+    (the clipboard API only exists on https and localhost, so it falls back
+    to selecting the text for Ctrl+C). */
+function commandRow(cmd) {
+  const row = el('div', 'wiz-cmd');
+  const box = el('input', 'dsk-input dsk-mono');
+  box.type = 'text';
+  box.readOnly = true;
+  box.value = cmd;
+  box.addEventListener('focus', () => box.select());
+  const copy = button('Copy', '', async () => {
+    try {
+      await navigator.clipboard.writeText(cmd);
+      copy.textContent = 'Copied';
+    } catch {
+      box.focus();
+      box.select();
+      copy.textContent = 'Press Ctrl+C';
+    }
+  });
+  row.append(box, copy);
+  return row;
+}
+
 function paste(kind) {
   const csv = kind === 'csv';
   panel(csv ? 'Paste your device list' : 'Paste your survey',
     csv
       ? 'The first line is the header. Only <code>name</code> is required.'
-      : 'The XML from <code>nmap -sn -oX - 10.0.0.0/24</code>. A ping sweep is enough.');
+      : 'Run this on a machine inside the network, then paste everything it prints. ' +
+        'A ping sweep is enough; run it with <code>sudo</code> and nmap also names each ' +
+        'device\'s maker, which helps tell them apart.');
+  if (!csv) bodyEl.append(commandRow(scanCommand()));
   const area = el('textarea', 'dsk-input dsk-area dsk-mono');
   area.rows = 12;
   area.placeholder = csv
     ? 'name,ip,kind,zone,role,url\nGATEWAY,10.0.0.1,network,main,the way in,http://10.0.0.1\n'
-    : '<?xml version="1.0"?><nmaprun …>';
+    : '<?xml version="1.0"?><nmaprun …>  (paste the whole output here)';
   bodyEl.append(area);
   bar(
     button('‹ Back', '', stepPlaces),

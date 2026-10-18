@@ -490,10 +490,32 @@ async function drawSurvey() {
   }
 
   const chosen = new Set();
+  const boxes = [];
   const table = el('table', 'dsk-table');
   table.innerHTML = '<thead><tr><th class="dsk-th-pick"></th><th>Address</th><th>Name</th>' +
     '<th>Vendor</th><th>Open ports</th><th>Realm</th><th>State</th><th class="dsk-th-act"></th>' +
     '</tr></thead>';
+  // a first survey is often dozens of strangers: one box takes them all
+  const all = el('input', 'dsk-check');
+  all.type = 'checkbox';
+  all.title = 'Choose every uncharted device';
+  all.setAttribute('aria-label', 'Choose every uncharted device');
+  table.querySelector('.dsk-th-pick').append(all);
+  const sync = () => {
+    chart.disabled = chosen.size === 0;
+    chart.textContent = chosen.size ? `Chart ${chosen.size} of these ›` : 'Chart the chosen ›';
+    const open = boxes.filter((b) => !b.box.disabled);
+    all.checked = open.length > 0 && open.every((b) => b.box.checked);
+    all.disabled = open.length === 0;
+  };
+  all.addEventListener('change', () => {
+    for (const { box, key } of boxes) {
+      if (box.disabled) continue;
+      box.checked = all.checked;
+      all.checked ? chosen.add(key) : chosen.delete(key);
+    }
+    sync();
+  });
   const tbody = el('tbody');
   for (const row of observed) {
     const tr = el('tr', row.ignored ? 'dsk-dim-row' : '');
@@ -501,10 +523,10 @@ async function drawSurvey() {
     const box = el('input', 'dsk-check');
     box.type = 'checkbox';
     box.disabled = !row.undocumented || row.ignored;
+    boxes.push({ box, key: row.key });
     box.addEventListener('change', () => {
       box.checked ? chosen.add(row.key) : chosen.delete(row.key);
-      chart.disabled = chosen.size === 0;
-      chart.textContent = chosen.size ? `Chart ${chosen.size} of these ›` : 'Chart the chosen ›';
+      sync();
     });
     pick.append(box);
     tr.append(pick);
@@ -533,10 +555,10 @@ async function drawSurvey() {
 
   const bar = el('div', 'dsk-formbar');
   const chart = el('button', 'dsk-btn dsk-btn-go', 'Chart the chosen ›');
-  chart.disabled = true;
   chart.addEventListener('click', () => draftReview([...chosen]));
   bar.append(chart);
   bodyEl.append(bar);
+  sync();
 }
 
 /** The review step: drafts are shown and corrected before anything is written. */

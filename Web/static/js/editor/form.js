@@ -161,6 +161,17 @@ function buildWidget(field, value) {
   node.spellcheck = false;
   node.value = value ?? '';
   if (field.placeholder) node.placeholder = field.placeholder;
+  if (type === 'scalar') {
+    // text *or* a number (a VLAN is `4` or `—`): a typed whole number goes back
+    // as a number, so saving a realm never turns the dataset's `4` into "4"
+    return {
+      node,
+      read: () => {
+        const raw = node.value.trim();
+        return /^-?\d+$/.test(raw) ? Number(raw) : raw;
+      },
+    };
+  }
   return { node, read: () => (typeof node.value === 'string' ? node.value.trim() : node.value) };
 }
 

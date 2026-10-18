@@ -199,7 +199,7 @@ SECTIONS = {
               help="VLAN id. Use `—` for a segment that isn't one."),
             f("subnet", "cidr", required=True,
               help="The realm's primary prefix, e.g. `10.0.20.0/24`. "
-                   "Leave blank for a segment with no addressing."),
+                   "Use `—` for a segment with no addressing."),
             f("hue", "color", required=True, help="The realm's colour, used everywhere."),
             f("net_hue", "color", label="Road colour",
               help="Optional separate colour for this realm's roads on the network layer."),
@@ -573,7 +573,7 @@ SECTIONS = {
         ]),
 
     "meta": section(
-        "meta", "realm setting", "realm settings", kind="object",
+        "meta", "atlas setting", "atlas settings", kind="object",
         id_field=None, title_field=None,
         lore="the surveyor's own notes",
         subtitle="Names and constants for the whole map.",

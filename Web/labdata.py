@@ -25,7 +25,7 @@ log = logging.getLogger("atlas.data.labdata")
 #: What an unseeded instance serves under ATLAS_FALLBACK=empty. Valid on
 #: purpose — it must pass validation, or a fresh install would open unhealthy.
 EMPTY_DATASET = {
-    "meta": {"title": "An uncharted realm"},
+    "meta": {"title": "An uncharted atlas"},
     "zones": [],
     "nodes": [],
     "routes": [],

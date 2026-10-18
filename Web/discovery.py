@@ -48,6 +48,14 @@ def slug_for(host, taken):
     return candidate
 
 
+def _is_address(text):
+    try:
+        ipaddress.ip_address(str(text))
+        return True
+    except ValueError:
+        return False
+
+
 def zone_for_ip(data, ip):
     """The realm whose subnet contains this address, or None.
 
@@ -192,8 +200,18 @@ def listing(data, backend=None, site=None):
         row["undocumented"] = row["matched_node"] is None
         row["ignored"] = row["key"] in ignored
         row["suggested_zone"] = zone_for_ip(data, row.get("ip"))
-    rows.sort(key=lambda r: (not r["undocumented"], r["ignored"], str(r.get("ip") or "")))
+    rows.sort(key=lambda r: (not r["undocumented"], r["ignored"], _address_order(r.get("ip"))))
     return rows
+
+
+def _address_order(ip):
+    """Sort addresses as numbers (10.0.0.2 before 10.0.0.10), v4 before v6;
+    anything that is not an address after them, as text."""
+    try:
+        addr = ipaddress.ip_address(str(ip))
+        return (0, addr.version, int(addr), "")
+    except ValueError:
+        return (1, 0, 0, str(ip or ""))
 
 
 def _listing_db(site_slug):
@@ -243,6 +261,52 @@ def forget(keys):
         return len(state["hosts"])
 
 
+#: Draft placement, matching store.layout's grid so both backends lay a survey
+#: out the same way: five across, 7% apart, starting just under the realm's
+#: label and below whatever already stands there.
+_GRID_COLS, _GRID_STEP = 5, 7.0
+_X_MIN, _X_MAX, _Y_MIN, _Y_MAX = 2.0, 98.0, -38.0, 138.0
+
+
+def place_drafts(data, drafts):
+    """Give each draft place a spot of its own near its realm's label.
+
+    `as_node` drafts all start at (50, 50); charting twenty scanned devices
+    used to stack them in one pile in the middle of the map. Each realm's
+    drafts are gridded under its label, after the places it already has, so
+    they arrive readable and in a stable order. Mutates and returns `drafts`.
+    """
+    def clamp(v, lo, hi):
+        return max(lo, min(hi, v))
+
+    def num(v):
+        return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+    # a labelled realm clusters under its label; an unlabelled one gets a band
+    # of its own down the table (store.layout's bands), and a realm the map
+    # has never heard of goes to the void below it, so no two groups share one
+    anchors, band = {}, 0
+    for z in data.get("zones", []) or []:
+        if num(z.get("label_x")) and num(z.get("label_y")):
+            anchors[z.get("id")] = (z["label_x"], z["label_y"] + 6.0)
+        else:
+            anchors[z.get("id")] = (50.0, 14.0 + 17.0 * band + 6.0)
+            band += 1
+    residents = {}
+    for n in data.get("nodes", []) or []:
+        residents[n.get("zone")] = residents.get(n.get("zone"), 0) + 1
+    slots = {}
+    for node in drafts:
+        zone = node.get("zone")
+        ax, ay = anchors.get(zone, (50.0, 120.0))
+        slot = residents.get(zone, 0) + slots.get(zone, 0)
+        slots[zone] = slots.get(zone, 0) + 1
+        col, row = slot % _GRID_COLS, slot // _GRID_COLS
+        node["x"] = round(clamp(ax + (col - (_GRID_COLS - 1) / 2) * _GRID_STEP, _X_MIN, _X_MAX), 1)
+        node["y"] = round(clamp(ay + row * _GRID_STEP, _Y_MIN, _Y_MAX), 1)
+    return drafts
+
+
 def as_node(host, data, taken=None):
     """Turn an observed device into a place, ready for an `insert` op.
 
@@ -257,9 +321,13 @@ def as_node(host, data, taken=None):
         zone = zones[0].get("id") if zones else "uncharted"
     ports = host.get("ports") or []
     port_note = ", ".join(str(p.get("port")) for p in ports[:6]) if ports else ""
+    # `nas.home.example` charts as NAS, as the db backend's importer has always
+    # done (importers.nmap._short); the full name stays in the survey list
+    hostname = host.get("hostname") or ""
+    short = hostname.split(".")[0] if hostname and not _is_address(hostname) else hostname
     return {
         "id": slug_for(host, taken),
-        "name": (host.get("hostname") or host.get("ip") or "UNKNOWN").upper(),
+        "name": (short or host.get("ip") or "UNKNOWN").upper(),
         "kind": "unknown",
         "zone": zone,
         "x": 50.0, "y": 50.0,
