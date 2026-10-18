@@ -256,7 +256,8 @@ SECTIONS = {
             f("kind", "select", options=NODE_KINDS, required=True, default="physical",
               help="physical = iron · vm = a guest · network = gear or the world beyond · "
                    "unknown = found by a scan, not yet classified."),
-            f("zone", "ref", ref="zones", required=True, help="Which realm it belongs to."),
+            f("zone", "ref", ref="zones", required=True, label="Realm",
+              help="Which realm it belongs to."),
             f("x", "percent", required=True, help="Map position, 0–100% across."),
             f("y", "percent", required=True,
               help="Map position, 0–100% down. Past 100 puts it in the void below."),
@@ -318,7 +319,8 @@ SECTIONS = {
             f("id", "slug", required=True, help="Short unique key, e.g. `admin-v4`."),
             f("cidr", "cidr", required=True, label="CIDR",
               help="Any prefix length, v4 or v6 — `10.0.20.0/24`, `10.0.0.0/8`, `fd00::/64`."),
-            f("zone", "ref", ref="zones", help="The realm this prefix serves, if one."),
+            f("zone", "ref", ref="zones", label="Realm",
+              help="The realm this prefix serves, if one."),
             f("name", "text", help="What it's for, e.g. `Admin VLAN`."),
             f("role", "select", options=PREFIX_ROLES, default="prefix",
               help="container = a supernet holding others · prefix = a real segment · "

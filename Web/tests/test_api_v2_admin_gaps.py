@@ -91,7 +91,10 @@ def test_discovery_scan_and_as_nodes_happy_path(client):
     assert keys, "the scan filed hosts"
     drafts = client.post(f"{ADMIN}/discovery/as-nodes", json={"keys": keys}).get_json()["nodes"]
     assert len(drafts) == len(keys)
-    assert all(d["kind"] == "unknown" for d in drafts), "a scan cannot say what a thing is"
+    # a scan cannot SAY what a thing is: a draft is unknown unless a clue
+    # suggests a kind, and then its role line says why and asks for a check
+    assert all(d["kind"] == "unknown" or ("looks like" in d["role"] and "check it" in d["role"])
+               for d in drafts), drafts
 
 
 def test_map_art_survey_happy_and_502(client, monkeypatch):

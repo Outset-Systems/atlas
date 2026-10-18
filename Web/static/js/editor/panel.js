@@ -447,6 +447,15 @@ async function drawChanges() {
 
 /* ── the discovery inbox ──────────────────────────────────────────────── */
 
+/** Where a newcomer's router keeps its leases. Shared with the first survey. */
+export const LEASE_HELP =
+  'Or your router\'s DHCP leases — the devices that asked it for an address, with the ' +
+  'names they gave themselves. Copy the file and paste it whole: ' +
+  '<code>/var/dhcpd/var/db/dhcpd.leases</code> on pfSense or OPNsense, ' +
+  '<code>kea-leases4.csv</code> where they run Kea, <code>/etc/pihole/dhcp.leases</code> ' +
+  'on Pi-hole, <code>/tmp/dhcp.leases</code> on OpenWrt, or on Windows Server ' +
+  '<code>Get-DhcpServerv4Lease -ScopeId 10.0.0.0 | ConvertTo-Csv</code>.';
+
 async function drawSurvey() {
   setHead(VIRTUAL.survey.label, VIRTUAL.survey.lore);
   bodyEl.innerHTML = '';
@@ -457,24 +466,27 @@ async function drawSurvey() {
 
   bodyEl.append(el('div', 'dsk-bar',
     `<span class="dsk-bar-sub">The Atlas never probes the network itself. Run a sweep ` +
-    `where you already have the rights, and hand it the result.</span>`));
+    `where you already have the rights, or copy your router's DHCP leases, and hand it ` +
+    `the result.</span>`));
 
   const paste = el('details', 'dsk-drop');
-  paste.innerHTML = `<summary>Bring in a survey (nmap XML)</summary>` +
-    `<p class="dsk-help">On a machine that can see the segment:<br>` +
-    `<code>nmap -sn -oX - 192.0.2.0/24</code><br>then paste the output below. ` +
-    `A ping sweep is enough — a port scan is not required and not advised on someone ` +
-    `else's network.</p>`;
+  paste.innerHTML = `<summary>Bring in a survey (nmap XML) or DHCP leases</summary>` +
+    `<p class="dsk-help">A sweep, on a machine that can see the segment:<br>` +
+    `<code>nmap -sn -oX - 192.0.2.0/24</code><br>A ping sweep is enough — a port scan is ` +
+    `not required and not advised on someone else's network.</p>` +
+    `<p class="dsk-help">${LEASE_HELP}</p>`;
   const area = el('textarea', 'dsk-input dsk-area dsk-mono');
   area.rows = 5;
-  area.placeholder = '<?xml version="1.0"?><nmaprun …>';
+  area.placeholder = '<?xml version="1.0"?><nmaprun …>   or a lease file';
   const go = el('button', 'dsk-btn dsk-btn-go', 'File this survey');
   go.addEventListener('click', async () => {
     if (!area.value.trim()) return;
     go.disabled = true;
     try {
-      const res = await Editor.scan(area.value);
-      A.showToast?.(`${res.seen} answered · ${res.new} new to the survey.`);
+      const res = await Editor.fileSurvey(area.value);
+      A.showToast?.(res.format
+        ? `${res.seen} ${res.format} leases · ${res.new} new to the survey.`
+        : `${res.seen} answered · ${res.new} new to the survey.`);
       area.value = '';
       show('survey');
     } catch (err) {
@@ -493,8 +505,8 @@ async function drawSurvey() {
   const boxes = [];
   const table = el('table', 'dsk-table');
   table.innerHTML = '<thead><tr><th class="dsk-th-pick"></th><th>Address</th><th>Name</th>' +
-    '<th>Vendor</th><th>Open ports</th><th>Realm</th><th>State</th><th class="dsk-th-act"></th>' +
-    '</tr></thead>';
+    '<th>Vendor</th><th>Open ports</th><th>Looks like</th><th>Realm</th><th>State</th>' +
+    '<th class="dsk-th-act"></th></tr></thead>';
   // a first survey is often dozens of strangers: one box takes them all
   const all = el('input', 'dsk-check');
   all.type = 'checkbox';
@@ -534,11 +546,18 @@ async function drawSurvey() {
     tr.append(el('td', '', esc(row.hostname || '—')));
     tr.append(el('td', '', esc(row.vendor || '—')));
     tr.append(el('td', '', esc((row.ports || []).map((p) => p.port).slice(0, 8).join(' ') || '—')));
+    // a suggestion, with its reason on hover; the draft says it again
+    const guess = row.suggestion;
+    const looks = el('td', '', guess
+      ? `${esc(guess.role)} <span class="dsk-dim">${esc(guess.kind)}</span>` : '—');
+    if (guess) looks.title = `A guess: ${guess.because}. Check it when you chart it.`;
+    tr.append(looks);
     tr.append(el('td', '', esc(row.suggested_zone || '—')));
+    const seenBy = row.source ? ` <span class="dsk-dim">· ${esc(row.source)}</span>` : '';
     tr.append(el('td', '', row.ignored
       ? '<span class="dsk-dim">silenced</span>'
       : row.undocumented
-        ? '<span class="dsk-warn">uncharted</span>'
+        ? `<span class="dsk-warn">uncharted</span>${seenBy}`
         : `<span class="dsk-ok">charted as ${esc(row.matched_node)}</span>`));
     const act = el('td', 'dsk-td-act');
     act.append(iconBtn(row.ignored ? '👁' : '🚫',
@@ -565,8 +584,9 @@ async function drawSurvey() {
 async function draftReview(keys) {
   const { nodes } = await Editor.draftsFrom(keys);
   drawDrafts(nodes, `${nodes.length} place${nodes.length === 1 ? '' : 's'} from the survey`,
-    'They land as <code>unknown</code> — a survey can say a thing answered, not what it is. ' +
-    'Give them names and realms now, or later.');
+    'A survey can say a thing answered, not what it is: each lands as <code>unknown</code> ' +
+    'unless its maker or its own name suggests a type, and then its role line says why. ' +
+    'Check those, give them names and realms now, or later.');
 }
 
 function drawDrafts(nodes, headline, caveat) {

@@ -23,9 +23,12 @@ colours it with live health from Prometheus, Loki and Uptime Kuma.
   elevations in 2D and 3D, the network path from the internet inwards,
   certificate expiry, a calendar of scheduled jobs that notices when one did
   not run, and an event history.
-- **Edit in the browser.** A guided first setup, forms for every field, CSV
-  import, and NetBox and nmap importers on the command line. Every change is
-  validated, recorded and can be undone.
+- **Edit in the browser.** A guided first setup and forms for every field.
+  Fill the map from a CSV device list, an nmap sweep or your router's DHCP
+  leases (ISC, dnsmasq, Kea, Windows Server); each device arrives with a
+  suggested type from its maker or its name, for you to check. The Atlas never
+  scans the network itself. NetBox and nmap importers on the command line too.
+  Every change is validated, recorded and can be undone.
 - **Real sign-in.** Local accounts with TOTP, optional LDAPS directory
   sign-in, or single sign-on behind a reverse proxy that signs each request.
   Places can be hidden from viewers outside a group.

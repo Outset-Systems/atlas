@@ -303,6 +303,30 @@ def discovery_scan():
     return jsonify({"ok": True, "seen": len(hosts), "new": new})
 
 
+@admin_bp.route("/discovery/leases", methods=["POST"])
+def discovery_leases():
+    """A router's DHCP lease file, filed into the same survey as a scan: the
+    devices that asked for an address, with the names they gave themselves.
+    Read from what the operator hands over, never fetched from the router."""
+    refusal = write_refusal()
+    if refusal:
+        return refusal
+    body = request.get_json(silent=True) or {}
+    text = body.get("leases") or ""
+    if not isinstance(text, str) or not text.strip():
+        return jsonify({"error": "send {leases: '<the lease file>'}"}), 400
+    if len(text) > 4_000_000:
+        return jsonify({"error": "that lease file is too large (max 4 MB)"}), 413
+    from importers.leases import LeaseError, parse_leases
+    try:
+        fmt, hosts = parse_leases(text)
+    except LeaseError as e:
+        return jsonify({"error": str(e)}), 422
+    new = discovery.record(hosts, atlas().backend, atlas().site)
+    log.info("v2 discovery: %d %s leases filed (%d new) by %s", len(hosts), fmt, new, actor())
+    return jsonify({"ok": True, "format": fmt, "seen": len(hosts), "new": new})
+
+
 @admin_bp.route("/discovery/decide", methods=["POST"])
 def discovery_decide():
     refusal = write_refusal()

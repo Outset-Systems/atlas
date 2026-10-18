@@ -194,7 +194,7 @@ def test_a_survey_files_hosts_and_flags_the_uncharted(client):
 
     drafts = client.post("/api/v2/admin/discovery/as-nodes", headers=WRITE,
                          json={"keys": ["10.9.9.9"]}).get_json()["nodes"]
-    assert drafts[0]["kind"] == "unknown", "a scan cannot say what a thing is"
+    assert drafts[0]["kind"] == "unknown", "nothing about this stranger suggests a kind"
     assert drafts[0]["id"] == "stranger"
 
 

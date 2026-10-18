@@ -199,6 +199,10 @@ export const Editor = {
 
   discovery() { return call('discovery'); },
   scan(nmapXml) { return post('discovery/scan', { nmap_xml: nmapXml }); },
+  leases(text) { return post('discovery/leases', { leases: text }); },
+  /** nmap XML or a DHCP lease file, told apart by the first character: XML
+      opens with `<`, no lease format does. */
+  fileSurvey(text) { return text.trimStart().startsWith('<') ? this.scan(text) : this.leases(text); },
   decide(keys, action) { return post('discovery/decide', { keys, action }); },
   draftsFrom(keys) { return post('discovery/as-nodes', { keys }); },
   importCsv(csv) { return post('import/csv', { csv }); },

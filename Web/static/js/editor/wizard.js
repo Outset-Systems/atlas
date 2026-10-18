@@ -12,7 +12,7 @@
 import { A, $, esc } from '../config.js';
 import Editor from './store.js';
 import { buildForm, makeEl as el } from './form.js';
-import { openDesk, reviewCsv } from './panel.js';
+import { openDesk, reviewCsv, LEASE_HELP } from './panel.js';
 
 let root, bodyEl, stepEl;
 let step = 0;
@@ -120,7 +120,7 @@ function stepPlaces() {
   step = 2;
   drawSteps();
   panel('Chart its places',
-    'Three ways in. None of them is permanent — anything charted can be renamed, ' +
+    'Four ways in. None of them is permanent — anything charted can be renamed, ' +
     'moved or removed from the Desk afterwards.');
 
   const zones = Editor.entries('zones');
@@ -147,6 +147,11 @@ function stepPlaces() {
     'have the right to, and paste what it prints. The Atlas never probes the network ' +
     'itself — it reads what you hand it.',
     () => paste('nmap')));
+
+  choices.append(choice('⇄', 'From your router',
+    'Paste its DHCP lease file: every device that asked it for an address, with the name ' +
+    'it gave itself. No scan at all, and usually the best names.',
+    () => paste('leases')));
 
   bodyEl.append(choices);
   bar(button('‹ Back', '', stepZone), button('I will do this later', '', close));
@@ -197,18 +202,23 @@ function commandRow(cmd) {
 
 function paste(kind) {
   const csv = kind === 'csv';
-  panel(csv ? 'Paste your device list' : 'Paste your survey',
+  const leases = kind === 'leases';
+  panel(csv ? 'Paste your device list' : leases ? 'Paste your router\'s leases' : 'Paste your survey',
     csv
       ? 'The first line is the header. Only <code>name</code> is required.'
-      : 'Run this on a machine inside the network, then paste everything it prints. ' +
-        'A ping sweep is enough; run it with <code>sudo</code> and nmap also names each ' +
-        'device\'s maker, which helps tell them apart.');
-  if (!csv) bodyEl.append(commandRow(scanCommand()));
+      : leases
+        ? LEASE_HELP.replace(/^Or your/, 'Your')
+        : 'Run this on a machine inside the network, then paste everything it prints. ' +
+          'A ping sweep is enough; run it with <code>sudo</code> and nmap also names each ' +
+          'device\'s maker, which helps tell them apart.');
+  if (kind === 'nmap') bodyEl.append(commandRow(scanCommand()));
   const area = el('textarea', 'dsk-input dsk-area dsk-mono');
   area.rows = 12;
   area.placeholder = csv
     ? 'name,ip,kind,zone,role,url\nGATEWAY,10.0.0.1,network,main,the way in,http://10.0.0.1\n'
-    : '<?xml version="1.0"?><nmaprun …>  (paste the whole output here)';
+    : leases
+      ? 'lease 10.0.0.20 { … }   or   1792400000 aa:bb:cc:dd:ee:ff 10.0.0.20 nas *'
+      : '<?xml version="1.0"?><nmaprun …>  (paste the whole output here)';
   bodyEl.append(area);
   bar(
     button('‹ Back', '', stepPlaces),
@@ -219,9 +229,11 @@ function paste(kind) {
           close();
           await reviewCsv(area.value);
         } else {
-          const res = await Editor.scan(area.value);
+          const res = leases ? await Editor.leases(area.value) : await Editor.scan(area.value);
           close();
-          A.showToast?.(`${res.seen} answered — review them in THE SURVEY.`);
+          A.showToast?.(leases
+            ? `${res.seen} devices from ${res.format} leases — review them in THE SURVEY.`
+            : `${res.seen} answered — review them in THE SURVEY.`);
           await openDesk('survey');
         }
       } catch (err) { fail(err); }

@@ -121,13 +121,26 @@ def _merge_hosts(state, hosts):
             continue
         existing = state["hosts"].get(key)
         if existing:
-            existing.update({k: v for k, v in host.items() if v is not None})
+            incoming = {k: v for k, v in host.items() if v is not None}
+            if incoming.get("source") == "dhcp":
+                # a lease adds what a scan could not see (the MAC, the name the
+                # device gave itself) and never overwrites what one found
+                incoming = {k: v for k, v in incoming.items()
+                            if k in ("ip", "source") or not existing.get(k)}
+            incoming["source"] = _sources(existing.get("source"), host.get("source"))
+            existing.update(incoming)
             existing["last_seen"] = _now()
         else:
             state["hosts"][key] = {**host, "first_seen": _now(), "last_seen": _now(),
                                    "source": host.get("source") or "nmap"}
             new += 1
     return new
+
+
+def _sources(had, new):
+    """Every source that has seen a device, e.g. "nmap, dhcp"."""
+    names = [s.strip() for s in f"{had or ''},{new or 'nmap'}".split(",") if s.strip()]
+    return ", ".join(dict.fromkeys(names))
 
 
 def _record_db(hosts, site_slug):
@@ -155,8 +168,22 @@ def _record_db(hosts, site_slug):
                                    source=host.get("source") or "nmap")
                 session.add(row)
                 new += 1
-            row.hostname = host.get("hostname") or row.hostname
-            row.raw_json = {"vendor": host.get("vendor"), "ports": host.get("ports") or []}
+            else:
+                row.source = _sources(row.source, host.get("source"))
+            # merge, as the file store does: a lease carries no vendor or ports,
+            # and must not erase what a scan of the same device found
+            raw = dict(row.raw_json or {})
+            if host.get("vendor"):
+                raw["vendor"] = host["vendor"]
+            if "ports" in host:
+                raw["ports"] = host.get("ports") or []
+            raw.setdefault("ports", [])
+            raw.setdefault("vendor", None)
+            if host.get("source") == "dhcp":
+                row.hostname = row.hostname or host.get("hostname")
+            else:
+                row.hostname = host.get("hostname") or row.hostname
+            row.raw_json = raw
             row.last_seen = now
     return new
 
@@ -195,11 +222,15 @@ def listing(data, backend=None, site=None):
                 "last_seen": host.get("last_seen"),
             })
 
+    import suggest
     for row in rows:
         row["matched_node"] = charted.get(row.get("ip"))
         row["undocumented"] = row["matched_node"] is None
         row["ignored"] = row["key"] in ignored
         row["suggested_zone"] = zone_for_ip(data, row.get("ip"))
+        # a lease names no maker, but a hypervisor's virtual NIC is its own
+        row["vendor"] = row.get("vendor") or suggest.virtual_vendor(row.get("mac"))
+        row["suggestion"] = suggest.suggest(row)
     rows.sort(key=lambda r: (not r["undocumented"], r["ignored"], _address_order(r.get("ip"))))
     return rows
 
@@ -310,10 +341,12 @@ def place_drafts(data, drafts):
 def as_node(host, data, taken=None):
     """Turn an observed device into a place, ready for an `insert` op.
 
-    `kind` is deliberately `unknown` rather than a guess: promoting a scanned
-    device as "physical" would be a claim the scan cannot support, and the map
-    already renders unknown as a plain circle marker.
+    `kind` is `unknown` unless its maker, its own name or its virtual NIC
+    gives it away (suggest.py), and then the draft says so in its role line:
+    a suggestion the human sees and corrects before anything is written, not a
+    claim the scan cannot support. The map renders unknown as a plain circle.
     """
+    import suggest
     taken = taken if taken is not None else {n.get("id") for n in data.get("nodes", []) or []}
     zone = zone_for_ip(data, host.get("ip"))
     if not zone:
@@ -325,15 +358,18 @@ def as_node(host, data, taken=None):
     # done (importers.nmap._short); the full name stays in the survey list
     hostname = host.get("hostname") or ""
     short = hostname.split(".")[0] if hostname and not _is_address(hostname) else hostname
+    vendor = host.get("vendor") or suggest.virtual_vendor(host.get("mac"))
+    guess = host.get("suggestion") if "suggestion" in host else suggest.suggest(host)
     return {
         "id": slug_for(host, taken),
         "name": (short or host.get("ip") or "UNKNOWN").upper(),
-        "kind": "unknown",
+        "kind": guess["kind"] if guess else "unknown",
         "zone": zone,
         "x": 50.0, "y": 50.0,
-        "role": "found by a survey · not yet identified",
+        "role": (f"looks like {guess['role']} · {guess['because']} — check it" if guess
+                 else "found by a survey · not yet identified"),
         "lore": "A stranger on the road. The surveyors noted it and moved on.",
         "ip": host.get("ip") or "—",
-        "hw": " · ".join(x for x in [host.get("vendor"),
+        "hw": " · ".join(x for x in [vendor,
                                      f"open ports {port_note}" if port_note else ""] if x),
     }
