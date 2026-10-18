@@ -8,8 +8,8 @@ colours it with live health from Prometheus, Loki and Uptime Kuma.
 
 > **Status: v0.1, early.** It works and is in daily use, but this is
 > the first public release: expect rough edges, missing docs and breaking
-> changes between 0.x versions. The install guide has not yet been tested on
-> a clean machine. Bug reports are very welcome.
+> changes between 0.x versions. The install guide has been followed word for
+> word on a clean machine. Bug reports are very welcome.
 
 ## Features
 
