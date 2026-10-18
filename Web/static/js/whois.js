@@ -8,7 +8,7 @@
    carousel re-renders its slides on every dataset edit, and a listener tied
    to one render would quietly die with it.
 
-   A browser cannot speak port 43, so `/api/whois` (api_data.py) asks the
+   A browser cannot speak port 43, so `/api/v2/whois` (`whois.py`) asks the
    registries on the viewer's behalf; this module only carries the asking and
    the showing. Same-origin fetch — the CSP's `default-src 'self'` covers it. */
 

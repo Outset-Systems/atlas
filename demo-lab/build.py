@@ -376,7 +376,7 @@ CERTS = [
      "expires": "2026-10-28", "renews": "weekly rite", "note": "Host certificate for SSH."},
 ]
 
-# REGIONS (PLAN-REGIONS.md): the server zone opens into a detailed map of its
+# REGIONS: the server zone opens into a detailed map of its
 # own. Its render is a TRUE enlargement of this map (render_region), so places
 # map straight through the rectangle and no pins are needed.
 REGIONS = [

@@ -1,9 +1,9 @@
 """Map reads — `GET /api/v2/lab-data`, `GET /api/v2/maps`.
 
 The two reads the map itself lives on. The bodies are dynamic and
-redaction-shaped, so they are NOT modelled (the API migration plan §5 H2 —
-`schema.py`'s catalogue is the source of truth for the dataset, and a pydantic
-mirror of it would be a second one); they are plain Flask views. Redaction,
+redaction-shaped, so they are NOT modelled: `schema.py`'s catalogue is the
+source of truth for the dataset, and a pydantic mirror of it would be a second
+one. They are plain Flask views. Redaction,
 `Vary`, cache-control and the `lab-data` ETag/304 come from the shared
 helpers (`redaction.py`, `context.py`).
 """

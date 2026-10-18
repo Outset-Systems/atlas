@@ -1,4 +1,4 @@
-/* Atlas — region-model.js: the maths of REGIONS (PLAN-REGIONS.md), with no
+/* Atlas — region-model.js: the maths of REGIONS, with no
    DOM and no imports, so tests/test_region_model.mjs can ask it questions in
    plain node. regions.js is the shell: it reads the window and the camera,
    asks this module, and writes the answer to the page.

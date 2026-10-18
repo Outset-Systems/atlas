@@ -18,7 +18,7 @@ gate, and it is deliberately the narrowest one in the app:
 * A read-only Atlas still refuses, because "this instance does not write"
   should not have an exception nobody remembers.
 
-The path is NOT exempt from the app gate (the API migration plan §4 A6): in
+The path is NOT exempt from the app gate: in
 accounts/hybrid mode a sessionless cron caller gets the gate's 401 before the
 token is read. The fleet's rites report through the beats drop-dir instead
 (`Data/beats/`, swept by the signals feed), so nothing depends on this today.

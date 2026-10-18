@@ -24,8 +24,8 @@ What lives where now:
     ingest.py      the relay ingest GATE (token, size cap, limiter)
     whois.py       THE NAMING DEEP's vetted socket engine
 
-The unversioned v1 routes were removed in v1.41.0 (the API migration plan): the
-strangler is done, `/api/v2/` is the API.
+`/api/v2/` is the API; the unversioned routes it replaced were removed in
+v1.41.0.
 
 Prod entrypoint: `gunicorn app:app` (see Dockerfile). `python app.py` = dev.
 """

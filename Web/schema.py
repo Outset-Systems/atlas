@@ -16,7 +16,7 @@ That is the whole point: six editors built from one catalogue instead of six
 hand-written forms that drift apart. Adding a field to the map is an entry
 here, not a change in three places.
 
-Doctrine carried over from the hand-edited era (ALIVE.md §0.5): the dataset is
+Doctrine carried over from the hand-edited era: the dataset is
 richer than any schema we freeze. Unknown keys are **kept, not stripped** — a
 section's `fields` list is what the editor knows how to show, never the limit
 of what the file may hold.
@@ -212,7 +212,7 @@ SECTIONS = {
               help="Keep the realm, drop its name from the map."),
         ]),
 
-    # REGIONS (v1.49.0, PLAN-REGIONS.md): a rectangle on a map that has its
+    # REGIONS (v1.49.0): a rectangle on a map that has its
     # own, more detailed map. Zoom in and it takes over; zoom out and you are
     # back. Regions nest through `parent`.
     "regions": section(

@@ -243,7 +243,7 @@ def report(name):
             body = "_The scribes have not yet delivered this report._"
     else:
         # A page answers as a page. This was the one route that spoke HTML on
-        # success and JSON on failure (ALIVE.md THE LIST #6); the Abyss frames
+        # success and JSON on failure; the Abyss frames
         # it, and a frame that lands on a JSON document shows the viewer a
         # bare string.
         body, status = "_No such scroll._", 404

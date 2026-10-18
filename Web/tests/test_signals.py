@@ -1,6 +1,6 @@
 """Tests for the signals layer — the contract that must never break the map.
 
-The central guarantee (ALIVE.md §0.2): adapters and the hub fail silent. Every
+The central guarantee: adapters and the hub fail silent. Every
 test here that injects a failure asserts the feed still comes back well-formed,
 never an exception. Run: `python -m pytest Web/tests/ -q` (or `python Web/tests/test_signals.py`).
 """

@@ -1,4 +1,4 @@
-"""Typed request bodies for v2 — pydantic, used sparingly (the API migration plan §0).
+"""Typed request bodies for v2 — pydantic, used sparingly.
 
 Only the fixed-shape write envelopes are modelled; every dynamic or
 redaction-shaped body (the dataset, the feeds) deliberately is not (§5 H2 —

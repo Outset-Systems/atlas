@@ -1,4 +1,4 @@
-"""REGIONS (v1.49.0, PLAN-REGIONS.md): the dataset section, its checks, the
+"""REGIONS (v1.49.0): the dataset section, its checks, the
 demo lab's example, what the API serves, and what redaction must hide.
 
 The maths (where places land, when zooming opens a region) is in

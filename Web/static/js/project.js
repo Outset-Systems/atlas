@@ -17,9 +17,9 @@
    ⚑ **Only pointer input needs this.** Markers, labels and roads are DOM
    children of the transformed element, so the browser already projects them —
    there is nothing to route. What broke under tilt is the other direction:
-   turning a click or a drag back into a map position. PLAN-WORLDS Arc T lists
+   turning a click or a drag back into a map position. The tilt plan lists
    marker layout and road drawing as needing the seam too; that becomes true for
-   Arc D, where a WebGL camera owns the projection and CSS no longer does it for
+   a later arc, where a WebGL camera owns the projection and CSS no longer does it for
    us. Doing it now would be five files of churn for zero behaviour change.
 
    No imports and no DOM at load, so `tests/test_project.mjs` can exercise the
@@ -51,7 +51,7 @@ export const TILT = {
      ⇒ Y  = Sy·P / (P·cosθ + Sy·sinθ)
 
    and once Y is known, s follows and X = Sx/s. That one line is the whole of
-   "unproject() earning its keep" from PLAN-WORLDS Arc T. */
+   "unproject() earning its keep" from the tilt plan. */
 
 const rad = (d) => (d * Math.PI) / 180;
 

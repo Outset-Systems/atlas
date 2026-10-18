@@ -7,7 +7,7 @@
    live `cam`, reads the browser (`innerWidth`, the CSS tokens, the media
    query), feeds those to the model as a view descriptor, and writes the result
    back to the DOM. The three bugs of 2026-08-21 were all statements about
-   numbers that no test could reach from in here (ALIVE.md THE LIST #13).
+   numbers that no test could reach from in here.
 
    The rule for anything added below: if it can be written as "given this
    window and this camera, where does the camera go", it belongs in the model. */
@@ -266,7 +266,7 @@ addEventListener('keydown', (e) => {
       // too, but only when it actually closed a scene or the card (both glide
       // the camera off-centre; the drawer/palette/max do not). It also lowers
       // the decoy watch, the one overlay that had no Escape route before.
-      // (ALIVE.md THE LIST #15) The scenes still close through ONE list
+      // The scenes still close through ONE list
       // (ui.js closeAllScenes), not a copy enumerated here.
       const leaving = A.sceneOpen || A.cardOpen?.();
       A.closeMax?.(); A.closePalette?.(); A.closeAllScenes?.(); A.closeCard?.();

@@ -1,6 +1,6 @@
 """The `deception` signal source — the decoy feed's stones, brought onto the map.
 
-The signals layer has one law (ALIVE.md §0.2): *the map never dies with its
+The signals layer has one law: *the map never dies with its
 sources.* So the tests that matter here are the failure ones. A timeout, a 500,
 garbage JSON, an unreachable host and a refused key must every one of them
 resolve to an empty dict and a live map.

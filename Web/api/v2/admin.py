@@ -15,7 +15,7 @@ per-section endpoint, because there is no per-section server logic — that is
 what made six editors affordable.
 
 `GET /map-art/<name>` (the binary serve) stays on `views` — it is not under
-`/api/` (the API migration plan G15: pages and page-adjacent binaries stay views).
+`/api/`.
 """
 
 import logging

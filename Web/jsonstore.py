@@ -2,8 +2,8 @@
 
 The `_lock_path / _load / _save` trio, plus the `with exclusive(...): load;
 mutate; save` dance around it, was written four times — THE ANNALS (events),
-THE RITES (heartbeats), the discovery inbox, and THE REPAIRS (maintenance)
-(ALIVE.md THE LIST #9). `overlays.Overlay` was already this shape for the two
+THE RITES (heartbeats), the discovery inbox, and THE REPAIRS (maintenance).
+`overlays.Overlay` was already this shape for the two
 layout files; this is the same idea for the operational stores.
 
 Deliberately NOT for the dataset (`dataset.py`): its writer locks a whole

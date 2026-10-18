@@ -15,9 +15,9 @@ handlers. It is deliberately a thin adapter:
 * **Authorisation** comes from `security.is_admin()` and
   `security.write_refusal()`, unchanged, including their exact refusal bodies.
 
-If a port ever needs an authorisation rule that does not exist in `security.py`
-or `redaction.py`, that is a finding for `the API migration plan`, not a rule to
-write here.
+If a route ever needs an authorisation rule that does not exist in
+`security.py` or `redaction.py`, the rule belongs there, not here: this module
+adapts, it never decides.
 """
 
 from dataclasses import dataclass

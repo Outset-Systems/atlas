@@ -10,7 +10,7 @@
      1. **Our CSP.** `frame-src` is widened server-side to the origins the
         dataset links to (Web/embeddable.py, ATLAS_EMBED_SERVICES).
      2. **Their X-Frame-Options / frame-ancestors.** Asked once per service via
-        `/api/embeddable` and cached. A browser cannot see this for itself: a
+        `/api/v2/embeddable` and cached. A browser cannot see this for itself: a
         refused frame paints nothing and fires no error a cross-origin parent
         can read, which is why the watchdog below exists as a second line.
      3. **Mixed content.** An http:// service inside an https:// Atlas is dead
@@ -137,7 +137,7 @@ A.glassOpen = () => Boolean(root) && !root.hidden;
 
 /** Show `url` inside the map if it will render there, else in a new tab.
 
-    `key` is the dataset's own spelling of the URL — `/api/embeddable` will only
+    `key` is the dataset's own spelling of the URL — `/api/v2/embeddable` will only
     answer for a URL that is actually on the map, so the raw href is what has to
     be asked about, not the browser's absolutised version. */
 A.openHere = function openHere(url, title, opts = {}) {

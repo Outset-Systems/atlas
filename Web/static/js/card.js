@@ -1,6 +1,6 @@
 /* Atlas — the ivory card: the panel a marker opens — its portrait,
    its vitals, the service detail it drills into, and the minimise / expand /
-   pull-back chrome. Lifted out of ui.js whole (ALIVE.md THE LIST #7): the block
+   pull-back chrome. Lifted out of ui.js whole: the block
    referenced none of ui.js's other locals and everything outside reaches it
    through `A`, so nothing else moved. Registered in atlas.js right after ui.js. */
 
@@ -397,7 +397,7 @@ A.closeCard = function closeCard() {
 
 // Is a card on screen? The Escape chain asks, so it can recentre on close
 // exactly as the × does — but only when there was actually a card (or scene)
-// to leave (ALIVE.md THE LIST #15).
+// to leave.
 A.cardOpen = () => card.classList.contains('visible');
 
 // closing the card with the × re-centers the survey (you were glided off-center to a node)

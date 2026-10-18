@@ -1,4 +1,4 @@
-/* REGIONS' maths, in plain node (PLAN-REGIONS.md).
+/* REGIONS' maths, in plain node.
 
    Run:  node tests/test_region_model.mjs        (from Web/)
 

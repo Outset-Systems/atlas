@@ -814,7 +814,7 @@ def test_source_conflict_still_refuses_and_is_recorded(realm, monkeypatch):
 
 
 # ── The six routes on the most dangerous screen that had no test ────────────
-# (ALIVE.md THE LIST #3). Each one is a write to an account or the ledger that
+# Each one is a write to an account or the ledger that
 # records writes to accounts; every one must refuse a non-admin, a missing
 # CSRF token, and the classic self/last-admin traps before it does anything.
 

@@ -1,11 +1,11 @@
 """Live-signals layer for the Atlas — the glass over Kuma/Prometheus, never the engine.
 
-Principle (ALIVE.md §0.2): *the map never dies with its sources.* Every adapter here
+Principle: *the map never dies with its sources.* Every adapter here
 is built to fail silent — a timeout, a 500, a bad payload, a missing key all resolve to
 "no signal" (an empty dict), never to an exception that could break the render. The
 front-end treats an absent feed as the v1.0.0 static behaviour ("the watchers are silent").
 
-Architecture (ALIVE.md §1): one small adapter per source, each exposing `fetch() -> dict`
+Architecture: one small adapter per source, each exposing `fetch() -> dict`
 with a hard 3s timeout and a guarantee never to raise. `SignalsHub` merges the enabled
 adapters into one cached feed (30s TTL) that `/api/signals` serves and the front-end polls.
 
@@ -104,7 +104,7 @@ class StaticFileAdapter(_Adapter):
 
     Doubles as (a) the deterministic mock the framework is tested against and
     (b) a real "source-swappable" backend if signals are ever produced by a
-    sidecar writing JSON to a path the Atlas can read (ALIVE.md §0.4).
+    sidecar writing JSON to a path the Atlas can read.
     """
 
     name = "static"
@@ -121,7 +121,7 @@ class StaticFileAdapter(_Adapter):
 
 
 class KumaAdapter(_Adapter):
-    """Uptime-Kuma metrics/status → node & service states (ALIVE.md K1–K5).
+    """Uptime-Kuma metrics/status → node & service states.
 
     Live wiring lands in Wave 2 (needs a Kuma API key + monitors). Until then this
     adapter is exercised via StaticFileAdapter; when configured it makes a real,
@@ -288,7 +288,7 @@ class RelayAdapter(_Adapter):
 
 
 class PrometheusAdapter(_Adapter):
-    """Whitelisted PromQL → plaque numbers & sparklines (ALIVE.md P1/P2).
+    """Whitelisted PromQL → plaque numbers & sparklines.
 
     Never a free-form proxy: only the queries in `_PROM_QUERIES` are ever issued.
     Live wiring is Wave 2 (needs one UDM rule the app host→the monitoring host:9090).

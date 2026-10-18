@@ -2,7 +2,7 @@
   <!-- Illuminated Cartography (the design notes): gilded accents on engraved ink. The
        four-point compass star is the app's own mark (◈ / ✦), gilt on an ink
        disc so it reads on a light or dark browser tab alike. One static file
-       (ALIVE.md THE LIST #18) — a declared icon stops the /favicon.ico 404. -->
+       — a declared icon stops the /favicon.ico 404. -->
   <circle cx="16" cy="16" r="15" fill="#1d2021"/>
   <circle cx="16" cy="16" r="14.5" fill="none" stroke="#C9A554" stroke-width="1" opacity="0.55"/>
   <!-- compass star: long N/S/E/W points, short diagonals -->

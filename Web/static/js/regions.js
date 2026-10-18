@@ -1,4 +1,4 @@
-/* Atlas — REGIONS (v1.49.0, PLAN-REGIONS.md): zoom into a part of the map and
+/* Atlas — REGIONS (v1.49.0): zoom into a part of the map and
    its own, more detailed map takes over; zoom back out and you are where you
    were. Regions nest.
 

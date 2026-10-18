@@ -1,4 +1,4 @@
-/* Atlas — the command palette (ALIVE.md H1): press `/` to summon a
+/* Atlas — the command palette: press `/` to summon a
    surveyor's finding-glass. Fuzzy-find any place or service, arrow to it, Enter
    to glide there / open it. The biggest daily-use win, zero dependencies. */
 

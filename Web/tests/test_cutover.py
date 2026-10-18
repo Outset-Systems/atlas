@@ -2,7 +2,7 @@
 and the server has nothing else left to speak.
 
 The 2026-08-25 cutover flipped every in-repo consumer from `api/...` to
-`api/v2/...` (the API migration plan, cutover phase); v1.41.0 removed the v1 routes
+`api/v2/...` (cutover phase); v1.41.0 removed the v1 routes
 themselves. This pins both: a v1 literal creeping back into a fetch would 404
 now, and a v1-shaped route creeping back into the url map would be a second
 surface with no test in front of it.

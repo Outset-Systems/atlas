@@ -4,7 +4,7 @@ Every JSON error built here is `{"error": <sentence>}` plus, when there is more
 to say, `reason` (why this was refused — the operator-facing half of a 403)
 and/or `problems` (a list, for validation). Three of the four spellings that
 used to coexist collapse into this one shape with optional keys: `{"error"}`,
-`{"error","reason"}`, `{"error","problems"}` (ALIVE.md THE LIST #6).
+`{"error","reason"}`, `{"error","problems"}`.
 
 The fourth — the accounts surface's `{"ok": false, "error"}` — deliberately
 stays. `auth_routes` handlers key their own success/failure off `ok` and the

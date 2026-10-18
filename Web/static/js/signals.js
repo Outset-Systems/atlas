@@ -1,7 +1,7 @@
 /* Atlas — the living layer: poll /api/signals and let the map breathe
-   with the real health of the realm (ALIVE.md K1/K3/K5).
+   with the real health of the realm.
 
-   Principle (ALIVE.md §0.2): the map never dies with its sources. Healthy — and
+   Principle: the map never dies with its sources. Healthy — and
    *no signal at all* — is the untouched v1.0.0 look (zone-hue breathing). Only
    trouble repaints: amber for degraded, a slow red pulse + beacon for the dark,
    grey for the slumbering. If the feed can't be read, the map goes quietly static
@@ -108,7 +108,7 @@ function apply(feed) {
   A.refreshStonesScene?.(); // a stone that starts speaking lights up where it
                             // stands, even with the list already open — the
                             // scene where a stale "all quiet" is the worst lie
-                            // (ALIVE.md THE LIST #14; it was defined for this
+                            // (it was defined for this
                             // and never called, so the list went stale for 30s
                             // exactly when it mattered most). No-op when shut.
   paintDrift(feed?.drift);  // Z3 — surface monitors not yet on the map

@@ -439,7 +439,7 @@ function makeCarousel(p) {
      from being reinvented", "`focusEmbed` still knows how to narrow to one
      container"). Kept on that basis and said so HERE, at the return site,
      because a reader grepping for callers finds none and has no way to learn
-     it was a decision rather than an oversight (ALIVE.md THE LIST #16).
+     it was a decision rather than an oversight.
      `focusEmbed` also calls `showByTitle` as its own fallback, so the pair
      stands or goes together. */
   return { render, showByTitle, focusEmbed };
@@ -574,7 +574,7 @@ function groupPanes(embeds) {
 }
 
 /* An http embed inside an https Atlas is mixed content — the browser blocks
-   the iframe SILENTLY, so over the TLS door (PLAN-TLS.md) an unguarded slide
+   the iframe SILENTLY, so over the TLS door an unguarded slide
    would sit at "scrying…" forever. The glass (glass.js isMixed) and the card
    vitals (the `location.protocol === 'http:'` gate below) already know this;
    the carousels were the one surface that didn't. A mixed watching takes the

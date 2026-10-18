@@ -4,7 +4,7 @@ Only registered when sessions exist (`atlas_auth.sessions_enabled()`,
 app.py) — every other mode is cookie-less and gains no new workstation. The API
 half that lived here (`/api/auth/*`) is `api/v2/accounts_v2.py` since the
 2026-08-25 cutover and was removed from this file at the v1 removal
-(v1.41.0); the page is not an API and stays a view (the API migration plan G15).
+(v1.41.0); the page is not an API and stays a view.
 
 `/auth/login` is exempt from the gate (a signed-out user must be able to reach
 the login flow); the page itself does nothing but render, and the sign-in it

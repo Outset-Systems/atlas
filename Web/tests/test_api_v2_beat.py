@@ -2,7 +2,7 @@
 
 Every arm of the deliberately narrow gate: read-only 403 first, unconfigured
 503, bad token 403, good token 200 — and in accounts mode the app gate's 401
-before the token is ever read (the API migration plan §4 A6, pinned).
+before the token is ever read (pinned).
 """
 
 import os

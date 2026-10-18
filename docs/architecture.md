@@ -10,6 +10,11 @@ JavaScript modules with no build step. It keeps its state in files under
 `/data` (or, optionally, a SQL database) and reads live health from
 Prometheus, Loki, Uptime Kuma and a decoy feed when they are configured.
 
+A note on the version numbers in comments: the Atlas ran for a year as one
+lab's private tool before this public release, and comments that explain why
+code is the way it is cite that tool's own releases (`v1.38.0`, `v1.49.0`).
+They are history, not the public version line, which starts at 0.1.
+
 ```
 Web/                  the app (this is what the image runs)
   app.py              the app factory, create_app()

@@ -66,7 +66,7 @@ def _label_for(ctx):
 
 
 def _drift(ctx, feed):
-    """Survey drift (ALIVE.md Z3): monitors Kuma watches that the map hasn't
+    """Survey drift: monitors Kuma watches that the map hasn't
     charted. Silence deliberate omissions via `signals.drift_ignore`."""
     services = feed.get("services") or {}
     if not services:

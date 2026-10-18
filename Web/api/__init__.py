@@ -1,7 +1,8 @@
-"""The versioned API packages.
+"""The HTTP API packages.
 
-`api.v2` is the strangler-fig layer being grown beside the existing routes
-(`api_data`, `api_admin`, `api_v1`, `api_whois`, `ingest`, `auth_routes`).
-Nothing here replaces those modules until `the API migration plan` says a group has
-proven parity; see that file for the order and the rules.
+`api.v2` is the API: one blueprint at `/api/v2/` carrying every read, write,
+feed and probe. `api.status` serves the one unversioned path, `/api/status`
+(the card contract dashboards and uptime monitors probe), from the same
+builder as `/api/v2/health`. The pages are not an API and live in `views.py`
+and `auth_routes.py`.
 """

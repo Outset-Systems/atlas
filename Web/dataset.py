@@ -303,7 +303,7 @@ def _apply_one(data, op):
                              index if index >= 0 else len(entries))
         if index >= 0:
             # Merge, don't replace: keys the editor doesn't know about are the
-            # dataset's business, not the form's (ALIVE.md §0.5). An explicit
+            # dataset's business, not the form's. An explicit
             # null is how a form says "clear this optional field", which is a
             # different intention from not mentioning it at all.
             merged = dict(entries[index])

@@ -5,7 +5,7 @@
    `innerHeight`, `A.MAPW` and the live `cam` object straight out of the module
    scope, so there was no way to ask it a question without a browser — and the
    suite therefore could not see any of the three bugs that shipped on
-   2026-08-21 (ALIVE.md THE LIST #13):
+   2026-08-21:
 
      · the wheel gate compared against `cam.min` (the width-fit floor) while
        every stated journey lands at `fitScale()` (cover) — the same number on

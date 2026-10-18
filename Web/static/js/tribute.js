@@ -1,4 +1,4 @@
-/* Atlas — THE TRIBUTE (ALIVE.md N3): the hypervisor divides its 64 GB
+/* Atlas — THE TRIBUTE: the hypervisor divides its 64 GB
    among its vassals. A vessel-bar shows the whole divided; illuminated allocation
    bars per VM show each one's assigned RAM and how full it runs. The standby host slumbers.
    Live headroom math from vms[] (VM Configuration Scroll). */

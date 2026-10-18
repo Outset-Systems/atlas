@@ -273,7 +273,7 @@ async function drawMapArt(form) {
   // default, not a filename typed in here. This was hard-coded to one lab's
   // render, so changing the shipped backdrop silently highlighted a tile that
   // no longer existed — the same trap the deployment notes records for the Grafana base
-  // and the vault root. `/api/admin/map-art` has always returned `default`.
+  // and the vault root. `/api/v2/admin/map-art` has always returned `default`.
   let fallback = '';
   const current = () => (form.get('map_image') || '').trim() || fallback;
 

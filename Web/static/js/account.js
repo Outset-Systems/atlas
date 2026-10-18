@@ -1,7 +1,7 @@
 /* Atlas — the account workstation: who you are on this instance (the
    seal and its emblem), the admin's ledgers (USERS, SIGN-INS), and THE
-   DIRECTORY (which directory may sign people in). Lifted out of ui.js whole
-   (ALIVE.md THE LIST #7). One inbound arrow — ui.js's settings tab calls
+   DIRECTORY (which directory may sign people in). Lifted out of ui.js whole.
+   One inbound arrow — ui.js's settings tab calls
    `A.renderSettingsSections` — and every other tie is through `A`
    (`A.showToast`, `A.applySettingsFolds`); the block referenced no other ui.js
    local. Registered in atlas.js after ui.js. */
@@ -16,7 +16,7 @@ import { A, CFG, $, esc, themeText } from './config.js';
                   only sign-out that exists anywhere in this app.
      hub        — the Hub signed you in and owns the session. Naming
                   the viewer is useful; offering a sign-out would be a lie
-                  (`/api/auth/*` is not even registered in this mode), so the
+                  (`/api/v2/auth/*` is not even registered in this mode), so the
                   block says where the session lives instead.
      standalone — no gate, no identity. The block stays hidden; the startup
                   warning already says this plainly and the map is the point.

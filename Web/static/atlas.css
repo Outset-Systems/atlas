@@ -20,7 +20,7 @@
                                 on-screen SHARE (camera.js) is --card-w + 2× this.
                                 #card, .card-left and CARD_SHARE_PX all read from
                                 these two now, instead of 320 / 344 / 368 drifting
-                                apart (ALIVE.md THE LIST #19). */
+                                apart. */
   --gilt: #d79921;           /* neutral yellow — THE accent */
   --gilt-bright: #fabd2f;    /* bright yellow — cores, hover */
   --text: #ebdbb2;           /* fg1 */
@@ -1943,7 +1943,7 @@ body.drawer-open .pth-panel { right: calc(5vw + var(--drawer-clear)); }
   border-radius: 10px; padding: 2px 8px;
 }
 
-/* ── Live signal states (ALIVE.md K1/K3/K5) ──────────────
+/* ── Live signal states ──────────────
    Healthy (and no-signal) keeps the untouched zone-hue breathing — only trouble
    repaints, so the eye is drawn to the dark, not to the whole board. Semantic
    colours reuse the design palette; no new colours introduced. */
@@ -1981,7 +1981,7 @@ body.drawer-open .pth-panel { right: calc(5vw + var(--drawer-clear)); }
 /* K5 — 'faith of the realm' uptime on the ivory card */
 .card-uptime { color: var(--discover); font-weight: 600; }
 
-/* ── Command palette (ALIVE.md H1) — dark finding-glass, drawer idiom ── */
+/* ── Command palette — dark finding-glass, drawer idiom ── */
 #palette {
   position: fixed; inset: 0; z-index: 990;
   display: flex; align-items: flex-start; justify-content: center;
@@ -2037,7 +2037,7 @@ body.drawer-open .pth-panel { right: calc(5vw + var(--drawer-clear)); }
   font-family: 'Alegreya Sans', sans-serif; font-size: 0.92rem;
 }
 
-/* ── THE LEDGER — IPAM /24 grids (ALIVE.md N4) ── */
+/* ── THE LEDGER — IPAM /24 grids ── */
 /* The wrapper stays `inset: 0` — the dim should run to the top of the screen,
    BEHIND the band, or a scene would read as a window rather than as the map
    being covered. Only the panel's room changes: it is seated below the crown
@@ -2126,7 +2126,7 @@ body.drawer-open .pth-panel { right: calc(5vw + var(--drawer-clear)); }
 }
 .ldg-cell.lit:hover { transform: scale(1.35); box-shadow: 0 0 10px var(--c-hue); }
 
-/* ── THE TRIBUTE — RAM allocation (ALIVE.md N3) ── */
+/* ── THE TRIBUTE — RAM allocation ── */
 /* wrapper + .open: the shared scene chrome beside #ledger */
 .trb-panel {
   display: flex; flex-direction: column;
@@ -2200,7 +2200,7 @@ body.drawer-open .pth-panel { right: calc(5vw + var(--drawer-clear)); }
   .trb-stat { grid-column: 2; }
 }
 
-/* ── THE RELIQUARY — rack elevation (ALIVE.md N1, NetBox-style) ── */
+/* ── THE RELIQUARY — rack elevation (NetBox-style) ── */
 /* wrapper + .open: the shared scene chrome beside #ledger */
 .rel-panel {
   display: flex; flex-direction: column;
@@ -3654,7 +3654,7 @@ body.constellation .mk.active .mk-dot { opacity: 0.35; }
 .tr-finding.tr-note     .tr-text { opacity: 0.62; }
 .tr-app.tr-flagged .ldg-zname { color: var(--sem-down); }
 
-/* ── REGIONS (v1.49.0, PLAN-REGIONS.md) ─────────────────────────────────────
+/* ── REGIONS (v1.49.0) ─────────────────────────────────────
    A region is a rectangle on a map that opens into a detailed map of its own.
    On the main map it is an inked frame with a name tab; open, it is the lens:
    a full-window view over the main map with its own camera, a breadcrumb, a

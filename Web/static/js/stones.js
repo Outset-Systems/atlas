@@ -177,7 +177,7 @@ A.closeStones = close;
    that starts speaking while you are looking at the list should light up where
    it stands, the way a split ring does (v1.10.7). It was defined for that and
    never wired, so the list sat stale for up to 30s in the one scene where that
-   is a lie worth avoiding; wired 2026-08-25 (ALIVE.md THE LIST #14).
+   is a lie worth avoiding; wired 2026-08-25.
 
    `build()` replaces the list wholesale, and this now runs on a timer rather
    than only on open — so the reader's scroll position has to survive it, or a

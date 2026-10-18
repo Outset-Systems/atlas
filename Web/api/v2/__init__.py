@@ -1,10 +1,10 @@
 """API v2 — the Atlas's HTTP API, one blueprint at `/api/v2/`.
 
-Built as a strangler-fig layer beside the original unversioned routes
-(the API migration plan: ported group by group 2026-08-25, cut over the same day,
-parity-proven, and the v1 routes removed in v1.41.0). What remains outside it
-is `/api/status` (`api/status.py` — the fleet card contract the Hub and Kuma
-probe on every app) and the pages (`views.py`, `auth_routes.py`).
+It replaced the original unversioned routes group by group, each proven
+against the old one before the switch; the old routes were removed in
+v1.41.0. What remains outside it is `/api/status` (`api/status.py` — the
+fleet card contract the Hub and Kuma probe on every app) and the pages
+(`views.py`, `auth_routes.py`).
 
 The blueprint NAME is the namespace: every endpoint here is `api_v2.<name>` —
 or `api_v2.<child>.<name>` for the three NESTED surfaces (`admin`, `ingest`,

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{{ realm_title }}</title>
 <!-- A declared icon is what stops the browser asking for /favicon.ico, which
-     404'd five times a page load (ALIVE.md THE LIST #18). Relative like every
+     404'd five times a page load. Relative like every
      other asset here, so it resolves under both `/` and the Hub's `/atlas/`. -->
 <link rel="icon" type="image/svg+xml" href="static/favicon.svg?v={{ v }}">
 <link rel="stylesheet" href="static/fonts.css?v={{ v }}">
@@ -668,7 +668,7 @@
       <!-- THE CARTOGRAPHER'S TABLE (2026-08-15): the viewer's own backdrop and
            the theme that rides it, per browser — the Desk still owns uploads and
            the realm-wide default. Rows built by static/js/table.js from
-           /api/maps; the tilt is Arc T of PLAN-WORLDS.md, v1. -->
+           /api/v2/maps; the tilt is the first arc of the worlds plan. -->
       <div class="sp-sec" data-sec="table">
         <button class="sp-sub" type="button">THE CARTOGRAPHER'S TABLE</button>
         <div class="sp-sec-body">

@@ -8,7 +8,7 @@ prometheus-client>=0.20,<1
 # images happen to ship /usr/share/zoneinfo, but a host without it (Windows,
 # slim/alpine bases) 500'd /api/v2/calendar — the package makes it portable.
 tzdata>=2024.1
-# API v2 (the API migration plan) — pydantic validates the fixed-shape write bodies
+# API v2 — pydantic validates the fixed-shape write bodies
 pydantic>=2,<3
 # db mode only (ATLAS_DATA_BACKEND=db) — lazy-imported; file mode never loads these
 sqlalchemy>=2.0,<3
