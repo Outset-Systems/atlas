@@ -77,18 +77,20 @@ Two keys are created on first start if you do not supply them. Both live in
 
 ## Authentication
 
-`ATLAS_AUTH_MODE` picks one of four modes:
+`ATLAS_AUTH_MODE` picks one of four modes. The image and `compose.public.yaml`
+default to `accounts`, so a new install always asks for sign-in; `standalone` is
+the default only when you run the code directly from a checkout (development).
 
 | Mode | Who can see the map | Sign-in |
 |---|---|---|
-| `standalone` (default) | Anyone who can reach the port. Read-only unless `ATLAS_ALLOW_INSECURE=1`. | None. Use on loopback or a trusted network only. |
-| `accounts` | Signed-in users. | The Atlas's own accounts (local passwords, optionally LDAPS), with optional TOTP. |
+| `standalone` | Anyone who can reach the port. Read-only unless `ATLAS_ALLOW_INSECURE=1`. | None. Use on loopback or a trusted network only. |
+| `accounts` (image default) | Signed-in users. | The Atlas's own accounts (local passwords, optionally LDAPS), with optional TOTP. |
 | `hub` | Whoever an upstream single-sign-on gateway (the "hub") forwards. | Done by the hub, which sends a signed identity header. The Atlas has no sign-in page in this mode. |
 | `hybrid` | Hub users, plus anyone who signs in with an Atlas account. | Hub identity when the signed header is present, the Atlas sign-in page when it is not. |
 
 | Variable | Default | What it does | Secret | Settings screen |
 |---|---|---|---|---|
-| `ATLAS_AUTH_MODE` | `standalone` | `standalone`, `accounts`, `hub` or `hybrid`. Any other value makes every gated request fail with a 500 (fail closed). | no | no |
+| `ATLAS_AUTH_MODE` | `accounts` in the image, `standalone` from a checkout | `standalone`, `accounts`, `hub` or `hybrid`. Any other value makes every gated request fail with a 500 (fail closed). | no | no |
 | `ATLAS_ADMIN_GROUP` | `atlas-admins` | The group that makes a viewer an Atlas admin when the identity comes from the hub (or from `ATLAS_STANDALONE_GROUPS`). Also the default for `ATLAS_LDAP_ADMIN_GROUPS`. | no | no |
 | `ATLAS_TRUSTED_PROXIES` | (unset) | Comma-separated IPs or CIDRs of the reverse proxies whose `X-Forwarded-For` header the app believes, for example `172.18.0.2` or `172.18.0.0/16`. Used for the sign-in throttle and the audit log. Unset trusts no proxy and uses the socket peer. A bare number (a hop count) is refused and logged. See [install.md](install.md#put-it-behind-a-reverse-proxy). | no | no |
 | `ATLAS_INSECURE_COOKIES` | (unset) | `1` (or `true`, `yes`) drops the `Secure` flag from the session cookie, for testing over plain http. Without it, most browsers discard the cookie on plain http to anything but `localhost`, and sign-in returns you to the sign-in page. Do not use behind TLS. | no | no |
@@ -107,7 +109,7 @@ In `standalone` mode there is no sign-in; these name the single implied user.
 
 | Variable | Default | What it does | Secret | Settings screen |
 |---|---|---|---|---|
-| `ATLAS_BOOTSTRAP_ADMIN_USER` | (unset) | First run only: while there is no active admin, create this local admin at start (or promote the account if it already exists). Inert once any admin exists, so it is safe to leave set. | no | no |
+| `ATLAS_BOOTSTRAP_ADMIN_USER` | `admin` when a bootstrap password is set | First run only: while there is no active admin, create this local admin at start (or promote the account if it already exists). Inert once any admin exists, so it is safe to leave set. With no admin and no bootstrap password in `accounts` mode, the log says how to create one. | no | no |
 | `ATLAS_BOOTSTRAP_ADMIN_PASSWORD` | (unset) | The bootstrap admin's password, at least 12 characters. A shorter password is refused: the app logs an error and starts without an admin. Prefer the `_FILE` form. | yes, `ATLAS_BOOTSTRAP_ADMIN_PASSWORD_FILE` | no |
 | `ATLAS_MFA_REQUIRED` | (empty) | Who must enroll TOTP before they can use the map: empty (nobody; anyone may enroll), `all` (also `1`, `yes`, `on`), `admins`, or a sign-in source (`local` or `ldap`). Read live. | no | no |
 | `ATLAS_LOGIN_MAX_USER` | `5` | Failed sign-ins allowed per user name within the window. | no | no |

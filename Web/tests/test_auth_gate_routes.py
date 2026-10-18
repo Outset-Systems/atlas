@@ -324,6 +324,46 @@ def test_bootstrap_admin_env(tmp_path):
     assert accounts.verify_password("ops", PW)
 
 
+def test_bootstrap_password_alone_creates_admin(tmp_path):
+    """A bare `docker run -e ATLAS_BOOTSTRAP_ADMIN_PASSWORD=…` (no user name)
+    created nobody before 2026-10-18; it now creates the documented `admin`."""
+    fresh_app(
+        ATLAS_AUTH_MODE="accounts",
+        ATLAS_DATA=str(_dataset(tmp_path)),
+        ATLAS_ACCOUNTS_DB=str(tmp_path / "pwonly.db"),
+        ATLAS_SECRET_KEY="k", ATLAS_INSECURE_COOKIES="1",
+        ATLAS_DATA_BACKEND="file",
+        ATLAS_BOOTSTRAP_ADMIN_PASSWORD=PW,
+    )
+    import accounts
+    acc = accounts.get_user("admin")
+    assert acc and acc["is_admin"] and acc["source"] == "local"
+    assert accounts.verify_password("admin", PW)
+
+
+def test_no_admin_and_nothing_to_bootstrap_says_so(tmp_path, monkeypatch, caplog):
+    """accounts mode with no admin and no bootstrap envs: the app starts, and
+    the log says why nobody can sign in and how to fix it."""
+    fresh_app(
+        ATLAS_AUTH_MODE="accounts",
+        ATLAS_DATA=str(_dataset(tmp_path)),
+        ATLAS_ACCOUNTS_DB=str(tmp_path / "noadmin.db"),
+        ATLAS_SECRET_KEY="k", ATLAS_INSECURE_COOKIES="1",
+        ATLAS_DATA_BACKEND="file",
+    )
+    import accounts
+    import auth_routes
+    for name in ("ATLAS_BOOTSTRAP_ADMIN_USER", "ATLAS_BOOTSTRAP_ADMIN_PASSWORD",
+                 "ATLAS_BOOTSTRAP_ADMIN_PASSWORD_FILE"):
+        monkeypatch.delenv(name, raising=False)
+    with caplog.at_level("WARNING", logger="atlas.auth.routes"):
+        auth_routes.ensure_bootstrap_admin()
+    assert accounts.count_active_admins() == 0
+    assert any("no admin account exists" in r.getMessage()
+               and "ATLAS_BOOTSTRAP_ADMIN_PASSWORD" in r.getMessage()
+               for r in caplog.records)
+
+
 def test_bootstrap_admin_lost_race_is_not_fatal(tmp_path, monkeypatch):
     """Two gunicorn workers bootstrap a fresh install at once; the one whose
     INSERT loses must boot, not take the master down (atlas-public 2026-09-27)."""

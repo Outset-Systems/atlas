@@ -49,13 +49,25 @@ def ensure_bootstrap_admin():
     if accounts.count_active_admins() > 0:
         return
     username = (os.environ.get("ATLAS_BOOTSTRAP_ADMIN_USER") or "").strip().lower()
-    if not username:
-        return
     password = (os.environ.get("ATLAS_BOOTSTRAP_ADMIN_PASSWORD") or "").strip()
     path = (os.environ.get("ATLAS_BOOTSTRAP_ADMIN_PASSWORD_FILE") or "").strip()
     if not password and path and os.path.isfile(path):
         with open(path, encoding="utf-8") as f:
             password = f.read().strip()
+    # A password with no user name means the admin the docs name: compose
+    # always passed `admin`, so only a bare `docker run -e …PASSWORD=…`
+    # created nobody, silently (the fresh-clone test, 2026-10-18).
+    if password and not username:
+        username = "admin"
+    if not username:
+        import settings
+        if settings.auth_mode() == "accounts":
+            # Nobody can sign in, and nothing else says why.
+            log.warning("no admin account exists, so nobody can sign in. Set "
+                        "ATLAS_BOOTSTRAP_ADMIN_PASSWORD (or _PASSWORD_FILE; user "
+                        "name ATLAS_BOOTSTRAP_ADMIN_USER, default admin) and "
+                        "restart, or run `python cli.py user-add <name> --admin`.")
+        return
     existing = accounts.get_user(username)
     if existing:
         accounts.set_admin(username, True)

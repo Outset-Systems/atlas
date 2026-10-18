@@ -264,7 +264,9 @@ Then delete the cloned directory, including `.env`.
 ## Running without the compose file
 
 The image needs only a volume at `/data` and the environment variables you
-choose. The same setup with `docker run`:
+choose. It asks for sign-in by default (`ATLAS_AUTH_MODE=accounts`), so give
+the first admin a password, or nobody can sign in. The same setup with
+`docker run`:
 
 ```sh
 docker build --target public -t atlas:local .

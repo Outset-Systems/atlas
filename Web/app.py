@@ -119,12 +119,12 @@ def _warn_about_posture(writable):
     if AUTH_MODE != "standalone" or settings.ALLOW_INSECURE:
         return
     log.warning(
-        "SECURITY: running in STANDALONE mode — NO authentication. The full lab map "
-        "(internal IPs, hostnames, service URLs) is served to anyone who can reach "
-        "this port%s. Production must use docker-compose.suite.yml (hub mode, port "
-        "unpublished). Bind to loopback for local dev, set ATLAS_READONLY=1 to at "
-        "least refuse writes, or set ATLAS_ALLOW_INSECURE=1 to silence this on a "
-        "trusted network.",
+        "SECURITY: running in STANDALONE mode — NO authentication. The whole map "
+        "(internal addresses, host names, service URLs) is served to anyone who can "
+        "reach this port%s. For real use set ATLAS_AUTH_MODE=accounts (or hub / "
+        "hybrid behind a signing proxy; docs/configuration.md). Bind to loopback for "
+        "local dev, set ATLAS_READONLY=1 to at least refuse writes, or set "
+        "ATLAS_ALLOW_INSECURE=1 to silence this on a trusted network.",
         ", and the editing API will accept changes from them" if writable else "",
     )
 

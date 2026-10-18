@@ -5,6 +5,11 @@
 # A fresh install opens on an empty map and an invitation to chart it
 # (ATLAS_FALLBACK=empty). Set ATLAS_FALLBACK=bundled to open on the demo lab
 # instead, when this image carries one (Web/default-lab-data.json).
+#
+# Sign-in is on by default (ATLAS_AUTH_MODE=accounts): give the first admin a
+# password with ATLAS_BOOTSTRAP_ADMIN_PASSWORD (compose.public.yaml passes its
+# ATLAS_ADMIN_PASSWORD through). Without one the Atlas starts, says why in its
+# log, and nobody can sign in until an admin exists.
 
 FROM python:3.12-slim AS public
 
@@ -18,6 +23,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 ENV PYTHONUNBUFFERED=1
 ENV ATLAS_THEME=plain
+# a shipped image never serves the map without sign-in; standalone stays a
+# choice the operator makes on purpose (docs/configuration.md)
+ENV ATLAS_AUTH_MODE=accounts
 # /metrics across both gunicorn workers: prometheus_client's multiprocess
 # mode keeps per-process files here. 1777 so any `user:` a compose file picks
 # can write it.
