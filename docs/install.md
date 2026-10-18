@@ -1,11 +1,14 @@
 # Installing the Atlas
 
-> **Status: tested once, not yet on a fresh VM.** On 2026-10-18 these steps
-> ran start to finish on a second Docker host (Ubuntu, Compose 2.40): build,
-> healthy container, sign-in, the demo lab and the short-password case all
-> worked as written. That host already had the base image, so a first build
-> elsewhere takes a few minutes longer. A run on a fresh VM is still planned
-> before v0.1. If a step does not work as written, please open an issue.
+> **Status: tested on a clean machine.** On 2026-10-18 these steps ran word
+> for word on a clean Ubuntu 24.04 system with nothing cached: Docker Engine
+> 29.9 and Compose 5.6 installed from Docker's apt repository, then the
+> quickstart, sign-in, the demo lab and the uninstall, all as written (about a
+> minute end to end on a fast connection). Earlier the same day they also ran
+> on an existing Docker host, including the short-password case. Not yet
+> tried: a full virtual machine with Docker running as a system service, and
+> Docker Desktop on macOS or Windows. If a step does not work as written,
+> please open an issue.
 
 The Atlas runs as one container with one volume. The compose file in the
 repository root, `compose.public.yaml`, starts it in **accounts** mode (real
