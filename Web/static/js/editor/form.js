@@ -283,16 +283,21 @@ function fieldRow(field, widget) {
 
 /**
  * Build a form for one entry of a section.
+ * @param {{only?: string[]}} [opts] `only`: show and read just these fields
+ *   (the first survey asks for the few a newcomer needs). Everything else is
+ *   left untouched: `read()` never mentions it, so an upsert merges around it.
  * @returns {{el: HTMLElement, read: () => object, focus: () => void}}
  *   `read()` throws an Error with a human message if a required field is blank.
  */
-export function buildForm(sectionKey, entry) {
+export function buildForm(sectionKey, entry, opts = {}) {
   const section = Editor.section(sectionKey);
   const original = entry || {};
   const form = el('div', 'dsk-form');
   const widgets = {};
+  const only = opts.only ? new Set(opts.only) : null;
+  const fields = only ? section.fields.filter((f) => only.has(f.name)) : section.fields;
 
-  for (const field of section.fields) {
+  for (const field of fields) {
     const widget = buildWidget(field, original[field.name]);
     widgets[field.name] = { field, widget };
     form.append(fieldRow(field, widget.node));
@@ -300,8 +305,9 @@ export function buildForm(sectionKey, entry) {
 
   // Keys the catalogue doesn't model are shown, read-only, rather than hidden:
   // the dataset is allowed to be richer than the form, and a field you cannot
-  // see is a field you will accidentally destroy.
-  const unmodelled = Object.keys(original).filter(
+  // see is a field you will accidentally destroy. A trimmed form hides fields
+  // on purpose and never writes them, so it has nothing to warn about.
+  const unmodelled = only ? [] : Object.keys(original).filter(
     (k) => !section.fields.some((f) => f.name === k));
   if (unmodelled.length) {
     form.append(el('div', 'dsk-extra',

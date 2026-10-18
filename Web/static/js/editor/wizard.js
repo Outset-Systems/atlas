@@ -53,15 +53,23 @@ function fail(err) {
   bodyEl.prepend(box);
 }
 
+/* Each step asks only what a newcomer needs; the rest of a section's fields
+   (the backdrop, the host's memory and cores, label positions…) wait in the
+   Desk, where they are one click away once there is a map to tune. */
+function laterNote(what) {
+  bodyEl.append(el('p', 'wiz-blurb', `${what} — all in the Desk (E), whenever you want them.`));
+}
+
 /* ── 1. the realm ─────────────────────────────────────────────────────── */
 function stepRealm() {
   step = 0;
   drawSteps();
   panel('Name your realm',
-    'This is the title on the map and in the Hub. Everything else can change later — ' +
-    'so can this.');
-  const form = buildForm('meta', Editor.data?.meta || {});
+    'This is the title on the map and in the Hub. It can change later, like everything ' +
+    'else here.');
+  const form = buildForm('meta', Editor.data?.meta || {}, { only: ['title'] });
   bodyEl.append(form.el);
+  laterNote('The backdrop, the survey date and the host\'s memory and cores');
   bar(
     button('Skip', '', stepZone),
     button('Next ›', 'go', async () => {
@@ -89,17 +97,19 @@ function stepZone() {
     name: existing.length ? '' : 'Main',
     vlan: existing.length ? '' : 1,
     subnet: '', hue: '#C9A554',
-    lore: 'Newly surveyed ground.',
-    label_x: 50, label_y: 50,
   };
-  const form = buildForm('zones', seed);
+  // required by the catalogue but nothing a newcomer has an opinion on yet;
+  // an insert is written whole, so they go in with the form's answers
+  const unasked = { lore: 'Newly surveyed ground.', label_x: 50, label_y: 50 };
+  const form = buildForm('zones', seed, { only: ['name', 'id', 'vlan', 'subnet', 'hue'] });
   bodyEl.append(form.el);
+  laterNote('Its card line, road colour and label position');
   bar(
     button('‹ Back', '', stepRealm),
     button(existing.length ? 'Skip' : 'Skip for now', '', stepPlaces),
     button('Add it ›', 'go', async () => {
       try {
-        await Editor.insert('zones', form.read());
+        await Editor.insert('zones', { ...unasked, ...form.read() });
         stepPlaces();
       } catch (err) { fail(err); }
     }));
