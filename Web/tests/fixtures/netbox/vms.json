@@ -1,0 +1,27 @@
+{
+  "count": 2,
+  "next": null,
+  "previous": null,
+  "results": [
+    {
+      "id": 7,
+      "name": "EDGE",
+      "role": null,
+      "cluster": {"id": 1, "name": "Hypervisor"},
+      "vcpus": 4.0,
+      "memory": 8192,
+      "primary_ip4": {"address": "10.77.90.10/24"},
+      "custom_fields": {}
+    },
+    {
+      "id": 8,
+      "name": "MONITOR",
+      "role": {"id": 9, "slug": "agent-host", "name": "Agent Host"},
+      "cluster": {"id": 1, "name": "Hypervisor"},
+      "vcpus": 6.0,
+      "memory": 16384,
+      "primary_ip4": {"address": "10.77.30.10/24"},
+      "custom_fields": {}
+    }
+  ]
+}

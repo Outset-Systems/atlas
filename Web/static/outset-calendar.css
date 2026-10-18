@@ -1,0 +1,149 @@
+/* The Outset Calendar component's own styles (outset-calendar.js draws into a
+   host with class .calendar-host). Vendored unchanged (CONTRACT mirror rule).
+
+   ONE TOKEN LAYER (1.6.1). Every colour and face the component spends is an
+   `--oc-*` token declared on `.calendar-host` below, each falling back first to
+   the host page's own name for the same thing and then to a hard gruvbox
+   value. A host that wants the component in its own dress overrides the
+   `--oc-*` tokens on `.calendar-host` and touches nothing else — which is what
+   keeps the Hub's fleet day and the Atlas's realm day looking like one idea
+   drawn twice instead of two ideas.
+
+   THE COLOUR LADDER, and it is the whole of it: an ordinary block is INK — the
+   day's substrate — the GILT is spent only on blocks that call a model, the
+   model too big for the local card takes the WARNING tone, an overlap is an
+   OUTLINE and the only alarm on the page, and "now" is one info hairline. Per
+   the Atlas's the design notes, "if everything glows, nothing does": four fills is
+   already the ceiling, and a fifth must replace one rather than join them.
+
+   FOUR COLUMNS. `--oc-gut / --oc-name-w / --oc-meta-w` are the gutter, the
+   name and the meta; the hours row, every group head and every row are laid on
+   the same `grid-template-columns`, so an hour on the axis is that hour on
+   every strip below it. MUST TRACK each other. */
+.calendar-host {
+  --oc-bg: var(--surface, #282828);
+  --oc-line: var(--border, #3c3836);
+  --oc-ink: var(--muted, #928374);          /* the ordinary block */
+  --oc-text: var(--text, #ebdbb2);
+  --oc-dim: var(--muted, #928374);
+  --oc-gilt: var(--gold, #d79921);          /* a call on a model */
+  --oc-warn: var(--orange, #fe8019);        /* … on a model too big for the card */
+  --oc-alarm: var(--red, #fb4934);          /* two of them at once */
+  --oc-ok: var(--green, #b8bb26);
+  --oc-info: var(--accent, #83a598);
+  --oc-font-display: 'Cinzel', Georgia, serif;
+  --oc-font-data: 'JetBrains Mono', ui-monospace, monospace;
+  --oc-font-body: inherit;
+  --oc-gut: 18px; --oc-name-w: 260px; --oc-meta-w: 230px; --oc-gap: 14px;
+  --oc-div: 24;      /* the track's divisions — MUST TRACK the axis's labels */
+  background: var(--oc-bg); border: 1px solid var(--oc-line); border-radius: 10px;
+  padding: .1rem 1rem .6rem; overflow-x: auto;
+  font-variant-numeric: tabular-nums;
+  /* the axis thins out by how much room THIS host has, not by how wide the
+     window is: the same component is a full page in the Hub and a block inside
+     an 1180px scene panel in the Atlas, and a viewport media query would have
+     given the panel a 24-hour axis at 26px an hour */
+  container-type: inline-size;
+}
+
+.oc-hours, .oc-group, .oc-row {
+  display: grid; align-items: center;
+  grid-template-columns: var(--oc-gut) var(--oc-name-w) 1fr var(--oc-meta-w);
+  gap: 0 var(--oc-gap);
+}
+
+/* ── the controls ── */
+.oc-controls { display: flex; gap: .8rem; align-items: center; flex-wrap: wrap; padding: .5rem .2rem; font-size: .78rem; color: var(--oc-dim); }
+.oc-filter { flex: 1 1 260px; max-width: 420px; background: var(--bg, #1d2021); color: var(--oc-text); border: 1px solid var(--oc-line); border-radius: 6px; padding: .3rem .5rem; font-size: .8rem; }
+.oc-filter:focus { outline: none; border-color: var(--oc-gilt); }
+.oc-btn { background: none; border: 1px solid var(--oc-line); color: var(--oc-dim); border-radius: 4px; cursor: pointer;
+  font-family: var(--oc-font-display); font-size: .62rem; letter-spacing: .12em; text-transform: uppercase; padding: .2rem .55rem; }
+.oc-btn:hover { color: var(--oc-gilt); border-color: var(--oc-gilt); }
+.oc-count { margin-left: auto; font-family: var(--oc-font-data); font-size: .68rem; }
+
+/* ── the axis ── it rides the top of the scroll: a page of rows is more than
+   one screen, and a ruler you have to scroll back to is one you stop reading */
+.oc-hours { position: sticky; top: 0; z-index: 2; background: var(--oc-bg); padding: .45rem 0 .35rem; border-bottom: 1px solid var(--oc-line); }
+.oc-ticks { position: relative; height: 12px; font-family: var(--oc-font-data); font-size: .58rem; letter-spacing: .06em; color: var(--oc-dim); }
+.oc-ticks span { position: absolute; top: 0; transform: translateX(-50%); }
+.oc-hours .oc-name b { font-family: var(--oc-font-display); font-weight: 700; font-size: .6rem; letter-spacing: .18em; color: var(--oc-dim); }
+
+/* ── an app ── */
+.oc-group { min-height: 34px; margin-top: .5rem; border-top: 1px solid var(--oc-line); border-bottom: 1px solid var(--oc-line);
+  background: color-mix(in srgb, var(--oc-bg) 86%, var(--oc-text) 14%); }
+.oc-group .oc-name b { font-family: var(--oc-font-display); font-weight: 700; font-size: .74rem; letter-spacing: .12em; color: var(--oc-text); }
+.oc-caret { background: none; border: none; color: var(--oc-dim); cursor: pointer; font-size: .8rem; padding: 0; }
+.oc-caret:hover { color: var(--oc-gilt); }
+
+/* ── a row ── */
+.oc-row { min-height: 30px; border-bottom: 1px solid color-mix(in srgb, var(--oc-line) 55%, transparent); }
+.oc-row:last-of-type { border-bottom: none; }
+.oc-row.none .oc-name b { color: var(--oc-dim); font-style: italic; font-weight: 400; }
+.oc-mark { font-style: normal; text-align: center; font-size: .82rem; line-height: 1; color: var(--oc-dim); }
+.oc-name { min-width: 0; display: flex; flex-direction: column; line-height: 1.2; padding-right: .2rem; }
+.oc-name b, .oc-name i { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.oc-name b { font-family: var(--oc-font-body); font-weight: 600; font-size: .82rem; color: var(--oc-text); }
+.oc-name i { font-style: normal; font-family: var(--oc-font-data); font-size: .6rem; color: var(--oc-dim); }
+.oc-row.off .oc-name b, .oc-row.parked .oc-name b { color: var(--oc-dim); text-decoration: line-through; }
+.oc-meta { min-width: 0; display: flex; flex-direction: column; line-height: 1.25; text-align: right; font-family: var(--oc-font-data); }
+.oc-meta em, .oc-meta i { font-style: normal; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.oc-meta em { font-size: .64rem; color: var(--oc-text); }
+.oc-meta i { font-size: .6rem; color: var(--oc-dim); }
+
+/* ── the day ── the track's own ground is the ruler, so the axis above it
+   carries numbers and nothing else. `--oc-div` MUST TRACK how many hours the
+   axis actually labels: a division with no number over it is a line the reader
+   has to count from, which is the thing a ruler exists to stop. */
+.oc-track {
+  position: relative; height: 18px; border-radius: 2px;
+  border: 1px solid color-mix(in srgb, var(--oc-line) 70%, transparent); overflow: hidden;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 calc(100%/var(--oc-div) - 1px),
+      color-mix(in srgb, var(--oc-line) 60%, transparent) calc(100%/var(--oc-div) - 1px) calc(100%/var(--oc-div))),
+    rgba(0,0,0,.26);
+}
+.oc-track.head { height: 22px; }
+.oc-block { position: absolute; top: 2px; bottom: 2px; min-width: 2px; border-radius: 1px; background: var(--oc-ink); }
+.oc-row.tone-warm .oc-block { background: var(--oc-gilt); opacity: .9; }
+.oc-row.tone-heavy .oc-block { background: var(--oc-warn); }
+.oc-block.tick { top: 5px; bottom: 5px; opacity: .6; }
+.oc-block.off { background: var(--oc-ink); opacity: .35; }
+.oc-block.overlap { outline: 1px dashed var(--oc-alarm); outline-offset: 1px; opacity: 1; }
+.oc-block.pending { outline: 1px dashed var(--oc-gilt); }
+.oc-idle { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-style: normal; font-family: var(--oc-font-data); font-size: .56rem; letter-spacing: .08em; color: var(--oc-ink); opacity: .7; }
+.oc-dot { position: absolute; top: 8px; width: 5px; height: 5px; border-radius: 50%; background: var(--oc-ok); }
+.oc-dot.bad { background: var(--oc-alarm); }
+.oc-now { position: absolute; top: -1px; bottom: -1px; width: 1px; background: var(--oc-info); opacity: .9; z-index: 1; }
+
+/* ── the verdicts ── a wall of ✓ stays quiet; a ✕ is the only thing with
+   colour in its row, and earns a rule in the gutter so it is findable by
+   scrolling instead of by reading */
+.oc-row.v-kept .oc-mark { color: var(--oc-ok); }
+.oc-row.v-pending .oc-mark, .oc-row.v-pending .oc-said { color: var(--oc-gilt); }
+.oc-row.v-failed .oc-mark { color: var(--oc-alarm); }
+.oc-row.v-failed .oc-said { color: var(--oc-alarm); font-weight: 600; }
+.oc-row.v-failed { box-shadow: inset 2px 0 0 var(--oc-alarm); }
+.oc-row.v-awaited .oc-said { font-style: italic; opacity: .7; }
+
+/* ── the actions ── */
+.oc-line { display: flex; align-items: center; justify-content: flex-end; gap: .4rem; min-width: 0; }
+.oc-line .oc-said { min-width: 0; }
+.oc-actions { display: inline-flex; gap: .2rem; flex: none; }
+.oc-actions button { background: none; border: 1px solid var(--oc-line); color: var(--oc-dim); border-radius: 3px; font-size: .62rem; padding: 0 .3rem; cursor: pointer; }
+.oc-actions button:hover { color: var(--oc-gilt); border-color: var(--oc-gilt); }
+
+/* ── the legend ── the swatches ARE the ladder; they read from the same
+   tokens the blocks do, so a host that re-dresses one re-dresses both */
+.oc-legend { display: flex; gap: 1rem; font-size: .68rem; color: var(--oc-dim); padding: .6rem .2rem 0; flex-wrap: wrap; font-family: var(--oc-font-data); }
+.oc-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: middle; margin-right: .3rem; }
+.oc-swatch.sw-warm { background: var(--oc-gilt); }
+.oc-swatch.sw-heavy { background: var(--oc-warn); }
+.oc-swatch.sw-net { background: var(--oc-ink); }
+.oc-swatch.sw-off { background: var(--oc-ink); opacity: .35; }
+.oc-swatch.sw-overlap { outline: 1px dashed var(--oc-alarm); outline-offset: 1px; }
+.oc-swatch.sw-call { background: var(--oc-ok); border-radius: 50%; }
+
+@container (max-width: 1180px) { .oc-track { --oc-div: 12; } .oc-ticks span:nth-child(2n) { display: none; } }
+@container (max-width: 760px) { .oc-track { --oc-div: 8; } .oc-ticks span:not(:nth-child(6n+1)) { display: none; } }
+@container (max-width: 900px) { .oc-hours, .oc-group, .oc-row { --oc-name-w: 160px; --oc-meta-w: 120px; } }

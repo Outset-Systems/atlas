@@ -1,0 +1,92 @@
+# The Atlas: a self-hosted map of your homelab, in one container.
+#
+#   docker compose -f compose.public.yaml up -d
+#
+# Then open http://localhost:5006 and sign in as the admin below.
+# Full guide: docs/install.md. Every setting: docs/configuration.md.
+#
+# Values in ${...} are read from your shell or from a .env file next to this
+# one. Only ATLAS_ADMIN_PASSWORD needs setting on first start.
+
+name: atlas
+
+services:
+  atlas:
+    # Built from this checkout. To run the published image instead, delete
+    # the `build:` block and set, for example:
+    #   image: ghcr.io/outset-systems/atlas:0.1
+    build:
+      context: .
+      target: public
+    image: atlas:local
+    restart: unless-stopped
+
+    # Loopback only. Put a reverse proxy with TLS in front to reach it from
+    # other machines (docs/install.md), or change this to "5006:5006" on a
+    # network you trust.
+    ports:
+      - "${ATLAS_PUBLISH:-127.0.0.1:5006}:5006"
+
+    # Everything the app writes: the dataset, accounts, generated keys,
+    # change history. Back this volume up (docs/install.md#backups).
+    volumes:
+      - atlas-data:/data
+
+    environment:
+      ATLAS_THEME: plain
+      # Real sign-in: local accounts with optional TOTP and optional LDAPS.
+      ATLAS_AUTH_MODE: accounts
+      # First run only: creates this admin while no admin exists, then does
+      # nothing. The password needs at least 12 characters.
+      ATLAS_BOOTSTRAP_ADMIN_USER: ${ATLAS_ADMIN_USER:-admin}
+      ATLAS_BOOTSTRAP_ADMIN_PASSWORD: ${ATLAS_ADMIN_PASSWORD:-}
+      # Or keep the password out of the environment: leave ATLAS_ADMIN_PASSWORD
+      # unset, put the password in a file, uncomment the two `secrets:` blocks
+      # below, and uncomment this line:
+      #   ATLAS_BOOTSTRAP_ADMIN_PASSWORD_FILE: /run/secrets/atlas_admin_password
+      # Who must enroll a TOTP authenticator at sign-in: "admins", "all", or
+      # blank for nobody. "admins" is recommended once you have signed in.
+      ATLAS_MFA_REQUIRED: ${ATLAS_MFA_REQUIRED:-}
+      # "empty" opens on a blank map; "bundled" opens on the demo lab.
+      ATLAS_FALLBACK: ${ATLAS_FALLBACK:-empty}
+      # The name on the sign-in page.
+      ATLAS_BRAND: ${ATLAS_BRAND:-The Atlas}
+      # The address your reverse proxy connects from, so the sign-in throttle
+      # and the audit log see real client addresses. Blank trusts no proxy.
+      ATLAS_TRUSTED_PROXIES: ${ATLAS_TRUSTED_PROXIES:-}
+      # "1" only for testing over plain http from another machine: without
+      # TLS a browser drops the Secure session cookie and sign-in loops.
+      ATLAS_INSECURE_COOKIES: ${ATLAS_INSECURE_COOKIES:-}
+      # Live health, all optional (docs/configuration.md#integrations):
+      #   ATLAS_SIGNALS_SOURCES: prometheus,kuma
+      #   ATLAS_PROM_URL: http://prometheus:9090
+      #   ATLAS_LOKI_URL: http://loki:3100
+      #   ATLAS_KUMA_URL: http://uptime-kuma:3001
+      #   ATLAS_KUMA_API_KEY_FILE: /run/secrets/kuma_api_key
+
+    # secrets:
+    #   - atlas_admin_password
+
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request,sys; r=urllib.request.urlopen('http://localhost:5006/api/v2/health', timeout=3); sys.exit(0 if r.status==200 else 1)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+    # The app runs as an unprivileged user and needs no Linux capabilities.
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+# secrets:
+#   atlas_admin_password:
+#     file: ./atlas_admin_password.txt
+
+volumes:
+  atlas-data:

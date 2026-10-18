@@ -1,0 +1,47 @@
+# atlas-relay — example systemd unit (install by hand; nothing here deploys itself).
+#
+#   install -d -m 750 -o atlas-relay -g atlas-relay /etc/atlas-relay
+#   install -m 600 -o atlas-relay -g atlas-relay token /etc/atlas-relay/token
+#   cp relay.toml /etc/atlas-relay/relay.toml && chmod 600 /etc/atlas-relay/relay.toml
+#   cp atlas-relay.service /etc/systemd/system/ && systemctl enable --now atlas-relay
+#
+# The service account needs no privileges beyond reading its own config —
+# EXCEPT for [scan], where nmap's default -sn sweep uses raw sockets and needs
+# CAP_NET_RAW (granted below) or an unprivileged fallback (nmap_args = ["-sT"]).
+
+[Unit]
+Description=Atlas relay — pushes site health/inventory to a hosted Atlas
+Documentation=https://github.com/outset-systems/atlas
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=atlas-relay
+Group=atlas-relay
+WorkingDirectory=/opt/atlas
+ExecStart=/usr/bin/python3 /opt/atlas/relay/atlas_relay.py --config /etc/atlas-relay/relay.toml
+Restart=on-failure
+RestartSec=30
+
+# Outbound-only agent handling a credential: give it nothing it does not need.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+AmbientCapabilities=
+# For [scan] with nmap's raw-socket modes, replace the two lines above with:
+#   CapabilityBoundingSet=CAP_NET_RAW
+#   AmbientCapabilities=CAP_NET_RAW
+
+[Install]
+WantedBy=multi-user.target

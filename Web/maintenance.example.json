@@ -1,0 +1,15 @@
+{
+  "_comment": "THE REPAIRS. `windows` is the modern shape: scheduled, self-closing, edited from the Desk. `nodes` is the legacy flat list — still honoured, still what the ops tooling maintenance_prep flow writes — and means 'under repair until removed'. Both may coexist; neither writer clobbers the other. Copy to /data/maintenance.json or point ATLAS_MAINTENANCE at it.",
+  "nodes": [],
+  "windows": [
+    {
+      "id": "sunday-patching",
+      "reason": "fleet patching + reboot",
+      "nodes": ["downloads"],
+      "starts": "2026-08-02T02:00:00Z",
+      "ends": "2026-08-02T04:00:00Z",
+      "repeat": "weekly",
+      "note": "alarms stay quiet for these places while the window is open"
+    }
+  ]
+}

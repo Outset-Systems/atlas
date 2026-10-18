@@ -1,0 +1,9 @@
+{
+  "count": 2,
+  "next": null,
+  "previous": null,
+  "results": [
+    {"id": 21, "prefix": "10.77.33.0/24", "vlan": {"id": 11, "vid": 33, "name": "Upper Deck"}},
+    {"id": 22, "prefix": "10.77.90.0/24", "vlan": {"id": 12, "vid": 90, "name": "Outset DMZ"}}
+  ]
+}

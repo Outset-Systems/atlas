@@ -1,0 +1,60 @@
+# atlas-relay — example configuration.
+# Copy to relay.toml, fill in, chmod 600 (it points at a token file).
+# Everything here is OUTBOUND: the relay opens connections, nothing listens.
+
+[server]
+# Where the hosted Atlas lives. https only — a plain-http url is refused unless
+# you explicitly set allow_insecure_http (LAN testing).
+url = "https://atlas.example.com"
+# The per-site token from `atlasctl token-issue --site <slug>`. Prefer the file
+# form (chmod 600, root:root) — an inline token ends up in backups and shells.
+token_file = "/etc/atlas-relay/token"
+# token = "atlas_..."                 # or ATLAS_RELAY_TOKEN in the environment
+verify_tls = true
+timeout = 20
+# web_dir = "/opt/atlas/Web"          # only if the relay is not inside a checkout
+
+# ── Health ───────────────────────────────────────────────────────────────────
+# Merged Kuma/Prometheus feed. This is the one that makes the map live; keep it
+# frequent and cheap.
+[signals]
+enabled = true
+interval = 30
+sources = ["kuma", "prometheus"]
+
+kuma_url = "http://uptime-kuma.internal:3001"
+kuma_api_key_file = "/etc/atlas-relay/kuma-key"
+# kuma_api_key = "..."
+
+prom_url = "http://prometheus.internal:9090"
+
+# Optional: map Kuma monitor names onto node ids. Without it, monitors are
+# matched to markers by name.
+[signals.kuma_map]
+# "Nextcloud" = "app-host"
+# "Jellyfin"  = "media"
+
+# ── Inventory ────────────────────────────────────────────────────────────────
+# Pulls NetBox on the customer LAN and pushes the snapshot; the server does the
+# mapping. Six hours is plenty — inventory is not a live signal.
+[inventory]
+enabled = false
+interval = 21600
+netbox_url = "https://netbox.internal"
+netbox_token_file = "/etc/atlas-relay/netbox-token"
+# netbox_site = "hq"                  # limit to one NetBox site
+# role_map = "nas=physical,edge-router=network"
+verify_tls = true
+
+# ── Discovery ────────────────────────────────────────────────────────────────
+# Runs nmap locally and reports what answers. Undocumented devices are the
+# point: the server counts anything that matches no node.
+# Default args are a ping sweep (-sn) — no port scanning unless you ask.
+[scan]
+enabled = false
+interval = 86400
+targets = ["10.0.0.0/24"]
+nmap_args = ["-sn"]
+# nmap_binary = "/usr/bin/nmap"
+# promote = false   # true = discovered devices become real map nodes automatically
+timeout = 600

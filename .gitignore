@@ -1,0 +1,25 @@
+# Runtime state: the dataset, layout, accounts store and keys live in the
+# /data volume (ATLAS_DATA), never in the repo.
+Data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.key
+secrets/
+.env
+
+# Python and test scratch
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.pytest-tmp/
+Web/.pytest-tmp/
+
+# Editor and OS noise
+Thumbs.db
+.DS_Store
+*.tmp
+*.bak
+*.bak-*

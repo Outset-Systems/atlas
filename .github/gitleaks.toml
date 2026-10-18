@@ -1,0 +1,8 @@
+# gitleaks configuration for .github/workflows/secrets.yml.
+# The default rules, plus nothing yet: add an [[allowlists]] entry here only
+# for an invented example value, with a comment saying where it lives.
+
+title = "atlas"
+
+[extend]
+useDefault = true

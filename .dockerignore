@@ -1,0 +1,30 @@
+# The Dockerfile copies Web/ wholesale; keep state and scratch out of the image.
+
+# Credential stores, keys and local settings
+**/*.db
+**/*.db-journal
+**/*.db-wal
+**/*.db-shm
+**/*.key
+**/secrets/
+.env
+
+# Safety copies of the dataset must never ride into an image
+**/*.bak
+**/*.bak-*
+
+# Python, test and tooling scratch
+**/__pycache__
+**/.pytest_cache
+**/.pytest-tmp
+**/.venv
+
+# Never build from a checkout's history or editor state
+.git
+.gitignore
+.gitattributes
+**/Thumbs.db
+**/.DS_Store
+
+# Runtime data is host state, not image state
+Data/

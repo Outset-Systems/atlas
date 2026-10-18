@@ -1,0 +1,16 @@
+{
+  "_comment": "Example/dev signals feed. Point ATLAS_SIGNALS_SOURCES=static + ATLAS_SIGNALS_FILE at a copy of this to exercise K1-K5 live-marker code paths without Kuma. In production, the kuma/prometheus adapters produce this shape instead. Keys are node/service ids from lab-data.json.",
+  "nodes": {
+    "hypervisor": {"state": "healthy", "uptime_30d": 99.98},
+    "app-host":       {"state": "healthy", "uptime_30d": 99.91},
+    "edge":       {"state": "healthy", "uptime_30d": 99.80},
+    "monitor":      {"state": "degraded", "uptime_30d": 98.40},
+    "standby":        {"state": "slumbering"}
+  },
+  "services": {
+    "feed": {"state": "healthy"},
+    "apex": {"state": "healthy"},
+    "grafana": {"state": "healthy"}
+  },
+  "metrics": {"watchfires_up": 13, "watchfires_total": 13}
+}

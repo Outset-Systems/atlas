@@ -1,0 +1,1290 @@
+{
+  "meta": {
+    "title": "Home Lab Atlas",
+    "surveyed": "2026-10-18",
+    "art": "demo-lab render (build.py), label-free",
+    "map_image": "demo-lab.webp",
+    "tribute": {
+      "total_gb": 128,
+      "host_reserve_gb": 8,
+      "cpu_cores": 16,
+      "cpu_threads": 32
+    }
+  },
+  "zones": [
+    {
+      "id": "sky",
+      "name": "Servers",
+      "vlan": 33,
+      "subnet": "10.77.33.0/24",
+      "hue": "#7FB0C4",
+      "net_hue": "#7FB0C4",
+      "label_x": 50.0,
+      "label_y": 18.0,
+      "lore": "The hypervisor, the NAS and the guests that run the house. Nothing here faces the internet."
+    },
+    {
+      "id": "workstation-vlan",
+      "name": "Clients",
+      "vlan": 10,
+      "subnet": "10.77.10.0/24",
+      "hue": "#8FB573",
+      "net_hue": "#8FB573",
+      "label_x": 18.0,
+      "label_y": 40.0,
+      "hide_label": true,
+      "lore": "Laptops, phones and the desk machines. Trusted to reach services, never to serve them."
+    },
+    {
+      "id": "monitor-vlan",
+      "name": "Watch",
+      "vlan": 30,
+      "subnet": "10.77.30.0/24",
+      "hue": "#C9A554",
+      "net_hue": "#C9A554",
+      "label_x": 78.0,
+      "label_y": 36.0,
+      "hide_label": true,
+      "lore": "Monitoring lives on its own network so it can still see when everything else is down."
+    },
+    {
+      "id": "depths",
+      "name": "Management",
+      "vlan": 1,
+      "subnet": "10.77.1.0/24",
+      "hue": "#B8C4D6",
+      "net_hue": "#B8C4D6",
+      "label_x": 50.0,
+      "label_y": 88.0,
+      "hide_label": true,
+      "lore": "Switch and router management. Reachable only from the admin workstation."
+    },
+    {
+      "id": "lookout",
+      "name": "IoT",
+      "vlan": 66,
+      "subnet": "10.77.66.0/24",
+      "hue": "#C06B62",
+      "net_hue": "#C06B62",
+      "label_x": 86.0,
+      "label_y": 70.0,
+      "hide_label": true,
+      "lore": "Cameras, plugs and sensors. Allowed out to their clouds, never in to anything else."
+    },
+    {
+      "id": "dmz",
+      "name": "DMZ",
+      "vlan": 90,
+      "subnet": "10.77.90.0/24",
+      "hue": "#C0714E",
+      "net_hue": "#C0714E",
+      "label_x": 24.0,
+      "label_y": 74.0,
+      "hide_label": true,
+      "lore": "The only machines the internet can knock on: the edge proxy and what it fronts."
+    }
+  ],
+  "nodes": [
+    {
+      "id": "gateway",
+      "name": "GATEWAY",
+      "kind": "network",
+      "zone": "sky",
+      "shape": "diamond",
+      "x": 50.0,
+      "y": 52.0,
+      "ip": "10.77.1.1",
+      "role": "Router + firewall",
+      "lore": "Every VLAN meets here, and every rule about who may talk to whom lives here.",
+      "hw": "OPNsense 26.1 · N100 · 6× 2.5GbE",
+      "links": [
+        {
+          "label": "OPNsense",
+          "url": "https://10.77.1.1",
+          "desc": "Interfaces, firewall rules, DHCP and the VPN.",
+          "hue": "#8ec07c",
+          "kuma": "Gateway"
+        }
+      ],
+      "reaches": [
+        "core-switch",
+        "hypervisor",
+        "nas",
+        "edge",
+        "the-wild"
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "source": "local",
+          "sudo": "nopasswd",
+          "groups": [
+            "wheel"
+          ],
+          "note": "Console and web UI. The only admin."
+        },
+        {
+          "name": "backup-bot",
+          "source": "service",
+          "sudo": "none",
+          "groups": [],
+          "note": "Pulls the config nightly. Read-only API key."
+        }
+      ]
+    },
+    {
+      "id": "core-switch",
+      "name": "CORE SWITCH",
+      "kind": "network",
+      "zone": "depths",
+      "shape": "triangle",
+      "x": 50.0,
+      "y": 80.0,
+      "ip": "10.77.1.2",
+      "role": "Managed switch · 24 ports",
+      "lore": "Carries every VLAN to every room. Its management page is the most boring and most important page in the house.",
+      "hw": "24× 1GbE · 4× SFP+ · PoE",
+      "links": [
+        {
+          "label": "Switch UI",
+          "url": "https://10.77.1.2",
+          "desc": "Ports, VLAN membership and PoE budget.",
+          "hue": "#8ec07c",
+          "kuma": "Core Switch",
+          "connects": [
+            "gateway",
+            "hypervisor",
+            "nas",
+            "gpu-box",
+            "workstation"
+          ]
+        }
+      ],
+      "reaches": [
+        "gateway"
+      ]
+    },
+    {
+      "id": "hypervisor",
+      "name": "HYPERVISOR",
+      "kind": "physical",
+      "zone": "sky",
+      "spark": true,
+      "x": 50.0,
+      "y": 26.0,
+      "ip": "10.77.33.5",
+      "role": "Hypervisor · eight guests",
+      "lore": "The one machine that runs the rest. Patch it last and reboot it carefully.",
+      "hw": "Proxmox VE 9 · Ryzen 9 7950X · 128 GB · 2× 2 TB NVMe",
+      "children": [
+        "dc",
+        "monitor",
+        "downloads",
+        "internal-host",
+        "media",
+        "edge",
+        "app-host",
+        "standby"
+      ],
+      "links": [
+        {
+          "label": "Proxmox",
+          "url": "https://10.77.33.5:8006",
+          "desc": "Guests, storage, snapshots and the backup jobs.",
+          "hue": "#8ec07c",
+          "kuma": "Hypervisor"
+        }
+      ],
+      "reaches": [
+        "gateway",
+        "nas"
+      ],
+      "accounts": [
+        {
+          "name": "root",
+          "source": "local",
+          "sudo": "none",
+          "groups": [],
+          "note": "Console only; SSH disabled for root."
+        },
+        {
+          "name": "admin",
+          "source": "domain",
+          "sudo": "password",
+          "groups": [
+            "sudo"
+          ],
+          "note": "Day-to-day admin."
+        },
+        {
+          "name": "ops-agent",
+          "source": "agent",
+          "sudo": "nopasswd",
+          "groups": [
+            "docker"
+          ],
+          "note": "Automation account. Command-restricted key."
+        }
+      ]
+    },
+    {
+      "id": "nas",
+      "name": "NAS",
+      "kind": "physical",
+      "zone": "sky",
+      "spark": true,
+      "x": 66.0,
+      "y": 20.0,
+      "ip": "10.77.33.10",
+      "role": "Storage · 48 TB",
+      "lore": "Every byte the house cannot afford to lose, snapshotted hourly and copied off-site nightly.",
+      "hw": "TrueNAS SCALE · 4× 12 TB RAIDZ1 · 64 GB ECC",
+      "links": [
+        {
+          "label": "TrueNAS",
+          "url": "https://10.77.33.10",
+          "desc": "Pools, shares and snapshots.",
+          "hue": "#8ec07c",
+          "kuma": "NAS"
+        }
+      ],
+      "reaches": [
+        "gateway",
+        "the-wild"
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "source": "local",
+          "sudo": "password",
+          "groups": [
+            "builtin_administrators"
+          ],
+          "note": "Web UI admin."
+        },
+        {
+          "name": "media",
+          "source": "service",
+          "sudo": "none",
+          "groups": [],
+          "note": "Read-only share for the media server."
+        }
+      ]
+    },
+    {
+      "id": "dc",
+      "name": "DIRECTORY",
+      "kind": "vm",
+      "zone": "sky",
+      "parent": "hypervisor",
+      "x": 40.0,
+      "y": 18.0,
+      "ip": "10.77.33.11",
+      "role": "Directory + DNS + internal CA",
+      "lore": "Every account and every internal name starts here.",
+      "hw": "Debian 13 · 2 vCPU · 4 GB · Samba AD + step-ca",
+      "links": [
+        {
+          "label": "Directory",
+          "url": "https://id.home.example",
+          "desc": "Sign-in for every service in the house.",
+          "hue": "#8ec07c",
+          "kuma": "Directory"
+        }
+      ],
+      "reaches": [
+        "gateway"
+      ]
+    },
+    {
+      "id": "monitor",
+      "name": "MONITOR",
+      "kind": "vm",
+      "zone": "monitor-vlan",
+      "parent": "hypervisor",
+      "spark": true,
+      "x": 76.0,
+      "y": 32.0,
+      "ip": "10.77.30.10",
+      "role": "Monitoring · metrics, logs, uptime",
+      "lore": "Prometheus, Loki and Uptime Kuma. When something is down, this is how you know.",
+      "hw": "Debian 13 · 4 vCPU · 8 GB · Docker",
+      "links": [
+        {
+          "label": "Uptime Kuma",
+          "url": "http://10.77.30.10:3001",
+          "desc": "Up/down for every service on this map.",
+          "hue": "#8ec07c",
+          "kuma": "Uptime Kuma",
+          "container": "uptime-kuma"
+        },
+        {
+          "label": "Prometheus",
+          "url": "http://10.77.30.10:9090",
+          "desc": "Metrics from every host, kept thirty days.",
+          "hue": "#8ec07c",
+          "container": "prometheus",
+          "require_group": "atlas-admins"
+        },
+        {
+          "label": "Loki",
+          "url": "http://10.77.30.10:3100",
+          "desc": "Logs from every container.",
+          "hue": "#8ec07c",
+          "container": "loki",
+          "require_group": "atlas-admins"
+        }
+      ],
+      "reaches": [
+        "gateway",
+        "hypervisor",
+        "nas",
+        "edge"
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "source": "domain",
+          "sudo": "password",
+          "groups": [
+            "sudo",
+            "docker"
+          ],
+          "note": ""
+        },
+        {
+          "name": "ops-agent",
+          "source": "agent",
+          "sudo": "none",
+          "groups": [
+            "docker"
+          ],
+          "note": "Reads metrics only."
+        }
+      ]
+    },
+    {
+      "id": "downloads",
+      "name": "DOWNLOADS",
+      "kind": "vm",
+      "zone": "sky",
+      "parent": "hypervisor",
+      "x": 58.0,
+      "y": 34.0,
+      "ip": "10.77.33.21",
+      "role": "Downloads + automation",
+      "lore": "Fetches what the media library asks for, behind its own VPN tunnel.",
+      "hw": "Debian 13 · 2 vCPU · 4 GB · Docker",
+      "links": [
+        {
+          "label": "Downloader",
+          "url": "http://10.77.33.21:8080",
+          "desc": "Queue and history.",
+          "hue": "#8ec07c",
+          "kuma": "Downloads",
+          "container": "downloader"
+        }
+      ],
+      "reaches": [
+        "gateway",
+        "nas"
+      ]
+    },
+    {
+      "id": "internal-host",
+      "name": "INTERNAL HOST",
+      "kind": "vm",
+      "zone": "sky",
+      "parent": "hypervisor",
+      "spark": true,
+      "x": 42.0,
+      "y": 34.0,
+      "ip": "10.77.33.30",
+      "role": "Internal apps · wiki, git, dashboards",
+      "lore": "The house's own tools: the wiki, the git server and this map.",
+      "hw": "Debian 13 · 4 vCPU · 8 GB · Docker",
+      "links": [
+        {
+          "label": "Forgejo",
+          "url": "https://git.home.example",
+          "desc": "Every repository, including this map's.",
+          "hue": "#8ec07c",
+          "kuma": "Forgejo",
+          "container": "forgejo"
+        },
+        {
+          "label": "Wiki",
+          "url": "https://wiki.home.example",
+          "desc": "Runbooks: how each service is rebuilt.",
+          "hue": "#8ec07c",
+          "kuma": "Wiki",
+          "container": "wiki"
+        },
+        {
+          "label": "Atlas",
+          "url": "https://atlas.home.example",
+          "desc": "This map.",
+          "hue": "#8ec07c",
+          "container": "atlas",
+          "require_group": "atlas-admins"
+        }
+      ],
+      "reaches": [
+        "gateway",
+        "nas",
+        "monitor"
+      ]
+    },
+    {
+      "id": "media",
+      "name": "MEDIA",
+      "kind": "vm",
+      "zone": "dmz",
+      "parent": "hypervisor",
+      "x": 30.0,
+      "y": 66.0,
+      "ip": "10.77.90.30",
+      "role": "Media server",
+      "lore": "Films and shows for the house, read from the NAS.",
+      "hw": "Debian 13 · 4 vCPU · 8 GB · Jellyfin",
+      "links": [
+        {
+          "label": "Jellyfin",
+          "url": "https://media.home.example",
+          "desc": "The library.",
+          "hue": "#8ec07c",
+          "kuma": "Jellyfin",
+          "path": [
+            "edge",
+            "gateway",
+            "the-wild"
+          ],
+          "container": "jellyfin"
+        }
+      ],
+      "reaches": [
+        "gateway",
+        "nas"
+      ]
+    },
+    {
+      "id": "edge",
+      "name": "EDGE",
+      "kind": "vm",
+      "zone": "dmz",
+      "parent": "hypervisor",
+      "spark": true,
+      "x": 22.0,
+      "y": 60.0,
+      "ip": "10.77.90.10",
+      "role": "Reverse proxy + intrusion detection",
+      "lore": "The only door the internet may knock on. Caddy answers; CrowdSec watches.",
+      "hw": "Debian 13 · 2 vCPU · 2 GB · Caddy + CrowdSec",
+      "links": [
+        {
+          "label": "CrowdSec",
+          "url": "http://10.77.90.10:8080",
+          "desc": "Bans and decisions at the edge.",
+          "hue": "#8ec07c",
+          "kuma": "Edge",
+          "container": "crowdsec",
+          "require_group": "atlas-admins"
+        }
+      ],
+      "reaches": [
+        "gateway",
+        "the-wild",
+        "app-host",
+        "media"
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "source": "local",
+          "sudo": "password",
+          "groups": [
+            "sudo"
+          ],
+          "note": ""
+        },
+        {
+          "name": "deploy",
+          "source": "service",
+          "sudo": "none",
+          "groups": [
+            "docker"
+          ],
+          "note": "CI deploy key."
+        }
+      ]
+    },
+    {
+      "id": "app-host",
+      "name": "APP HOST",
+      "kind": "vm",
+      "zone": "dmz",
+      "parent": "hypervisor",
+      "spark": true,
+      "x": 34.0,
+      "y": 56.0,
+      "ip": "10.77.90.20",
+      "role": "Public apps behind the edge",
+      "lore": "Nextcloud and the family photo album, published through the edge.",
+      "hw": "Debian 13 · 4 vCPU · 8 GB · Docker",
+      "links": [
+        {
+          "label": "Nextcloud",
+          "url": "https://cloud.home.example",
+          "desc": "Files and calendars, from anywhere.",
+          "hue": "#8ec07c",
+          "kuma": "Nextcloud",
+          "path": [
+            "edge",
+            "gateway",
+            "the-wild"
+          ],
+          "container": "nextcloud"
+        },
+        {
+          "label": "Photos",
+          "url": "https://photos.home.example",
+          "desc": "The family album.",
+          "hue": "#8ec07c",
+          "kuma": "Photos",
+          "path": [
+            "edge",
+            "gateway",
+            "the-wild"
+          ],
+          "container": "photos"
+        }
+      ],
+      "reaches": [
+        "gateway",
+        "nas",
+        "edge"
+      ]
+    },
+    {
+      "id": "standby",
+      "name": "STANDBY",
+      "kind": "vm",
+      "zone": "sky",
+      "parent": "hypervisor",
+      "x": 62.0,
+      "y": 12.0,
+      "ip": "10.77.33.40",
+      "role": "Spare guest · powered off",
+      "lore": "A clean guest kept ready for experiments. Off unless someone is trying something.",
+      "hw": "Debian 13 · 2 vCPU · 4 GB",
+      "links": []
+    },
+    {
+      "id": "gpu-box",
+      "name": "GPU BOX",
+      "kind": "physical",
+      "zone": "workstation-vlan",
+      "x": 16.0,
+      "y": 32.0,
+      "ip": "10.77.10.40",
+      "role": "Local AI models",
+      "lore": "One graphics card, several language models, and the house's power bill.",
+      "hw": "Ryzen 7 · RTX 4070 · 64 GB · Ollama",
+      "links": [
+        {
+          "label": "Ollama",
+          "url": "http://10.77.10.40:11434",
+          "desc": "Local models for the apps that ask.",
+          "hue": "#8ec07c",
+          "kuma": "GPU Box"
+        }
+      ],
+      "reaches": [
+        "gateway"
+      ]
+    },
+    {
+      "id": "workstation",
+      "name": "WORKSTATION",
+      "kind": "physical",
+      "zone": "workstation-vlan",
+      "x": 22.0,
+      "y": 42.0,
+      "ip": "10.77.10.21",
+      "role": "Admin workstation",
+      "lore": "Where the map is edited from. The only client allowed onto the management VLAN.",
+      "hw": "Windows 11 · Ryzen 7 · 32 GB",
+      "links": [],
+      "reaches": [
+        "gateway",
+        "core-switch"
+      ]
+    },
+    {
+      "id": "camera-hub",
+      "name": "CAMERA HUB",
+      "kind": "physical",
+      "zone": "lookout",
+      "x": 84.0,
+      "y": 64.0,
+      "ip": "10.77.66.5",
+      "role": "Home automation + cameras",
+      "lore": "Every sensor, camera and switch in the house, walled off from everything else.",
+      "hw": "Raspberry Pi 5 · 8 GB · Home Assistant OS",
+      "links": [
+        {
+          "label": "Home Assistant",
+          "url": "http://10.77.66.5:8123",
+          "desc": "Sensors, cameras and automations.",
+          "hue": "#8ec07c",
+          "kuma": "Home Assistant"
+        }
+      ],
+      "reaches": [
+        "gateway"
+      ]
+    },
+    {
+      "id": "offsite",
+      "name": "OFF-SITE",
+      "kind": "network",
+      "zone": "sky",
+      "off_map": true,
+      "x": 92.0,
+      "y": 8.0,
+      "ip": "—",
+      "role": "Off-site backup",
+      "lore": "Encrypted copies of the NAS, nightly, far away.",
+      "hw": "Object storage · restic",
+      "links": []
+    },
+    {
+      "id": "nas-2",
+      "name": "SECOND NAS",
+      "kind": "physical",
+      "zone": "sky",
+      "planned": true,
+      "x": 74.0,
+      "y": 14.0,
+      "ip": "10.77.33.12",
+      "role": "Planned · replication target",
+      "lore": "Not bought yet. Will hold a second copy of everything on the NAS.",
+      "hw": "planned",
+      "links": []
+    },
+    {
+      "id": "the-wild",
+      "name": "THE INTERNET",
+      "kind": "network",
+      "zone": "dmz",
+      "hue": "#C0714E",
+      "x": 10.0,
+      "y": 84.0,
+      "ip": "—",
+      "role": "The internet",
+      "lore": "Everything beyond the gateway.",
+      "hw": "ISP fibre · 1 Gb symmetric",
+      "links": []
+    }
+  ],
+  "routes": [
+    {
+      "from": "gateway",
+      "to": "core-switch",
+      "kind": "vlan"
+    },
+    {
+      "from": "core-switch",
+      "to": "hypervisor",
+      "kind": "vlan"
+    },
+    {
+      "from": "core-switch",
+      "to": "nas",
+      "kind": "vlan"
+    },
+    {
+      "from": "core-switch",
+      "to": "gpu-box",
+      "kind": "vlan"
+    },
+    {
+      "from": "core-switch",
+      "to": "workstation",
+      "kind": "vlan"
+    },
+    {
+      "from": "gateway",
+      "to": "camera-hub",
+      "kind": "vlan"
+    },
+    {
+      "from": "gateway",
+      "to": "monitor",
+      "kind": "vlan"
+    },
+    {
+      "from": "gateway",
+      "to": "edge",
+      "kind": "vlan"
+    },
+    {
+      "from": "gateway",
+      "to": "dc",
+      "kind": "vlan"
+    },
+    {
+      "from": "gateway",
+      "to": "internal-host",
+      "kind": "vlan"
+    },
+    {
+      "from": "gateway",
+      "to": "downloads",
+      "kind": "vlan"
+    },
+    {
+      "from": "gateway",
+      "to": "media",
+      "kind": "vlan"
+    },
+    {
+      "from": "gateway",
+      "to": "app-host",
+      "kind": "vlan"
+    },
+    {
+      "from": "gateway",
+      "to": "the-wild",
+      "kind": "wan"
+    },
+    {
+      "from": "nas",
+      "to": "offsite",
+      "kind": "wan"
+    },
+    {
+      "from": "edge",
+      "to": "app-host",
+      "kind": "edge"
+    },
+    {
+      "from": "edge",
+      "to": "media",
+      "kind": "edge"
+    },
+    {
+      "from": "edge",
+      "to": "gateway",
+      "kind": "edge"
+    },
+    {
+      "from": "monitor",
+      "to": "hypervisor",
+      "kind": "telemetry"
+    },
+    {
+      "from": "monitor",
+      "to": "nas",
+      "kind": "telemetry"
+    },
+    {
+      "from": "monitor",
+      "to": "edge",
+      "kind": "telemetry"
+    },
+    {
+      "from": "monitor",
+      "to": "app-host",
+      "kind": "telemetry"
+    },
+    {
+      "from": "workstation",
+      "to": "edge",
+      "kind": "mesh"
+    },
+    {
+      "from": "workstation",
+      "to": "monitor",
+      "kind": "mesh"
+    }
+  ],
+  "rack": [
+    {
+      "u": "U12",
+      "size": 1,
+      "name": "Patch Panel",
+      "node": "",
+      "desc": "24-port keystone panel, every drop labelled."
+    },
+    {
+      "u": "U11",
+      "size": 1,
+      "name": "Core Switch",
+      "node": "core-switch",
+      "desc": "24× 1GbE, 4× SFP+, PoE for the cameras."
+    },
+    {
+      "u": "U9–10",
+      "size": 2,
+      "name": "Gateway",
+      "node": "gateway",
+      "desc": "Fanless router, six 2.5GbE ports."
+    },
+    {
+      "u": "U5–8",
+      "size": 4,
+      "name": "Hypervisor",
+      "node": "hypervisor",
+      "desc": "4U tower on a shelf."
+    },
+    {
+      "u": "U1–4",
+      "size": 4,
+      "name": "NAS",
+      "node": "nas",
+      "desc": "Four bays, one spare."
+    }
+  ],
+  "vms": [
+    {
+      "id": "dc",
+      "host": "hypervisor",
+      "vcpu": 2,
+      "ram_gb": 4,
+      "demand_gb": 1.9,
+      "state": "on"
+    },
+    {
+      "id": "monitor",
+      "host": "hypervisor",
+      "vcpu": 4,
+      "ram_gb": 8,
+      "demand_gb": 5.1,
+      "state": "on"
+    },
+    {
+      "id": "downloads",
+      "host": "hypervisor",
+      "vcpu": 2,
+      "ram_gb": 4,
+      "demand_gb": 2.2,
+      "state": "on"
+    },
+    {
+      "id": "internal-host",
+      "host": "hypervisor",
+      "vcpu": 4,
+      "ram_gb": 8,
+      "demand_gb": 4.6,
+      "state": "on"
+    },
+    {
+      "id": "media",
+      "host": "hypervisor",
+      "vcpu": 4,
+      "ram_gb": 8,
+      "demand_gb": 3.8,
+      "state": "on",
+      "dynamic": "4–12"
+    },
+    {
+      "id": "edge",
+      "host": "hypervisor",
+      "vcpu": 2,
+      "ram_gb": 2,
+      "demand_gb": 0.9,
+      "state": "on"
+    },
+    {
+      "id": "app-host",
+      "host": "hypervisor",
+      "vcpu": 4,
+      "ram_gb": 8,
+      "demand_gb": 5.4,
+      "state": "on"
+    },
+    {
+      "id": "standby",
+      "host": "hypervisor",
+      "vcpu": 2,
+      "ram_gb": 4,
+      "demand_gb": 0,
+      "state": "off"
+    }
+  ],
+  "signals": {
+    "kuma": {
+      "Gateway": "gateway",
+      "Core Switch": "core-switch",
+      "Hypervisor": "hypervisor",
+      "NAS": "nas",
+      "Directory": "dc",
+      "Uptime Kuma": "monitor",
+      "Downloads": "downloads",
+      "Forgejo": "internal-host",
+      "Jellyfin": "media",
+      "Edge": "edge",
+      "Nextcloud": "app-host",
+      "Home Assistant": "camera-hub"
+    },
+    "drift_ignore": [
+      "offsite",
+      "nas-2"
+    ]
+  },
+  "rack_rear": [
+    {
+      "name": "UPS",
+      "node": "",
+      "desc": "1500 VA, about 20 minutes for the rack."
+    },
+    {
+      "name": "PDU",
+      "desc": "Switched, eight outlets."
+    },
+    {
+      "name": "Fibre ONT",
+      "node": "gateway",
+      "desc": "The ISP's box; the WAN side of the gateway."
+    }
+  ],
+  "chronicle": [
+    {
+      "title": "CPU by container",
+      "chart": "containers.cpu",
+      "solo": true,
+      "url": "https://grafana.home.example/d/containers",
+      "about": "Which container is busy right now."
+    },
+    {
+      "title": "Memory by container",
+      "chart": "containers.mem",
+      "solo": true,
+      "url": "https://grafana.home.example/d/containers",
+      "about": "Resident memory per container."
+    },
+    {
+      "title": "LLM calls",
+      "chart": "llm.calls",
+      "solo": true,
+      "about": "Model calls that answered vs fell back."
+    },
+    {
+      "title": "LLM calls per app",
+      "chart": "llm.apps",
+      "solo": true,
+      "about": "Who is asking the models."
+    },
+    {
+      "title": "Pending upgrades",
+      "chart": "patch.pending",
+      "solo": true,
+      "url": "https://grafana.home.example/d/patch",
+      "about": "Packages waiting on each host.",
+      "note": "Patched Sundays."
+    },
+    {
+      "title": "Uptime board",
+      "url": "http://10.77.30.10:3001/status/home",
+      "note": "Uptime Kuma's status page."
+    }
+  ],
+  "abyss": [
+    {
+      "title": "Active bans",
+      "chart": "edge.bans",
+      "solo": true,
+      "url": "https://grafana.home.example/d/security",
+      "about": "CrowdSec decisions in force, by origin."
+    },
+    {
+      "title": "Detections",
+      "chart": "edge.detections",
+      "solo": true,
+      "about": "Scenario overflows at the edge."
+    },
+    {
+      "title": "Network traffic",
+      "chart": "hosts.net",
+      "solo": true,
+      "about": "Bytes in and out, per host."
+    },
+    {
+      "title": "Edge status codes",
+      "chart": "edge.status",
+      "solo": true,
+      "about": "What the edge answered."
+    },
+    {
+      "title": "Routers",
+      "chart": "edge.routers",
+      "solo": true,
+      "about": "Requests per published service."
+    },
+    {
+      "title": "Top clients",
+      "chart": "edge.top_clients",
+      "solo": true,
+      "whois": true,
+      "about": "Who asked the most, with a WHOIS lookup."
+    },
+    {
+      "title": "Top probes",
+      "chart": "edge.top_probes",
+      "solo": true,
+      "about": "The paths scanners try first."
+    },
+    {
+      "title": "SSH accepted",
+      "chart": "edge.ssh_granted",
+      "solo": true,
+      "about": "Successful SSH logins at the edge."
+    },
+    {
+      "title": "SSH denied",
+      "chart": "edge.ssh_denied",
+      "solo": true,
+      "about": "Refused SSH attempts."
+    },
+    {
+      "title": "Scenarios",
+      "chart": "edge.scenarios",
+      "solo": true,
+      "about": "Which detections fire most."
+    },
+    {
+      "title": "Bans now",
+      "chart": "edge.active_bans",
+      "solo": true,
+      "pane_group": "the edge count",
+      "about": "One number: bans in force."
+    },
+    {
+      "title": "Alerts",
+      "chart": "edge.alerts",
+      "solo": true,
+      "pane_group": "the edge count",
+      "about": "Alerts in the last day."
+    },
+    {
+      "title": "Bouncer",
+      "chart": "edge.bouncer",
+      "solo": true,
+      "pane_group": "the edge count",
+      "about": "Requests the bouncer blocked."
+    },
+    {
+      "title": "Lines parsed",
+      "chart": "edge.parsed",
+      "solo": true,
+      "pane_group": "the edge count",
+      "about": "Log lines CrowdSec read."
+    },
+    {
+      "title": "Security report",
+      "url": "https://wiki.home.example/security/weekly",
+      "about": "The weekly security write-up.",
+      "note": "Mondays."
+    }
+  ],
+  "rites": [
+    {
+      "name": "The Nightly Backup",
+      "host": "HYPERVISOR",
+      "when": "01:00",
+      "cadence": "daily",
+      "note": "Proxmox backs up every running guest to the NAS."
+    },
+    {
+      "name": "The Off-site Copy",
+      "host": "NAS",
+      "when": "02:30",
+      "cadence": "daily",
+      "note": "restic sends the night's snapshot off-site, encrypted before it leaves."
+    },
+    {
+      "name": "Hourly Snapshots",
+      "host": "NAS",
+      "when": "hourly :05",
+      "cadence": "continuous",
+      "note": "ZFS snapshots of every dataset, 48 hourly and 30 daily kept."
+    },
+    {
+      "name": "The Patch Survey",
+      "host": "all guests",
+      "when": "Sun 04:15",
+      "cadence": "weekly",
+      "note": "apt on every guest, then a reboot if the kernel asks."
+    },
+    {
+      "name": "SSH Cert Renewal",
+      "host": "4 guests",
+      "when": "Sun 03:00 UTC",
+      "cadence": "weekly",
+      "note": "Host certificates re-signed by the internal CA."
+    },
+    {
+      "name": "Media Maintenance",
+      "host": "MEDIA",
+      "when": "daily 07:15",
+      "cadence": "daily",
+      "note": "Library scan and transcode clean-up."
+    },
+    {
+      "name": "DNS Blocklist Update",
+      "host": "DIRECTORY",
+      "when": "03:30",
+      "cadence": "daily",
+      "note": "Refreshes the blocklists the DNS filter uses."
+    },
+    {
+      "name": "Certificate Watch",
+      "host": "MONITOR",
+      "when": "06:00",
+      "cadence": "daily",
+      "note": "Warns when any certificate on the map is inside 21 days of expiry."
+    },
+    {
+      "name": "The Weekly Report",
+      "host": "MONITOR",
+      "when": "Mon 13:00 UTC",
+      "cadence": "weekly",
+      "note": "Security and certificate summary, posted to the wiki.",
+      "key": "the-weekly-report",
+      "expect_every": "7d",
+      "grace": "2d"
+    },
+    {
+      "name": "Access Audit",
+      "host": "all guests",
+      "when": "Mon 13:30 UTC",
+      "cadence": "weekly",
+      "note": "Diffs accounts, keys and sudoers against each host's baseline."
+    },
+    {
+      "name": "Pool Scrub",
+      "host": "NAS",
+      "when": "1st Sun 02:00",
+      "cadence": "monthly",
+      "note": "Reads every block and checks it against its checksum."
+    },
+    {
+      "name": "The Morning Brief",
+      "host": "INTERNAL HOST",
+      "when": "13:00 UTC — 08:00 local",
+      "cadence": "daily",
+      "note": "A model summarises overnight alerts into one note.",
+      "asks": "gpu-box",
+      "model": "llama3.1:8b · 8k",
+      "at": "13:00",
+      "hold": 25
+    },
+    {
+      "name": "The Hourly Triage",
+      "host": "INTERNAL HOST",
+      "when": "hourly at :35, 08:00–20:00 local",
+      "cadence": "continuous",
+      "note": "A model sorts new alerts by urgency.",
+      "asks": "gpu-box",
+      "model": "llama3.1:8b · 8k",
+      "at": ":35",
+      "between": "13:00–01:00",
+      "hold": 5
+    },
+    {
+      "name": "The Week in Review",
+      "host": "INTERNAL HOST",
+      "when": "Sun 22:00 UTC",
+      "cadence": "weekly",
+      "note": "A model writes the week's changes into the wiki.",
+      "asks": "gpu-box",
+      "model": "qwen3:14b · 32k",
+      "at": "22:00",
+      "days": "Sun",
+      "hold": 15
+    },
+    {
+      "name": "Config Commit",
+      "host": "GATEWAY",
+      "when": "on every save",
+      "cadence": "continuous",
+      "note": "The router's config is committed to git whenever it changes."
+    },
+    {
+      "name": "Old Experiment",
+      "host": "STANDBY",
+      "when": "—",
+      "cadence": "parked",
+      "note": "A cron job kept for reference; nothing runs."
+    }
+  ],
+  "certs": [
+    {
+      "name": "*.home.example",
+      "kind": "tls",
+      "issuer": "Let's Encrypt",
+      "host": "EDGE",
+      "expires": "2026-12-01",
+      "renews": "Caddy, DNS-01",
+      "note": "Every public name at the edge."
+    },
+    {
+      "name": "Home Root CA",
+      "kind": "ca",
+      "issuer": "step-ca on DIRECTORY",
+      "host": "DIRECTORY",
+      "expires": "2036-09-24",
+      "renews": "manual, ten years",
+      "note": "Signs every internal certificate."
+    },
+    {
+      "name": "id.home.example",
+      "kind": "tls",
+      "issuer": "Home Root CA",
+      "host": "DIRECTORY",
+      "expires": "2027-01-15",
+      "renews": "step-ca ACME, 60 days",
+      "note": "The sign-in page."
+    },
+    {
+      "name": "git.home.example",
+      "kind": "tls",
+      "issuer": "Home Root CA",
+      "host": "INTERNAL HOST",
+      "expires": "2026-11-20",
+      "renews": "step-ca ACME, 60 days",
+      "note": "Forgejo."
+    },
+    {
+      "name": "hypervisor host key",
+      "kind": "ssh-host",
+      "issuer": "Home Root CA",
+      "host": "HYPERVISOR",
+      "expires": "2026-10-28",
+      "renews": "weekly rite",
+      "note": "Host certificate for SSH."
+    },
+    {
+      "name": "edge host key",
+      "kind": "ssh-host",
+      "issuer": "Home Root CA",
+      "host": "EDGE",
+      "expires": "2026-10-28",
+      "renews": "weekly rite",
+      "note": "Host certificate for SSH."
+    }
+  ],
+  "regions": [
+    {
+      "id": "server-room",
+      "name": "Server room",
+      "map": "demo-lab-server-room.webp",
+      "x": 34.0,
+      "y": 6.0,
+      "w": 46.0,
+      "h": 34.0,
+      "auto": true
+    }
+  ]
+}

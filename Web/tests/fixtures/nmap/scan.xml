@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- trimmed `nmap -oX` output: two charted hosts, one stranger, one down -->
+<nmaprun scanner="nmap" args="nmap -sn -oX scan.xml 10.77.33.0/24" start="1784500000" version="7.95">
+  <host starttime="1784500001" endtime="1784500002">
+    <status state="up" reason="arp-response" reason_ttl="0"/>
+    <address addr="10.77.33.5" addrtype="ipv4"/>
+    <address addr="AA:BB:CC:00:00:06" addrtype="mac" vendor="Micro-Star INTL"/>
+    <hostnames>
+      <hostname name="hypervisor.home.example" type="PTR"/>
+    </hostnames>
+    <ports>
+      <port protocol="tcp" portid="22">
+        <state state="open" reason="syn-ack"/>
+        <service name="ssh" product="OpenSSH" method="probed"/>
+      </port>
+      <port protocol="tcp" portid="443">
+        <state state="closed" reason="reset"/>
+        <service name="https" method="table"/>
+      </port>
+    </ports>
+  </host>
+  <host starttime="1784500001" endtime="1784500002">
+    <status state="up" reason="arp-response" reason_ttl="0"/>
+    <address addr="10.77.33.10" addrtype="ipv4"/>
+    <address addr="AA:BB:CC:00:00:15" addrtype="mac" vendor="Synology Incorporated"/>
+    <hostnames>
+      <hostname name="nas.home.example" type="PTR"/>
+    </hostnames>
+    <ports/>
+  </host>
+  <host starttime="1784500003" endtime="1784500004">
+    <status state="up" reason="arp-response" reason_ttl="0"/>
+    <address addr="10.77.33.99" addrtype="ipv4"/>
+    <address addr="DE:AD:BE:EF:00:99" addrtype="mac" vendor="Espressif Inc."/>
+    <hostnames>
+      <hostname name="esp-9f2a.home.example" type="PTR"/>
+    </hostnames>
+    <ports>
+      <port protocol="tcp" portid="80">
+        <state state="open" reason="syn-ack"/>
+        <service name="http" method="table"/>
+      </port>
+    </ports>
+  </host>
+  <host starttime="1784500005" endtime="1784500005">
+    <status state="down" reason="no-response" reason_ttl="0"/>
+    <address addr="10.77.33.200" addrtype="ipv4"/>
+    <hostnames/>
+  </host>
+  <runstats>
+    <finished time="1784500006" elapsed="5.02"/>
+    <hosts up="3" down="1" total="4"/>
+  </runstats>
+</nmaprun>

@@ -1,0 +1,5 @@
+name,ip,kind,zone,role,url,url_label,notes
+Front Desk Switch,192.168.10.2,network,Main Office,48-port PoE switch,https://192.168.10.2,Switch UI,Closet A
+File Server,192.168.10.10,physical,Main Office,Windows file server,https://192.168.10.10:5001,DSM,Nightly backup 01:00
+Warehouse AP,192.168.20.5,network,Warehouse,Ceiling access point,,,Mounted above bay 3
+Billing VM,192.168.10.40,vm,Main Office,Billing application,https://billing.example.com,Billing,

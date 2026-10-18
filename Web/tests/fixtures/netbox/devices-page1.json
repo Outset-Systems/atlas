@@ -1,0 +1,27 @@
+{
+  "count": 4,
+  "next": "https://netbox.test/api/dcim/devices/?limit=200&offset=200",
+  "previous": null,
+  "results": [
+    {
+      "id": 1,
+      "name": "HYPERVISOR",
+      "role": {"id": 1, "slug": "server", "name": "Server"},
+      "device_type": {"model": "Ryzen 9 9950X Tower", "manufacturer": {"name": "Custom"}},
+      "platform": {"name": "Server 2025"},
+      "primary_ip4": {"address": "10.77.33.5/24"},
+      "comments": "",
+      "custom_fields": {"atlas_url": null}
+    },
+    {
+      "id": 2,
+      "name": "NAS",
+      "role": {"id": 2, "slug": "nas", "name": "NAS"},
+      "device_type": {"model": "DS920+", "manufacturer": {"name": "Synology"}},
+      "platform": null,
+      "primary_ip4": {"address": "10.77.33.10/24"},
+      "comments": "",
+      "custom_fields": {}
+    }
+  ]
+}

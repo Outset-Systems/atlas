@@ -1,0 +1,24 @@
+flask>=3.0,<4
+requests>=2.31,<3
+gunicorn>=22,<24
+# /metrics — the Atlas's own watchfire (metrics.py); multiprocess mode across
+# the gunicorn workers via PROMETHEUS_MULTIPROC_DIR (Dockerfile)
+prometheus-client>=0.20,<1
+# zoneinfo's data: THE CALENDAR resolves IANA zones (UTC included). Debian-based
+# images happen to ship /usr/share/zoneinfo, but a host without it (Windows,
+# slim/alpine bases) 500'd /api/v2/calendar — the package makes it portable.
+tzdata>=2024.1
+# API v2 (the API migration plan) — pydantic validates the fixed-shape write bodies
+pydantic>=2,<3
+# db mode only (ATLAS_DATA_BACKEND=db) — lazy-imported; file mode never loads these
+sqlalchemy>=2.0,<3
+alembic>=1.13,<2
+# accounts mode only (ATLAS_AUTH_MODE=accounts) — lazy-imported; hub/standalone
+# deployments never load these
+pyotp>=2.9,<3
+qrcode>=7.4,<9
+cryptography>=42,<46
+ldap3>=2.9,<3
+# THE REAL-WORLD SURVEY only (worldsurvey.py) — lazy-imported; an Atlas that
+# never surveys never loads it
+pillow>=10,<14

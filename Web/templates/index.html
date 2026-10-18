@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ realm_title }}</title>
+<!-- A declared icon is what stops the browser asking for /favicon.ico, which
+     404'd five times a page load (ALIVE.md THE LIST #18). Relative like every
+     other asset here, so it resolves under both `/` and the Hub's `/atlas/`. -->
+<link rel="icon" type="image/svg+xml" href="static/favicon.svg?v={{ v }}">
+<link rel="stylesheet" href="static/fonts.css?v={{ v }}">
+<!-- The shared Calendar component (the shared framework static/outset-calendar.*),
+     drawn at the foot of THE CALENDAR when a Hub is configured: the fleet's day.
+     ⚠ BEFORE atlas.css, and it matters: both sheets set the component's
+     `--oc-*` tokens on `.calendar-host` at equal specificity, so the LATER one
+     wins and the Atlas's mapping (grep `--oc-gilt`) must be the later one. -->
+<link rel="stylesheet" href="static/outset-calendar.css?v={{ v }}">
+<link rel="stylesheet" href="static/atlas.css?v={{ v }}">
+<link rel="stylesheet" href="static/desk.css?v={{ v }}">
+<!-- The backdrop is the largest thing on the page by an order of magnitude and
+     nothing can be drawn until it is measured (boot reads its natural size to
+     set the world's dimensions). Starting its fetch here, before the stylesheets
+     are parsed, is the single biggest thing that can be done about first paint
+     without re-encoding the art. -->
+<link rel="preload" as="image" href="{{ map_image }}" fetchpriority="high">
+</head>
+<body data-editable="{{ '1' if editable else '0' }}" data-seeded="{{ '1' if seeded else '0' }}">
+
+<!-- Cinematic intro veil -->
+<div id="veil">
+  <div class="veil-inner">
+    {% if theme.veil_sigil == "sigil" %}<div class="veil-tri" aria-hidden="true"><span></span><span></span><span></span></div>{% endif %}
+    <h1 class="veil-title">{{ veil_title }}</h1>
+    <svg class="veil-rule" viewBox="0 0 320 22" aria-hidden="true">
+      <path d="M4,11 C60,2 110,20 160,11 S260,2 316,11 M140,11 l20,-7 l20,7 l-20,7 z"/>
+    </svg>
+  </div>
+</div>
+
+<!-- The map stage: camera transforms #stage; layers live inside -->
+<div id="viewport">
+  <div id="stage">
+    <img id="map-base" src="{{ map_image }}" alt="{{ theme.text.map_alt }}" draggable="false"
+         decoding="async" fetchpriority="high">
+    <div id="star-hide" aria-hidden="true"></div>
+    <div id="depth-map-shade" aria-hidden="true"></div>
+    <div id="sky-map-light" aria-hidden="true"></div>
+    <div id="void-fade" aria-hidden="true"></div>
+    <div id="void" aria-hidden="true"></div>
+    <!-- the Depths' own atmosphere: bioluminescent fog filling the descent,
+         the mirror of the Sky's clouds+glow (2026-07-12) -->
+    <div id="depths-realm" aria-hidden="true">
+      <div class="depths-glow"></div>
+      <div class="depths-motes"></div>
+    </div>
+    <!-- The abyss watches: security & cloud/edge reports, far below the Depths -->
+    <section id="abyss" aria-label="The abyss watches — security &amp; the outer veil">
+      <!-- re-stamped from the depths zone's name by nameRegionHeads() -->
+      <div class="abyss-head">THE DEPTHS</div>
+      <div class="abyss-sub">security &amp; the outer veil, scried from the deep</div>
+      <div class="chron-viewer">
+        <div class="chron-stage" id="abyss-stage"></div>
+        <button class="chron-arrow chron-prev" id="abyss-prev" title="Previous">‹</button>
+        <button class="chron-arrow chron-next" id="abyss-next" title="Next">›</button>
+      </div>
+      <div class="chron-dots" id="abyss-dots"></div>
+      <div class="abyss-buttons" id="abyss-buttons"></div>
+      <!-- (THE NAMING DEEP lived here as its own panel for three days. It now
+           rides inside the TOP CLIENTS slide of the carousel above — the panel
+           that names the busiest client IPs and the tool that asks who holds
+           one belong in the same frame. Rendered by ui.js slideHTML for any
+           watching carrying `whois: true`; behaviour in static/js/whois.js.) -->
+      <div class="chron-foot">&mdash; scried from the deep &middot; click any watching to open it &mdash;</div>
+    </section>
+    <div id="sky-realm" aria-label="{{ theme.text.sky[:1]|upper }}{{ theme.text.sky[1:] }} — above the realm">
+      <div class="sky-glow" aria-hidden="true"></div>
+      <!-- (the sky's #sky-title button lived here until 2026-08-15 — the
+           region is named once now, by the heading above the carousel) -->
+      <div class="cloud-bank" aria-hidden="true">
+        <svg class="cloud-svg" preserveAspectRatio="none" viewBox="0 0 1200 320">
+          <defs>
+            <filter id="cloudgen" x="-6%" y="-6%" width="112%" height="112%" color-interpolation-filters="sRGB">
+              <feTurbulence type="fractalNoise" baseFrequency="0.006 0.013" numOctaves="5" seed="11" stitchTiles="stitch" result="n"/>
+              <feColorMatrix in="n" type="matrix" values="0 0 0 0 0.965  0 0 0 0 0.937  0 0 0 0 0.874  0 0 0 2.5 -1.06"/>
+            </filter>
+            <filter id="cloudgen-fine" x="-6%" y="-6%" width="112%" height="112%" color-interpolation-filters="sRGB">
+              <feTurbulence type="fractalNoise" baseFrequency="0.03 0.04" numOctaves="4" seed="4" stitchTiles="stitch" result="n"/>
+              <feColorMatrix in="n" type="matrix" values="0 0 0 0 0.97  0 0 0 0 0.945  0 0 0 0 0.885  0 0 0 2.7 -1.0"/>
+            </filter>
+          </defs>
+          <rect x="0" y="0" width="1200" height="320" filter="url(#cloudgen)"/>
+        </svg>
+      </div>
+    </div>
+    <!-- The heading names the REGION, not the carousel (2026-08-15) —
+         the sky zone's own name/vlan, re-stamped from the dataset by
+         nameRegionHeads() in ui.js so a Desk rename moves it like every other
+         label. The text here is the pre-boot fallback. -->
+    <section id="chronicle" aria-label="{{ theme.text.sky[:1]|upper }}{{ theme.text.sky[1:] }} — the realm's watchings, scried live">
+      <div class="chron-head">{{ theme.text.sky|upper }}</div>
+      <div class="chron-sub">{{ theme.text.sky_sub }}</div>
+      <div class="chron-viewer">
+        <div class="chron-stage" id="chron-stage"><!-- slides built by ui.js --></div>
+        <button class="chron-arrow chron-prev" id="chron-prev" title="Previous">‹</button>
+        <button class="chron-arrow chron-next" id="chron-next" title="Next">›</button>
+      </div>
+      <div class="chron-dots" id="chron-dots"></div>
+      <div class="chron-buttons" id="chron-buttons"></div>
+      <div class="chron-foot">{{ theme.text.chronicle_foot }}</div>
+    </section>
+    <div id="sky-shadow" aria-hidden="true"></div>
+    <!-- scenery since 2026-08-15, not a control — ☁ and the wheel still rise -->
+    <div id="sky-island" aria-hidden="true">
+      <div id="sky-islet"></div>
+      <svg class="orb-cloud-svg" preserveAspectRatio="none" viewBox="0 0 300 200">
+        <rect x="0" y="0" width="300" height="200" filter="url(#cloudgen-fine)"/>
+      </svg>
+    </div>
+    <svg id="overlay" aria-hidden="true"></svg>
+    <div id="zone-labels"></div>
+    <!-- REGIONS (v1.49.0): the frames of the parts of this map that open into
+         a detailed map of their own (regions.js) -->
+    <div id="region-frames"></div>
+    <div id="markers"></div>
+    <!-- THE CONSTELLATION's satellite dots — their own layer, so every loop
+         over #markers keeps meaning "the charted places" -->
+    <div id="satellites"></div>
+  </div>
+  <div class="fog fog-a"></div>
+  <div class="fog fog-b"></div>
+  <div id="vignette"></div>
+</div>
+
+<!-- Floating chrome — ONE menu (2026-08-10). The ◆ scene flyout and the ⚙
+     settings panel were separate top-level controls with their own open/closed
+     state, which put three ways to open something in the same corner and let
+     two of them be open at once over the map. They became sections of the
+     drawer, so there is one button, one panel, and one thing open at a time.
+     (The scenes have since left the drawer for their own band at the top —
+     2026-08-15 — which lands nearer the design notes's scene-switcher after all,
+     at the crown instead of bottom-center.) -->
+<!-- the control column is now ZOOM ONLY (2026-08-15). Every other map
+     tool moved into the cluster THE ATLAS reveals, below — the column had
+     grown to six buttons plus ☰, which is a lot of permanent chrome for
+     controls you reach for occasionally, and zoom is the one pair you reach
+     for constantly. Two buttons, so `#card`'s clearance shrank with it:
+     grep MUST TRACK in atlas.css. -->
+<div class="zoom-stack">
+  <button class="chrome" id="btn-zoom-in" title="Closer (+)">+</button>
+  <button class="chrome" id="btn-zoom-out" title="Further (−)">−</button>
+  <!-- the network layer, PERMANENTLY under − (2026-09-02): it used to
+       hide in the hover cluster with the journeys, but it is reached for as
+       often as zoom is, and a control you use constantly should not need a
+       hover to find. Same glyph, same id, same N key — only the seat moved. -->
+  <button class="chrome ci-net" id="btn-net" title="Show the network layer (N)" aria-label="Network layer">
+    <svg class="ci-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <circle cx="12" cy="5" r="2.3" fill="currentColor" stroke="none"/>
+      <circle cx="5" cy="18.5" r="2.3" fill="currentColor" stroke="none"/>
+      <circle cx="19" cy="18.5" r="2.3" fill="currentColor" stroke="none"/>
+      <path d="M12 7.1 L5.6 16.6 M12 7.1 L18.4 16.6 M7 18.5 L17 18.5"/>
+    </svg>
+  </button>
+</div>
+
+<!-- THE SCENES — a band ACROSS the crown of the screen (2026-08-15).
+     They were the drawer's first tab, which meant flicking between scenes cost
+     ☰ → SCENES → pick, three gestures for the app's main act of navigation.
+
+     The band now spans the full width and carries ☰ at its far end, so the top
+     of the screen is one strip of chrome instead of a strip plus two floating
+     corners. THE ATLAS is the home button and does three jobs — see the
+     comment on `.scene-home` in atlas.css. -->
+<nav id="scenes-list" aria-label="Scenes">
+  <span class="scene-home" id="scene-home">
+    <button class="scene active" data-scene="atlas">ATLAS</button>
+  </span>
+  <button class="scene" data-scene="rack">ARMORY</button>
+  <button class="scene" data-scene="tribute">TRIBUTE</button>
+  <button class="scene" data-scene="ledger">LEDGER</button>
+  <button class="scene" data-scene="path">PATH</button>
+  <!-- THE RITES and THE FORGE live here since v1.45.0; the title says so for
+       anyone who comes looking for either by its old name. -->
+  <button class="scene" data-scene="calendar" title="THE RITES and THE FORGE — every rite of the realm on one clock">CALENDAR</button>
+  <button class="scene" data-scene="seals">SEALS</button>
+  <button class="scene" data-scene="stones">{{ theme.text.stones|upper }}</button>
+  <button class="scene" data-scene="annals">ANNALS</button>
+  <!-- ACCOUNTS is admin-only. Hidden here and revealed by ui.js when the
+       viewer can actually use it — the server redacts the roster for
+       everyone else regardless, so this is courtesy, not the control. -->
+  <button class="scene" data-scene="accounts" id="scene-accounts" hidden>ACCOUNTS</button>
+  <button class="scene" data-scene="trust" id="scene-trust" hidden>THE TRUST</button>
+  <!-- ⚙ SITS IN THE BAND, to the left of ☰ (2026-09-04). It used to
+       hang BELOW ☰ as a fixed cluster OUTSIDE the nav — a sibling, because the
+       band's backdrop-filter and overflow would have positioned a `fixed`
+       descendant against the band and then clipped it away. In flow it is
+       safe: that trap bites positioned descendants only, and this one is a
+       flex item like every scene button. It rests at zero width and grows
+       LEFTWARD out of ☰ on hover (ui.js hoverReveal → `.peek`), and stays out
+       while the SETTINGS scene is up, wearing `.active` like any scene
+       button. It IS the SETTINGS scene's button: `data-scene` puts it through
+       the same click handler as the labelled scenes. -->
+  <span class="menu-tools" id="menu-tools">
+    <button class="chrome ci-gear" id="btn-menu-settings" data-scene="settings"
+            title="Settings" aria-label="Settings">⚙</button>
+  </span>
+  <!-- ☰ ends the band. It was a floating circle at top-right; in the band it
+       is the same control in the same corner, minus a second piece of chrome
+       for the eye to account for. -->
+  <button class="chrome ci-menu" id="btn-menu" title="Menu — the index (M)">☰</button>
+</nav>
+
+<!-- The map tools, revealed by hovering THE ATLAS and kept out by CLICKING it.
+     They are layers and journeys OF the atlas, so they hang off the atlas
+     rather than standing in a permanent column.
+
+     Two rows of two (2026-08-15), and the rows are the grouping the
+     buttons always had and never showed: the TOP row is what you lay over the
+     surface — ☁ the sky, ◈ the roads — and the BOTTOM row is where you go and
+     who is watching while you are there — ☾ the descent, 👁 the decoy watch.
+     A 2×2 block also reads as one object hanging off one button, which a row
+     of five never did.
+
+     The pin button is gone: THE ATLAS's own click is the pin now, so the
+     cluster no longer has to carry a control for its own persistence.
+
+     ⚠ It lives OUTSIDE #scenes-list on purpose. The band carries
+     `backdrop-filter`, which makes it the containing block for `position:
+     fixed` descendants, and it carries `overflow-x: auto` for the one-row
+     scroll — so a cluster nested inside it would be positioned against the
+     band AND clipped by it, and would simply never appear. Hover is wired in
+     ui.js instead of :hover for the same reason: the two elements are no
+     longer relatives. -->
+<span class="atlas-tools" id="atlas-tools">
+      <button class="chrome ci-sky" id="btn-sky" title="Rise to {{ theme.text.sky }} · the Chronicle (S)">☁</button>
+      <!-- the network glyph left this cluster 2026-09-02: it now sits
+           permanently under − in `.zoom-stack`, the pair it is reached for with. -->
+      <button class="chrome ci-depths" id="btn-depths" title="Descend into the Depths (D)">☾</button>
+      <!-- THE decoy feed WATCH (2026-08-15) — the decoys as a map layer: an
+           eye over every place a stone guards, voiced by the live feed.
+           It ENDS the second row (Link, same day) — an explicit reversal of the
+           "👁 sits above ☾" order from the single column, which the two-row
+           grouping supersedes: the descent is the journey this row is about,
+           and the watch is who is looking while you take it. -->
+      <button class="chrome ci-decoys" id="btn-decoys" title="Show the {{ theme.text.stones_watch }} — the {{ theme.text.stones }}, where they stand (G)" aria-label="{{ theme.text.stones_watch|capitalize }} layer">
+        <svg class="ci-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+          <path d="M2.5 11 C 6 6.4, 18 6.4, 21.5 11 C 18 15.6, 6 15.6, 2.5 11 Z"/>
+          <circle cx="12" cy="11" r="3"/>
+          <circle cx="12" cy="11" r="1.1" fill="currentColor" stroke="none"/>
+          <path d="M12 14.6 L12 19.6 l-1.7 -1.5"/>
+          <path d="M5.6 7.6 L4.2 5.8 M12 6.1 L12 4 M18.4 7.6 L19.8 5.8"/>
+        </svg>
+      </button>
+</span>
+
+<!-- The one drawer: THE INDEX — places and services. (Settings was its
+     third, tabless section from 2026-08-10 until 2026-09-04; it is a scene
+     of its own now, `#settings` below.) -->
+<aside id="index-drawer" aria-hidden="true">
+  <!-- The head is a title now, nothing more (2026-08-15). ⚙ and » both
+       left it: the panel hangs off ☰, so ☰ is what closes it (Esc and a click
+       on the map still do too), and settings is the ⚙ in the band beside ☰.
+       A panel that arrives from a button does not need to carry a second
+       copy of that button — the 2026-08-12 reasoning for putting them here was
+       sound while the drawer was a slab welded to the screen's edge, arriving
+       from nowhere in particular. It isn't one any more. -->
+  <div class="drawer-head">
+    <span class="drawer-title">THE INDEX</span>
+  </div>
+  <!-- two tabs since the scenes moved to their own band at the top of the
+       screen (2026-08-15) -->
+  <div class="drawer-tabs">
+    <button class="dtab active" data-tab="places">PLACES</button>
+    <button class="dtab" data-tab="services">SERVICES</button>
+  </div>
+  <div class="idx-search-wrap" id="idx-search-wrap">
+    <span class="idx-search-glyph" aria-hidden="true">⌕</span>
+    <input id="idx-search" type="text" autocomplete="off" spellcheck="false"
+           placeholder="Search the index…" aria-label="Search the index">
+    <button id="idx-search-clear" class="idx-search-clear" title="Clear" hidden>×</button>
+  </div>
+  <!-- the seeking (2026-08-15): when the toggle in settings is on and a
+       query is typed, this row offers the same words to DEGOOG — the realm's
+       own metasearch — for the things the index does not chart -->
+  <button class="idx-seek" id="idx-seek" hidden>
+    <span class="idx-seek-glyph" aria-hidden="true">◇</span>
+    <span class="idx-seek-t">seek it with <strong>DEGOOG</strong> ›</span>
+  </button>
+  <div id="index-list"></div>
+  <div id="services-list" hidden></div>
+</aside>
+
+<!-- Ivory detail card -->
+<article id="card" aria-hidden="true">
+  <div class="card-bar"></div>
+  <!-- portrait + close pinned OUTSIDE the scroll area so the emblem/logo is
+       always visible even when a tall card scrolls (2026-07-12) -->
+  <div class="card-portrait" id="card-portrait">?</div>
+  <!-- pull back without losing the place: zooms out around whatever is
+       selected, so the roads around it come into frame (2026-07-31) -->
+  <button class="card-out" id="btn-card-out" title="Pull back — stay centred on this place">⊖</button>
+  <button class="card-min" id="btn-card-min" title="Minimize">–</button>
+  <button class="card-close" id="btn-card-close" title="Close (Esc)">×</button>
+  <div class="card-inner">
+    <div class="card-epi" id="card-epi">—</div>
+    <h3 id="card-name">—</h3>
+    <p class="card-lore" id="card-lore">—</p>
+    <div class="card-data" id="card-data"></div>
+    <!-- THE FORGE'S DAY: for the place rites ask (the GPU box), what turns next and
+         the door to THE CALENDAR. card.js fills it from rites[] and hides it
+         for every other place. -->
+    <div class="card-forge" id="card-forge" hidden></div>
+    <div class="card-vitals" id="card-vitals"></div>
+    <div class="card-links" id="card-links"></div>
+    <div class="card-scroll" id="card-scroll"></div>
+    <!-- service detail sub-view (slides over the node view) -->
+    <div class="card-svc" id="card-svc" hidden></div>
+  </div>
+</article>
+
+<!-- THE ARMORY — the physical rack as an illuminated hardware elevation -->
+<div id="reliquary" aria-hidden="true">
+  <div class="rel-panel" role="dialog" aria-label="The Armory — the rack elevation">
+    <div class="rel-head">
+      <span class="rel-title" id="rel-title">ARMORY</span>
+      <span class="rel-sub">the realm's iron, rack by rack</span>
+      <span class="rel-tools">
+        <span class="rel-viewtoggle" role="group" aria-label="View the rack in 2D or 3D">
+          <button class="rel-seg is-on" id="rel-2d" aria-pressed="true">2D</button>
+          <button class="rel-seg" id="rel-3d-btn" aria-pressed="false">3D</button>
+        </span>
+        <button class="rel-tool" id="rel-edit" title="Drag vessels to new slots">⇅ Rearrange</button>
+        <button class="rel-tool" id="rel-save" hidden>Save</button>
+        <button class="rel-tool" id="rel-reset" hidden>Reset</button>
+      </span>
+      <button class="rel-close" id="rel-close" title="Close (Esc)">×</button>
+    </div>
+    <div class="rel-body">
+      <div class="rel-rack">
+        <div class="rel-power" aria-hidden="true"><span>{{ theme.text.relay_power }}</span></div>
+        <div id="rel-elevation" role="list"></div>
+        <div id="rel-3d" hidden></div>
+      </div>
+      <aside id="rel-detail" class="rel-detail"></aside>
+    </div>
+  </div>
+</div>
+
+<!-- THE LEDGER — NetBox-style IPAM: prefixes, utilization, hosts -->
+<div id="ledger" aria-hidden="true">
+  <div class="ldg-panel" role="dialog" aria-label="The Ledger — IP address map">
+    <div class="ldg-head">
+      <span class="ldg-title">LEDGER</span>
+      <span class="ldg-sub">every prefix in the realm — charted, reserved, or free ground</span>
+      <button class="ldg-close" id="ldg-close" title="Close (Esc)">×</button>
+    </div>
+    <div class="ldg-list" id="ldg-list"></div>
+  </div>
+</div>
+
+<!-- THE TRIBUTE — the hypervisor's 64 GB divided among its vassals -->
+<div id="tribute" aria-hidden="true">
+  <div class="trb-panel" role="dialog" aria-label="The Tribute — memory and processor allocation">
+    <div class="trb-head">
+      <span class="trb-title">TRIBUTE</span>
+      <span class="trb-sub">{{ theme.text.tribute_sub }}</span>
+      <button class="trb-close" id="trb-close" title="Close (Esc)">×</button>
+    </div>
+    <div class="trb-vessel-wrap">
+      <div class="trb-cap">MEMORY</div>
+      <div class="trb-vessel" id="trb-vessel"></div>
+      <div class="trb-summary" id="trb-summary"></div>
+      <div class="trb-cap trb-cap-2">PROCESSORS</div>
+      <div class="trb-vessel" id="trb-vessel-cpu"></div>
+      <div class="trb-summary" id="trb-summary-cpu"></div>
+    </div>
+    <div class="trb-list" id="trb-list"></div>
+  </div>
+</div>
+
+<!-- THE PATH — the realm's topology, tier by tier (SolarWinds-style, hand-drawn) -->
+<div id="path" aria-hidden="true">
+  <div class="pth-panel" role="dialog" aria-label="The Path — network topology">
+    <div class="ldg-head">
+      <span class="ldg-title">PATH</span>
+      <span class="ldg-sub">from the wild to the vassals — every road, alive</span>
+      <button class="ldg-close" id="pth-close" title="Close (Esc)">×</button>
+    </div>
+    <div class="pth-body"><svg id="pth-svg"></svg><div id="pth-nodes"></div></div>
+    <div class="pth-legend" id="pth-legend"></div>
+  </div>
+</div>
+
+<!-- THE CALENDAR — the realm's day: every rite on one clock (v1.45.0).
+     It is THE RITES (2026-07-11 — what the realm does for itself, and whether
+     it did) and THE FORGE'S DAY (v1.40.0 — the local models' one queue, and
+     the meetings over it) folded into the one page they were always two
+     drawings of. calendar.js paints it from api/v2/rites; calendar-model.js
+     decides what is where. The asked place's card carries the door. -->
+<div id="calendar" aria-hidden="true">
+  <div class="ldg-panel" role="dialog" aria-label="The Calendar — the realm's day">
+    <div class="ldg-head">
+      <span class="ldg-title">CALENDAR</span>
+      <span class="ldg-sub">what the realm does for itself, on one day and one clock</span>
+      <button class="ldg-close" id="cal-close" title="Close (Esc)">×</button>
+    </div>
+    <div class="cal-head" id="cal-head"></div>
+    <!-- ONE SCROLL. The realm's day and the fleet's day are one document, so
+         they share `.ldg-list`'s scroller rather than each getting their own:
+         two `overflow-y: auto` siblings inside a `max-height` panel split the
+         height between them, and the realm's day — the thing the scene is for
+         — is the half that loses. -->
+    <div class="ldg-list" id="cal-scroll">
+      <div id="cal-list"></div>
+      <!-- THE FLEET'S DAY (step 4, v1.43.0): the shared Calendar component
+           drawing the Hub's whole-fleet view — every registered app's planned
+           blocks, overlaps outlined — when ATLAS_HUB_URL is set and the Hub
+           answers. Standalone it stays empty; the realm's own day above is the
+           whole story then. -->
+      <div id="cal-fleet" hidden></div>
+    </div>
+  </div>
+</div>
+<script src="static/js/vendor/outset-calendar.js?v={{ v }}"></script>
+
+
+<!-- THE SEALS — every certificate the realm presents, soonest to lapse first -->
+<div id="seals" aria-hidden="true">
+  <div class="ldg-panel" role="dialog" aria-label="The Seals — certificates">
+    <div class="ldg-head">
+      <span class="ldg-title">SEALS</span>
+      <span class="ldg-sub">what vouches for the realm, and when it lapses</span>
+      <button class="ldg-close" id="sl-close" title="Close (Esc)">&times;</button>
+    </div>
+    <div class="rt-head" id="sl-head"></div>
+    <div class="ldg-list" id="sl-list"></div>
+  </div>
+</div>
+
+
+<!-- THE DECOYS — the realm's tripwires, and which of them has spoken.
+     Roster from the dataset, voices from the live feed; the head says outright
+     when the watch is unreachable, because an empty list means nothing on its
+     own. All behaviour lives in static/js/stones.js — the app's CSP blocks
+     inline scripts, so an inline one here would be silently dead in a browser
+     while every test still passed. -->
+<div id="stones" aria-hidden="true">
+  <div class="ldg-panel" role="dialog" aria-label="The {{ theme.text.stones }} — deception tripwires">
+    <div class="ldg-head">
+      <span class="ldg-title">{{ theme.text.stones|upper }}</span>
+      <span class="ldg-sub">silent watchers — anything that touches one is an event, not a maybe</span>
+      <button class="ldg-close" id="gs-close" title="Close (Esc)">&times;</button>
+    </div>
+    <div class="rt-head" id="gs-head"></div>
+    <div class="ldg-list" id="gs-list"></div>
+  </div>
+</div>
+
+
+<!-- THE ANNALS — every state change the watchers witnessed -->
+<div id="annals" aria-hidden="true">
+  <div class="ldg-panel" role="dialog" aria-label="The Annals — event history">
+    <div class="ldg-head">
+      <span class="ldg-title">ANNALS</span>
+      <span class="ldg-sub">what befell the realm, and when</span>
+      <button class="ldg-close" id="ann-close" title="Close (Esc)">×</button>
+    </div>
+    <div class="ann-bar" id="ann-head"></div>
+    <div class="ldg-list" id="ann-list"></div>
+  </div>
+</div>
+
+<!-- THE SURVEYOR'S DESK — where the map is written (admins only; the server
+     decides whether the chrome that opens this is rendered at all) -->
+<div id="desk" aria-hidden="true">
+  <div class="dsk-panel" role="dialog" aria-label="The Surveyor's Desk — edit the map">
+    <div class="dsk-head">
+      <span class="dsk-title" id="dsk-title">THE SURVEYOR'S DESK</span>
+      <span class="dsk-sub" id="dsk-sub"></span>
+      <button class="ldg-close" id="dsk-close" title="Close (Esc)">×</button>
+    </div>
+    <div class="dsk-main">
+      <nav class="dsk-side" id="dsk-nav" aria-label="Sections"></nav>
+      <div class="dsk-body" id="dsk-body"></div>
+    </div>
+  </div>
+</div>
+
+<!-- THE FIRST SURVEY — the guided setup for an uncharted realm -->
+<div id="wizard" aria-hidden="true">
+  <div class="wiz-panel" role="dialog" aria-label="The first survey — set up this Atlas">
+    <div class="dsk-head">
+      <span class="dsk-title">THE FIRST SURVEY</span>
+      <span class="dsk-sub">charting a realm from nothing</span>
+      <button class="ldg-close" id="wiz-close" title="Close (Esc)">×</button>
+    </div>
+    <div class="wiz-steps" id="wiz-steps"></div>
+    <div class="wiz-body" id="wiz-body"></div>
+  </div>
+</div>
+
+<!-- Command palette — the surveyor's finding-glass ( / ) -->
+<div id="palette" aria-hidden="true">
+  <div class="pal-panel" role="dialog" aria-label="Find a place or service">
+    <div class="pal-input-wrap">
+      <span class="pal-glyph" aria-hidden="true">⌕</span>
+      <input id="pal-input" type="text" autocomplete="off" spellcheck="false"
+             placeholder="Find a place or service…" aria-label="Find a place or service"
+             role="combobox" aria-expanded="true" aria-controls="pal-list">
+      <span class="pal-hint" aria-hidden="true">↑↓ · ↵ · esc</span>
+    </div>
+    <div id="pal-list" role="listbox"></div>
+  </div>
+</div>
+
+<!-- THE VIEWING GLASS — a service shown over the map instead of in a new tab.
+     Falls back to the tab whenever framing is refused; see static/js/glass.js. -->
+<div id="glass" hidden data-state="reaching">
+  <div class="gl-panel" role="dialog" aria-label="The viewing glass">
+    <div class="gl-head">
+      <span class="gl-title" id="gl-title"></span>
+      <span class="gl-sub" id="gl-sub"></span>
+      <span class="gl-tools">
+        <button class="gl-tool" id="gl-reload" title="Draw it again">↻</button>
+        <a class="gl-tool" id="gl-open" href="#" target="_blank" rel="noopener"
+           title="Open it in a new tab">⧉</a>
+      </span>
+      <button class="ldg-close" id="gl-close" title="Close (Esc)">×</button>
+    </div>
+    <div class="gl-body">
+      <!-- the realm's one waiting state (.chron-scrying) — not a second spelling of it -->
+      <div class="chron-scrying" aria-hidden="true"><span></span><span></span><span></span><em>reaching for it…</em></div>
+      <div class="gl-note" id="gl-note"></div>
+      <iframe class="gl-frame" id="gl-frame" title="The viewing glass"
+              referrerpolicy="no-referrer"></iframe>
+    </div>
+    <div class="gl-foot" id="gl-url"></div>
+  </div>
+</div>
+
+<!-- Enlarge an embedded dashboard to fill the window (not OS full-screen) -->
+<div id="embed-max" hidden>
+  <div id="embed-max-title" aria-live="polite"></div>
+  <button id="embed-max-close" title="Close (Esc)">×</button>
+  <button class="embed-max-arrow" id="embed-max-prev" title="Previous watching" hidden>‹</button>
+  <button class="embed-max-arrow" id="embed-max-next" title="Next watching" hidden>›</button>
+  <div class="chron-scrying" aria-hidden="true">
+    <span></span><span></span><span></span><em>scrying…</em>
+  </div>
+  <iframe id="embed-max-frame" title="Dashboard"></iframe>
+  <!-- a native watching, enlarged: chronicle.js draws it here and parks the frame (v1.35.0) -->
+  <div id="embed-max-native" hidden></div>
+</div>
+
+<!-- Survey drift (Z3): Kuma monitors watched but not yet on the map -->
+<button id="drift-note" hidden aria-live="polite" title="Show what the watch sees that the map has not charted">
+  <span class="drift-head">⚠ watched, but not charted — <span id="drift-count"></span></span>
+  <div class="drift-list" id="drift-list" hidden></div>
+</button>
+
+<!-- ACCOUNTS: who can get into each place, and how far in. Admin-only; the
+     roster is stripped server-side (redaction.py) for anyone not cleared to see
+     everything. All behaviour lives in static/js/accounts-scene.js — the CSP
+     blocks inline scripts, so an inline one here would be silently dead in a
+     browser while every test still passed. -->
+<div id="accounts" aria-hidden="true">
+  <div class="ldg-panel" role="dialog" aria-label="Accounts — who can reach each place">
+    <div class="ldg-head">
+      <span class="ldg-title">ACCOUNTS</span>
+      <span class="ldg-sub">who holds a key to each place, and how far in</span>
+      <button class="ldg-close" id="acc-close" title="Close (Esc)">&times;</button>
+    </div>
+    <div class="rt-head" id="acc-head"></div>
+    <div class="ldg-list" id="acc-list"></div>
+  </div>
+</div>
+
+<!-- THE TRUST: who is allowed to speak for a client. Admin-only, and
+     GENERATED — the trust-map generator derives it from the compose files and the
+     nginx vhosts and bakes Web/trust.json into the image, so the view is
+     exactly as old as the running build. Behaviour lives in
+     static/js/trust.js; the CSP blocks inline scripts, so an inline one here
+     would be silently dead in a browser while every test still passed. -->
+<div id="trust" aria-hidden="true">
+  <div class="ldg-panel" role="dialog" aria-label="The Trust — who may speak for a client">
+    <div class="ldg-head">
+      <span class="ldg-title">THE TRUST</span>
+      <span class="ldg-sub">whose word each app takes for who you are</span>
+      <button class="ldg-close" id="tr-close" title="Close (Esc)">&times;</button>
+    </div>
+    <div class="rt-head" id="tr-head"></div>
+    <div class="ldg-list" id="tr-list"></div>
+  </div>
+</div>
+
+<!-- SETTINGS — a scene since 2026-09-04 (the owner: "make settings a scene and
+     take it out of the index window"). It was the drawer's third, tabless
+     section: the Index retitled itself SETTINGS over it, the search hid, and
+     ☰ had to be taught never to open onto it. As a scene it has what every
+     scene has — the shared .ldg-panel chrome, a ×, the scrim, Escape through
+     closeAllScenes, and a button in the band (the ⚙ beside ☰). The panel is
+     narrower than its siblings (atlas.css): these are forms, not ledgers.
+     #settings-panel keeps its id — the Desk appends into it (editor/index.js),
+     table.js and account.js draw into its sections, and ui.js folds them:
+     every .sp-sec wraps a .sp-sub header (a button) over a .sp-sec-body, and
+     the fold is remembered per section key. -->
+<div id="settings" aria-hidden="true">
+  <div class="ldg-panel" role="dialog" aria-label="Settings">
+    <div class="ldg-head">
+      <span class="ldg-title">SETTINGS</span>
+      <span class="ldg-sub">who you are, what the map asks, and how it is drawn</span>
+      <button class="ldg-close" id="set-close" title="Close (Esc)">&times;</button>
+    </div>
+    <div id="settings-panel">
+      <!-- Who you are on this instance. Built by ui.js from CFG.AUTH, because
+           what belongs here differs per auth mode and only the server knows the
+           mode (see settings.auth_config). Empty in standalone — no gate, no
+           identity, nothing honest to say. -->
+      <div class="sp-account sp-sec" id="sp-account" data-sec="account" hidden></div>
+      <!-- THE DIRECTORY: AD/LDAPS settings, admin-only and only where an Atlas
+           session can exist (accounts / hybrid). Built by ui.js from
+           /api/admin/auth, which is itself admins-only — the chrome is hidden
+           AND the API refuses, so this is not a client-side secret. -->
+      <div class="sp-directory sp-sec" id="sp-directory" data-sec="directory" hidden></div>
+      <!-- THE SOURCES (v1.37.0): where the Atlas asks for its numbers (Prometheus,
+           Loki), its signals (Uptime-Kuma) and its stones (the decoy feed). Admins in any
+           mode; built by account.js from /api/v2/admin/integrations, which is
+           itself admins-only. Keys are write-only — the form never sees one. -->
+      <div class="sp-sec" id="sp-integrations" data-sec="integrations" hidden></div>
+      <!-- THE REALM (v1.38.0): Hub URL, vault root, heartbeat token — the same
+           settings layer as THE SOURCES. THE DEPLOYMENT: every knob, read-only. -->
+      <div class="sp-sec" id="sp-realm" data-sec="realm" hidden></div>
+      <div class="sp-sec" id="sp-deployment" data-sec="deployment" hidden></div>
+      <!-- USERS + SIGN-INS: the accounts store's admin ledger (2026-08-16).
+           Built by ui.js; hidden outside accounts/hybrid or for non-admins, and
+           a Hub-named admin gets the pointer to the Atlas door instead of
+           buttons that would 401. -->
+      <div class="sp-sec" id="sp-users" data-sec="users" hidden></div>
+      <div class="sp-sec" id="sp-signins" data-sec="signins" hidden></div>
+      <div class="sp-sec" data-sec="survey">
+        <button class="sp-sub" type="button">THE SURVEY</button>
+        <div class="sp-sec-body">
+          <label class="sp-row">
+            <span>Move the dots</span>
+            <input type="checkbox" id="sp-editmode">
+          </label>
+          <div class="sp-hint" id="sp-edit-hint" hidden>Drag any place to reposition it. Changes save in this browser.</div>
+          <div class="sp-actions">
+            <button class="sp-btn sp-btn-go" id="sp-save">Save to map</button>
+            <button class="sp-btn" id="sp-copy">Copy</button>
+            <button class="sp-btn sp-btn-warn" id="sp-reset">Reset</button>
+          </div>
+          <div class="sp-hint">Save = permanent, for everyone. Reset = discard your unsaved moves.</div>
+        </div>
+      </div>
+      <!-- THE SEEKING: hand the index search's words to DEGOOG (the realm's own
+           public metasearch) when the map has no answer. Off by default — the
+           index is about the realm; the wider seeking is opt-in. -->
+      <div class="sp-sec" data-sec="seeking">
+        <button class="sp-sub" type="button">THE SEEKING</button>
+        <div class="sp-sec-body">
+          <label class="sp-row">
+            <span>Seek with Degoog</span>
+            <input type="checkbox" id="sp-degoog">
+          </label>
+          <div class="sp-hint">With this on, the index search also offers your words to DEGOOG — for the things the map does not chart. Saved in this browser.</div>
+        </div>
+      </div>
+      <!-- THE CARTOGRAPHER'S TABLE (2026-08-15): the viewer's own backdrop and
+           the theme that rides it, per browser — the Desk still owns uploads and
+           the realm-wide default. Rows built by static/js/table.js from
+           /api/maps; the tilt is Arc T of PLAN-WORLDS.md, v1. -->
+      <div class="sp-sec" data-sec="table">
+        <button class="sp-sub" type="button">THE CARTOGRAPHER'S TABLE</button>
+        <div class="sp-sec-body">
+          <div class="sp-maps" id="sp-maps"></div>
+          <div class="sp-hint">Your choice, in this browser only — the realm's default is set at the Desk.
+            Same land, different light; a different coastline needs its places re-surveyed.</div>
+          <label class="sp-row">
+            <span>Tilt the table</span>
+            <input type="checkbox" id="sp-tilt">
+          </label>
+          <div class="sp-hint">The sand table seen at an angle.</div>
+        </div>
+      </div>
+      <!-- Diagnostics: which signal sources are actually reporting. The feed already
+           carries this; surfacing it answers "why does the map look wrong?" here
+           instead of by curling /api/signals. -->
+      <div class="sp-sec" data-sec="watchers">
+        <button class="sp-sub" type="button">THE WATCHERS</button>
+        <div class="sp-sec-body">
+          <div class="sp-sources" id="sp-sources"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast for unbuilt scenes -->
+<div id="toast" aria-live="polite"></div>
+
+<footer id="colophon">{{ theme.text.colophon }}</footer>
+
+<!-- Deployment values for the front-end. A data block, not a script: the CSP
+     forbids inline script, and this is never executed. Keeps the static
+     assets identical across deployments. -->
+<!-- `or {}` is not defensive programming for its own sake: templates and static
+     are bind-mounted and hot-reload, while the Python is baked into the image
+     (the deployment notes), so a template can legitimately be newer than the app serving
+     it. Without the guard that skew is a 500 on the whole map instead of a
+     page that simply has no Grafana configured. -->
+<!-- REGIONS (v1.49.0): the detailed map of one region, over the main map,
+     which waits underneath framing the rectangle you came in through -->
+<section id="region-lens" class="region-lens" hidden aria-label="Detailed map">
+  <div class="rl-viewport">
+    <div class="rl-stage">
+      <img class="rl-map" alt="" draggable="false">
+      <div class="rl-frames"></div>
+      <div class="rl-markers"></div>
+    </div>
+  </div>
+  <nav class="rl-crumbs" aria-label="Map levels"></nav>
+  <div class="rl-locator" role="button" tabindex="0" title="Back out (Esc)">
+    <img alt="" draggable="false"><div class="rl-loc-box"></div>
+  </div>
+  <div class="rl-hint" aria-hidden="true"></div>
+</section>
+<div id="region-announce" class="sr-only" aria-live="polite"></div>
+<script type="application/json" id="atlas-config">{{ (client_config or {})|tojson }}</script>
+<script type="module" src="static/js/atlas.js?v={{ v }}"></script>
+</body>
+</html>

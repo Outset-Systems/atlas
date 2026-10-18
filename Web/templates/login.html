@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign In — {{ app_brand }}</title>
+{# Preload only the two faces that set THIS card's metrics. All four faces are
+   font-display:swap, so without this the card first paints in Times/system,
+   then reflows when Cinzel and Alegreya arrive — the heading, every label and
+   the button all change height at once and the button visibly jumps. That is
+   the on-load half of the flicker (the on-submit half was a hover/disabled
+   fight, fixed in the button rules below).
+   The MFA stage's JetBrains Mono and the Fell flavor line are deliberately NOT
+   preloaded: they are a stage away, and four blocking font fetches to fix a
+   reflow in two of them is a worse trade. `crossorigin` is required on font
+   preloads even same-origin — without it the file is fetched TWICE. #}
+<link rel="preload" as="font" type="font/woff2" crossorigin
+      href="/static/fonts/Cinzel-600.woff2?v={{ v }}">
+<link rel="preload" as="font" type="font/woff2" crossorigin
+      href="/static/fonts/AlegreyaSans-400.woff2?v={{ v }}">
+<style>
+  @font-face { font-family: 'Cinzel'; font-weight: 600; font-display: swap;
+    src: url('/static/fonts/Cinzel-600.woff2?v={{ v }}') format('woff2'); }
+  @font-face { font-family: 'Alegreya Sans'; font-weight: 400; font-display: swap;
+    src: url('/static/fonts/AlegreyaSans-400.woff2?v={{ v }}') format('woff2'); }
+  @font-face { font-family: 'IM Fell English'; font-style: italic; font-weight: 400; font-display: swap;
+    src: url('/static/fonts/IMFellEnglish-400i.woff2?v={{ v }}') format('woff2'); }
+  @font-face { font-family: 'JetBrains Mono'; font-weight: 400; font-display: swap;
+    src: url('/static/fonts/JetBrainsMono-400.woff2?v={{ v }}') format('woff2'); }
+
+  :root {
+    --abyss:#0D0B07; --workstation:#16120D; --workstation-2:#1E1912;
+    --ink-line:#3A342A; --ink-soft:#57503F;
+    --gilt:#C9A554; --gilt-bright:#E4C878;
+    --text:#C9BFA8; --text-dim:#8A8069; --sem-down:#C06B62;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    min-height:100vh; display:flex; align-items:center; justify-content:center;
+    background:var(--abyss); color:var(--text);
+    font-family:'Alegreya Sans', sans-serif; font-size:1.05rem;
+  }
+  /* paper grain, the fixed overlay the map itself wears */
+  body::after {
+    content:''; position:fixed; inset:0; pointer-events:none; opacity:0.035;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  .wrap { width:100%; max-width:380px; padding:24px; }
+  .mast { text-align:center; margin-bottom:32px; }
+  .mast h1 {
+    font-family:'Cinzel', serif; font-weight:600; font-size:1.35rem;
+    letter-spacing:0.26em; color:var(--gilt); text-transform:uppercase;
+  }
+  .mast .lore {
+    font-family:'IM Fell English', serif; font-style:italic;
+    color:var(--text-dim); font-size:0.95rem; margin-top:8px;
+  }
+  .card {
+    background:var(--surface); border:1px solid var(--ink-line);
+    border-radius:4px; padding:32px 28px;
+  }
+  .card hr { border:0; border-top:1px solid var(--ink-soft); margin:20px 0 0; opacity:.5; }
+  label {
+    display:block; font-family:'Cinzel', serif; font-size:0.72rem;
+    letter-spacing:0.22em; color:var(--text-dim); text-transform:uppercase;
+    margin:16px 0 6px;
+  }
+  input {
+    width:100%; padding:10px 12px;
+    background:var(--workstation-2); border:1px solid var(--ink-line);
+    border-radius:4px; color:var(--text);
+    font-family:'JetBrains Mono', monospace; font-size:0.92rem;
+  }
+  input:focus { outline:none; border-color:var(--gilt);
+    box-shadow:0 0 0 2px rgba(201,165,84,0.18); }
+  button {
+    width:100%; margin-top:24px; padding:11px;
+    background:transparent; border:1px solid var(--gilt); border-radius:4px;
+    color:var(--gilt); cursor:pointer;
+    font-family:'Cinzel', serif; font-weight:600; font-size:0.8rem;
+    letter-spacing:0.22em; text-transform:uppercase;
+    transition:background .15s, color .15s, opacity .15s;
+  }
+  /* ⚠ :not(:disabled) is load-bearing, not tidiness. A submit click leaves the
+     cursor ON the button, so :hover was filling it solid gold; the JS then
+     disables it, browsers stop matching :hover on a disabled control, and the
+     fill animated gold → transparent → gold around the request. That pulse WAS
+     the flicker. Disabled buttons must not answer to hover at all. */
+  button:not(:disabled):hover { background:var(--gilt); color:var(--abyss); }
+  /* opacity is in the transition above for the same reason — untransitioned it
+     snapped to .5 and back within a frame or two on a fast LAN answer. */
+  button:disabled { opacity:.5; cursor:default; }
+  .err {
+    display:none; margin-bottom:4px; padding:9px 12px;
+    border:1px solid var(--sem-down); border-radius:4px;
+    color:var(--sem-down); font-size:0.9rem;
+  }
+  .stage { display:none; }
+  .stage.lit { display:block; }
+  .hint { color:var(--text-dim); font-size:0.88rem; margin-top:14px; }
+  .qr { background:#EFE7D3; border-radius:4px; padding:12px; margin-top:14px;
+    text-align:center; }
+  .qr svg { width:180px; height:180px; }
+  .mono { font-family:'JetBrains Mono', monospace; font-size:0.82rem;
+    word-break:break-all; color:var(--gilt-bright); }
+  .codes { columns:2; margin-top:10px; }
+  .codes div { font-family:'JetBrains Mono', monospace; font-size:0.85rem;
+    padding:2px 0; color:var(--text); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  {# app_brand, NOT app_name: the door does not name the realm. "the lab"
+     is the map's own name and is earned by signing in — the veil and the crown
+     say it once you are through. A stranger at the gate (this page now answers
+     on the public internet) should learn nothing but that an Atlas is here. #}
+  <div class="mast">
+    <h1>{{ app_brand }}</h1>
+    <div class="lore">None may read the map unnamed.</div>
+  </div>
+  <div class="card">
+    <div class="err" id="err"></div>
+
+    <div class="stage lit" id="stage-login">
+      <form id="f-login">
+        <label for="u">Name</label>
+        <input id="u" name="username" autocomplete="username" autofocus required>
+        <label for="p">Password</label>
+        <input id="p" name="password" type="password" autocomplete="current-password" required>
+        <button type="submit" id="b-login">Enter the realm</button>
+      </form>
+    </div>
+
+    <div class="stage" id="stage-mfa">
+      <form id="f-mfa">
+        <label for="c">One-time code</label>
+        <input id="c" inputmode="numeric" autocomplete="one-time-code"
+               placeholder="TOTP or backup code" required>
+        <button type="submit">Verify</button>
+      </form>
+      <div class="hint">The code from your authenticator app, or one of your
+        saved backup codes.</div>
+    </div>
+
+    <div class="stage" id="stage-enroll">
+      <div class="hint" style="margin-top:0">This realm requires a second
+        factor. Scan the sigil with an authenticator app, then enter the
+        code it shows.</div>
+      <div class="qr" id="qr"></div>
+      <div class="mono" id="secret"></div>
+      <form id="f-enroll">
+        <label for="ec">Code from the app</label>
+        <input id="ec" inputmode="numeric" autocomplete="one-time-code" required>
+        <button type="submit">Bind the sigil</button>
+      </form>
+    </div>
+
+    <div class="stage" id="stage-codes">
+      <div class="hint" style="margin-top:0">Keep these one-time backup codes
+        somewhere safe — they are shown exactly once, and each opens the gate
+        one time if the authenticator is lost.</div>
+      <div class="codes" id="codes"></div>
+      <button id="b-done">Continue to the map</button>
+    </div>
+  </div>
+</div>
+
+<!-- Server values for the flow. A `type="application/json"` block is DATA, not
+     script, so the CSP has no opinion about it — the same contract index.html
+     uses. The behaviour lives in static/js/login.js because the app-wide CSP
+     (`default-src 'self'`, no `script-src`) blocks inline execution: as an
+     inline block this was silently dead in every browser, which dropped the
+     form back to a native GET and put the password in the URL. -->
+<script type="application/json" id="login-config">{{ {"next": next} | tojson }}</script>
+<script src="{{ url_for('static', filename='js/login.js') }}?v={{ v }}"></script>
+</body>
+</html>

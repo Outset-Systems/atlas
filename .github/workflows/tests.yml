@@ -1,0 +1,58 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+  # image.yml runs this before it publishes a release image
+  workflow_call:
+
+permissions: {}
+
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: Web/requirements.txt
+      # pytest is a dev dependency, not in the image's requirements
+      - name: Install dependencies
+        run: pip install -r Web/requirements.txt pytest
+      - name: Python suite
+        working-directory: Web
+        run: python -m pytest -q
+      - name: Every environment variable is documented
+        run: python docs/env-coverage.py
+
+  node:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "20"
+          # no package.json: nothing to install or cache
+          package-manager-cache: false
+      # the pure models (camera, calendar, ipam, project, rack): plain node:test
+      - name: Front-end model tests
+        run: node --test Web/tests/*.mjs
+      # every function the boot sequence calls is defined somewhere
+      - name: Boot wiring check
+        run: node tools/check-boot.mjs Web/static/js

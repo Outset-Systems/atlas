@@ -1,0 +1,27 @@
+{
+  "count": 4,
+  "next": null,
+  "previous": "https://netbox.test/api/dcim/devices/?limit=200",
+  "results": [
+    {
+      "id": 3,
+      "name": "GATEWAY",
+      "device_role": {"id": 3, "slug": "firewall", "name": "Firewall"},
+      "device_type": {"model": "UDM Pro SE", "manufacturer": {"name": "Ubiquiti"}},
+      "platform": null,
+      "primary_ip4": {"address": "10.77.90.1/24"},
+      "comments": "",
+      "custom_fields": {"atlas_url": "https://docs.test/gateway"}
+    },
+    {
+      "id": 4,
+      "name": "SHADOW BOX",
+      "role": {"id": 1, "slug": "server", "name": "Server"},
+      "device_type": {"model": "NUC", "manufacturer": {"name": "Intel"}},
+      "platform": null,
+      "primary_ip4": null,
+      "comments": "",
+      "custom_fields": {}
+    }
+  ]
+}

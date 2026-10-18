@@ -1,0 +1,9 @@
+{
+  "count": 2,
+  "next": null,
+  "previous": null,
+  "results": [
+    {"id": 11, "vid": 33, "name": "Upper Deck", "status": {"value": "active"}},
+    {"id": 12, "vid": 90, "name": "Outset DMZ", "status": {"value": "active"}}
+  ]
+}

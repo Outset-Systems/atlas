@@ -1,0 +1,520 @@
+/* THE SURVEYOR'S DESK — the editing workstation. Read the design notes before editing.
+
+   A separate stylesheet rather than more of atlas.css, which is already 95 KB
+   and covers a different thing: this is the only part of the app that is UI
+   rather than world. Removing the editor means removing one <link> and one
+   folder, which is a property worth keeping.
+
+   Per the design notes: the panel language of the other scenes (dark surface, gilt
+   rules, Cinzel micro-caps) with the *form itself* on parchment — the same
+   contrast flip the detail card uses, for the same reason. Writing happens on
+   paper; the world around it stays ink. Documents get 4px radius, panels 8px,
+   and gold is spent only on the accepting action. */
+
+#desk, #wizard {
+  position: fixed; inset: 0; z-index: 990;
+  display: flex; align-items: center; justify-content: center;
+  padding: 3vh 3vw; background: rgba(6,5,3,0.74);
+  opacity: 0; pointer-events: none; transition: opacity 200ms ease;
+}
+#desk.open, #wizard.open { opacity: 1; pointer-events: auto; }
+
+.dsk-panel, .wiz-panel {
+  display: flex; flex-direction: column;
+  width: min(1180px, 97vw); max-height: 94vh;
+  background: linear-gradient(180deg, var(--workstation-2), var(--surface));
+  border: 1px solid var(--ink-line); border-radius: 8px;
+  box-shadow: 0 28px 80px rgba(0,0,0,0.78);
+  transform: translateY(10px); transition: transform 200ms var(--glide);
+  overflow: hidden;
+}
+.wiz-panel { width: min(760px, 96vw); }
+#desk.open .dsk-panel, #wizard.open .wiz-panel { transform: translateY(0); }
+
+.dsk-head {
+  display: flex; align-items: baseline; gap: 14px;
+  padding: 16px 20px 14px; border-bottom: 1px solid var(--ink-line);
+}
+.dsk-title { font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.86rem; letter-spacing: 0.28em; color: var(--gilt); }
+.dsk-sub { font-family: 'IM Fell English', 'Alegreya Sans', serif; font-style: italic; font-size: 0.88rem; color: var(--text-dim); }
+
+.dsk-main { display: flex; min-height: 0; flex: 1; }
+
+/* ── the section rail ─────────────────────────────────────────────────── */
+.dsk-side {
+  flex: 0 0 208px; display: flex; flex-direction: column; gap: 1px;
+  padding: 12px 0; border-right: 1px solid var(--ink-line);
+  background: rgba(0,0,0,0.18); overflow-y: auto;
+}
+.dsk-nav {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 16px; background: none; border: none; border-left: 2px solid transparent;
+  color: var(--text-dim); cursor: pointer; text-align: left;
+  font-family: 'Cinzel', serif; font-size: 0.62rem; letter-spacing: 0.14em;
+  transition: color 150ms, background 150ms, border-color 150ms;
+}
+.dsk-nav:hover { color: var(--text); background: rgba(var(--gilt-rgb),0.06); }
+.dsk-nav.on { color: var(--gilt); border-left-color: var(--gilt); background: rgba(var(--gilt-rgb),0.1); }
+.dsk-nav-name { flex: 1; }
+.dsk-nav-n {
+  font-family: 'JetBrains Mono', monospace; font-size: 0.6rem;
+  color: var(--ink-soft); font-variant-numeric: tabular-nums;
+}
+.dsk-nav.on .dsk-nav-n { color: var(--gilt); }
+.dsk-nav-rule { height: 1px; margin: 10px 16px; background: var(--ink-line); }
+
+/* ── the working area ─────────────────────────────────────────────────── */
+.dsk-body { flex: 1; min-width: 0; padding: 18px 22px 26px; overflow-y: auto; }
+.dsk-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.dsk-bar-sub {
+  flex: 1; min-width: 220px;
+  font-family: 'Alegreya Sans', sans-serif; font-size: 0.86rem; color: var(--text-dim);
+}
+.dsk-bar-sub code, .dsk-help code {
+  font-family: 'JetBrains Mono', monospace; font-size: 0.78em; color: var(--text);
+  background: rgba(0,0,0,0.3); padding: 1px 5px; border-radius: 3px;
+}
+.dsk-search { max-width: 220px; }
+
+/* ── tables ───────────────────────────────────────────────────────────── */
+.dsk-table { width: 100%; border-collapse: collapse; font-family: 'Alegreya Sans', sans-serif; font-size: 0.88rem; }
+.dsk-table th {
+  text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--ink-line);
+  font-family: 'Cinzel', serif; font-size: 0.58rem; letter-spacing: 0.16em;
+  color: var(--text-dim); text-transform: uppercase; white-space: nowrap;
+}
+.dsk-table td {
+  padding: 7px 10px; border-bottom: 1px solid rgba(80,73,69,0.4);
+  color: var(--text); vertical-align: middle;
+}
+.dsk-table tr:hover td { background: rgba(var(--gilt-rgb),0.05); }
+/* an amber edge marks a row the saved layout is drawing somewhere else */
+.dsk-table tr.dsk-overridden td:first-child { box-shadow: inset 2px 0 0 var(--sem-warn); }
+.dsk-table tr.dsk-dim-row td { color: var(--ink-soft); }
+.dsk-mono, .dsk-table code {
+  font-family: 'JetBrains Mono', monospace; font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+.dsk-td-color { white-space: nowrap; }
+.dsk-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+.dsk-th-act, .dsk-td-act { width: 1%; white-space: nowrap; text-align: right; }
+.dsk-th-pick, .dsk-td-pick { width: 1%; }
+
+.dsk-icon {
+  background: none; border: none; cursor: pointer; color: var(--text-dim);
+  font-size: 0.92rem; line-height: 1; padding: 4px 6px; border-radius: 3px;
+  transition: color 150ms, background 150ms;
+}
+.dsk-icon:hover { color: var(--gilt); background: rgba(var(--gilt-rgb),0.12); }
+.dsk-icon-warn:hover { color: var(--sem-down); background: rgba(var(--down-rgb),0.14); }
+
+/* ── forms: the parchment flip ────────────────────────────────────────── */
+.dsk-form {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 14px 22px;
+  background: var(--parchment); color: var(--card-ink);
+  border: 1px solid rgba(var(--gilt-rgb),0.35); border-radius: 4px;
+  padding: 20px 22px;
+}
+.dsk-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.dsk-field-longtext, .dsk-field-objects, .dsk-field-object,
+.dsk-field-json, .dsk-field-strings { grid-column: 1 / -1; }
+.dsk-label {
+  font-family: 'Cinzel', serif; font-size: 0.6rem; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--card-ink-soft);
+}
+.dsk-req { color: #9d0006; font-style: normal; margin-left: 3px; }
+.dsk-help { font-family: 'Alegreya Sans', sans-serif; font-size: 0.78rem; line-height: 1.35; color: var(--card-ink-soft); }
+.dsk-help code { background: rgba(0,0,0,0.07); color: var(--card-ink); }
+
+.dsk-input {
+  font-family: 'Alegreya Sans', sans-serif; font-size: 0.92rem; color: var(--card-ink);
+  background: rgba(255,255,255,0.6); border: 1px solid rgba(80,73,69,0.32);
+  border-radius: 3px; padding: 6px 9px; width: 100%; min-width: 0;
+  transition: border-color 150ms, box-shadow 150ms;
+}
+.dsk-input:focus { outline: none; border-color: var(--gilt); box-shadow: 0 0 0 2px rgba(var(--gilt-rgb),0.24); }
+.dsk-input.dsk-mono { font-family: 'JetBrains Mono', monospace; font-size: 0.82rem; }
+.dsk-area { resize: vertical; line-height: 1.45; }
+.dsk-num { max-width: 160px; }
+.dsk-check { width: 16px; height: 16px; accent-color: var(--gilt); cursor: pointer; }
+.dsk-field-bool { flex-direction: row; align-items: center; gap: 9px; }
+.dsk-field-bool .dsk-label { text-transform: none; letter-spacing: 0.06em; font-size: 0.66rem; }
+.dsk-color { display: flex; gap: 8px; align-items: center; }
+.dsk-swatch {
+  width: 38px; height: 32px; padding: 0; cursor: pointer;
+  border: 1px solid rgba(80,73,69,0.32); border-radius: 3px; background: none;
+}
+.dsk-color-text { font-family: 'JetBrains Mono', monospace; font-size: 0.82rem; }
+
+/* chips — a list of plain strings, or of references */
+.dsk-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.dsk-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: 'JetBrains Mono', monospace; font-size: 0.76rem;
+  background: rgba(var(--gilt-rgb),0.16); border: 1px solid rgba(var(--gilt-rgb),0.4);
+  border-radius: 20px; padding: 2px 6px 2px 10px; color: var(--card-ink);
+}
+.dsk-chip-x {
+  background: none; border: none; cursor: pointer;
+  color: var(--card-ink-soft); font-size: 0.95rem; line-height: 1; padding: 0 2px;
+}
+.dsk-chip-x:hover { color: #9d0006; }
+.dsk-chips-empty { font-family: 'Alegreya Sans', sans-serif; font-size: 0.8rem; color: var(--card-ink-soft); font-style: italic; }
+.dsk-list-add { display: flex; gap: 8px; align-items: center; }
+.dsk-list-add .dsk-input, .dsk-list-add select { max-width: 280px; }
+
+/* nested sub-objects — a place's services, a prefix's ranges */
+.dsk-sublist { display: flex; flex-direction: column; gap: 10px; }
+.dsk-subcard {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px 18px;
+  border: 1px solid rgba(80,73,69,0.26); border-radius: 4px;
+  padding: 12px 14px; background: rgba(255,255,255,0.42);
+}
+.dsk-subcard-head { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; }
+.dsk-subcard-n {
+  font-family: 'Cinzel', serif; font-size: 0.58rem; letter-spacing: 0.16em;
+  text-transform: uppercase; color: var(--card-ink-soft);
+}
+.dsk-extra {
+  grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline;
+  font-family: 'Alegreya Sans', sans-serif; font-size: 0.78rem; color: var(--card-ink-soft);
+}
+.dsk-extra-head { font-family: 'Cinzel', serif; font-size: 0.55rem; letter-spacing: 0.14em; text-transform: uppercase; }
+.dsk-extra code {
+  font-family: 'JetBrains Mono', monospace; font-size: 0.74rem;
+  background: rgba(0,0,0,0.07); padding: 1px 5px; border-radius: 3px;
+}
+
+/* ── buttons ──────────────────────────────────────────────────────────── */
+.dsk-formbar { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+.dsk-btn {
+  font-family: 'Cinzel', serif; font-size: 0.62rem; letter-spacing: 0.16em; text-transform: uppercase;
+  background: rgba(0,0,0,0.24); color: var(--text); border: 1px solid var(--ink-line);
+  border-radius: 3px; padding: 8px 16px; cursor: pointer;
+  transition: background 150ms, border-color 150ms, color 150ms;
+}
+.dsk-btn:hover { border-color: var(--gilt); color: var(--gilt); }
+.dsk-btn:disabled { opacity: 0.4; cursor: default; }
+.dsk-btn-go { background: var(--discover); border-color: var(--discover); color: #f2e5bc; }
+.dsk-btn-go:hover:not(:disabled) { background: var(--discover-hover); border-color: var(--discover-hover); color: #fbf1c7; }
+.dsk-btn-warn { background: rgba(var(--down-rgb),0.16); border-color: var(--sem-down); color: var(--sem-down); }
+.dsk-btn-warn:hover { background: var(--sem-down); color: #1d2021; }
+.dsk-btn-sm { padding: 5px 11px; font-size: 0.56rem; }
+.dsk-form .dsk-btn { background: rgba(0,0,0,0.07); color: var(--card-ink); border-color: rgba(80,73,69,0.32); }
+.dsk-form .dsk-btn:hover { border-color: var(--gilt); color: #7c6f00; }
+
+/* ── notices, problems, dependents ────────────────────────────────────── */
+.dsk-notice {
+  font-family: 'Alegreya Sans', sans-serif; font-size: 0.88rem; line-height: 1.45;
+  border: 1px solid var(--ink-line); border-left-width: 3px; border-radius: 3px;
+  padding: 11px 14px; margin-bottom: 14px; color: var(--text-dim);
+  background: rgba(0,0,0,0.2);
+}
+.dsk-notice-warn { border-left-color: var(--sem-warn); color: var(--text); }
+.dsk-notice-bad { border-left-color: var(--sem-down); color: var(--text); }
+.dsk-notice-head { font-weight: 700; margin-bottom: 4px; }
+.dsk-problems {
+  margin: 6px 0 0 18px;
+  font-family: 'JetBrains Mono', monospace; font-size: 0.76rem; line-height: 1.6;
+}
+.dsk-form-errors:empty { display: none; }
+.dsk-deps { border: 1px solid var(--ink-line); border-radius: 3px; padding: 12px 14px; margin-bottom: 14px; }
+.dsk-deps-head { font-family: 'Alegreya Sans', sans-serif; font-size: 0.86rem; color: var(--text); }
+.dsk-deps .dsk-field-bool { margin-top: 12px; }
+.dsk-deps .dsk-label { color: var(--text-dim); }
+.dsk-dim { color: var(--ink-soft); }
+.dsk-warn { color: var(--sem-warn); }
+.dsk-ok { color: var(--sem-up); }
+
+/* ── the change log ───────────────────────────────────────────────────── */
+.dsk-revs { display: flex; flex-direction: column; }
+.dsk-rev {
+  display: grid; grid-template-columns: 168px 120px 1fr auto; gap: 12px; align-items: center;
+  padding: 9px 4px; border-bottom: 1px solid rgba(80,73,69,0.4);
+  font-family: 'Alegreya Sans', sans-serif; font-size: 0.86rem; color: var(--text);
+}
+.dsk-rev-when { font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: var(--text-dim); }
+.dsk-rev-who { font-family: 'JetBrains Mono', monospace; font-size: 0.74rem; color: var(--gilt); }
+
+/* ── the survey inbox ─────────────────────────────────────────────────── */
+.dsk-drop { margin-bottom: 16px; border: 1px dashed var(--ink-line); border-radius: 4px; padding: 12px 14px; }
+.dsk-drop summary {
+  font-family: 'Cinzel', serif; font-size: 0.62rem; letter-spacing: 0.16em;
+  text-transform: uppercase; color: var(--gilt); cursor: pointer;
+}
+.dsk-drop .dsk-help { color: var(--text-dim); margin: 10px 0; }
+.dsk-drop .dsk-area { margin-bottom: 10px; background: rgba(0,0,0,0.3); color: var(--text); border-color: var(--ink-line); }
+.dsk-draft { margin-bottom: 12px; border: 1px solid var(--ink-line); border-radius: 4px; }
+.dsk-draft summary {
+  padding: 10px 14px; cursor: pointer;
+  font-family: 'Cinzel', serif; font-size: 0.66rem; letter-spacing: 0.12em; color: var(--text);
+}
+.dsk-draft[open] summary { border-bottom: 1px solid var(--ink-line); }
+.dsk-draft .dsk-form { border: none; border-radius: 0 0 4px 4px; }
+
+/* ── the first survey ─────────────────────────────────────────────────── */
+.wiz-steps { display: flex; gap: 4px; padding: 14px 22px 0; }
+.wiz-step {
+  display: flex; align-items: center; gap: 7px; flex: 1;
+  font-family: 'Cinzel', serif; font-size: 0.56rem; letter-spacing: 0.14em;
+  color: var(--ink-soft); padding-bottom: 10px; border-bottom: 2px solid var(--ink-line);
+}
+.wiz-step i {
+  font-style: normal; width: 18px; height: 18px; border-radius: 50%;
+  display: grid; place-items: center; border: 1px solid currentColor; font-size: 0.6rem;
+}
+.wiz-step.on { color: var(--gilt); border-bottom-color: var(--gilt); }
+.wiz-step.done { color: var(--sem-up); border-bottom-color: var(--sem-up); }
+.wiz-body { padding: 20px 22px 24px; overflow-y: auto; }
+.wiz-h {
+  font-family: 'Cinzel', serif; font-weight: 600; font-size: 1.05rem;
+  letter-spacing: 0.12em; color: var(--text); margin-bottom: 8px;
+}
+.wiz-blurb {
+  font-family: 'Alegreya Sans', sans-serif; font-size: 0.92rem; line-height: 1.5;
+  color: var(--text-dim); margin-bottom: 18px; max-width: 62ch;
+}
+.wiz-bar { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+.wiz-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
+.wiz-choice {
+  display: flex; flex-direction: column; gap: 8px; text-align: left;
+  background: rgba(0,0,0,0.22); border: 1px solid var(--ink-line); border-radius: 4px;
+  padding: 18px 16px; cursor: pointer; transition: border-color 150ms, background 150ms;
+}
+.wiz-choice:hover { border-color: var(--gilt); background: rgba(var(--gilt-rgb),0.08); }
+.wiz-choice-g { font-size: 1.3rem; color: var(--gilt); line-height: 1; }
+.wiz-choice-t {
+  font-family: 'Cinzel', serif; font-size: 0.7rem; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--text);
+}
+.wiz-choice-b { font-family: 'Alegreya Sans', sans-serif; font-size: 0.82rem; line-height: 1.4; color: var(--text-dim); }
+
+/* ── the pencil in each scene header, and the uncharted invitation ────── */
+.scene-edit {
+  margin-left: auto; background: none; border: 1px solid transparent;
+  color: var(--text-dim); font-size: 0.86rem; line-height: 1; cursor: pointer;
+  padding: 4px 7px; border-radius: 3px; transition: color 150ms, border-color 150ms;
+}
+.rel-tools .scene-edit { margin-left: 0; }
+.scene-edit:hover { color: var(--gilt); border-color: rgba(var(--gilt-rgb),0.5); }
+/* The Chronicle and the Abyss are headings on the map itself, not flex panel
+   headers — the pencil sits inline after the title, and the Chronicle's sits
+   on the light sky, where the panel-dim ink would vanish. */
+.chron-head .scene-edit, .abyss-head .scene-edit {
+  margin-left: 12px; vertical-align: middle; font-size: 0.8rem;
+}
+.chron-head .scene-edit { color: #6b5f45; }
+.chron-head .scene-edit:hover { color: #463c22; border-color: rgba(70,60,34,0.5); }
+.scene-edit + .ldg-close, .scene-edit + .trb-close, .scene-edit + .rel-close { margin-left: 10px; }
+/* (`.sp-editor` carried its own top rule + padding from before it became a
+   `.sp-sec` (2026-08-16); its `.sp-sub` draws the divider like every sibling,
+   so the private copy doubled it. Removed 2026-09-04.) */
+
+#first-survey {
+  position: fixed; left: 50%; top: 42%; transform: translate(-50%,-50%); z-index: 900;
+  display: flex; flex-direction: column; gap: 8px; align-items: center;
+  background: rgba(20,17,12,0.86); border: 1px solid rgba(var(--gilt-rgb),0.5);
+  border-radius: 4px; padding: 26px 40px; cursor: pointer;
+  backdrop-filter: blur(3px); transition: border-color 150ms, background 150ms;
+}
+#first-survey:hover { border-color: var(--gilt); background: rgba(28,24,16,0.92); }
+.fs-head { font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.8rem; letter-spacing: 0.3em; color: var(--gilt); }
+.fs-sub { font-family: 'IM Fell English', serif; font-style: italic; font-size: 0.95rem; color: var(--text-dim); }
+body.pre #first-survey { display: none; }
+
+@media (max-width: 860px) {
+  .dsk-main { flex-direction: column; }
+  .dsk-side {
+    flex: 0 0 auto; flex-direction: row; overflow-x: auto;
+    border-right: none; border-bottom: 1px solid var(--ink-line);
+  }
+  .dsk-nav { border-left: none; border-bottom: 2px solid transparent; white-space: nowrap; }
+  .dsk-nav.on { border-left-color: transparent; border-bottom-color: var(--gilt); }
+  .dsk-rev { grid-template-columns: 1fr; gap: 3px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #desk, #wizard, .dsk-panel, .wiz-panel { transition: none; }
+}
+
+/* ══ THE ANNALS + THE REPAIRS ══════════════════════════════════════════════
+   Both reuse the Ledger's panel shell (.ldg-panel / .ldg-head / .ldg-list),
+   so only the rows are new. Semantic colour comes from the existing tokens —
+   the design notes: reuse the zone hues, no new colours. */
+
+/* Seated under the crown with the rest of them (2026-08-15) — it borrows the
+   Ledger's panel shell, so `.ldg-panel`'s max-height already leaves room for
+   the band; only the wrapper's own padding lives here. See `--crown-clear`. */
+#annals {
+  position: fixed; inset: 0; z-index: 985;
+  display: flex; align-items: center; justify-content: center;
+  padding: calc(var(--crown-clear) + 1vh) 3vw 4vh; background: rgba(6,5,3,0.7);
+  opacity: 0; pointer-events: none; transition: opacity 200ms ease;
+}
+#annals.open { opacity: 1; pointer-events: auto; }
+#annals .ldg-panel { transform: translateY(10px); }
+#annals.open .ldg-panel { transform: translateY(0); }
+#annals .ldg-list { flex-direction: column; flex-wrap: nowrap; gap: 0; }
+
+/* ── the annals ── */
+.ann-bar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 22px 0; flex-wrap: wrap;
+}
+.ann-filter {
+  font-family: 'Cinzel', serif; font-size: 0.58rem; letter-spacing: 0.14em;
+  text-transform: uppercase; background: none; color: var(--text-dim);
+  border: 1px solid var(--ink-line); border-radius: 20px;
+  padding: 4px 12px; cursor: pointer; transition: color 150ms, border-color 150ms;
+}
+.ann-filter:hover { color: var(--text); }
+.ann-filter.on { color: var(--gilt); border-color: var(--gilt); }
+.ann-counts {
+  margin-left: auto; font-family: 'JetBrains Mono', monospace;
+  font-size: 0.68rem; color: var(--ink-soft);
+}
+.ann-row {
+  display: grid; grid-template-columns: 86px 1fr auto auto; gap: 12px; align-items: baseline;
+  padding: 9px 4px; border-bottom: 1px solid rgba(80,73,69,0.4);
+  border-left: 2px solid transparent; padding-left: 12px;
+  font-family: 'Alegreya Sans', sans-serif; font-size: 0.9rem; color: var(--text);
+}
+.ann-row.ann-grave { border-left-color: var(--sem-down); }
+.ann-row.ann-warn { border-left-color: var(--sem-warn); }
+.ann-row.ann-planned { border-left-color: var(--sem-info); }
+.ann-row.ann-clear { border-left-color: var(--sem-up); }
+.ann-row.ann-quiet { border-left-color: var(--sem-slumber); }
+.ann-when {
+  font-family: 'JetBrains Mono', monospace; font-size: 0.72rem;
+  color: var(--text-dim); font-variant-numeric: tabular-nums;
+}
+.ann-from { color: var(--ink-soft); font-size: 0.82em; }
+.ann-kind {
+  font-family: 'Cinzel', serif; font-size: 0.52rem; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--ink-soft);
+}
+.ann-ack { font-style: italic; font-size: 0.82rem; color: var(--sem-up); }
+.ann-ack-btn {
+  font-family: 'Cinzel', serif; font-size: 0.54rem; letter-spacing: 0.14em;
+  text-transform: uppercase; background: none; color: var(--text-dim);
+  border: 1px solid var(--ink-line); border-radius: 3px;
+  padding: 3px 9px; cursor: pointer; transition: color 150ms, border-color 150ms;
+}
+.ann-ack-btn:hover { color: var(--gilt); border-color: var(--gilt); }
+.ann-ack-btn:disabled { opacity: 0.4; cursor: default; }
+
+/* ── the repairs ── */
+.rep-row {
+  display: flex; flex-direction: column; gap: 5px;
+  padding: 10px 12px; border-bottom: 1px solid rgba(80,73,69,0.4);
+  border-left: 2px solid transparent;
+}
+.rep-row.rep-active { border-left-color: var(--sem-info); background: rgba(131,165,152,0.06); }
+.rep-row.rep-upcoming { border-left-color: var(--gilt); }
+.rep-row.rep-ended { border-left-color: var(--ink-soft); opacity: 0.65; }
+.rep-row.rep-invalid { border-left-color: var(--sem-down); }
+.rep-main { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.rep-reason {
+  font-family: 'Cinzel', serif; font-size: 0.72rem; letter-spacing: 0.1em; color: var(--text);
+}
+.rep-nodes { display: flex; flex-wrap: wrap; gap: 5px; }
+.rep-node {
+  font-family: 'JetBrains Mono', monospace; font-size: 0.68rem;
+  color: var(--text-dim); border: 1px solid var(--ink-line);
+  border-radius: 20px; padding: 1px 8px;
+}
+.rep-when {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: var(--text-dim);
+}
+.rep-arrow { color: var(--ink-soft); }
+.rep-repeat {
+  font-family: 'Cinzel', serif; font-size: 0.52rem; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--gilt);
+  border: 1px solid rgba(var(--gilt-rgb),0.4); border-radius: 20px; padding: 1px 8px;
+}
+.rep-note { font-family: 'Alegreya Sans', sans-serif; font-size: 0.84rem; color: var(--text-dim); }
+
+/* a window's state, echoed in the Desk's table */
+.dsk-table tr.dsk-w-active td:first-child { box-shadow: inset 2px 0 0 var(--sem-info); }
+.dsk-table tr.dsk-w-ended td { opacity: 0.6; }
+.dsk-table tr.dsk-w-invalid td:first-child { box-shadow: inset 2px 0 0 var(--sem-down); }
+
+@media (prefers-reduced-motion: reduce) {
+  /* Every scene overlay AND its panel. `#stones`, `#tribute`, `#reliquary` and
+     `#path` were missing — they still slid and faded under reduced motion,
+     against the design notes's "always: full prefers-reduced-motion fallback, instant
+     transitions". Found and closed 2026-08-25 while adding `#accounts`, which
+     is what made the list worth reading rather than appending to. */
+  #annals, #ledger, #rites, #seals, #stones, #tribute, #reliquary, #path, #accounts, #settings,
+  #annals .ldg-panel, #ledger .ldg-panel, #rites .ldg-panel, #seals .ldg-panel,
+  #stones .ldg-panel, #accounts .ldg-panel, #settings .ldg-panel,
+  #tribute .trb-panel, #reliquary .rel-panel, #path .pth-panel { transition: none; }
+}
+
+/* ══ dependency-aware suppression ══════════════════════════════════════════
+   A place that is down behind something else that is down stays red — it IS
+   down, and dimming that would be a lie — but it drops the beacon flare and
+   the throb, so one fault raises one flare instead of ten. The eye goes to
+   the cause. See Web/dependencies.py. */
+.mk.s-down.s-caused::after { display: none; }
+.mk.s-down.s-caused .mk-ring { animation: none; opacity: 0.45; }
+.mk.s-down.s-caused .mk-core { animation: none; box-shadow: 0 0 6px var(--sem-down); opacity: 0.7; }
+
+/* the card says what it is behind, rather than just being red */
+.card-caused {
+  display: block; margin-top: 6px;
+  font-family: 'Alegreya Sans', sans-serif; font-size: 0.86rem;
+  color: var(--card-ink-soft); font-style: italic;
+}
+.card-caused strong { font-style: normal; }
+
+/* the annals: a consequence is recorded but never demands a human */
+.ann-row.ann-consequence { border-left-color: var(--ink-soft); }
+.ann-row.ann-consequence .ann-what { color: var(--text-dim); }
+.ann-behind { font-style: italic; color: var(--ink-soft); }
+
+/* ── THE BACKDROP — choosing the picture the map is drawn on (2026-07-28) ──
+   A gallery rather than a filename field, because "which render was that?" is
+   a question you answer by looking. Selecting only sets the form's value; the
+   realm settings still save as one write, so the change log gets one row. */
+.dsk-mapart { margin-top: 22px; border-top: 1px solid var(--ink-line); padding-top: 14px; }
+.dsk-mapart-head { display: flex; flex-direction: column; gap: 3px; margin-bottom: 10px; }
+.dsk-mapart-head strong {
+  font-family: 'JetBrains Mono', monospace; font-size: 0.74rem;
+  letter-spacing: 0.08em; color: var(--gilt);
+}
+.dsk-mapart-head span { font-size: 0.8rem; color: var(--text-dim); }
+
+.dsk-mapart-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(124px, 1fr));
+  gap: 10px; margin-bottom: 12px;
+}
+.dsk-mapart-tile {
+  position: relative; display: flex; flex-direction: column; gap: 2px;
+  padding: 6px; cursor: pointer; text-align: left;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid var(--ink-line); border-radius: 3px;
+  color: var(--text-dim); font: inherit;
+}
+.dsk-mapart-tile:hover { border-color: color-mix(in srgb, var(--gilt) 55%, transparent); }
+.dsk-mapart-tile.on {
+  border-color: var(--gilt);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gilt) 45%, transparent);
+}
+.dsk-mapart-tile img {
+  width: 100%; aspect-ratio: 1; object-fit: cover;
+  background: rgba(0, 0, 0, 0.4); border-radius: 2px;
+}
+.dsk-mapart-name {
+  font-family: 'JetBrains Mono', monospace; font-size: 0.66rem;
+  color: var(--text); overflow-wrap: anywhere;
+}
+.dsk-mapart-meta { font-size: 0.62rem; color: var(--text-dim); }
+.dsk-mapart-tile.on .dsk-mapart-name { color: var(--gilt); }
+.dsk-mapart-drop { position: absolute; top: 4px; right: 4px; }
+
+.dsk-mapart-upload { display: flex; flex-direction: column; gap: 5px; }
+.dsk-mapart-hint { font-size: 0.74rem; color: var(--text-dim); font-style: italic; }
+.dsk-mapart-file { font-size: 0.78rem; color: var(--text-dim); }

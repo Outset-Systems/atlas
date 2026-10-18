@@ -1,0 +1,75 @@
+"""atlasctl end-to-end tests — run directly, no pytest needed:
+
+    python Web/tests/test_cli.py
+
+Drives the real CLI entrypoint (in-process) through the §4 contract:
+initdb -> import-json -> export -> deep-compare, plus sites listing,
+--strict refusal, and unknown-site errors.
+"""
+
+import json
+import os
+import sys
+import tempfile
+
+WEB = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, WEB)
+
+TMP = tempfile.mkdtemp(prefix="atlas-cli-test-")
+DB = "--db", "sqlite:///" + os.path.join(TMP, "cli.db").replace("\\", "/")
+GOLDEN_PATH = os.path.join(WEB, "default-lab-data.json")
+with open(GOLDEN_PATH, encoding="utf-8") as f:
+    GOLDEN = json.load(f)
+
+import cli  # noqa: E402
+
+assert cli.main([*DB, "initdb"]) == 0  # tables exist regardless of test order
+
+
+def test_initdb_import_export_round_trip():
+    assert cli.main([*DB, "import-json", "--site", "lab", GOLDEN_PATH]) == 0
+    out_path = os.path.join(TMP, "export.json")
+    assert cli.main([*DB, "export", "--site", "lab", "-o", out_path]) == 0
+    with open(out_path, encoding="utf-8") as f:
+        assert json.load(f) == GOLDEN, "CLI round-trip diverged from source dataset"
+
+
+def test_sites_lists_the_site():
+    import io, contextlib
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        assert cli.main([*DB, "sites"]) == 0
+    assert "lab" in buf.getvalue()
+
+
+def test_strict_refuses_problem_dataset_and_leaves_no_site():
+    bad = json.loads(json.dumps(GOLDEN))
+    bad["nodes"][0]["zone"] = "no-such-zone"
+    bad_path = os.path.join(TMP, "bad.json")
+    with open(bad_path, "w", encoding="utf-8") as f:
+        json.dump(bad, f)
+    assert cli.main([*DB, "import-json", "--site", "strict-site", "--strict", bad_path]) == 3
+    assert cli.main([*DB, "export", "--site", "strict-site"]) == 2, "strict import must not create the site"
+    # without --strict the same dataset imports (tolerance doctrine)
+    assert cli.main([*DB, "import-json", "--site", "tolerant-site", bad_path]) == 0
+
+
+def test_export_unknown_site_errors():
+    assert cli.main([*DB, "export", "--site", "no-such-site"]) == 2
+
+
+def test_unreadable_dataset_errors():
+    assert cli.main([*DB, "import-json", os.path.join(TMP, "missing.json")]) == 2
+
+
+if __name__ == "__main__":
+    failures = 0
+    for name in sorted(n for n in globals() if n.startswith("test_")):
+        try:
+            globals()[name]()
+            print(f"  ok   {name}")
+        except AssertionError as e:
+            failures += 1
+            print(f"  FAIL {name}: {e}")
+    print("PASS" if not failures else f"{failures} FAILURE(S)")
+    sys.exit(1 if failures else 0)

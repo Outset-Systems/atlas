@@ -1,0 +1,119 @@
+{
+  "_comment": "Static health for the demo lab. Invented; no network calls.",
+  "nodes": {
+    "gateway": {
+      "state": "healthy",
+      "uptime_30d": 99.9
+    },
+    "core-switch": {
+      "state": "healthy",
+      "uptime_30d": 99.9
+    },
+    "hypervisor": {
+      "state": "healthy",
+      "uptime_30d": 99.9
+    },
+    "nas": {
+      "state": "healthy",
+      "uptime_30d": 99.9
+    },
+    "dc": {
+      "state": "healthy",
+      "uptime_30d": 99.9
+    },
+    "monitor": {
+      "state": "healthy",
+      "uptime_30d": 99.9
+    },
+    "downloads": {
+      "state": "degraded",
+      "uptime_30d": 98.4
+    },
+    "internal-host": {
+      "state": "healthy",
+      "uptime_30d": 99.9
+    },
+    "media": {
+      "state": "healthy",
+      "uptime_30d": 99.9
+    },
+    "edge": {
+      "state": "healthy",
+      "uptime_30d": 99.9
+    },
+    "app-host": {
+      "state": "healthy",
+      "uptime_30d": 99.9
+    },
+    "standby": {
+      "state": "down",
+      "uptime_30d": 12.0
+    },
+    "gpu-box": {
+      "state": "healthy",
+      "uptime_30d": 99.9
+    },
+    "workstation": {
+      "state": "healthy",
+      "uptime_30d": 99.9
+    },
+    "camera-hub": {
+      "state": "healthy",
+      "uptime_30d": 99.9
+    },
+    "the-wild": {
+      "state": "healthy"
+    }
+  },
+  "services": {
+    "Gateway": {
+      "state": "healthy"
+    },
+    "Core Switch": {
+      "state": "healthy"
+    },
+    "Hypervisor": {
+      "state": "healthy"
+    },
+    "NAS": {
+      "state": "healthy"
+    },
+    "Directory": {
+      "state": "healthy"
+    },
+    "Uptime Kuma": {
+      "state": "healthy"
+    },
+    "Downloads": {
+      "state": "degraded"
+    },
+    "Forgejo": {
+      "state": "healthy"
+    },
+    "Wiki": {
+      "state": "healthy"
+    },
+    "Jellyfin": {
+      "state": "healthy"
+    },
+    "Edge": {
+      "state": "healthy"
+    },
+    "Nextcloud": {
+      "state": "healthy"
+    },
+    "Photos": {
+      "state": "healthy"
+    },
+    "GPU Box": {
+      "state": "healthy"
+    },
+    "Home Assistant": {
+      "state": "healthy"
+    }
+  },
+  "metrics": {
+    "watchfires_up": 14,
+    "watchfires_total": 15
+  }
+}
