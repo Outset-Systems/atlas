@@ -63,9 +63,17 @@ services:
       #   ATLAS_LOKI_URL: http://loki:3100
       #   ATLAS_KUMA_URL: http://uptime-kuma:3001
       #   ATLAS_KUMA_API_KEY_FILE: /run/secrets/kuma_api_key
+      # Tripwires: let OpenCanary, Canarytokens or a script report a trip
+      # (docs/configuration.md#tripwires). Put a random secret of 16+
+      # characters in a file (`docker compose exec atlas python cli.py
+      # tripwires-key --new-secret` prints one), mount it as the
+      # `atlas_tripwires` secret below, and uncomment:
+      #   ATLAS_TRIPWIRES_WEBHOOK: "1"
+      #   ATLAS_TRIPWIRES_SECRET_FILE: /run/secrets/atlas_tripwires
 
     # secrets:
     #   - atlas_admin_password
+    #   - atlas_tripwires
 
     healthcheck:
       test:
@@ -87,6 +95,8 @@ services:
 # secrets:
 #   atlas_admin_password:
 #     file: ./atlas_admin_password.txt
+#   atlas_tripwires:
+#     file: ./atlas_tripwires.txt
 
 volumes:
   atlas-data:
