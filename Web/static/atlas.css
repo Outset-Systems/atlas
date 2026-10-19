@@ -2,13 +2,15 @@
 
 /* Palette = Gruvbox (warm retro, first-class light + dark). The Illuminated
    Cartography idiom is preserved; only the inkpot changed to Gruvbox. Every
-   workstation/text/accent reads from a variable so the theme flips in one place.
-   Dark is the default (the atlas is a night map); ?.light flips to Gruvbox light. */
+   workstation/text/accent reads from a variable so the scheme flips in one place.
+   :root holds the night palette (the map is a night map in both schemes); the
+   light scheme restates the panel tokens on the panel containers only — see
+   THE LIGHT SCHEME below. */
 :root {
   /* structure — Gruvbox dark */
   --abyss: #1d2021;          /* bg0_h — page/void */
-  --workstation: #282828;        /* bg0 — panels */
-  --workstation-2: #3c3836;      /* bg1 — raised panels */
+  --surface: #282828;        /* bg0 — panels */
+  --surface-2: #32302f;      /* bg0_s — raised panels (design system; #3c3836 left text-dim at 4.2:1) */
   --ink-line: #504945;       /* bg2 — strokes */
   --ink-soft: #665c54;       /* bg3 — quiet strokes */
   --parchment: #fbf1c7;      /* light bg0 — the ivory card (contrast flip) */
@@ -57,6 +59,65 @@
   /* the Index drawer's horizontal claim: width 320 + right inset 18. The
      scene-panel rules cede exactly this; MUST TRACK #index-drawer. */
   --drawer-clear: calc(320px + 18px);
+  /* ── panel tokens that flip with the scheme (v1.52.0) ───────────────────
+     Wells, hairlines and the older desaturated status hues used to be
+     literals inside the panel rules; they are tokens now so the LIGHT block
+     below can restate them. The dark values are the literals they replaced,
+     so the dark scheme is unchanged. */
+  --shade-rgb: 0, 0, 0;      /* sunken wells and shadows: rgba(var(--shade-rgb), calc(a * var(--shade-k))) */
+  --shade-k: 1;
+  --hair: rgba(255, 255, 255, 0.05);   /* a row's bottom hairline on a panel */
+  --text-soft: #b7a983;      /* hint lines between --text and --text-dim */
+  --on-gilt: #1a1a17;        /* a label on a filled gilt control */
+  --tone-up: #7A9B6E;        /* the v1 status hues the panels still speak in */
+  --tone-warn: #C49A52;
+  --tone-down: #C06B62;
+  --tone-info: #7FB0C4;
+  --frame-ground: #101010;   /* behind an embedded service while it loads */
+  color-scheme: dark;
+}
+
+/* ── THE LIGHT SCHEME (v1.52.0, the design notes 2026-10-19) ─────────────────────
+   Panels follow the scheme; the map is a night map in both. So the light
+   values are restated ONLY on the panel containers, and everything outside
+   them — the stage and its markers and zone labels, the round chrome, the
+   scene band, the veil, the announcements, the parchment card — keeps the
+   night palette from :root by construction, not by a list of exceptions.
+   `data-scheme` on <html> is set by scheme.js (stored choice, else the OS
+   preference). Values: the suite design system's Gruvbox Light Hard, with
+   two deliberate departures for legibility at panel sizes, both measured by
+   tests/test_scheme_css.py: --text-dim is fg3 #665c54 (the system's #7c6f64
+   is 4.3:1 on surface, under AA) and panel --gilt is a deeper amber #8a5a0b
+   (the system's gold #b57614 is 3.3:1, fit only for 24px type, and the panels
+   set their titles in 0.6–0.8rem Cinzel caps). */
+:root[data-scheme="light"] :is(#index-drawer, .ldg-panel, .trb-panel, .rel-panel, .pth-panel,
+                               .pal-panel, .gl-panel, .dsk-panel, .wiz-panel) {
+  --abyss: #f9f5d7;
+  --surface: #fbf1c7;
+  --surface-2: #f2e5bc;
+  --ink-line: #d5c4a1;
+  --ink-soft: #7c6f64;
+  --text: #3c3836;
+  --text-dim: #665c54;
+  --text-soft: #504945;
+  --gilt: #8a5a0b;
+  --gilt-bright: #b57614;
+  --gilt-rgb: 138, 90, 11;
+  --on-gilt: #fbf1c7;
+  --sem-up: #79740e;
+  --sem-warn: #b57614;
+  --sem-down: #9d0006;
+  --sem-info: #076678;
+  --down-rgb: 157, 0, 6;
+  --tone-up: #79740e;
+  --tone-warn: #b57614;
+  --tone-down: #9d0006;
+  --tone-info: #076678;
+  --shade-rgb: 60, 56, 54;
+  --shade-k: 0.3;
+  --hair: rgba(60, 56, 54, 0.14);
+  --frame-ground: #f2e5bc;
+  color-scheme: light;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -406,7 +467,7 @@ body::after {
   width: max-content; max-width: 260px; z-index: 8;
   display: flex; flex-direction: column; gap: 8px; text-align: left;
   padding: 12px 14px; border-radius: 6px;
-  background: color-mix(in srgb, var(--workstation-2) 92%, transparent);
+  background: color-mix(in srgb, var(--surface-2) 92%, transparent);
   border: 1px solid var(--ink-line); box-shadow: 0 14px 40px rgba(0,0,0,0.5);
   backdrop-filter: blur(6px);
 }
@@ -800,7 +861,7 @@ body.depths #colophon { color: #3E5A52; }
 }
 .sp-row { display: flex; align-items: center; justify-content: space-between; font-size: 0.86rem; cursor: pointer; }
 .sp-row input { width: 16px; height: 16px; accent-color: var(--gilt); cursor: pointer; }
-.sp-hint { font-size: 0.72rem; color: #b7a983; margin-top: 8px; line-height: 1.4; }
+.sp-hint { font-size: 0.72rem; color: var(--text-soft); margin-top: 8px; line-height: 1.4; }
 .sp-actions { display: flex; gap: 8px; margin-top: 12px; }
 .sp-btn {
   flex: 1; padding: 6px 8px; font-size: 0.72rem; font-family: inherit;
@@ -845,7 +906,7 @@ a.sp-btn { text-decoration: none; text-align: center; display: block; }
 .acct-pw .dir-input { display: block; width: 100%; box-sizing: border-box; margin: 6px 0 0; }
 .acct-emb {
   width: 30px; height: 30px; border-radius: 4px; cursor: pointer;
-  background: rgba(0,0,0,0.18); border: 1px solid var(--ink-line);
+  background: rgba(var(--shade-rgb), calc(0.18 * var(--shade-k))); border: 1px solid var(--ink-line);
   font-size: 0.95rem; line-height: 1; transition: border-color 150ms;
 }
 .acct-emb:hover { border-color: var(--gilt); }
@@ -922,7 +983,7 @@ a.sp-btn { text-decoration: none; text-align: center; display: block; }
 .dir-src { font-family: 'Alegreya Sans', sans-serif; font-size: 0.66rem;
            letter-spacing: 0; color: var(--ink-soft); margin-left: auto; font-style: italic; }
 .dir-input {
-  width: 100%; background: rgba(0,0,0,0.25); color: var(--text);
+  width: 100%; background: rgba(var(--shade-rgb), calc(0.25 * var(--shade-k))); color: var(--text);
   border: 1px solid var(--ink-line); border-radius: 3px; padding: 6px 8px;
   font-family: 'JetBrains Mono', monospace; font-size: 0.7rem;
   transition: border-color 150ms;
@@ -985,8 +1046,8 @@ body.tilted .mk .mk-ring { animation: none; }
   font-family: 'JetBrains Mono', monospace; font-size: 0.68rem;
   padding: 2px 7px; border-radius: 20px; border: 1px solid currentColor;
 }
-.sp-src-ok { color: #7A9B6E; }
-.sp-src-silent { color: #C06B62; }
+.sp-src-ok { color: var(--tone-up); }
+.sp-src-silent { color: var(--tone-down); }
 .sp-src-age {
   font-family: 'JetBrains Mono', monospace; font-size: 0.66rem;
   color: var(--text-dim); margin-left: auto;
@@ -1173,13 +1234,16 @@ body.decoys-on .mk.has-stone .mk-label { opacity: 1; transform: translateX(-50%)
   transition: width 180ms var(--glide), opacity 180ms, transform 180ms var(--glide);
 }
 #scenes-list .menu-tools.peek,
-#scenes-list .menu-tools:has(.active) { width: 34px; opacity: 1; transform: none; }   /* 30 button + 4 gap */
+#scenes-list .menu-tools:has(.active) { width: 68px; opacity: 1; transform: none; }   /* two × (30 button + 4 gap): ☀/☾ and ⚙ */
 #scenes-list .menu-tools .chrome {
   position: static; flex: none; margin-right: 4px;
   width: 30px; height: 30px; font-size: 0.95rem;
 }
 #scenes-list .ci-gear:hover,
 #scenes-list .ci-gear.active { box-shadow: none; }
+#scenes-list .ci-scheme:hover { box-shadow: none; }   /* the same clip, the same reason */
+/* ☀ wears the lit glyph while the light scheme is in force: pressed, not lamp */
+#scenes-list .ci-scheme[aria-pressed="true"] { color: var(--gilt-bright); }
 #scenes-list .ci-gear.active { border-color: rgba(var(--gilt-rgb), 0.7); color: var(--gilt-bright); }
 
 /* ── ☰'s scene lamp is a lamp, not a beacon (2026-08-15) ─────────────
@@ -1427,10 +1491,10 @@ body.constellation #overlay .territory-tag { opacity: 0.12; }
      `right:` clearance computed against this drawer still holds. */
   position: fixed; top: calc(var(--crown-b) + 4px); right: 18px; bottom: 12px;
   width: 320px; z-index: 970;
-  background: linear-gradient(180deg, var(--workstation-2), var(--surface));
+  background: linear-gradient(180deg, var(--surface-2), var(--surface));
   border: 1px solid var(--ink-line);
   border-radius: 4px 4px 14px 14px;
-  box-shadow: 0 24px 60px rgba(0,0,0,0.6);
+  box-shadow: 0 24px 60px rgba(var(--shade-rgb), calc(0.6 * var(--shade-k)));
   clip-path: inset(0 0 100% 0);
   transform: translateY(-10px);
   transition: clip-path 400ms var(--glide), transform 400ms var(--glide);
@@ -1825,7 +1889,7 @@ body.drawer-open .pth-panel { right: calc(5vw + var(--drawer-clear)); }
 .idx-search-wrap {
   display: flex; align-items: center; gap: 8px;
   margin: 10px 12px 2px; padding: 8px 10px;
-  border: 1px solid var(--ink-line); border-radius: 4px; background: rgba(0,0,0,0.14);
+  border: 1px solid var(--ink-line); border-radius: 4px; background: rgba(var(--shade-rgb), calc(0.14 * var(--shade-k)));
 }
 .idx-search-glyph { color: var(--gilt); font-size: 0.95rem; }
 #idx-search {
@@ -1991,9 +2055,9 @@ body.drawer-open .pth-panel { right: calc(5vw + var(--drawer-clear)); }
 #palette.open { opacity: 1; pointer-events: auto; }
 .pal-panel {
   width: min(560px, 92vw);
-  background: linear-gradient(180deg, var(--workstation-2), var(--surface));
+  background: linear-gradient(180deg, var(--surface-2), var(--surface));
   border: 1px solid var(--ink-line); border-radius: 8px;
-  box-shadow: 0 24px 70px rgba(0,0,0,0.7);
+  box-shadow: 0 24px 70px rgba(var(--shade-rgb), calc(0.7 * var(--shade-k)));
   transform: translateY(-8px); transition: transform 160ms var(--glide);
   overflow: hidden;
 }
@@ -2065,9 +2129,9 @@ body.drawer-open .pth-panel { right: calc(5vw + var(--drawer-clear)); }
   /* 92vh was the whole viewport less a margin; the seat below the crown is
      what is left after `--crown-clear` (grep MUST TRACK the wrapper above) */
   width: min(880px, 96vw); max-height: calc(100vh - var(--crown-clear) - 6vh);
-  background: linear-gradient(180deg, var(--workstation-2), var(--surface));
+  background: linear-gradient(180deg, var(--surface-2), var(--surface));
   border: 1px solid var(--ink-line); border-radius: 8px;
-  box-shadow: 0 28px 80px rgba(0,0,0,0.75);
+  box-shadow: 0 28px 80px rgba(var(--shade-rgb), calc(0.75 * var(--shade-k)));
   transform: translateY(10px); transition: transform 200ms var(--glide);
   overflow: hidden;
 }
@@ -2116,10 +2180,10 @@ body.drawer-open .pth-panel { right: calc(5vw + var(--drawer-clear)); }
 .ldg-zcount { font-family: 'JetBrains Mono', monospace; font-size: 0.6rem; color: var(--ink-soft); letter-spacing: 0.06em; }
 .ldg-grid {
   display: grid; grid-template-columns: repeat(16, 11px); grid-auto-rows: 11px; gap: 2px;
-  padding: 8px; border: 1px solid var(--ink-line); border-radius: 4px; background: rgba(0,0,0,0.25);
+  padding: 8px; border: 1px solid var(--ink-line); border-radius: 4px; background: rgba(var(--shade-rgb), calc(0.25 * var(--shade-k)));
 }
 .ldg-cell { width: 11px; height: 11px; border-radius: 2px; background: rgba(201,191,168,0.05); }
-.ldg-cell.edge { background: rgba(0,0,0,0.35); }   /* .0 network · .255 broadcast */
+.ldg-cell.edge { background: rgba(var(--shade-rgb), calc(0.35 * var(--shade-k))); }   /* .0 network · .255 broadcast */
 .ldg-cell.lit {
   background: var(--c-hue); box-shadow: 0 0 5px var(--c-hue); cursor: pointer;
   transition: transform 120ms;
@@ -2131,9 +2195,9 @@ body.drawer-open .pth-panel { right: calc(5vw + var(--drawer-clear)); }
 .trb-panel {
   display: flex; flex-direction: column;
   width: min(860px, 96vw); max-height: calc(100vh - var(--crown-clear) - 6vh);
-  background: linear-gradient(180deg, var(--workstation-2), var(--surface));
+  background: linear-gradient(180deg, var(--surface-2), var(--surface));
   border: 1px solid var(--ink-line); border-radius: 8px;
-  box-shadow: 0 28px 80px rgba(0,0,0,0.75);
+  box-shadow: 0 28px 80px rgba(var(--shade-rgb), calc(0.75 * var(--shade-k)));
   transform: translateY(10px); transition: transform 200ms var(--glide);
   overflow: hidden;
 }
@@ -2145,11 +2209,11 @@ body.drawer-open .pth-panel { right: calc(5vw + var(--drawer-clear)); }
 .trb-vessel {
   display: flex; width: 100%; height: 30px;
   border: 1px solid var(--ink-line); border-radius: 4px; overflow: hidden;
-  background: rgba(0,0,0,0.28);
+  background: rgba(var(--shade-rgb), calc(0.28 * var(--shade-k)));
 }
 .trb-seg {
   height: 100%; background: var(--seg-hue);
-  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.25), inset 0 8px 10px rgba(255,255,255,0.12);
+  box-shadow: inset 0 0 0 1px rgba(var(--shade-rgb), calc(0.25 * var(--shade-k))), inset 0 8px 10px rgba(255,255,255,0.12);
   opacity: 0.82; transition: opacity 150ms;
 }
 .trb-vessel:hover .trb-seg { opacity: 0.55; }
@@ -2163,7 +2227,7 @@ body.drawer-open .pth-panel { right: calc(5vw + var(--drawer-clear)); }
 }
 .trb-sum-big { font-size: 1.1rem; color: var(--gilt); }
 .trb-sum-big small { font-size: 0.72rem; color: var(--text-dim); }
-.trb-sum-free { color: #7A9B6E; }
+.trb-sum-free { color: var(--tone-up); }
 /* Two vessels now (memory, then processors), so each says which it is. Cinzel
    micro-caps, the same voice the scene buttons use. */
 .trb-cap {
@@ -2173,7 +2237,7 @@ body.drawer-open .pth-panel { right: calc(5vw + var(--drawer-clear)); }
 .trb-cap-2 { margin-top: 20px; }
 /* Assigning more vCPU than there are threads is ordinary practice, not a
    fault — so it is stated in the warn tone, never the down tone. */
-.trb-sum-over { color: var(--sem-warn, #C49A52); }
+.trb-sum-over { color: var(--sem-warn, var(--tone-warn)); }
 
 /* per-VM allocation rows */
 .trb-list { padding: 10px 22px 22px; overflow-y: auto; }
@@ -2186,7 +2250,7 @@ body.drawer-open .pth-panel { right: calc(5vw + var(--drawer-clear)); }
 .trb-row:hover { background: rgba(var(--gilt-rgb), 0.06); }
 .trb-row.off { opacity: 0.5; }
 .trb-name { font-family: 'Cinzel', serif; font-weight: 600; font-size: 0.74rem; letter-spacing: 0.1em; color: var(--text); white-space: nowrap; }
-.trb-bar { position: relative; height: 14px; background: rgba(0,0,0,0.3); border-radius: 3px; overflow: hidden; }
+.trb-bar { position: relative; height: 14px; background: rgba(var(--shade-rgb), calc(0.3 * var(--shade-k))); border-radius: 3px; overflow: hidden; }
 .trb-track {
   position: absolute; inset: 0 auto 0 0; height: 100%;
   background: color-mix(in srgb, var(--row-hue) 30%, transparent);
@@ -2205,9 +2269,9 @@ body.drawer-open .pth-panel { right: calc(5vw + var(--drawer-clear)); }
 .rel-panel {
   display: flex; flex-direction: column;
   width: min(1000px, 96vw); max-height: calc(100vh - var(--crown-clear) - 6vh);
-  background: linear-gradient(180deg, var(--workstation-2), var(--surface));
+  background: linear-gradient(180deg, var(--surface-2), var(--surface));
   border: 1px solid var(--ink-line); border-radius: 8px;
-  box-shadow: 0 28px 80px rgba(0,0,0,0.75);
+  box-shadow: 0 28px 80px rgba(var(--shade-rgb), calc(0.75 * var(--shade-k)));
   transform: translateY(10px); transition: transform 200ms var(--glide);
   overflow: hidden;
 }
@@ -2273,7 +2337,7 @@ body.drawer-open .pth-panel { right: calc(5vw + var(--drawer-clear)); }
 /* `min-width: 0` + `max-width: 100%`: a rear vessel's Description is a
    sentence, and a button that refused to be narrower than its sentence is
    what widened the whole column (see `.rel-rack`). It wraps now. */
-.rel-rear-item { background: rgba(0,0,0,0.22); border: 1px dashed var(--ink-line); border-radius: 3px; padding: 5px 11px; cursor: pointer; display: flex; flex-direction: column; gap: 1px; text-align: left; transition: border-color 150ms; min-width: 0; max-width: 100%; }
+.rel-rear-item { background: rgba(var(--shade-rgb), calc(0.22 * var(--shade-k))); border: 1px dashed var(--ink-line); border-radius: 3px; padding: 5px 11px; cursor: pointer; display: flex; flex-direction: column; gap: 1px; text-align: left; transition: border-color 150ms; min-width: 0; max-width: 100%; }
 .rel-rear-item:hover { border-color: rgba(var(--gilt-rgb), 0.5); }
 .rel-rear-name { font-family: 'Cinzel', serif; font-weight: 600; font-size: 0.64rem; letter-spacing: 0.08em; color: var(--text-dim); }
 .rel-rear-desc { font-family: 'JetBrains Mono', monospace; font-size: 0.54rem; color: var(--ink-soft); }
@@ -2329,7 +2393,7 @@ body.pre #scenes-list { opacity: 0; pointer-events: none; }
      band, the same height as ☰ at every width.) It STANDS OUT here rather than
      waiting for a hover: a hover-revealed control is no control at all on a
      touch screen, and this is the width where the screen is one. */
-  #scenes-list .menu-tools { width: 34px; opacity: 1; transform: none; }
+  #scenes-list .menu-tools { width: 68px; opacity: 1; transform: none; }   /* ☀/☾ and ⚙, standing out */
   .atlas-tools .chrome { width: 34px; height: 34px; }
 }
 
@@ -2465,14 +2529,14 @@ body.pre #scenes-list { opacity: 0; pointer-events: none; }
   fill: none; stroke: var(--ink-soft); stroke-width: 0.35;
   vector-effect: non-scaling-stroke; stroke-width: 1.4px; opacity: 0.85;
 }
-.pth-k-wan    { stroke: #7FB0C4; stroke-dasharray: 6 5; }
-.pth-k-edge   { stroke: #C49A52; }
-.pth-k-vlan   { stroke: #7A9B6E; }
-.pth-k-mesh   { stroke: #7A9B6E; stroke-dasharray: 1.5 5; opacity: 0.7; }
-.pth-k-telemetry { stroke: #83a598; stroke-dasharray: 1 6; opacity: 0.5; }
+.pth-k-wan    { stroke: var(--tone-info); stroke-dasharray: 6 5; }
+.pth-k-edge   { stroke: var(--tone-warn); }
+.pth-k-vlan   { stroke: var(--tone-up); }
+.pth-k-mesh   { stroke: var(--tone-up); stroke-dasharray: 1.5 5; opacity: 0.7; }
+.pth-k-telemetry { stroke: var(--sem-info); stroke-dasharray: 1 6; opacity: 0.5; }
 .pth-k-vassal { stroke: var(--ink-soft); stroke-dasharray: 2 4; opacity: 0.6; }
-.pth-warn   { stroke: #C49A52 !important; }
-.pth-dark   { stroke: #C06B62 !important; stroke-width: 2px; animation: pth-alarm 1.6s ease-in-out infinite; }
+.pth-warn   { stroke: var(--tone-warn) !important; }
+.pth-dark   { stroke: var(--tone-down) !important; stroke-width: 2px; animation: pth-alarm 1.6s ease-in-out infinite; }
 @keyframes pth-alarm { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
 
 .pth-node {
@@ -2484,14 +2548,14 @@ body.pre #scenes-list { opacity: 0; pointer-events: none; }
 .pth-node:hover { background: rgba(var(--gilt-rgb), 0.08); }
 .pth-dot {
   width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;
-  border: 1.5px solid var(--n-hue, var(--gilt)); background: var(--workstation-2);
+  border: 1.5px solid var(--n-hue, var(--gilt)); background: var(--surface-2);
   box-shadow: 0 0 12px color-mix(in srgb, var(--n-hue, var(--gilt)) 30%, transparent);
 }
 .pth-node.k-vm .pth-dot { border-radius: 50%; }                       /* vm — circle */
 .pth-node.k-physical .pth-dot { border-radius: 4px; transform: rotate(45deg); } /* iron — diamond */
 .pth-node.k-physical .pth-dot .svc-health { transform: rotate(-45deg); }
 .pth-node.k-network .pth-dot { border-radius: 4px; }                  /* ways — square */
-.pth-node.st-down .pth-dot { border-color: #C06B62; animation: pth-alarm 1.6s ease-in-out infinite; }
+.pth-node.st-down .pth-dot { border-color: var(--tone-down); animation: pth-alarm 1.6s ease-in-out infinite; }
 /* arrived from a service card — halo its host */
 .pth-node.pth-focus .pth-dot {
   box-shadow: 0 0 0 3px rgba(var(--gilt-rgb), 0.55), 0 0 18px rgba(var(--gilt-rgb), 0.5);
@@ -2538,18 +2602,18 @@ body.pre #scenes-list { opacity: 0; pointer-events: none; }
 }
 .pth-lg { display: inline-flex; align-items: center; gap: 7px; }
 .pth-lg-line { display: inline-block; width: 26px; height: 0; border-top: 2px solid var(--ink-soft); }
-.pth-lg-line.pth-k-wan { border-top-style: dashed; border-color: #7FB0C4; }
-.pth-lg-line.pth-k-edge { border-color: #C49A52; }
-.pth-lg-line.pth-k-vlan { border-color: #7A9B6E; }
-.pth-lg-line.pth-k-mesh { border-top-style: dotted; border-color: #7A9B6E; }
-.pth-lg-line.pth-k-telemetry { border-top-style: dotted; border-color: #83a598; }
+.pth-lg-line.pth-k-wan { border-top-style: dashed; border-color: var(--tone-info); }
+.pth-lg-line.pth-k-edge { border-color: var(--tone-warn); }
+.pth-lg-line.pth-k-vlan { border-color: var(--tone-up); }
+.pth-lg-line.pth-k-mesh { border-top-style: dotted; border-color: var(--tone-up); }
+.pth-lg-line.pth-k-telemetry { border-top-style: dotted; border-color: var(--sem-info); }
 .pth-lg-line.pth-k-vassal { border-top-style: dotted; border-color: var(--ink-soft); }
 .pth-lg-note { margin-left: auto; font-style: italic; font-family: 'IM Fell English', serif; }
 
 /* Ledger prefix utilization bar (NetBox-flavored) */
 .ldg-util {
   position: relative; height: 8px; margin-top: 8px;
-  background: rgba(0,0,0,0.35); border: 1px solid var(--ink-line); border-radius: 3px;
+  background: rgba(var(--shade-rgb), calc(0.35 * var(--shade-k))); border: 1px solid var(--ink-line); border-radius: 3px;
   overflow: hidden;
 }
 .ldg-util-fill {
@@ -2689,8 +2753,8 @@ body.pre #scenes-list { opacity: 0; pointer-events: none; }
    screen, and a ruler you have to scroll back to is a ruler you stop reading */
 .cal-ruler {
   position: sticky; top: -18px; z-index: 3; padding: 12px 0 8px;
-  background: var(--workstation-2);
-  box-shadow: 0 6px 10px -8px rgba(0,0,0,0.8);
+  background: var(--surface-2);
+  box-shadow: 0 6px 10px -8px rgba(var(--shade-rgb), calc(0.8 * var(--shade-k)));
   border-bottom: 1px solid var(--ink-line);
 }
 .cal-hours {
@@ -2747,7 +2811,7 @@ body.pre #scenes-list { opacity: 0; pointer-events: none; }
   background:
     repeating-linear-gradient(90deg, transparent 0 calc(100%/8 - 1px),
       color-mix(in srgb, var(--ink-line) 80%, transparent) calc(100%/8 - 1px) calc(100%/8)),
-    rgba(0,0,0,0.28);
+    rgba(var(--shade-rgb), calc(0.28 * var(--shade-k)));
   border: 1px solid color-mix(in srgb, var(--ink-line) 70%, transparent); overflow: hidden;
 }
 .cal-blk {
@@ -2781,7 +2845,7 @@ body.pre #scenes-list { opacity: 0; pointer-events: none; }
   font-family: 'JetBrains Mono', monospace; font-size: 0.56rem; letter-spacing: 0.08em;
   color: var(--ink-soft); font-style: normal;
   /* the ground must not read through the words that explain its emptiness */
-  background: linear-gradient(90deg, transparent, rgba(0,0,0,0.55) 22%, rgba(0,0,0,0.55) 78%, transparent);
+  background: linear-gradient(90deg, transparent, rgba(var(--shade-rgb), calc(0.55 * var(--shade-k))) 22%, rgba(var(--shade-rgb), calc(0.55 * var(--shade-k))) 78%, transparent);
 }
 .cal-now {
   position: absolute; top: -1px; bottom: -1px; width: 1px; z-index: 1;
@@ -2943,7 +3007,7 @@ body.pre #scenes-list { opacity: 0; pointer-events: none; }
   border-radius: 3px; padding: 5px 10px; cursor: pointer; transition: background 150ms, border-color 150ms;
 }
 .rel-tool:hover { background: rgba(var(--gilt-rgb), 0.16); }
-.rel-tool.on { background: var(--gilt); color: #1a1a17; border-color: var(--gilt); }
+.rel-tool.on { background: var(--gilt); color: var(--on-gilt); border-color: var(--gilt); }
 .rel-tool[hidden] { display: none; }
 
 /* ── THE ARMORY: 2D ⇄ 3D toggle + the 3D deep-dive canvas ────────────────
@@ -2958,7 +3022,7 @@ body.pre #scenes-list { opacity: 0; pointer-events: none; }
 }
 .rel-seg + .rel-seg { border-left: 1px solid rgba(var(--gilt-rgb), 0.28); }
 .rel-seg:hover { background: rgba(var(--gilt-rgb), 0.16); }
-.rel-seg.is-on { background: var(--gilt); color: #1a1a17; }
+.rel-seg.is-on { background: var(--gilt); color: var(--on-gilt); }
 .rel-seg:disabled { opacity: 0.4; cursor: not-allowed; }
 
 #rel-elevation[hidden] { display: none; }
@@ -3163,12 +3227,12 @@ body.constellation .mk.active .mk-dot { opacity: 0.35; }
   display: flex; flex-direction: column;
   background: var(--surface); border: 1px solid rgba(var(--gilt-rgb),0.4);
   border-radius: 8px; overflow: hidden;
-  box-shadow: 0 30px 80px rgba(0,0,0,0.7);
+  box-shadow: 0 30px 80px rgba(var(--shade-rgb), calc(0.7 * var(--shade-k)));
 }
 .gl-head {
   display: flex; align-items: baseline; gap: 12px; flex-shrink: 0;
   padding: 12px 16px 11px; border-bottom: 1px solid var(--ink-line);
-  background: var(--workstation-2); position: relative;
+  background: var(--surface-2); position: relative;
 }
 .gl-title {
   font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.78rem;
@@ -3186,8 +3250,8 @@ body.constellation .mk.active .mk-dot { opacity: 0.35; }
   transition: background 150ms, border-color 150ms;
 }
 .gl-tool:hover { background: rgba(var(--gilt-rgb), 0.18); border-color: var(--gilt); }
-.gl-body { position: relative; flex: 1; min-height: 0; background: #101010; }
-.gl-frame { width: 100%; height: 100%; border: none; display: block; background: #101010; }
+.gl-body { position: relative; flex: 1; min-height: 0; background: var(--frame-ground); }
+.gl-frame { width: 100%; height: 100%; border: none; display: block; background: var(--frame-ground); }
 #glass[data-state="reaching"] .gl-frame,
 #glass[data-state="refused"] .gl-frame { opacity: 0; }
 /* the glass reuses the realm's one waiting state (.chron-scrying) — it had
@@ -3214,10 +3278,10 @@ body.constellation .mk.active .mk-dot { opacity: 0.35; }
   padding: 11px 18px 10px; border-radius: 2px; margin-top: 4px;
   transition: background 200ms, box-shadow 200ms;
 }
-.gl-refuse-go:hover { background: var(--discover-hover); box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
+.gl-refuse-go:hover { background: var(--discover-hover); box-shadow: 0 4px 16px rgba(var(--shade-rgb), calc(0.4 * var(--shade-k))); }
 .gl-foot {
   flex-shrink: 0; padding: 7px 16px 8px; border-top: 1px solid var(--ink-line);
-  background: var(--workstation-2);
+  background: var(--surface-2);
   font-family: 'JetBrains Mono', monospace; font-size: 0.6rem;
   color: var(--text-dim); word-break: break-all;
 }
@@ -3251,7 +3315,7 @@ body.constellation .mk.active .mk-dot { opacity: 0.35; }
   display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.6fr) auto;
   gap: 10px; align-items: baseline;
   padding: 7px 0 7px 11px; border-left: 2px solid transparent;
-  border-bottom: 1px solid rgba(255,255,255,0.05);
+  border-bottom: 1px solid var(--hair);
 }
 .seal:last-child { border-bottom: none; }
 .seal-name {
@@ -3311,7 +3375,7 @@ body.constellation .mk.active .mk-dot { opacity: 0.35; }
   display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
   gap: 10px; align-items: baseline;
   padding: 7px 0 7px 11px; border-left: 2px solid transparent;
-  border-bottom: 1px solid rgba(255,255,255,0.05);
+  border-bottom: 1px solid var(--hair);
 }
 .acc-row:last-child { border-bottom: none; }
 .acc-name {
@@ -3333,7 +3397,7 @@ body.constellation .mk.active .mk-dot { opacity: 0.35; }
 .acc-group {
   font-family: 'JetBrains Mono', monospace; font-size: 0.6rem;
   padding: 1px 6px; border-radius: 20px;   /* chips 20px, per the radius scale */
-  color: var(--text-dim); background: rgba(255,255,255,0.05);
+  color: var(--text-dim); background: var(--hair);
   border: 1px solid rgba(var(--gilt-rgb), 0.14);
 }
 .acc-note {
@@ -3367,13 +3431,13 @@ body.constellation .mk.active .mk-dot { opacity: 0.35; }
   --ch-1: #7FB0C4; --ch-2: #C49A52; --ch-3: #C06B62; --ch-4: #7A9B6E;
   --ch-5: #7FE0C8; --ch-6: #9A7FB0; --ch-7: #D9C08A; --ch-8: #8A9BA8;
   --ch-up: #7A9B6E; --ch-warn: #C49A52; --ch-down: #C06B62;
-  --ch-grid: rgba(201,165,84,0.12); --ch-ink: #8A8069; --ch-text: #C9BFA8; --ch-workstation: #0b0d12;
+  --ch-grid: rgba(201,165,84,0.12); --ch-ink: #8A8069; --ch-text: #C9BFA8; --ch-surface: #0b0d12;
 }
 #chronicle .chron-viewer {
   --ch-1: #3F7D95; --ch-2: #A8792E; --ch-3: #B0524A; --ch-4: #5D8452;
   --ch-5: #3F9B86; --ch-6: #7D5F9C; --ch-7: #8C7A3A; --ch-8: #5D6D7A;
   --ch-up: #5D8452; --ch-warn: #A8792E; --ch-down: #B0524A;
-  --ch-grid: rgba(60,50,30,0.14); --ch-ink: #6B6046; --ch-text: #2A241A; --ch-workstation: #f4f2ea;
+  --ch-grid: rgba(60,50,30,0.14); --ch-ink: #6B6046; --ch-text: #2A241A; --ch-surface: #f4f2ea;
 }
 /* the figure fills its pane exactly as a frame did, and fades in the same way */
 .chron-native {
@@ -3473,7 +3537,7 @@ body.constellation .mk.active .mk-dot { opacity: 0.35; }
   --ch-1: #7FB0C4; --ch-2: #C49A52; --ch-3: #C06B62; --ch-4: #7A9B6E;
   --ch-5: #7FE0C8; --ch-6: #9A7FB0; --ch-7: #D9C08A; --ch-8: #8A9BA8;
   --ch-up: #7A9B6E; --ch-warn: #C49A52; --ch-down: #C06B62;
-  --ch-grid: rgba(201,165,84,0.12); --ch-ink: #8A8069; --ch-text: #C9BFA8; --ch-workstation: #0b0d12;
+  --ch-grid: rgba(201,165,84,0.12); --ch-ink: #8A8069; --ch-text: #C9BFA8; --ch-surface: #0b0d12;
 }
 #embed-max-native[hidden], #embed-max-frame[hidden] { display: none; }
 #embed-max-native .chron-native { padding: 44px 28px 20px; }
@@ -3569,6 +3633,67 @@ body.constellation .mk.active .mk-dot { opacity: 0.35; }
     box-shadow: 0 0 0 4px rgba(251,73,52,0.28);
   }
 }
+
+/* ── THE TRIPWIRES (v1.52.0) ─────────────────────────────
+   The decoys scene grown into two families, per-source contact, trips with
+   an acknowledge, and the setup a sender needs. Same idiom as the rest of the
+   scene: Cinzel micro-caps for heads, mono for data, the one loud colour
+   (--sem-down) spent only on a touched tripwire. Tokens only, so the panel
+   follows the colour scheme. */
+.gs-sources { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 6px; }
+.gs-src { font-family: 'JetBrains Mono', monospace; font-size: 0.74rem; color: var(--text-dim); }
+.gs-src b { font-weight: 600; color: var(--text); }
+.gs-src-lost { color: var(--sem-warn); }
+.gs-family { padding-top: 6px; }
+.gs-family + .gs-family { border-top: 1px solid var(--ink-line); margin-top: 6px; }
+.gs-family-head {
+  font-family: 'Cinzel', serif; font-size: 0.66rem; font-weight: 700;
+  letter-spacing: 0.24em; color: var(--gilt); margin: 10px 0 4px;
+}
+.gs-family-sub {
+  font-family: 'Alegreya Sans', sans-serif; font-size: 0.82rem; font-weight: 400;
+  letter-spacing: 0.01em; color: var(--text-dim); margin-left: 8px;
+}
+.gs-trip {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 4px;
+  font-family: 'JetBrains Mono', monospace; font-size: 0.74rem; color: var(--text-dim);
+}
+.gs-speaking .gs-trip-line { color: var(--text); }
+.gs-trip-loose { padding: 6px 0 6px 24px; border-bottom: 1px solid var(--hair); }
+.gs-trip-loose .gs-trip-line { color: var(--sem-down); }
+.gs-ack, .gs-copy, .gs-setup-toggle, .gs-add {
+  font-family: 'Cinzel', serif; font-size: 0.56rem; letter-spacing: 0.14em;
+  text-transform: uppercase; background: none; color: var(--text-dim);
+  border: 1px solid var(--ink-line); border-radius: 3px;
+  padding: 3px 9px; cursor: pointer; transition: color 150ms, border-color 150ms;
+}
+.gs-ack:hover, .gs-copy:hover, .gs-setup-toggle:hover, .gs-add:hover,
+.gs-ack:focus-visible, .gs-copy:focus-visible, .gs-setup-toggle:focus-visible, .gs-add:focus-visible {
+  color: var(--gilt); border-color: var(--gilt); outline: none;
+}
+.gs-ack:disabled { opacity: 0.4; cursor: default; }
+.gs-setup { border-top: 1px solid var(--ink-line); margin-top: 12px; padding-top: 10px; }
+.gs-setup-bar { display: flex; flex-wrap: wrap; gap: 8px; }
+.gs-setup-toggle { color: var(--gilt); border-color: rgba(var(--gilt-rgb), 0.4); font-weight: 700; }
+.gs-setup-body { margin-top: 8px; }
+.gs-setup-p { font-size: 0.9rem; color: var(--text-dim); margin: 8px 0; line-height: 1.5; }
+.gs-setup-p code, .gs-notes code {
+  font-family: 'JetBrains Mono', monospace; font-size: 0.8em; color: var(--text);
+  background: rgba(var(--shade-rgb), calc(0.25 * var(--shade-k))); padding: 1px 5px; border-radius: 3px;
+}
+.gs-code { margin: 6px 0 10px; border: 1px solid var(--ink-line); border-radius: 4px; overflow: hidden; }
+.gs-code-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 4px 8px; background: var(--surface-2);
+  font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: var(--text-dim);
+}
+.gs-code pre {
+  margin: 0; padding: 8px 10px; max-height: 260px; overflow: auto;
+  font-family: 'JetBrains Mono', monospace; font-size: 0.74rem; line-height: 1.45;
+  color: var(--text); background: rgba(var(--shade-rgb), calc(0.22 * var(--shade-k)));
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.gs-notes { margin: 4px 0 8px 18px; font-size: 0.86rem; color: var(--text-dim); line-height: 1.5; }
 
 /* ── THE TRUST ──────────────────────────────────────────────────────────────
    Who may speak for a client. Reuses the ledger panel chrome (.ldg-*) and the
@@ -3773,3 +3898,25 @@ button.rl-crumb:focus-visible { outline: 2px solid var(--gilt-bright); outline-o
 @media (prefers-reduced-motion: reduce) {
   .region-lens, .rl-stage.rl-gliding, .rl-hint, .rl-locator { transition: none; }
 }
+
+/* ── THE LIGHT SCHEME's one-offs (v1.52.0) ─────────────────────────────────
+   The panels' own literals that no shared token describes: a lighter red
+   for a warning label, a hover tint of the gilt fill, the IPAM grid's empty
+   cell, THE TRIBUTE's reserved stripes. Everything else flips through the
+   tokens on the panel containers (top of this file). Rack devices stay dark
+   metal in both schemes (the design notes, THE ARMORY rule 10). */
+:root[data-scheme="light"] .sp-btn-warn { color: #9d0006; border-color: rgba(157, 0, 6, 0.45); }
+:root[data-scheme="light"] .sp-btn-warn:hover { background: rgba(157, 0, 6, 0.1); }
+:root[data-scheme="light"] .sp-btn-go:hover { background: #9a6510; }
+:root[data-scheme="light"] .ldg-cell { background: rgba(60, 56, 54, 0.07); }
+:root[data-scheme="light"] .ldg-cell.edge { background: rgba(60, 56, 54, 0.16); }
+:root[data-scheme="light"] .trb-seg.reserve {
+  background: repeating-linear-gradient(45deg, #d5c4a1, #d5c4a1 4px, #ebdbb2 4px, #ebdbb2 8px);
+}
+:root[data-scheme="light"] .ldg-legend-item.ldg-r-reserved { color: #af3a03; }
+/* Dataset hues (a zone's, a port's) were chosen against the night palette; as
+   TEXT on a light panel the pale ones vanish. Mixed 40/60 toward ink they keep
+   their family and clear AA on cream; strokes and dots keep the pure hue. */
+:root[data-scheme="light"] .idx-zone { color: color-mix(in srgb, var(--zone-hue, var(--text-dim)) 40%, #282828); }
+:root[data-scheme="light"] .ldg-host-ip { color: color-mix(in srgb, var(--z-hue, var(--gilt)) 40%, #282828); }
+:root[data-scheme="light"] .ldg-port { color: color-mix(in srgb, var(--p-hue, var(--gilt)) 40%, #282828); }

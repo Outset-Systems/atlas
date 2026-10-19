@@ -19,6 +19,7 @@
    A.paintDecoys), so a stone that starts speaking lights where it stands. */
 
 import { A, $, esc, themeText } from './config.js';
+import { legacySources, listening, roster, watchByNode as watchModel } from './tripwire-model.js';
 
 let on = false;
 
@@ -32,36 +33,17 @@ const EYE_SVG =
   `<path d="M5.6 7.6 L4.2 5.8 M12 6.1 L12 4 M18.4 7.6 L19.8 5.8"/>` +
   `</svg>`;
 
-/* loudest voice wins when a place carries several stones */
-const RANK = { speaking: 0, stirred: 1, unheard: 2, silent: 3 };
-const voiceOf = (s) => (s in RANK ? s : 'unheard');
-
-/** stones per place: node id → loudest voice + count. Same merge the scene
-    does (roster ∪ feed, feed wins), minus retired stones — schema: "they
-    leave the map". A stone with no `host` guards nowhere drawable; it still
-    counts in the toast so the layer never silently under-reports. */
+/* Stones per place: node id → loudest voice + count (tripwire-model.js).
+   With the admin read (`A.tripwires`, v1.52.0) the states include webhook
+   trips and "lost" means a configured source is not answering; without it,
+   the chart merged with the decoy feed, as before. Retired ones leave the
+   map; a stone with no `host` still counts in the toast so the layer never
+   silently under-reports. */
 function watchByNode() {
-  const byId = new Map();
-  for (const s of A.DATA?.stones || []) if (s?.id) byId.set(s.id, { ...s });
-  for (const [id, info] of Object.entries(A.signalsFeed?.stones || {})) {
-    byId.set(id, { ...(byId.get(id) || { id }), ...info, id });
-  }
-  const lost = A.signalsSources ? A.signalsSources.deception !== 'ok' : true;
-  const nodes = new Map();
-  let unplaced = 0, speaking = 0;
-  for (const s of byId.values()) {
-    if (s.retired) continue;
-    const voice = lost ? 'unheard' : voiceOf(s.state);
-    if (voice === 'speaking') speaking++;
-    if (!s.host) { unplaced++; continue; }
-    const cur = nodes.get(s.host);
-    if (!cur || RANK[voice] < RANK[cur.voice]) {
-      nodes.set(s.host, { voice, count: (cur?.count || 0) + 1 });
-    } else {
-      cur.count++;
-    }
-  }
-  return { nodes, unplaced, speaking, total: byId.size, lost };
+  const ov = A.tripwires || null;
+  const rows = roster({ overview: ov, charted: A.DATA?.stones || [], live: A.signalsFeed?.stones || {} });
+  const lost = listening(ov?.sources || legacySources(A.signalsSources)).verdict !== 'ok';
+  return { ...watchModel(rows, lost), lost };
 }
 
 /** (Re)paint the eye badges. Runs on toggle, on every signals poll, and after
@@ -97,7 +79,16 @@ function paint() {
     eye.title = `${esc(String(watch.count))} stone${watch.count === 1 ? '' : 's'} · ${watch.voice} — open THE ${esc(themeText('stones', 'Decoys').toUpperCase())}`;
   }
 }
-A.paintDecoys = paint;
+/* The signals poll calls this every 30s. While the layer is UP, an admin's
+   read is refreshed too (at most every 25s), so a webhook trip lights its eye
+   without a reload; while it is down nothing is fetched. */
+let lastLoad = 0;
+A.paintDecoys = function paintDecoys() {
+  paint();
+  if (!on || Date.now() - lastLoad < 25000) return;
+  lastLoad = Date.now();
+  A.loadTripwires?.().then((ov) => { if (ov && on) paint(); });
+};
 
 A.toggleDecoys = function toggleDecoys(force) {
   on = typeof force === 'boolean' ? force : !on;
@@ -105,6 +96,8 @@ A.toggleDecoys = function toggleDecoys(force) {
   $('btn-decoys')?.classList.toggle('lit', on);
   if (!on) return;
   paint();
+  // an admin's layer also hears the webhook: fetch the read, repaint when it lands
+  A.loadTripwires?.().then((ov) => { if (ov && on) paint(); });
   // say what the layer is showing the moment it opens — the same three
   // verdicts the scene's head gives, in one line
   const { nodes, unplaced, speaking, total, lost } = watchByNode();
@@ -113,7 +106,7 @@ A.toggleDecoys = function toggleDecoys(force) {
   } else if (lost) {
     A.showToast?.('CONTACT LOST — the watch is not answering. The eyes are drawn from the chart, not the wire.');
   } else if (speaking) {
-    A.showToast?.(`${speaking} stone${speaking === 1 ? ' is' : 's are'} SPEAKING — the eyes show where.`);
+    A.showToast?.(`${speaking} ${themeText('stones', 'tripwires').toLowerCase()} ${themeText('tw_lit', 'TRIPPED')} — the eyes show where.`);
   } else {
     A.showToast?.(`All quiet — ${nodes.size} place${nodes.size === 1 ? '' : 's'} under the watch` +
       (unplaced ? ` (+${unplaced} stone${unplaced === 1 ? '' : 's'} unplaced)` : '') + '.');

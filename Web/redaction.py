@@ -256,6 +256,12 @@ def redact_for_groups(data):
     if sees_everything(groups):
         return data, ""
     d = copy.deepcopy(data)
+    # TRIPWIRES ARE ADMIN-ONLY, WHOLESALE (v0.1). Where a honeypot sits and
+    # where a canary token is planted is the deception layout itself: there
+    # is no per-entry version of it worth giving, and a scrubbed stone still
+    # says that bait exists here and how much. Same blunt rule as the
+    # account roster below, and on the same not-`sees_everything` path.
+    d.pop("stones", None)
     hidden = hidden_node_ids(d, groups)
     d["nodes"] = [n for n in d.get("nodes", []) if cleared(n, groups)]
     for n in d["nodes"]:

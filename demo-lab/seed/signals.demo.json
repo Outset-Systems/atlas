@@ -112,6 +112,12 @@
       "state": "healthy"
     }
   },
+  "stones": {
+    "canary-fileserver": {
+      "state": "speaking",
+      "last_spoke": "2026-10-18T03:12:00Z"
+    }
+  },
   "metrics": {
     "watchfires_up": 14,
     "watchfires_total": 15

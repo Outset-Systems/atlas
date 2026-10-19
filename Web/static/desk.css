@@ -22,9 +22,9 @@
 .dsk-panel, .wiz-panel {
   display: flex; flex-direction: column;
   width: min(1180px, 97vw); max-height: 94vh;
-  background: linear-gradient(180deg, var(--workstation-2), var(--surface));
+  background: linear-gradient(180deg, var(--surface-2), var(--surface));
   border: 1px solid var(--ink-line); border-radius: 8px;
-  box-shadow: 0 28px 80px rgba(0,0,0,0.78);
+  box-shadow: 0 28px 80px rgba(var(--shade-rgb), calc(0.78 * var(--shade-k)));
   transform: translateY(10px); transition: transform 200ms var(--glide);
   overflow: hidden;
 }
@@ -44,7 +44,7 @@
 .dsk-side {
   flex: 0 0 208px; display: flex; flex-direction: column; gap: 1px;
   padding: 12px 0; border-right: 1px solid var(--ink-line);
-  background: rgba(0,0,0,0.18); overflow-y: auto;
+  background: rgba(var(--shade-rgb), calc(0.18 * var(--shade-k))); overflow-y: auto;
 }
 .dsk-nav {
   display: flex; align-items: center; gap: 8px;
@@ -190,7 +190,7 @@
 .dsk-formbar { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
 .dsk-btn {
   font-family: 'Cinzel', serif; font-size: 0.62rem; letter-spacing: 0.16em; text-transform: uppercase;
-  background: rgba(0,0,0,0.24); color: var(--text); border: 1px solid var(--ink-line);
+  background: rgba(var(--shade-rgb), calc(0.24 * var(--shade-k))); color: var(--text); border: 1px solid var(--ink-line);
   border-radius: 3px; padding: 8px 16px; cursor: pointer;
   transition: background 150ms, border-color 150ms, color 150ms;
 }
@@ -209,7 +209,7 @@
   font-family: 'Alegreya Sans', sans-serif; font-size: 0.88rem; line-height: 1.45;
   border: 1px solid var(--ink-line); border-left-width: 3px; border-radius: 3px;
   padding: 11px 14px; margin-bottom: 14px; color: var(--text-dim);
-  background: rgba(0,0,0,0.2);
+  background: rgba(var(--shade-rgb), calc(0.2 * var(--shade-k)));
 }
 .dsk-notice-warn { border-left-color: var(--sem-warn); color: var(--text); }
 .dsk-notice-bad { border-left-color: var(--sem-down); color: var(--text); }
@@ -244,7 +244,7 @@
   text-transform: uppercase; color: var(--gilt); cursor: pointer;
 }
 .dsk-drop .dsk-help { color: var(--text-dim); margin: 10px 0; }
-.dsk-drop .dsk-area { margin-bottom: 10px; background: rgba(0,0,0,0.3); color: var(--text); border-color: var(--ink-line); }
+.dsk-drop .dsk-area { margin-bottom: 10px; background: rgba(var(--shade-rgb), calc(0.3 * var(--shade-k))); color: var(--text); border-color: var(--ink-line); }
 .dsk-draft { margin-bottom: 12px; border: 1px solid var(--ink-line); border-radius: 4px; }
 .dsk-draft summary {
   padding: 10px 14px; cursor: pointer;
@@ -282,7 +282,7 @@
 .wiz-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
 .wiz-choice {
   display: flex; flex-direction: column; gap: 8px; text-align: left;
-  background: rgba(0,0,0,0.22); border: 1px solid var(--ink-line); border-radius: 4px;
+  background: rgba(var(--shade-rgb), calc(0.22 * var(--shade-k))); border: 1px solid var(--ink-line); border-radius: 4px;
   padding: 18px 16px; cursor: pointer; transition: border-color 150ms, background 150ms;
 }
 .wiz-choice:hover { border-color: var(--gilt); background: rgba(var(--gilt-rgb),0.08); }
@@ -499,7 +499,7 @@ body.pre #first-survey { display: none; }
 .dsk-mapart-tile {
   position: relative; display: flex; flex-direction: column; gap: 2px;
   padding: 6px; cursor: pointer; text-align: left;
-  background: rgba(0, 0, 0, 0.22);
+  background: rgba(var(--shade-rgb), calc(0.22 * var(--shade-k)));
   border: 1px solid var(--ink-line); border-radius: 3px;
   color: var(--text-dim); font: inherit;
 }
@@ -510,7 +510,7 @@ body.pre #first-survey { display: none; }
 }
 .dsk-mapart-tile img {
   width: 100%; aspect-ratio: 1; object-fit: cover;
-  background: rgba(0, 0, 0, 0.4); border-radius: 2px;
+  background: rgba(var(--shade-rgb), calc(0.4 * var(--shade-k))); border-radius: 2px;
 }
 .dsk-mapart-name {
   font-family: 'JetBrains Mono', monospace; font-size: 0.66rem;
@@ -523,3 +523,14 @@ body.pre #first-survey { display: none; }
 .dsk-mapart-upload { display: flex; flex-direction: column; gap: 5px; }
 .dsk-mapart-hint { font-size: 0.74rem; color: var(--text-dim); font-style: italic; }
 .dsk-mapart-file { font-size: 0.78rem; color: var(--text-dim); }
+
+/* THE LIGHT SCHEME (v1.52.0): the Desk's frame follows the scheme through the
+   tokens atlas.css restates on .dsk-panel/.wiz-panel; the form itself is
+   parchment in both. Two one-offs no token describes. */
+:root[data-scheme="light"] .dsk-bar-sub code { background: rgba(60, 56, 54, 0.09); }
+:root[data-scheme="light"] .dsk-btn-warn:hover { color: #fbf1c7; }
+
+/* REGIONS' "use the current view" (v1.52.0): a row across the whole form,
+   seated above Left/Top/Width/Height as their heading, not a fifth field. */
+.dsk-field-wide { grid-column: 1 / -1; }
+.dsk-field-wide > div { display: flex; gap: 8px; align-items: center; }

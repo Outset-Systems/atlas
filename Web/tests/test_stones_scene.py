@@ -201,9 +201,11 @@ def test_the_scene_distinguishes_quiet_from_unreachable():
     only `sources.deception` tells them apart — so the source must be read and
     the lost case must be stated in words."""
     js = _read(JS)
-    assert "signalsSources" in js
+    assert "signalsSources" in js           # the feed-only fallback still reads it
+    assert "listening(" in js               # per source since v1.52.0 (tripwire-model.js)
     assert "CONTACT LOST" in js
-    assert "THE WATCH IS NOT SET" in js, "unconfigured is a third, different case"
+    # unconfigured is a third, different case; its words are theme text since v1.52.0
+    assert "tw_unset" in js and "NOTHING IS LISTENING" in js, "unconfigured is a third, different case"
 
 
 def test_the_scene_never_infers_calm_from_an_empty_list():
@@ -225,21 +227,21 @@ def _render_body():
     """Just the HTML-building function — scanning the whole file would trip over
     ordinary JS that happens to mention the same fields."""
     js = _read(JS)
-    start = js.index("function stoneHTML(")
+    start = js.index("function rowHTML(")   # stoneHTML until v1.52.0 (TRIPWIRES)
     end = js.index("\nfunction ", start + 1)
     return js[start:end]
 
 
 @pytest.mark.parametrize("field", [
-    "s.name", "s.id", "s.host", "s.zone", "s.mimics", "s.placement", "s.kind",
-    "s.last_reason", "s.last_spoke",
+    "t.name", "t.id", "t.host", "t.zone", "t.mimics", "t.placement", "t.kind",
+    "t.planted", "t.last_spoke", "t.expires",
 ])
 def test_every_stone_string_reaches_the_page_escaped(field):
     """The feed half is scrubbed of attacker text by the decoy feed, but the dataset
     half is human-edited and a browser is the last place to discover otherwise.
     Numbers are exempt — `s.trips | 0` is an integer by construction — so this
     names the string-valued fields rather than guessing from a regex."""
-    assert "import { A, $, esc }" in _read(JS)
+    assert re.search(r"import \{ A, \$, esc\b", _read(JS))
     body = _render_body()
     for m in re.finditer(r"\$\{([^}]*)\}", body):
         expr = m.group(1)
@@ -248,7 +250,7 @@ def test_every_stone_string_reaches_the_page_escaped(field):
 
 
 def test_the_render_function_was_actually_found():
-    """Guards the test above: if stoneHTML is renamed and the slice comes back
+    """Guards the test above: if rowHTML is renamed and the slice comes back
     empty, every escaping assertion would pass vacuously."""
     body = _render_body()
     assert "gs-row" in body and len(body) > 400

@@ -7,9 +7,9 @@ fleet card contract the Hub and Kuma probe on every app) and the pages
 (`views.py`, `auth_routes.py`).
 
 The blueprint NAME is the namespace: every endpoint here is `api_v2.<name>` —
-or `api_v2.<child>.<name>` for the three NESTED surfaces (`admin`, `ingest`,
-`auth`; note `api_v2.auth.*` names the accounts blueprint, while `api.v2.auth`
-the MODULE is the authorisation adapter) — and `tests/test_api_v2_health.py`
+or `api_v2.<child>.<name>` for the four NESTED surfaces (`admin`, `ingest`,
+`tripwires_ingest`, `auth`; note `api_v2.auth.*` names the accounts blueprint,
+while `api.v2.auth` the MODULE is the authorisation adapter) — and `tests/test_api_v2_health.py`
 asserts over the url map that nothing else wears that name.
 
 What v2 does NOT do, on purpose:
@@ -45,7 +45,9 @@ EXEMPT_PATHS = (HEALTH_PATH, MANIFEST_PATH, "/api/manifest")
 
 #: The relay ingest workstation: exempt BY PREFIX in `create_app` — a push agent
 #: has no session; its per-site bearer token (checked in `ingest.authenticate`)
-#: is the whole credential.
+#: is the whole credential. The TRIPWIRES webhook (`/ingest/tripwires`) lives
+#: under the same prefix and the same rule: its credential
+#: (`tripwires.authenticate`) is the whole boundary.
 INGEST_URL_PREFIX = URL_PREFIX + "/ingest"
 
 
@@ -75,3 +77,4 @@ from . import vitals  # noqa: E402,F401  — native card vitals (v1.34.0)
 from . import charts  # noqa: E402,F401  — native watchings (v1.35.0)
 from . import manifest  # noqa: E402,F401  — the app manifest + the shared Calendar's day (step 4)
 from . import trust  # noqa: E402,F401  — THE TRUST view (generated; admin only)
+from . import tripwires  # noqa: E402,F401  — TRIPWIRES: the webhook (nested bp) + admin reads

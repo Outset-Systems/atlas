@@ -168,7 +168,8 @@ misconfigured only removes its markers; the map still draws.
 | `ATLAS_LOKI_URL` | (unset) | Loki base URL, for example `http://loki:3100`. Feeds the log-derived charts. | no | yes (Sources) |
 | `ATLAS_KUMA_URL` | (unset) | Uptime Kuma base URL, for example `http://uptime-kuma:3001`. The app reads Kuma's `/metrics`. | no | yes (Sources) |
 | `ATLAS_KUMA_API_KEY` | (unset) | A Kuma API key (sent as the HTTP Basic password, as Kuma expects). | yes, `ATLAS_KUMA_API_KEY_FILE` | yes (Sources, stored encrypted) |
-| `ATLAS_DECOYS_URL` | (unset) | Base URL of a decoy (honeypot) service whose JSON feed of tripped decoys the `deception` source reads from `<url>/api/stones`. | no | yes (Sources) |
+| `ATLAS_DECOYS_URL` | (unset) | Base URL of a decoy (honeypot) service whose JSON feed of tripped decoys the `deception` source reads from `<url>` + `ATLAS_DECOYS_PATH`. One of the [tripwire](#tripwires) sources. | no | yes (Sources) |
+| `ATLAS_DECOYS_PATH` | `/api/stones` | The path on `ATLAS_DECOYS_URL` that serves the decoy feed. Must be an absolute path (`/...`) with no host, query or spaces; anything else falls back to the default. | no | yes (Sources) |
 | `ATLAS_DECOYS_KEY` | (unset) | The read key sent to the decoy service. | yes, `ATLAS_DECOYS_KEY_FILE` | yes (Sources, stored encrypted) |
 | `ATLAS_DECOYS_KEY_HEADER` | `X-Api-Key` | The header the decoy read key is sent in. | no | no |
 | `ATLAS_LLM_CONTAINERS` | `.+` | A Loki regex over container names, for the charts that count language-model calls in your logs. The default matches every container. | no | no |
@@ -195,10 +196,44 @@ The policy that lists dataset origins is only sent to signed-in viewers in
 
 | Variable | Default | What it does | Secret | Settings screen |
 |---|---|---|---|---|
-| `ATLAS_INGEST_ENABLED` | (unset) | `1` turns on the relay ingest API (`/api/v2/ingest/*`), which accepts signals, inventory and observations pushed by the relay agent with a per-site token (`python cli.py token-issue`). Needs `ATLAS_DATA_BACKEND=db`; ignored otherwise. | no | no |
+| `ATLAS_INGEST_ENABLED` | (unset) | `1` turns on the relay ingest API (`/api/v2/ingest/{signals,inventory,observed}`), which accepts signals, inventory and observations pushed by the relay agent with a per-site token (`python cli.py token-issue`). Needs `ATLAS_DATA_BACKEND=db`; ignored otherwise. The tripwires webhook beside it has its own switch, `ATLAS_TRIPWIRES_WEBHOOK`. | no | no |
 | `ATLAS_BEAT_TOKEN` | (unset) | Shared token that lets a scheduled job report "I ran" with `POST /api/v2/rites/<key>/beat` (`Authorization: Bearer <token>` or an `X-Atlas-Beat` header). Unset turns the endpoint off (503). In `accounts` and `hybrid` modes the sign-in gate answers before the token is checked, so use the beats directory there. | yes, `ATLAS_BEAT_TOKEN_FILE` | yes (Realm, stored encrypted) |
 | `ATLAS_BEATS` | `<data dir>/heartbeats.json` | Where received heartbeats are stored. | no | no |
 | `ATLAS_BEATS_DIR` | `<data dir>/beats` | Drop directory: a job that cannot reach the app reports by creating a file named after its key here (`touch /data/beats/<key>`). The app picks the file up and deletes it. | no | no |
+
+## Tripwires
+
+Tripwires are honeypots and canary tokens charted in the dataset's `stones`
+section. Trips reach the map from the decoy feed above, or from any tool
+through a webhook, `POST /api/v2/ingest/tripwires`, which understands
+OpenCanary's `WebhookHandler`, Canarytokens' webhook, and a generic
+`{"tripwire_id", "at", "kind"}`. Each trip becomes an event in the event
+history (`ATLAS_EVENTS`), on either data backend. Tripwires and their trips are
+shown to admins only. The webhook sits under the ingest prefix, so it bypasses
+the sign-in gate and its credential is the whole boundary:
+
+- `X-Atlas-Signature: sha256=<hex HMAC-SHA256 of the raw body>` keyed with
+  `ATLAS_TRIPWIRES_SECRET`, for scripts that can sign;
+- `Authorization: Bearer <key>` (OpenCanary), or `?key=<key>` on the URL
+  (Canarytokens, which cannot send headers), where `<key>` is the webhook key
+  printed by `python cli.py tripwires-key`. It is derived from the secret, so
+  the secret itself never travels and changing the secret changes the key.
+  A URL key can appear in proxy access logs; prefer the header where the
+  sender supports one.
+- on the `db` backend, a site token minted with
+  `python cli.py token-issue --site <site> --scopes tripwires` also works as
+  the bearer or `key`.
+
+Bodies over 64 KB get 413, more than 60 requests a minute per credential 429.
+Copy-paste configuration for each sender (the OpenCanary logger handler, the
+Canarytokens webhook URL, the generic shape) comes from the admin-only
+`GET /api/v2/tripwires/setup`; secrets are never in it.
+
+| Variable | Default | What it does | Secret | Settings screen |
+|---|---|---|---|---|
+| `ATLAS_TRIPWIRES_WEBHOOK` | (unset) | `1` turns the webhook on. It stays off (404) until a credential could be valid: a secret, or the `db` backend for site tokens. | no | no |
+| `ATLAS_TRIPWIRES_SECRET` | (unset) | The webhook secret, at least 16 characters (`python cli.py tripwires-key --new-secret` prints a random one). Signs `X-Atlas-Signature` and derives the webhook key. | yes, `ATLAS_TRIPWIRES_SECRET_FILE` | no |
+| `ATLAS_TRIPWIRES_STATE` | `<events dir>/tripwires.json` | When each sender (OpenCanary, Canarytokens, generic) was last heard and last tripped. Small; one row per sender. | no | no |
 
 ## Metrics
 

@@ -7,7 +7,8 @@ and groups were named after that suite. They now have neutral names:
   ATLAS_HUB_SECRET(_FILE)  the shared secret that signs the Hub's identity header
   ATLAS_HUB_AUTH_HEADER    which header carries that signed identity
   ATLAS_ADMIN_GROUP        the group that makes a viewer an Atlas admin
-  ATLAS_DECOYS_URL / _KEY / _KEY_FILE / _KEY_HEADER   the decoy (tripwire) feed
+  ATLAS_DECOYS_URL / _KEY / _KEY_FILE / _KEY_HEADER / _PATH   the decoy feed
+                           (one TRIPWIRES source; _PATH is new, default /api/stones)
   ATLAS_STANDALONE_USER / _EMAIL / _GROUPS            who "you" are in standalone
 
 `env(name)` reads the new name first. A deployment that still carries the old

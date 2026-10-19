@@ -20,6 +20,7 @@ Sources are chosen by env so going live is config-only:
     ATLAS_PROM_URL          e.g. http://monitor:9090
     ATLAS_DECOYS_URL       e.g. http://decoys:5013
     ATLAS_DECOYS_KEY       the decoy feed's read key (or ATLAS_DECOYS_KEY_FILE -> docker secret)
+    ATLAS_DECOYS_PATH      where it serves its roster (default /api/stones)
 
 Secrets come from env or a *_FILE docker-secret path — never the dataset, never the client.
 """
@@ -201,11 +202,17 @@ class DeceptionAdapter(_Adapter):
 
     name = "deception"
 
-    def __init__(self, url, read_key, key_header=None):
+    def __init__(self, url, read_key, key_header=None, path=None):
         import envnames
         self.url = url.rstrip("/")
         self.read_key = read_key
         self.key_header = key_header or envnames.env("ATLAS_DECOYS_KEY_HEADER")
+        if path is None:
+            import integrations
+            path = integrations.decoys_path()
+        # TRIPWIRES: one source among several, and its roster path is the
+        # operator's (ATLAS_DECOYS_PATH, default /api/stones).
+        self.path = path
 
     def _fetch(self):
         if not self.read_key:
@@ -219,7 +226,7 @@ class DeceptionAdapter(_Adapter):
         import requests  # local import: optional dep, never at module load
 
         resp = requests.get(
-            self.url + "/api/stones",
+            self.url + self.path,
             headers={self.key_header: self.read_key},
             timeout=_TIMEOUT,
         )

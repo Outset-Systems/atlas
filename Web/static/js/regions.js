@@ -325,6 +325,7 @@ async function show(r, box) {
   lensStage.style.width = lensCam.w + 'px';
   lensStage.style.height = lensCam.h + 'px';
   level = r;
+  writeHash(r.id);
   buildLensMarkers(r);
   buildLensFrames(r);
   buildCrumbs(r);
@@ -360,9 +361,12 @@ async function enter(id, { from = 'main', auto = false } = {}) {
   try {
     let box = null;
     if (from === 'main' || !level) {
-      // the main camera frames the rectangle (it waits there, under the lens)
-      box = M.rectOnScreen(r, A.cam, A.MAPW, A.MAPH);
-      const target = M.fitRect(r, A.MAPW, A.MAPH, innerWidth, innerHeight, PAD);
+      // the main camera frames the rectangle (it waits there, under the lens).
+      // A nested region opened straight from the main map (a deep link) has
+      // its rectangle on its parent's map, not this one: frame the outermost.
+      const outer = M.chainOf(regions(), r.id)[0] || r;
+      box = M.rectOnScreen(outer, A.cam, A.MAPW, A.MAPH);
+      const target = M.fitRect(outer, A.MAPW, A.MAPH, innerWidth, innerHeight, PAD);
       Object.assign(A.cam, target);
       A.apply?.(true);
       A.closeCard?.();
@@ -398,6 +402,7 @@ function closeLens() {
   lensMarkers.innerHTML = '';
   lensFrames.innerHTML = '';
   level = null;
+  writeHash(null);
 }
 
 /* Leave to `targetId` (null = the main map), one level or several. */
@@ -454,6 +459,20 @@ A.leaveRegion = leaveOne;
    burst of wheel events with inertia; counting those as "again" threw people
    out of a region they had only meant to see whole. */
 let lastZoomAt = 0;
+
+/* A zoom-out gesture met the floor. `fresh` = it is a new gesture, not the
+   tail of the one that armed it. Returns true when it left the region. */
+function floorReached(fresh) {
+  const now = Date.now();
+  if (leaveArmedAt && fresh && now - leaveArmedAt < LEAVE_ARM_MS) { leaveArmedAt = 0; leaveOne(); return true; }
+  if (!leaveArmedAt || now - leaveArmedAt >= LEAVE_ARM_MS) {
+    leaveArmedAt = now;
+    const back = level.parent ? regionById(level.parent)?.name : baseTitle();
+    showHint(`Zoom out again to return to ${back}`, LEAVE_ARM_MS);
+  }
+  return false;
+}
+
 function lensZoom(sx, sy, factor) {
   const now = Date.now();
   const gap = now - lastZoomAt;
@@ -461,16 +480,7 @@ function lensZoom(sx, sy, factor) {
   const { cam, atFloor } = M.zoomAround(lensCam, sx, sy, factor, lensCam.min, lensCam.max);
   Object.assign(lensCam, cam);
   applyLens(false);
-  if (atFloor) {
-    const fresh = gap > QUIET_MS;                       // a new gesture, not the tail of the last
-    if (leaveArmedAt && fresh && now - leaveArmedAt < LEAVE_ARM_MS) { leaveArmedAt = 0; leaveOne(); return; }
-    if (!leaveArmedAt || now - leaveArmedAt >= LEAVE_ARM_MS) {
-      leaveArmedAt = now;
-      const back = level.parent ? regionById(level.parent)?.name : baseTitle();
-      showHint(`Zoom out again to return to ${back}`, LEAVE_ARM_MS);
-    }
-    return;
-  }
+  if (atFloor) { floorReached(gap > QUIET_MS); return; }   // a wheel burst is one gesture
   leaveArmedAt = 0;                                     // zoomed back in: no longer on the way out
   if (factor > 1) scheduleLensAuto();
 }
@@ -493,13 +503,71 @@ lensView.addEventListener('wheel', (e) => {
   lensZoom(e.clientX, e.clientY, e.deltaY < 0 ? CFG.ZOOM_WHEEL : 1 / CFG.ZOOM_WHEEL);
 }, { passive: false });
 
+/* Pointers: one drags (pan), two pinch (zoom about their midpoint, and pan
+   as the midpoint moves). A pinch is ONE gesture from the second finger down
+   to the first finger up, so pinching out against the floor arms "leave" once
+   per pinch and a second pinch leaves — the wheel's two-gesture rule. The
+   browser must not take the fingers for its own page zoom: touch-action is
+   also set in atlas.css, and set here so the gesture never depends on it. */
+lensView.style.touchAction = 'none';
+const pointers = new Map();     // pointerId → {x, y}: every pointer down on the lens
+let pinch = null;               // {startK, floorHit} while two are down
+
+function startPinch() {
+  lensDrag = null;
+  lensView.classList.remove('dragging');
+  clearTimeout(lensSettle);
+  for (const id of pointers.keys()) { try { lensView.setPointerCapture(id); } catch { /* ok */ } }
+  pinch = { startK: lensCam.k, floorHit: false };
+}
+
+function pinchMove(id, x, y) {
+  const [ida, idb] = [...pointers.keys()];
+  const a0 = pointers.get(ida), b0 = pointers.get(idb);
+  const a1 = id === ida ? { x, y } : a0;
+  const b1 = id === idb ? { x, y } : b0;
+  pointers.set(id, { x, y });
+  if (busy || !level) return;
+  const { cam, atFloor } = M.pinchStep(lensCam, a0, b0, a1, b1, lensCam.min, lensCam.max);
+  Object.assign(lensCam, cam);
+  applyLens(false);
+  if (atFloor) {
+    if (!pinch.floorHit) {
+      pinch.floorHit = true;
+      if (floorReached(true)) { pinch = null; pointers.clear(); }
+    }
+  } else if (lensCam.k > lensCam.min * 1.02) {
+    leaveArmedAt = 0;                                   // pinched back in: no longer on the way out
+  }
+}
+
+function endPinch() {
+  const zoomedIn = pinch && lensCam.k > pinch.startK * 1.02;
+  pinch = null;
+  lastZoomAt = Date.now();
+  if (zoomedIn) scheduleLensAuto();
+  // the finger still down carries on as a one-finger pan
+  const [rest] = [...pointers.entries()];
+  if (rest) {
+    lensDrag = { x: rest[1].x, y: rest[1].y, moved: true, id: rest[0] };
+    lensView.classList.add('dragging');
+  }
+}
+
 let lensDrag = null;
 lensView.addEventListener('pointerdown', (e) => {
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  if (e.isPrimary) pointers.clear();       // a first finger: any pointer left over lost its "up"
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pointers.size === 2 && !pinch) { startPinch(); return; }
+  if (pointers.size > 1) return;
   if (e.button !== 0 || e.target.closest('.rl-mk, .rg-tab')) return;
   lensDrag = { x: e.clientX, y: e.clientY, moved: false, id: e.pointerId };
 });
 lensView.addEventListener('pointermove', (e) => {
-  if (!lensDrag) return;
+  if (pinch && pointers.has(e.pointerId)) { pinchMove(e.pointerId, e.clientX, e.clientY); return; }
+  if (pointers.has(e.pointerId)) pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (!lensDrag || e.pointerId !== lensDrag.id) return;
   const dx = e.clientX - lensDrag.x, dy = e.clientY - lensDrag.y;
   if (!lensDrag.moved && Math.abs(dx) + Math.abs(dy) > CFG.DRAG_THRESHOLD_PX) {
     lensDrag.moved = true;
@@ -511,7 +579,13 @@ lensView.addEventListener('pointermove', (e) => {
   lensCam.x += dx; lensCam.y += dy;
   applyLens(false);
 });
-const endLensDrag = () => { lensDrag = null; lensView.classList.remove('dragging'); };
+const endLensDrag = (e) => {
+  pointers.delete(e.pointerId);
+  if (pinch && pointers.size < 2) { endPinch(); return; }
+  if (pinch || (lensDrag && e.pointerId !== lensDrag.id)) return;
+  lensDrag = null;
+  lensView.classList.remove('dragging');
+};
 lensView.addEventListener('pointerup', endLensDrag);
 lensView.addEventListener('pointercancel', endLensDrag);
 lensView.addEventListener('dblclick', (e) => { if (!e.target.closest('.rl-mk, .rg-tab')) lensZoom(e.clientX, e.clientY, CFG.ZOOM_DBLCLICK); });
@@ -589,6 +663,88 @@ function pinDrag(e, mk, n) {
   mk.addEventListener('pointerup', up);
 }
 
+/* ── deep links: #region=<id> ─────────────────────────────────────────────
+   Opening a region writes its id into the hash, leaving rewrites or clears
+   it — with replaceState, so walking in and out of regions never piles up
+   history entries. A hash typed, pasted or followed opens that region on
+   load and on hashchange; nested ones open straight in, breadcrumb and all.
+   An id the map does not know is announced and otherwise ignored. */
+function writeHash(id) {
+  try {
+    const next = M.hashWithRegion(location.hash, id);
+    if (next === location.hash.replace(/^#/, '')) return;
+    history.replaceState(history.state, '', location.pathname + location.search + (next ? '#' + next : ''));
+  } catch { /* a sandboxed frame may refuse; the lens works without the link */ }
+}
+
+async function goTo(id) {
+  if (!id) { if (level) await leaveTo(null); return; }
+  if (level?.id === id) return;
+  const target = regionById(id);
+  if (!target || !M.chainOf(regions(), id).length) {
+    say(`No region called “${id}” on this map.`);
+    return;
+  }
+  if (level) {
+    const here = M.chainOf(regions(), level.id).map((c) => c.id);
+    if (here.includes(id)) { await leaveTo(id); return; }           // an ancestor: step back out to it
+    if (target.parent === level.id) { await enter(id, { from: 'lens' }); return; }
+    await leaveTo(null);                                             // elsewhere: out, then in
+  }
+  A.closeCard?.();
+  await enter(id, { from: 'main' });
+}
+
+let linkReady = false;
+let followTimer = 0;
+function followHash(tries = 0) {
+  clearTimeout(followTimer);
+  if (!linkReady) return;
+  if (busy) {                                         // a transition is running: ask again after it
+    if (tries < 40) followTimer = setTimeout(() => followHash(tries + 1), 120);
+    return;
+  }
+  goTo(M.regionFromHash(location.hash));
+}
+addEventListener('hashchange', () => followHash());
+
+/* The first open waits for the veil: the opening shot moves the main camera,
+   and a lens opened under the veil would frame a rectangle that then moves. */
+let linkArmed = false;
+function armDeepLinks() {
+  if (linkArmed) return;                              // buildWorld runs again on every Desk save
+  linkArmed = true;
+  const go = () => { linkReady = true; if (M.regionFromHash(location.hash)) followHash(); };
+  if (!document.body.classList.contains('pre')) { go(); return; }
+  const watch = new MutationObserver(() => {
+    if (document.body.classList.contains('pre')) return;
+    watch.disconnect();
+    go();
+  });
+  watch.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+}
+
+/* ── the Desk's "use the current view" ───────────────────────────────────
+   What the window shows now, as a rectangle on the map `parentId` (blank =
+   the main map): the lens's view when a region is open, else the main
+   camera's — carried through the rectangles in between when the two maps
+   differ. The main map's figure is the flat view: a tilted table is read as
+   if it were laid flat. */
+A.regionViewFor = (parentId) => {
+  const onLens = Boolean(level);
+  if (!onLens && !(A.cam && A.MAPW && A.MAPH)) return null;
+  const raw = onLens
+    ? M.viewRect(lensCam, lensCam.w, lensCam.h, innerWidth, innerHeight)
+    : M.viewRect(A.cam, A.MAPW, A.MAPH, innerWidth, innerHeight);
+  const carried = M.carryRect(regions(), onLens ? level.id : null, parentId || null, raw);
+  return {
+    rect: carried ? M.clampRect(carried) : null,
+    from: onLens ? level.name : baseTitle(),          // the map the window is showing
+    fromLens: onLens,
+    direct: (onLens ? level.id : '') === (parentId || ''),
+  };
+};
+
 /* ── wiring into the rest of the Atlas ──────────────────────────────────── */
 const prevMove = A.onCameraMove;
 A.onCameraMove = (userMove) => { prevMove?.(userMove); onMainMove(userMove); };
@@ -597,6 +753,7 @@ const prevBuild = A.buildWorld;
 A.buildWorld = function buildWorldWithRegions() {
   prevBuild();
   buildFrames();
+  armDeepLinks();
   if (level) {
     const still = regionById(level.id);
     if (!still) { closeLens(); return; }

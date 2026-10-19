@@ -23,6 +23,7 @@ const GRAVITY_CLASS = { grave: 'ann-grave', warn: 'ann-warn', planned: 'ann-plan
 const PHRASE = {
   down: 'went dark', degraded: 'began to falter', healthy: 'answered again',
   maintenance: 'closed for repair', slumbering: 'went to sleep',
+  tripped: 'was touched',          // a tripwire (v1.52.0): bait has no legitimate caller
 };
 
 function when(iso) {
@@ -48,7 +49,7 @@ function rowHTML(e) {
   return `<div class="ann-row ${GRAVITY_CLASS[e.gravity] || ''}">
     <span class="ann-when" title="${esc(e.at)}">${esc(when(e.at))}</span>
     <span class="ann-what"><strong>${esc(e.name)}</strong> ${esc(phrase)}${behind}` +
-    `<span class="ann-from"> (from ${esc(e.from)})</span></span>
+    (e.kind === 'tripwire' ? '' : `<span class="ann-from"> (from ${esc(e.from)})</span>`) + `</span>
     <span class="ann-kind">${esc(e.kind)}</span>
     ${ack}
   </div>`;

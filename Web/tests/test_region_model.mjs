@@ -9,8 +9,9 @@
 
 import assert from 'node:assert/strict';
 import {
-  autoCandidate, chainOf, childrenOf, clampLens, coverage, fitContain, fitRect,
-  placeOn, rectOnScreen, shown, toChild, toParent, viewRect, zoomAround,
+  autoCandidate, carryRect, chainOf, childrenOf, clampLens, clampRect, coverage, fitContain,
+  fitRect, hashWithRegion, pinchStep, placeOn, rectFromView, rectOnScreen, rectToChild,
+  rectToParent, regionFromHash, shown, toChild, toParent, viewRect, zoomAround,
 } from '../static/js/region-model.js';
 
 let passed = 0;
@@ -154,6 +155,139 @@ test('zooming out at the floor reports it — the cue to leave the region', () =
 test('a rectangle on screen, for the transition out of its frame', () => {
   const box = rectOnScreen({ x: 10, y: 20, w: 30, h: 40 }, { x: 5, y: 7, k: 2 }, 1000, 500);
   assert.deepEqual(box, { left: 205, top: 207, width: 600, height: 400 });
+});
+
+/* ── "use the current view": the window → a rectangle ─────────────────── */
+
+test('the plain fitted view of a map that fills the window is the whole map', () => {
+  assert.deepEqual(rectFromView({ x: 0, y: 0, k: 1 }, 1000, 500, 1000, 500), { x: 0, y: 0, w: 100, h: 100 });
+});
+
+test('a panned view moves the rectangle and keeps its size', () => {
+  // k=1 on a 2000×1000 map in a 1000×500 window, panned 500 px right and 250 down
+  assert.deepEqual(rectFromView({ x: -500, y: -250, k: 1 }, 2000, 1000, 1000, 500), { x: 25, y: 25, w: 50, h: 50 });
+});
+
+test('a zoomed view is a smaller rectangle, rounded to one decimal', () => {
+  // k=3 on a 1000×1000 map in a 1000×1000 window: a third of it, from 1/3 across
+  const r = rectFromView({ x: -1000, y: -1000, k: 3 }, 1000, 1000, 1000, 1000);
+  assert.deepEqual(r, { x: 33.3, y: 33.3, w: 33.4, h: 33.4 });
+  assert.ok(r.x + r.w <= 100.0001);
+});
+
+test('a view past the edge is clamped to the map', () => {
+  // the window starts 10% left of the map and runs off its bottom
+  const r = rectFromView({ x: 100, y: -800, k: 1 }, 1000, 1000, 500, 500);
+  assert.deepEqual(r, { x: 0, y: 80, w: 40, h: 20 });
+});
+
+test('a letterboxed map (smaller than the window) gives all of it', () => {
+  const r = rectFromView({ x: 250, y: 100, k: 0.5 }, 1000, 1000, 1000, 700);
+  assert.deepEqual(r, { x: 0, y: 0, w: 100, h: 100 });
+});
+
+test('a view that shows none of the map is no rectangle', () => {
+  assert.equal(rectFromView({ x: 2000, y: 0, k: 1 }, 1000, 1000, 1000, 1000), null);
+  assert.equal(clampRect({ x: 10, y: 10, w: 0.01, h: 5 }), null);
+  assert.equal(clampRect({ x: NaN, y: 0, w: 1, h: 1 }), null);
+});
+
+test('a rectangle maps into a region and back', () => {
+  const r = { x: 10, y: 20, w: 40, h: 50 };
+  const c = rectToChild(r, { x: 20, y: 30, w: 20, h: 25 });
+  near(c.x, 25); near(c.y, 20); near(c.w, 50); near(c.h, 50);
+  const p = rectToParent(r, c);
+  near(p.x, 20); near(p.y, 30); near(p.w, 20); near(p.h, 25);
+});
+
+test('carrying a view: main → a nested region, lens → its parent, and onto itself', () => {
+  // main (16, 0, 6, 32) → west (20, 0, 20, 40) → north (0, 0, 33.3…, 100)
+  const n = carryRect(REGIONS, null, 'north', { x: 16, y: 0, w: 6, h: 32 });
+  near(n.x, 0); near(n.y, 0); near(n.w, 100 / 3); near(n.h, 100);
+  // a lens view on north, put back on west's map
+  const w = carryRect(REGIONS, 'north', 'west', { x: 0, y: 0, w: 50, h: 50 });
+  near(w.x, 20); near(w.y, 0); near(w.w, 30); near(w.h, 20);
+  assert.deepEqual(carryRect(REGIONS, 'west', 'west', { x: 1, y: 2, w: 3, h: 4 }), { x: 1, y: 2, w: 3, h: 4 });
+  assert.equal(carryRect(REGIONS, null, 'nope', { x: 0, y: 0, w: 1, h: 1 }), null);
+});
+
+test('a carried view outside the target map clamps to nothing', () => {
+  // the window shows only the main map's east, far from west
+  assert.equal(clampRect(carryRect(REGIONS, null, 'west', { x: 60, y: 0, w: 30, h: 30 })), null);
+});
+
+/* ── deep links ────────────────────────────────────────────────────────── */
+
+test('a hash names a region; junk names none', () => {
+  assert.equal(regionFromHash('#region=server-room'), 'server-room');
+  assert.equal(regionFromHash('region=rack-a'), 'rack-a');
+  assert.equal(regionFromHash('#region=rack%20a'), 'rack a');
+  for (const junk of ['', '#', '#region', '#region=', '#region=%E0%A4%A', '#regions=x', '#Region=x', null, undefined]) {
+    assert.equal(regionFromHash(junk), null, String(junk));
+  }
+});
+
+test('a region part among others is found, the first one wins', () => {
+  assert.equal(regionFromHash('#view=2&region=rack-a&x=1'), 'rack-a');
+  assert.equal(regionFromHash('#region=rack-a&region=server-room'), 'rack-a');
+});
+
+test('writing the hash encodes the id and keeps every other part in place', () => {
+  assert.equal(hashWithRegion('', 'server-room'), 'region=server-room');
+  assert.equal(hashWithRegion('#', 'rack a/b'), 'region=rack%20a%2Fb');
+  assert.equal(regionFromHash('#' + hashWithRegion('', 'rack a/b&c')), 'rack a/b&c');
+  assert.equal(hashWithRegion('#view=2&region=old&x=1', 'rack-a'), 'view=2&region=rack-a&x=1');
+  assert.equal(hashWithRegion('#view=2', 'rack-a'), 'view=2&region=rack-a');
+  assert.equal(hashWithRegion('#region=a&region=b', 'c'), 'region=c');
+});
+
+test('leaving clears the region part and only it', () => {
+  assert.equal(hashWithRegion('#region=rack-a', null), '');
+  assert.equal(hashWithRegion('#view=2&region=rack-a', null), 'view=2');
+  assert.equal(hashWithRegion('', null), '');
+});
+
+/* ── pinch ─────────────────────────────────────────────────────────────── */
+
+const P = (x, y) => ({ x, y });
+
+test('two fingers moving together pan without zooming', () => {
+  const { cam, factor, atFloor } = pinchStep({ k: 2, x: 0, y: 0 }, P(100, 100), P(200, 100), P(130, 90), P(230, 90), 0.5, 8);
+  near(factor, 1); near(cam.k, 2); near(cam.x, 30); near(cam.y, -10);
+  assert.equal(atFloor, false);
+});
+
+test('spreading the fingers zooms about their midpoint', () => {
+  // midpoint (150, 100) stays put; distance 100 → 200 doubles the zoom
+  const { cam } = pinchStep({ k: 1, x: 0, y: 0 }, P(100, 100), P(200, 100), P(50, 100), P(250, 100), 0.5, 8);
+  near(cam.k, 2); near(cam.x, 150 - 150 * 2); near(cam.y, 100 - 100 * 2);
+});
+
+test('a pinch that also moves keeps the map point under the fingers', () => {
+  const before = { k: 1.5, x: -40, y: 20 };
+  const a0 = P(300, 300), b0 = P(400, 400), a1 = P(320, 260), b1 = P(520, 460);
+  const { cam } = pinchStep(before, a0, b0, a1, b1, 0.1, 10);
+  const m0 = P(350, 350), m1 = P(420, 360);
+  near((m0.x - before.x) / before.k, (m1.x - cam.x) / cam.k);
+  near((m0.y - before.y) / before.k, (m1.y - cam.y) / cam.k);
+  near(cam.k, 3);
+});
+
+test('a pinch holds the zoom between the floor and the ceiling', () => {
+  const up = pinchStep({ k: 4, x: 0, y: 0 }, P(0, 0), P(100, 0), P(0, 0), P(400, 0), 1, 6);
+  near(up.cam.k, 6); assert.equal(up.atFloor, false);
+});
+
+test('pinching out at the floor reports it — the cue to leave, as the wheel does', () => {
+  const r = pinchStep({ k: 1, x: 0, y: 0 }, P(0, 0), P(200, 0), P(50, 0), P(150, 0), 1, 6);
+  assert.equal(r.atFloor, true); near(r.cam.k, 1);
+  const above = pinchStep({ k: 3, x: 0, y: 0 }, P(0, 0), P(200, 0), P(50, 0), P(150, 0), 1, 6);
+  assert.equal(above.atFloor, false); near(above.cam.k, 1.5);
+});
+
+test('fingers on the same spot do not divide by zero', () => {
+  const r = pinchStep({ k: 2, x: 5, y: 5 }, P(10, 10), P(10, 10), P(20, 10), P(20, 10), 1, 6);
+  near(r.factor, 1); near(r.cam.k, 2); near(r.cam.x, 15);
 });
 
 console.log(`\nregion-model: ${passed} passed`);

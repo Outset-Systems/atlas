@@ -94,13 +94,33 @@ RANGE_KINDS = ["dhcp", "reserved"]
 #: How a service's button behaves — see LINK_FIELDS["open_in"] and glass.js.
 OPEN_IN = ["auto", "here", "tab"]
 
-# ── decoys (the decoy feed) ──────────────────────────────────────────────────
+# ── tripwires (the `stones` section; the decoy feed is one source) ──────────
 #: What kind of bait a stone is. Mirrors the token types the decoy feed charts; kept
 #: loose rather than pinned to a provider's exact catalogue, because the point
 #: of the field is "what would an intruder think they found".
 STONE_KINDS = ["windows-folder", "network-folder", "web-bug", "dns",
                "doc-msword", "doc-excel", "doc-pdf", "aws-keys", "ad-account",
-               "sensitive-command", "kubeconfig", "other"]
+               "sensitive-command", "kubeconfig", "other",
+               # TRIPWIRES (v0.1): two more canary tokens, then the honeypots —
+               # fake hosts and services that answer (OpenCanary and friends).
+               # Appended, never reordered: an existing stone keeps its kind.
+               "cloud-key", "db-row",
+               "honeypot-host", "honeypot-ssh", "honeypot-smb", "honeypot-http",
+               "honeypot-rdp", "honeypot-ftp", "honeypot-telnet", "honeypot-db"]
+#: TRIPWIRES: the two families. A stone with no `family` takes it from its
+#: kind (`stone_family`), so every stone charted before the field existed
+#: already belongs to one.
+STONE_FAMILIES = ["honeypot", "token"]
+
+
+def stone_family(stone):
+    """`honeypot` or `token` for a stone, old shape or new: the explicit
+    `family` when it is a known one, else derived from the kind."""
+    stone = stone if isinstance(stone, dict) else {}
+    fam = stone.get("family")
+    if fam in STONE_FAMILIES:
+        return fam
+    return "honeypot" if str(stone.get("kind") or "").startswith("honeypot") else "token"
 #: Where a stone sits, which is what decides the escalation policy: ANY trip on
 #: an `internal` stone reaches a human. `wan` is the only zone whose trips may
 #: ever be filed quietly.
@@ -458,8 +478,9 @@ SECTIONS = {
         "stones", "stone", "stones", noun="stone",
         id_field="id", title_field="name",
         lore="the silent watchers, and what they guard",
-        subtitle="decoys — bait with no legitimate caller. Anything that "
-                 "touches one is an event, not a maybe.",
+        subtitle="tripwires — honeypots and canary tokens, bait with no "
+                 "legitimate caller. Anything that touches one is an event, "
+                 "not a maybe.",
         fields=[
             f("id", "text", required=True,
               help="Stable id, matching the decoy feed's own registry: `nas-restore-share`. "
@@ -493,6 +514,23 @@ SECTIONS = {
                    "Retired stones stay charted — their trips still point "
                    "somewhere — but they leave the map."),
             f("note", "text", help="One line. Which stage of the kill chain, usually."),
+            # TRIPWIRES (v0.1) — all optional, so every stone charted before
+            # them is still a whole stone.
+            f("family", "select", options=[""] + STONE_FAMILIES,
+              help="`honeypot` — a fake host or service that answers. `token` — "
+                   "a file, URL, name or key that calls home when used. Blank = "
+                   "from the kind (`honeypot-*` kinds are honeypots)."),
+            f("sensor", "text", label="Reported as",
+              help="What the monitoring tool calls this tripwire, so a trip it "
+                   "reports lands here: OpenCanary's `device.node_id` (or "
+                   "`node_id:port` for one of its services), a Canarytokens "
+                   "token id, or the token's reminder text. Blank = the id."),
+            f("planted", "text",
+              help="Where a token sits, described generically: `the finance "
+                   "share`. Describe, don't locate — same rule as `placement`."),
+            f("expires", "date",
+              help="The day a token stops being worth anything (a key rotated "
+                   "out, a document past its story). YYYY-MM-DD; blank = never."),
         ]),
 
     "chronicle": section(
@@ -700,6 +738,20 @@ def check_value(fld, value):
             datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
         except ValueError:
             return f"{name} {value!r} is not a date and time (YYYY-MM-DDTHH:MM)"
+        return None
+
+    if t == "date":
+        # A calendar day, `YYYY-MM-DD` (TRIPWIRES: a token's `expires`). Blank
+        # or the dataset's em-dash means none.
+        if not isinstance(value, str):
+            return f"{name} must be a date"
+        if value.strip() in NONE_MARKS:
+            return None
+        from datetime import date
+        try:
+            date.fromisoformat(value.strip())
+        except ValueError:
+            return f"{name} {value!r} is not a date (YYYY-MM-DD)"
         return None
 
     if t == "scalar":

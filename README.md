@@ -16,13 +16,22 @@ colours it with live health from Prometheus, Loki and Uptime Kuma.
 - **One map of everything.** Places grouped into network zones, the links
   between them, and the services each one runs. Pan, zoom, search with `/`,
   and open any place for its details.
-- **Live health.** Markers turn with the state Prometheus, Uptime Kuma and an
-  optional decoy feed report. A source that goes down only removes its
-  markers; the map keeps working.
+- **Live health.** Markers turn with the state Prometheus and Uptime Kuma
+  report. A source that goes down only removes its markers; the map keeps
+  working.
+- **Tripwires.** Chart your honeypots (OpenCanary, a fake share) and canary
+  tokens (a document, a URL, a cloud key), and the Atlas lights the one that
+  is touched. Trips arrive through one signed webhook that OpenCanary,
+  Canarytokens or any script can call, and say so out loud when a source stops
+  answering. Admins only: where bait sits stays secret. The Atlas never plants
+  bait itself.
 - **Views for the details:** an address ledger built on real CIDR maths, rack
   elevations in 2D and 3D, the network path from the internet inwards,
   certificate expiry, a calendar of scheduled jobs that notices when one did
-  not run, and an event history.
+  not run, an event history, and detailed maps for a room or a rack that open
+  as you zoom in (with links straight to one, `#region=<id>`).
+- **Light or dark panels.** ☀/☾ or `T`, following your system by default;
+  the map itself stays a night map.
 - **Edit in the browser.** A guided first setup and forms for every field.
   Fill the map from a CSV device list, an nmap sweep or your router's DHCP
   leases (ISC, dnsmasq, Kea, Windows Server); each device arrives with a

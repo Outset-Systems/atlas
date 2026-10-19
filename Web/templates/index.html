@@ -206,6 +206,11 @@
        button. It IS the SETTINGS scene's button: `data-scene` puts it through
        the same click handler as the labelled scenes. -->
   <span class="menu-tools" id="menu-tools">
+    <!-- ☀/☾ — the colour scheme (v1.52.0, scheme.js). Panels follow it; the
+         map stays a night map. scheme.js sets its glyph, title and pressed
+         state; the T key is the same control. -->
+    <button class="chrome ci-scheme" id="btn-scheme" type="button"
+            title="Colour scheme (T)" aria-label="Colour scheme" aria-pressed="false">☾</button>
     <button class="chrome ci-gear" id="btn-menu-settings" data-scene="settings"
             title="Settings" aria-label="Settings">⚙</button>
   </span>

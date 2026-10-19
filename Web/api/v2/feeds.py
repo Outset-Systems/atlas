@@ -18,6 +18,7 @@ import dependencies
 import events
 import heartbeats
 import maintenance
+import tripwires
 from context import atlas
 from redaction import (cleared, hidden_node_ids, sees_everything, vary_on_viewer,
                        viewer_groups, visible_monitors)
@@ -93,18 +94,28 @@ def _redact_feed(ctx, feed, groups):
     with zero clearance could enumerate every `require_group` place, watch it
     go up and down, and read the names of the monitors watching it.
     """
+    # TRIPWIRES are admin-only, wholesale: which bait is speaking, how many
+    # trips nobody could attribute, even that a decoy feed is wired at all,
+    # is the deception layout read the wrong way round. Same blunt rule as
+    # the account roster — cleared to see everything, or none of it.
+    sources = {k: v for k, v in (feed.get("sources") or {}).items() if k != "deception"}
     try:
         data, _, _ = ctx.dataset()
     except (OSError, ValueError):
         # Fail closed. Without the dataset there is no way to know which ids
         # this viewer may see, and every key in this feed is one of those ids.
-        return {"nodes": {}, "services": {}, "sources": feed.get("sources") or {},
+        return {"nodes": {}, "services": {}, "sources": sources,
                 "generated": feed.get("generated"),
                 "cached": feed.get("cached", False)}
 
     hidden = hidden_node_ids(data, groups)
     monitors = visible_monitors(data, groups)
     out = dict(feed)
+    out.pop("stones", None)
+    out["sources"] = sources
+    if isinstance(out.get("metrics"), dict):
+        out["metrics"] = {k: v for k, v in out["metrics"].items()
+                          if k not in ("unattributed_trips", "undelivered_alerts")}
 
     nodes = {}
     for node_id, info in (feed.get("nodes") or {}).items():
@@ -254,10 +265,15 @@ def events_feed():
         except (OSError, ValueError):
             visible = set()
     limit = min(request.args.get("limit", type=int) or 100, events.KEEP)
-    resp = make_response(jsonify({
-        "events": events.listing(limit=limit, visible=visible,
-                                 unacked_only=request.args.get("unacked") == "1"),
-        "counts": events.counts(visible=visible),
-    }))
+    unacked = request.args.get("unacked") == "1"
+    if sees_everything(groups):
+        body = {"events": events.listing(limit=limit, visible=visible, unacked_only=unacked),
+                "counts": events.counts(visible=visible)}
+    else:
+        # TRIPWIRES: a trip row (and its share of the counts) is admin-only
+        body = {"events": tripwires.listing_without_trips(limit=limit, visible=visible,
+                                                          unacked_only=unacked),
+                "counts": tripwires.counts_without_trips(visible=visible)}
+    resp = make_response(jsonify(body))
     resp.headers["Cache-Control"] = "no-store"
     return vary_on_viewer(resp)

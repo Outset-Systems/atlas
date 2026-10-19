@@ -384,6 +384,30 @@ REGIONS = [
      "x": 34.0, "y": 6.0, "w": 46.0, "h": 34.0, "auto": True},
 ]
 
+# ── tripwires: one honeypot and two canary tokens, all invented ───────────────
+# The scene needs something to show: an OpenCanary-style fake file server (its
+# `sensor` is OpenCanary's default device.node_id), a decoy document and a
+# cloud key that expires. The static feed below has the honeypot speaking, so
+# the bundled demo shows one live trip with no network call. Tripwires are
+# admin-only on the map, like everywhere else.
+STONES = [
+    {"id": "canary-fileserver", "name": "FILESRV-OLD", "kind": "honeypot-host", "family": "honeypot",
+     "host": "hypervisor", "zone": "internal", "severity": "critical", "sensor": "opencanary-1",
+     "placement": "a small guest on the hypervisor, answering SMB and SSH",
+     "mimics": "a file server nobody got round to retiring",
+     "note": "discovery: the first thing a scan of the server network finds"},
+    {"id": "payroll-doc", "name": "salaries-2026.docx", "kind": "doc-msword", "family": "token",
+     "host": "nas", "zone": "internal", "severity": "high",
+     "planted": "the shared documents folder on the NAS",
+     "mimics": "a spreadsheet everyone would open",
+     "note": "collection: someone browsing the share"},
+    {"id": "offsite-backup-key", "name": "backup.env", "kind": "cloud-key", "family": "token",
+     "host": "app-host", "zone": "internal", "severity": "critical",
+     "planted": "an old backup config on the app host", "expires": "2027-04-01",
+     "mimics": "the key an off-site backup would use",
+     "note": "credential access: a key that unlocks nothing"},
+]
+
 KUMA = {"Gateway": "gateway", "Core Switch": "core-switch", "Hypervisor": "hypervisor", "NAS": "nas",
         "Directory": "dc", "Uptime Kuma": "monitor", "Downloads": "downloads", "Forgejo": "internal-host",
         "Jellyfin": "media", "Edge": "edge", "Nextcloud": "app-host", "Home Assistant": "camera-hub"}
@@ -400,6 +424,7 @@ def dataset():
         "rack_rear": RACK_REAR, "chronicle": CHRONICLE, "abyss": ABYSS,
         "rites": RITES, "certs": CERTS,
         "regions": REGIONS,
+        "stones": STONES,
     }
 
 
@@ -411,8 +436,9 @@ def signals():
     nodes["the-wild"] = {"state": "healthy"}
     services = {l["kuma"]: {"state": "healthy"} for n in NODES for l in n["links"] if l.get("kuma")}
     services["Downloads"] = {"state": "degraded"}
+    stones = {"canary-fileserver": {"state": "speaking", "last_spoke": "2026-10-18T03:12:00Z"}}
     return {"_comment": "Static health for the demo lab. Invented; no network calls.",
-            "nodes": nodes, "services": services,
+            "nodes": nodes, "services": services, "stones": stones,
             "metrics": {"watchfires_up": len(services) - 1, "watchfires_total": len(services)}}
 
 

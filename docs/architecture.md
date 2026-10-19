@@ -142,7 +142,8 @@ per surface, each attaching routes to it:
 | `admin.py` | `/admin/*`: the editor's ops, revisions and revert, discovery, maintenance, CSV import, map images, Directory and Sources settings, the read-only Deployment view |
 | `accounts_v2.py` | `/auth/*`: sign-in, MFA, password, users, audit (sessions only) |
 | `sites.py` | `/sites/*` (db backend only) |
-| `ingest_v2.py` | `/ingest/*` (db backend and `ATLAS_INGEST_ENABLED=1`) |
+| `ingest_v2.py` | `/ingest/{signals,inventory,observed}` (db backend and `ATLAS_INGEST_ENABLED=1`) |
+| `tripwires.py` | `/ingest/tripwires` (the tripwires webhook, either backend, `ATLAS_TRIPWIRES_WEBHOOK=1`), `/tripwires` and `/tripwires/setup` (admin) |
 | `vitals.py`, `charts.py` | card vitals and charts from Prometheus and Loki |
 | `manifest.py` | `/manifest`, `/calendar` |
 | `trust.py` | `/trust` (an admin-only proxy-trust view generated at build; answers 503 until a `Web/trust.json` is built into the image) |
@@ -262,6 +263,19 @@ Which adapters exist is decided by `integrations.py`: the Settings screen's
 saved values first, the environment second. The hub watches the settings
 file's mtime and rebuilds its adapters when it changes, which is how a save in
 one gunicorn worker reaches the other without a restart.
+
+**Tripwires.** `tripwires.py` is the other half of the decoy story: honeypots
+and canary tokens charted in `stones[]`, and trips arriving from any tool
+through `POST /api/v2/ingest/tripwires` (OpenCanary, Canarytokens or a generic
+`{tripwire_id, at, kind}`). The webhook shares the ingest prefix's gate
+exemption but not its db requirement: a trip is matched to a stone, rebuilt
+from an allow-list of short, cleaned fields (nothing the sender wrote is kept
+verbatim), and appended to the event history as a `kind: tripwire` event,
+coalesced while a storm lasts. `tripwires.json` beside it keeps when each
+sender was last heard. `GET /api/v2/tripwires` merges those events with the
+decoy feed's live `stones` into one admin-only read model; `redaction.py` and
+`feeds.py` strip stones, trip events and the decoy source from every other
+viewer.
 
 `annalist.py` polls the feed in the background (every `ATLAS_ANNALS_POLL`
 seconds) so the event history and missed-job checks advance even when nobody

@@ -7,6 +7,7 @@ Run it as `python cli.py <command>`; there is no installed
     python cli.py export      --site lab -o lab-data.json
     python cli.py sites
     python cli.py initdb
+    python cli.py tripwires-key     # the TRIPWIRES webhook key (no db needed)
 
 Talks to ATLAS_DB_URL (or --db). Import is the authoritative full-replace path
 (the JSON is the truth); validation problems are reported but tolerated —
@@ -192,8 +193,20 @@ def cmd_sites(args):
     return 0
 
 
+#: Scopes a site token may carry: `ingest` (the relay) and `tripwires` (the
+#: TRIPWIRES webhook, db backend). A typo would mint a token nothing accepts.
+TOKEN_SCOPES = ("ingest", "tripwires")
+
+
 def cmd_token_issue(args):
     from store.tokens import issue_token
+    scopes = [x.strip() for x in (args.scopes or "").split(",") if x.strip()]
+    bad = [x for x in scopes if x not in TOKEN_SCOPES]
+    if not scopes or bad:
+        print(f"error: --scopes must be a comma list of {', '.join(TOKEN_SCOPES)}"
+              + (f" (not {bad[0]!r})" if bad else ""), file=sys.stderr)
+        return 2
+    args.scopes = ",".join(scopes)
     st = _store()
     with st.session_scope() as s:
         try:
@@ -233,6 +246,28 @@ def cmd_token_revoke(args):
         print(f"error: token #{args.id} is unknown or already revoked", file=sys.stderr)
         return 2
     print(f"token #{args.id} revoked")
+    return 0
+
+
+def cmd_tripwires_key(args):
+    """Print the TRIPWIRES webhook key derived from ATLAS_TRIPWIRES_SECRET(_FILE)
+    — what OpenCanary sends as its bearer and Canarytokens as `?key=`. With
+    --new-secret, print a fresh random secret to store instead (nothing is
+    written anywhere; put it in the secret file and restart)."""
+    import secrets as _secrets
+    if args.new_secret:
+        print(_secrets.token_urlsafe(32))
+        return 0
+    import tripwires
+    key = tripwires.webhook_key()
+    if not key:
+        print("error: no ATLAS_TRIPWIRES_SECRET (or _FILE) of at least "
+              f"{tripwires.SECRET_MIN} characters — make one with "
+              "`python cli.py tripwires-key --new-secret`", file=sys.stderr)
+        return 2
+    print("the TRIPWIRES webhook key (Bearer header or ?key=); it changes "
+          "when the secret does:", file=sys.stderr)
+    print(key)
     return 0
 
 
@@ -407,7 +442,8 @@ def main(argv=None):
     p = sub.add_parser("token-issue", help="mint a relay token for a site (shown once)")
     p.add_argument("--site", required=True)
     p.add_argument("--label", help="what this token is for, e.g. 'app-host relay'")
-    p.add_argument("--scopes", default="ingest")
+    p.add_argument("--scopes", default="ingest",
+                   help="comma list: ingest (relay), tripwires (the TRIPWIRES webhook)")
     p.set_defaults(fn=cmd_token_issue)
 
     p = sub.add_parser("token-list", help="list relay tokens")
@@ -418,6 +454,12 @@ def main(argv=None):
     p = sub.add_parser("token-revoke", help="revoke a relay token by id")
     p.add_argument("id", type=int)
     p.set_defaults(fn=cmd_token_revoke)
+
+    p = sub.add_parser("tripwires-key",
+                       help="print the TRIPWIRES webhook key (from ATLAS_TRIPWIRES_SECRET)")
+    p.add_argument("--new-secret", action="store_true",
+                   help="print a fresh random secret to store instead")
+    p.set_defaults(fn=cmd_tripwires_key)
 
     p = sub.add_parser("initdb", help="create tables (dev; deployments use alembic)")
     p.set_defaults(fn=cmd_initdb)

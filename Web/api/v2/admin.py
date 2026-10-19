@@ -641,9 +641,10 @@ def _hub_state():
         return {"enabled": [], "last": {}}
 
 
-def _probe(kind, url, key):
+def _probe(kind, url, key, path=None):
     """Ask one source whether it is there, the way the Atlas will ask it.
-    Returns (ok, detail). Never raises — the answer is the point."""
+    Returns (ok, detail). Never raises — the answer is the point. `path` is
+    the decoy feed's roster path as typed (None = the one in force)."""
     import requests
     base = (url or "").rstrip("/")
     if not base:
@@ -670,8 +671,11 @@ def _probe(kind, url, key):
             return True, f"Kuma answers — {n} monitor{'s' if n != 1 else ''}"
         if kind == "decoys":
             import envnames
+            import integrations
             header = envnames.env("ATLAS_DECOYS_KEY_HEADER")
-            r = requests.get(base + "/api/stones", headers={header: key or ""}, timeout=5)
+            # TRIPWIRES: ask where the adapter will ask (ATLAS_DECOYS_PATH)
+            r = requests.get(base + (path or integrations.decoys_path()),
+                             headers={header: key or ""}, timeout=5)
             if r.status_code in (401, 403, 404):
                 return False, "the decoy feed did not admit that key"
             r.raise_for_status()
@@ -736,7 +740,9 @@ def _known_env_names():
               "ATLAS_HUB_AUTH_HEADER", "ATLAS_ADMIN_GROUP", "ATLAS_THEME", "HUB_URL", "ATLAS_METRICS_TOKEN", "ATLAS_METRICS_TOKEN_FILE",
               "ATLAS_KUMA_URL", "ATLAS_KUMA_API_KEY", "ATLAS_KUMA_API_KEY_FILE",
               "ATLAS_DECOYS_URL", "ATLAS_DECOYS_KEY", "ATLAS_DECOYS_KEY_FILE",
-              "ATLAS_DECOYS_KEY_HEADER",
+              "ATLAS_DECOYS_KEY_HEADER", "ATLAS_DECOYS_PATH",
+              "ATLAS_TRIPWIRES_WEBHOOK", "ATLAS_TRIPWIRES_SECRET", "ATLAS_TRIPWIRES_SECRET_FILE",
+              "ATLAS_TRIPWIRES_STATE",
               "ATLAS_LOKI_URL", "ATLAS_INTEGRATIONS", "PROMETHEUS_MULTIPROC_DIR"}
     return sorted(names)
 
@@ -845,7 +851,14 @@ def integrations_test():
     if not _valid_url(url):
         return jsonify({"ok": False, "error": "That is not an http(s) URL with a host."}), 400
     key = (str(proposed.get(secret_key) or "").strip() or integrations.get(secret_key)) if secret_key else None
-    ok, detail = _probe(kind, url, key)
+    path = None
+    if kind == "decoys":
+        path = str(proposed.get("ATLAS_DECOYS_PATH") or "").strip() or None
+        if path and not integrations.valid_decoys_path(path):
+            return jsonify({"ok": False, "error": "ATLAS_DECOYS_PATH must be an absolute "
+                                                  "path like /api/stones."}), 400
+    # the path only when one was typed: `_probe(kind, url, key)` stays the call shape
+    ok, detail = _probe(kind, url, key, path=path) if path else _probe(kind, url, key)
     log.info("v2: source test %s by %s: ok=%s", kind, actor(), ok)
     return jsonify({"ok": ok, "detail": detail if ok else "", "error": "" if ok else detail})
 
@@ -882,6 +895,10 @@ def integrations_save():
     hosts = str(proposed.get("ATLAS_EMBED_HOSTS", "") or "")
     if ";" in hosts or "\n" in hosts or "\r" in hosts:
         return jsonify({"error": "ATLAS_EMBED_HOSTS is a space-separated list of origins — no ';' or newlines."}), 422
+    decoys_path = str(proposed.get("ATLAS_DECOYS_PATH", "") or "").strip()
+    if decoys_path and not integrations.valid_decoys_path(decoys_path):
+        return jsonify({"error": "ATLAS_DECOYS_PATH must be an absolute path on the decoy "
+                                 "feed, like /api/stones — no scheme, host, query or spaces."}), 422
     for key in integrations.BOOLS:
         if key in proposed and str(proposed.get(key) or "").strip() not in ("", "0", "1"):
             return jsonify({"error": f"{key} must be 1, 0, or blank (the deployment's value)."}), 422

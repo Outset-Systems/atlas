@@ -112,6 +112,17 @@ function buildWidget(field, value) {
     };
   }
 
+  // a calendar day, stored as YYYY-MM-DD (a canary token's `expires`, v1.52.0)
+  if (type === 'date') {
+    const node = el('input', 'dsk-input');
+    const ok = typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
+    // a stored value the date picker cannot show stays visible as text, so
+    // opening the form never quietly erases it (validation names it on save)
+    node.type = ok || !value ? 'date' : 'text';
+    node.value = value ?? '';
+    return { node, read: () => node.value.trim() };
+  }
+
   if (type === 'int' || type === 'number' || type === 'percent') {
     const node = el('input', 'dsk-input dsk-num');
     node.type = 'number';
@@ -308,10 +319,12 @@ export function buildForm(sectionKey, entry, opts = {}) {
   const only = opts.only ? new Set(opts.only) : null;
   const fields = only ? section.fields.filter((f) => only.has(f.name)) : section.fields;
 
+  const rows = {};
   for (const field of fields) {
     const widget = buildWidget(field, original[field.name]);
     widgets[field.name] = { field, widget };
-    form.append(fieldRow(field, widget.node));
+    rows[field.name] = fieldRow(field, widget.node);
+    form.append(rows[field.name]);
   }
 
   // Keys the catalogue doesn't model are shown, read-only, rather than hidden:
@@ -344,6 +357,10 @@ export function buildForm(sectionKey, entry, opts = {}) {
       widget.node.value = value ?? '';
       return true;
     },
+    /** The row a field sits in, so a helper can be seated beside it (the
+        region rectangle's "use the current view"). Null for a field this
+        form does not show. */
+    row(name) { return rows[name] || null; },
     read() {
       const out = {};
       const missing = [];

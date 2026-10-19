@@ -99,8 +99,11 @@ def test_the_gear_is_in_the_band_and_in_flow():
     # width the cluster stands out permanently
     narrow = re.findall(r"@media \(max-width: 720px\) \{(.*?)\n\}", css, re.S)
     assert narrow, "no ≤720px block at all"
-    assert any(re.search(r"#scenes-list \.menu-tools \{[^}]*width: 34px[^}]*opacity: 1", b) for b in narrow), (
+    # 68px since v1.52.0: two buttons, ☀/☾ (the colour scheme) and ⚙
+    assert any(re.search(r"#scenes-list \.menu-tools \{[^}]*width: 68px[^}]*opacity: 1", b) for b in narrow), (
         "no ≤720px block stands the gear out permanently")
+    assert 'id="btn-scheme"' in band and band.index('id="btn-scheme"') < band.index('id="btn-menu-settings"'), (
+        "☀/☾ must sit in the cluster, before ⚙")
 
 
 def test_the_band_still_has_the_properties_that_make_that_trap_real():

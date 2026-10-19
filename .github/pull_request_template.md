@@ -23,4 +23,6 @@
       screenshots of a real network; examples use `home.example` and
       `192.0.2.0/24`, `198.51.100.0/24`, `203.0.113.0/24`.
 - [ ] No names, terms or artwork from games, books, films or other fiction.
+- [ ] Every commit is signed off (`git commit -s`), certifying the
+      [Developer Certificate of Origin](https://developercertificate.org/).
 - [ ] I agree that this contribution is licensed under the MIT licence.

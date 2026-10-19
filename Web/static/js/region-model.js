@@ -151,3 +151,115 @@ export function rectOnScreen(r, cam, mapW, mapH) {
     height: (r.h / 100) * mapH * cam.k,
   };
 }
+
+/* ── "use the current view" (the Desk's rectangle helper) ─────────────────── */
+
+/** A rectangle in a parent map's percent → the same rectangle in region
+    `r`'s own percent, and back. The point maps above, applied to a box. */
+export function rectToChild(r, rect) {
+  return {
+    x: ((rect.x - r.x) / r.w) * 100, y: ((rect.y - r.y) / r.h) * 100,
+    w: (rect.w / r.w) * 100, h: (rect.h / r.h) * 100,
+  };
+}
+export function rectToParent(r, rect) {
+  return {
+    x: r.x + (rect.x / 100) * r.w, y: r.y + (rect.y / 100) * r.h,
+    w: (rect.w / 100) * r.w, h: (rect.h / 100) * r.h,
+  };
+}
+
+/** Carry a rectangle drawn on map `fromId` (null = the main map) onto map
+    `toId`: up through `fromId`'s chain to the main map, then down through
+    `toId`'s (skipping the maps both chains share). Null when either chain is
+    broken. A rectangle that lies outside the target map comes back outside
+    it — `clampRect` says so. */
+export function carryRect(regions, fromId, toId, rect) {
+  const up = fromId ? chainOf(regions, fromId) : [];
+  const down = toId ? chainOf(regions, toId) : [];
+  if ((fromId && !up.length) || (toId && !down.length)) return null;
+  let shared = 0;                 // the maps both chains pass through: no trip needed
+  while (shared < up.length && shared < down.length && up[shared].id === down[shared].id) shared++;
+  let out = { ...rect };
+  for (let i = up.length - 1; i >= shared; i--) out = rectToParent(up[i], out);
+  for (const r of down.slice(shared)) out = rectToChild(r, out);
+  return out;
+}
+
+/** Hold a rectangle to its map (0–100 both ways) and round it to `digits`
+    decimals — edges first, so the rounded box still fits (x + w ≤ 100).
+    Null when nothing of it is on the map. */
+export function clampRect(rect, digits = 1) {
+  if (!rect || ![rect.x, rect.y, rect.w, rect.h].every(Number.isFinite)) return null;
+  const f = 10 ** digits;
+  const round = (v) => Math.round(v * f) / f;
+  const x0 = round(Math.max(0, Math.min(100, rect.x)));
+  const y0 = round(Math.max(0, Math.min(100, rect.y)));
+  const x1 = round(Math.max(0, Math.min(100, rect.x + rect.w)));
+  const y1 = round(Math.max(0, Math.min(100, rect.y + rect.h)));
+  if (x1 - x0 <= 0 || y1 - y0 <= 0) return null;
+  return { x: x0, y: y0, w: round(x1 - x0), h: round(y1 - y0) };
+}
+
+/** What camera `cam` shows of a mapW×mapH map in a vw×vh window, as a
+    rectangle a region can take: clamped to the map, rounded. A map smaller
+    than the window (letterboxed) gives the whole of it on that axis. */
+export function rectFromView(cam, mapW, mapH, vw, vh, digits = 1) {
+  return clampRect(viewRect(cam, mapW, mapH, vw, vh), digits);
+}
+
+/* ── deep links: #region=<id> ─────────────────────────────────────────────
+   The hash is a list of `key=value` parts joined by `&`; `region` is ours and
+   any other part is someone else's and kept, in its place. */
+
+const HASH_KEY = 'region';
+const hashParts = (hash) => String(hash ?? '').replace(/^#/, '').split('&').filter(Boolean);
+const keyOf = (part) => { const i = part.indexOf('='); return i < 0 ? part : part.slice(0, i); };
+
+/** The region a hash names, or null (absent, empty, or not decodable). */
+export function regionFromHash(hash) {
+  for (const part of hashParts(hash)) {
+    if (keyOf(part) !== HASH_KEY || !part.includes('=')) continue;
+    let id;
+    try { id = decodeURIComponent(part.slice(part.indexOf('=') + 1)); } catch { return null; }
+    id = id.trim();
+    return id && id.length <= 200 ? id : null;
+  }
+  return null;
+}
+
+/** `hash` with its region part set to `id` (null = removed); every other
+    part kept where it was. Returned without the leading '#', '' when empty. */
+export function hashWithRegion(hash, id) {
+  const mine = id ? `${HASH_KEY}=${encodeURIComponent(id)}` : null;
+  const out = [];
+  let placed = false;
+  for (const part of hashParts(hash)) {
+    if (keyOf(part) !== HASH_KEY) { out.push(part); continue; }
+    if (!placed && mine) out.push(mine);
+    placed = true;
+  }
+  if (!placed && mine) out.push(mine);
+  return out.join('&');
+}
+
+/* ── pinch (two pointers) ──────────────────────────────────────────────── */
+
+/** One step of a two-finger pinch: the pointers were at a0, b0 and are now
+    at a1, b1 (screen px). The map point under their old midpoint ends up
+    under the new one (so a pinch also pans), and the zoom follows the change
+    in their distance, held between kMin and kMax. `atFloor` as zoomAround:
+    pinching out with the floor in the way. */
+export function pinchStep(cam, a0, b0, a1, b1, kMin, kMax) {
+  const d0 = Math.hypot(b0.x - a0.x, b0.y - a0.y);
+  const d1 = Math.hypot(b1.x - a1.x, b1.y - a1.y);
+  const factor = d0 > 0 && d1 > 0 ? d1 / d0 : 1;
+  const want = cam.k * factor;
+  const k = Math.max(kMin, Math.min(kMax, want));
+  const atFloor = factor < 1 && want < kMin * 1.0001;
+  const m0 = { x: (a0.x + b0.x) / 2, y: (a0.y + b0.y) / 2 };
+  const m1 = { x: (a1.x + b1.x) / 2, y: (a1.y + b1.y) / 2 };
+  const mx = (m0.x - cam.x) / cam.k;
+  const my = (m0.y - cam.y) / cam.k;
+  return { cam: { k, x: m1.x - mx * k, y: m1.y - my * k }, atFloor, factor };
+}

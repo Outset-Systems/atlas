@@ -201,6 +201,7 @@ function drawForm(key, entry, ref) {
   }
 
   bodyEl.append(errors, form.el);
+  if (key === 'regions') seatRegionView(form);
 
   const bar = el('div', 'dsk-formbar');
   const cancel = el('button', 'dsk-btn', 'Cancel');
@@ -335,6 +336,59 @@ async function drawMapArt(form) {
   } catch (err) {
     errors.append(problemList(err));
   }
+}
+
+/** REGIONS — "use the current view": fill the rectangle from what the map
+    behind the Desk shows, instead of typing four percentages. The Desk opens
+    over the map without moving it, so the view is the one you left: frame
+    the area, open the Desk, press. The map it reads is the open region's
+    detailed map when one is open (carried onto the "Inside" map through the
+    rectangles between them), else the main map — regions.js does the
+    reading (`A.regionViewFor`), region-model.js the maths. Nothing is saved;
+    the four fields change and one Save writes them, as with the backdrop. */
+function seatRegionView(form) {
+  const anchor = form.row('x');
+  if (!anchor) return;
+  const row = el('div', 'dsk-field dsk-field-wide');   // a heading for the four fields, not a fifth
+  const btn = el('button', 'dsk-btn dsk-btn-sm', 'Use the current view');
+  btn.type = 'button';
+  const help = el('span', 'dsk-help');
+  help.setAttribute('aria-live', 'polite');
+
+  const read = () => {
+    const parentId = String(form.get('parent') || '');
+    const parent = parentId ? Editor.entries('regions').find((r) => r.id === parentId) : null;
+    const onto = parentId ? `the detailed map of ${parent?.name || parentId}` : 'the main map';
+    const view = A.regionViewFor?.(parentId) || null;
+    const source = !view ? 'the map'
+      : view.fromLens ? `the detailed map of ${view.from}` : 'the main map';
+    let title = `Fill Left, Top, Width and Height with what ${source} behind the Desk shows now`;
+    if (view && !view.direct) {
+      title += `, carried onto ${onto} through its rectangle` +
+        (parentId ? `. To frame it on that map itself, open ${parent?.name || parentId} first` : '');
+    }
+    return { view, onto, source, title: title + '.' };
+  };
+  const retitle = () => { btn.title = read().title; };
+  btn.addEventListener('pointerenter', retitle);
+  btn.addEventListener('focus', retitle);
+  btn.addEventListener('click', () => {
+    const { view, onto, source } = read();
+    if (!view) { help.textContent = 'The map is not drawn yet.'; return; }
+    if (!view.rect) {
+      help.textContent = `The view shows none of ${onto}. Close the Desk, frame the area, and open it again.`;
+      return;
+    }
+    const { x, y, w, h } = view.rect;
+    form.set('x', x); form.set('y', y); form.set('w', w); form.set('h', h);
+    help.textContent = `From ${source}: ${w} × ${h} % at ${x}, ${y}. Save to keep it.`;
+  });
+  retitle();
+  help.textContent = 'Frame the area on the map before opening the Desk, then fill the rectangle from it.';
+  const hold = el('div');
+  hold.append(btn);
+  row.append(el('span', 'dsk-label', 'The rectangle'), hold, help);
+  anchor.before(row);
 }
 
 async function duplicate(key, entry) {

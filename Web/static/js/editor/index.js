@@ -27,6 +27,7 @@ const SCENE_EDITORS = [
   { at: '#ledger .ldg-head', section: 'prefixes', title: 'Edit realms, prefixes and addressing' },
   { at: '#path .ldg-head', section: 'routes', title: 'Add or remove roads' },
   { at: '#calendar .ldg-head', section: 'rites', title: 'Add or remove rites' },
+  { at: '#stones .ldg-head', section: 'stones', title: 'Add a honeypot or a canary token' },
   { at: '#chronicle .chron-head', section: 'chronicle', title: 'Add or remove watchings' },
   { at: '#abyss .abyss-head', section: 'abyss', title: 'Add or remove scryings' },
 ];

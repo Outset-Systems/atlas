@@ -152,6 +152,18 @@ name, `api`, `security`, `tests`, `docs`, `ci`. Add a body when the reason is
 not obvious from the diff: what was wrong, and why this is the fix. One
 logical change per commit.
 
+## Sign off your commits (DCO)
+
+Every commit in a pull request must carry a `Signed-off-by:` line with your
+real name and e-mail, certifying the
+[Developer Certificate of Origin 1.1](https://developercertificate.org/): in
+short, that you wrote the change or otherwise have the right to submit it
+under the project's licence. `git commit -s` adds the line for you; to sign
+off commits you already made, `git rebase --signoff main`.
+
+Pull requests with unsigned commits will be asked to add the sign-off before
+review.
+
 ## Pull requests
 
 - Keep a pull request to one change. Open an issue first for anything large.
@@ -181,5 +193,6 @@ review. `.github/workflows/secrets.yml` scans every push for credentials.
 
 ## Licence
 
-The Atlas is released under the MIT licence (`LICENSE`). By contributing you
-agree that your contribution is licensed the same way.
+The Atlas is released under the MIT licence (`LICENSE`). By contributing,
+and by signing off your commits, you agree that your contribution is
+licensed the same way.

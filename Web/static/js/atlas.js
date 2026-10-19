@@ -3,6 +3,7 @@
    Hub contract: relative paths only. */
 
 import { A, CFG, REDUCED, $ } from './config.js';
+import './scheme.js';   // THE COLOUR SCHEME (v1.52.0): first, so data-scheme stands before any panel opens
 // table.js FIRST among the siblings: it swaps the backdrop src at import time,
 // and boot() below measures whatever src is standing when the image settles
 import './table.js';

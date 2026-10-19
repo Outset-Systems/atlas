@@ -49,6 +49,9 @@ GROUPS = {
         "ATLAS_KUMA_API_KEY",
         "ATLAS_DECOYS_URL",
         "ATLAS_DECOYS_KEY",
+        # TRIPWIRES (v0.1): the decoy feed is one source among several now,
+        # and not every engine serves its roster at /api/stones.
+        "ATLAS_DECOYS_PATH",
     ),
     "realm": (
         "HUB_URL",
@@ -88,8 +91,34 @@ SOURCES = ("kuma", "prometheus", "deception", "relay", "static")
 SOURCE_NEEDS = {"kuma": "ATLAS_KUMA_URL", "prometheus": "ATLAS_PROM_URL",
                 "deception": "ATLAS_DECOYS_URL"}
 
+#: Where the decoy feed serves its roster when nothing says otherwise.
+DECOYS_PATH_DEFAULT = "/api/stones"
+
 _lock = threading.Lock()
 _cache = {"mtime": None, "data": {}}
+
+
+def valid_decoys_path(value):
+    """An absolute path on the decoy feed's own origin: starts with one `/`,
+    no scheme, no `//` (that would leave the origin), no whitespace or `?#`
+    (a query is a second place to smuggle a host), at most 200 characters."""
+    v = str(value or "")
+    return (0 < len(v) <= 200 and v.startswith("/") and not v.startswith("//")
+            and not any(c.isspace() or c in "?#\\" for c in v))
+
+
+def decoys_path():
+    """The decoy feed's roster path in force (ATLAS_DECOYS_PATH, settings file
+    first). A value that is not a clean absolute path falls back to the
+    default, loudly — a typo must not aim the read key somewhere else."""
+    raw = get("ATLAS_DECOYS_PATH").strip()
+    if not raw:
+        return DECOYS_PATH_DEFAULT
+    if not valid_decoys_path(raw):
+        log.warning("ATLAS_DECOYS_PATH %r is not an absolute path; using %s",
+                    raw, DECOYS_PATH_DEFAULT)
+        return DECOYS_PATH_DEFAULT
+    return raw
 
 
 def path():

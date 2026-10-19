@@ -1286,5 +1286,45 @@
       "h": 34.0,
       "auto": true
     }
+  ],
+  "stones": [
+    {
+      "id": "canary-fileserver",
+      "name": "FILESRV-OLD",
+      "kind": "honeypot-host",
+      "family": "honeypot",
+      "host": "hypervisor",
+      "zone": "internal",
+      "severity": "critical",
+      "sensor": "opencanary-1",
+      "placement": "a small guest on the hypervisor, answering SMB and SSH",
+      "mimics": "a file server nobody got round to retiring",
+      "note": "discovery: the first thing a scan of the server network finds"
+    },
+    {
+      "id": "payroll-doc",
+      "name": "salaries-2026.docx",
+      "kind": "doc-msword",
+      "family": "token",
+      "host": "nas",
+      "zone": "internal",
+      "severity": "high",
+      "planted": "the shared documents folder on the NAS",
+      "mimics": "a spreadsheet everyone would open",
+      "note": "collection: someone browsing the share"
+    },
+    {
+      "id": "offsite-backup-key",
+      "name": "backup.env",
+      "kind": "cloud-key",
+      "family": "token",
+      "host": "app-host",
+      "zone": "internal",
+      "severity": "critical",
+      "planted": "an old backup config on the app host",
+      "expires": "2027-04-01",
+      "mimics": "the key an off-site backup would use",
+      "note": "credential access: a key that unlocks nothing"
+    }
   ]
 }

@@ -194,7 +194,28 @@ def validate(data, strict=False):
     _check_addressing(problems, data)
     _check_prefix_ranges(problems, data)
     _check_regions(problems, data)
+    _check_tripwire_sensors(problems, data)
     return problems
+
+
+def _check_tripwire_sensors(problems, data):
+    """TRIPWIRES: a trip is attributed by the name its tool reports
+    (`sensor`, else the id). Two stones answering to one name means a trip
+    could land on either — the same reason two stones may not share an id."""
+    stones = data.get("stones")
+    if not isinstance(stones, list):
+        return
+    claimed = {}
+    for s in stones:
+        if not isinstance(s, dict) or not isinstance(s.get("sensor"), str):
+            continue
+        key = s["sensor"].strip().lower()
+        if not key:
+            continue
+        if key in claimed and claimed[key] != s.get("id"):
+            problems.append(f"stone '{s.get('id')}': reported as {s['sensor']!r}, "
+                            f"which stone '{claimed[key]}' already answers to")
+        claimed.setdefault(key, s.get("id"))
 
 
 def _check_regions(problems, data):
