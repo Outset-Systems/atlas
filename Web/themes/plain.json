@@ -5,10 +5,11 @@
   "veil_sigil": "",
   "maps": ["plain.webp"],
   "map_labels": {},
+  "sky_island": false,
   "text": {
     "map_alt": "Map of the lab",
     "sky": "the sky",
-    "sky_sub": "the realm above the realm",
+    "sky_sub": "the sky above the map",
     "chronicle_foot": "— live from the watch · click any watching to open it —",
     "relay_power": "fed by the core switch",
     "tribute_sub": "The hypervisor divides its memory and its processors among its guests",
@@ -17,7 +18,7 @@
     "decoy_source": "Decoy feed",
     "colophon": "— charted by Atlas —",
     "silent": "— the watch is silent —",
-    "annals_empty": "nothing has happened in the realm yet — the annals begin at the first change the watch sees.",
+    "annals_empty": "nothing has happened on the map yet — the annals begin at the first change the watch sees.",
     "hub_name": "the Hub"
   },
   "node_logos": {},

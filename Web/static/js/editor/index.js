@@ -71,7 +71,7 @@ function addSettingsEntry() {
   const first = document.createElement('button');
   first.className = 'sp-btn';
   first.textContent = 'Run the first survey';
-  first.title = 'The guided setup — name the realm, add a segment, chart its places';
+  first.title = 'The guided setup — name your atlas, add a realm (a segment), chart its places';
   first.addEventListener('click', (e) => { e.stopPropagation(); openWizard(); });
   const row = document.createElement('div');
   row.className = 'sp-actions';

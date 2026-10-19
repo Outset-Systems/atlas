@@ -277,7 +277,7 @@ function showServiceDetail(node, link) {
     : `<span class="csv-state-t dim">status unknown</span>`;
   const roleShort = (node.role || '').split('·')[0].trim();
   const zone = zoneById(node.zone);
-  const where = node.ip && node.ip !== '—' ? node.ip : (node.hw || 'the realm');
+  const where = node.ip && node.ip !== '—' ? node.ip : (node.hw || 'the map');
   /* What this service actually IS, when the dataset says so.
      The generated sentence below it — "Hosted on the app host, answering at
      198.51.100.21" — restates the epigraph two lines up and the mono host line at

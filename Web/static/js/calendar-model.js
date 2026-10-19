@@ -251,13 +251,13 @@ export function layoutForge(rites, nodeId) {
    thing, the only place a meeting can happen — and the rest by turning. The
    clockless close the page: present, listed, never drawn. */
 const TURNINGS = [
-  { key: 'daily', title: 'THE DAILY RITES', sub: 'what the realm does for itself every morning' },
+  { key: 'daily', title: 'THE DAILY RITES', sub: 'what the lab does for itself every morning' },
   /* "THE SUNDAY RITES" was true of the list that never drew a day. Now that
      each row shows the weekday it actually keeps — three of the seven are
      Monday's — the old name is a caption contradicting the picture under it. */
   { key: 'weekly', title: 'THE WEEKLY RITES', sub: 'each on its own day of the week' },
   { key: 'monthly', title: 'THE MONTHLY RITES', sub: 'once around the moon' },
-  { key: 'continuous', title: 'THE EVER-TURNING', sub: 'the realm’s pulse, minute by minute' },
+  { key: 'continuous', title: 'THE EVER-TURNING', sub: 'the lab’s pulse, minute by minute' },
 ];
 
 /** THE CALENDAR's day: every rite of the realm laid on one clock.

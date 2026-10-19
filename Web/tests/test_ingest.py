@@ -32,6 +32,12 @@ ATLAS_TEST_ENV = {
     "ATLAS_SIGNALS_SOURCES": "relay",
     "ATLAS_DATA": os.path.join(TMP, "no-such-lab-data.json"),
     "ATLAS_ALLOW_INSECURE": "1",
+    # This module's own integrations file. Without it the path comes from
+    # whichever module last reloaded `settings` (its DATA_DIR): if a file
+    # existed there, the signals hub saw a new stamp mid-test and rebuilt its
+    # adapters with that module's sources and site, so the stale-relay test
+    # failed only after certain other modules (the 10-18 "flake").
+    "ATLAS_INTEGRATIONS": os.path.join(TMP, "integrations-test-ingest.json"),
 }
 os.environ.update(ATLAS_TEST_ENV)
 
@@ -75,11 +81,14 @@ def _ingest_posture():
     module's import-time env). Pinned per test, restored after — the same
     guard test_relay.py carries, for the same reason."""
     import settings
-    old = (settings.INGEST_ENABLED, settings.DATA_BACKEND)
+    old = (settings.INGEST_ENABLED, settings.DATA_BACKEND, settings.SITE_SLUG)
     settings.INGEST_ENABLED = True
     settings.DATA_BACKEND = "db"
+    # the relay adapter is built for settings.SITE_SLUG whenever the hub
+    # rebuilds: pin it, so a rebuild can only ever point at this module's site
+    settings.SITE_SLUG = "lab"
     yield
-    settings.INGEST_ENABLED, settings.DATA_BACKEND = old
+    settings.INGEST_ENABLED, settings.DATA_BACKEND, settings.SITE_SLUG = old
 FEED = {"nodes": {"app-host": {"state": "healthy"}, "downloads": {"state": "down"}},
         "services": {"nextcloud": {"state": "healthy"}},
         "metrics": {"watchfires_up": 11}}

@@ -200,7 +200,7 @@ function pick(m) {
     }, { once: true });
     mapBase.src = target;
   } else {
-    A.showToast?.(m.default ? 'The realm’s own backdrop stands.' : 'The table is redressed.');
+    A.showToast?.(m.default ? 'The map’s own backdrop stands.' : 'The table is redressed.');
   }
   buildTable();   // repaint the ON marks
 }

@@ -181,7 +181,7 @@ function slideHTML(c, i) {
       (c.panels ? '' : `<button class="chron-fs" title="Full screen">⛶</button>`) +
       (c.url
         ? `<a class="chron-open" href="${esc(c.url)}" target="_blank" rel="noopener"` +
-          `${glassAttrs(c.title, 'a watching of the realm', c.open_in)}>open ›</a>`
+          `${glassAttrs(c.title, 'a watching of the lab', c.open_in)}>open ›</a>`
         : '') +
     `</span></div>` +
     (c.about ? `<div class="chron-about" hidden>${esc(c.about)}</div>` : '') +
@@ -228,7 +228,7 @@ function buildButtons(items, bwrap) {
     return `<div class="chron-btn-wrap">` +
       `<a class="chron-btn${c.broken ? ' broken' : ''}" href="${esc(c.url)}"` +
         ` target="_blank" rel="noopener"` +
-        `${glassAttrs(c.title, 'a watching of the realm', c.open_in)}>${esc(c.title)}</a>` +
+        `${glassAttrs(c.title, 'a watching of the lab', c.open_in)}>${esc(c.title)}</a>` +
       (note
         ? `<div class="chron-fly-pop" role="tooltip">` +
           `<div class="cfp-note">${c.broken ? '⚠ ' : ''}${esc(note)}</div></div>`

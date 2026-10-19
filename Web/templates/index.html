@@ -72,7 +72,7 @@
            watching carrying `whois: true`; behaviour in static/js/whois.js.) -->
       <div class="chron-foot">&mdash; scried from the deep &middot; click any watching to open it &mdash;</div>
     </section>
-    <div id="sky-realm" aria-label="{{ theme.text.sky[:1]|upper }}{{ theme.text.sky[1:] }} — above the realm">
+    <div id="sky-realm" aria-label="{{ theme.text.sky[:1]|upper }}{{ theme.text.sky[1:] }} — above the map">
       <div class="sky-glow" aria-hidden="true"></div>
       <!-- (the sky's #sky-title button lived here until 2026-08-15 — the
            region is named once now, by the heading above the carousel) -->
@@ -96,7 +96,7 @@
          the sky zone's own name/vlan, re-stamped from the dataset by
          nameRegionHeads() in ui.js so a Desk rename moves it like every other
          label. The text here is the pre-boot fallback. -->
-    <section id="chronicle" aria-label="{{ theme.text.sky[:1]|upper }}{{ theme.text.sky[1:] }} — the realm's watchings, scried live">
+    <section id="chronicle" aria-label="{{ theme.text.sky[:1]|upper }}{{ theme.text.sky[1:] }} — the lab's watchings, scried live">
       <div class="chron-head">{{ theme.text.sky|upper }}</div>
       <div class="chron-sub">{{ theme.text.sky_sub }}</div>
       <div class="chron-viewer">
@@ -108,6 +108,11 @@
       <div class="chron-buttons" id="chron-buttons"></div>
       <div class="chron-foot">{{ theme.text.chronicle_foot }}</div>
     </section>
+    {% if theme.sky_island %}
+    <!-- The floating islet is the lab map's own scenery: its spot (CFG.MESA_POS)
+         was tuned to a mesa in that art. A theme opts in with "sky_island": true;
+         on any other map (the plain theme, the demo lab, an empty install) it
+         floated over nothing in particular. (v1.52.0) -->
     <div id="sky-shadow" aria-hidden="true"></div>
     <!-- scenery since 2026-08-15, not a control — ☁ and the wheel still rise -->
     <div id="sky-island" aria-hidden="true">
@@ -116,6 +121,7 @@
         <rect x="0" y="0" width="300" height="200" filter="url(#cloudgen-fine)"/>
       </svg>
     </div>
+    {% endif %}
     <svg id="overlay" aria-hidden="true"></svg>
     <div id="zone-labels"></div>
     <!-- REGIONS (v1.49.0): the frames of the parts of this map that open into
@@ -180,7 +186,7 @@
   <button class="scene" data-scene="path">PATH</button>
   <!-- THE RITES and THE FORGE live here since v1.45.0; the title says so for
        anyone who comes looking for either by its old name. -->
-  <button class="scene" data-scene="calendar" title="THE RITES and THE FORGE — every rite of the realm on one clock">CALENDAR</button>
+  <button class="scene" data-scene="calendar" title="THE RITES and THE FORGE — every scheduled job in the lab on one clock">CALENDAR</button>
   <button class="scene" data-scene="seals">SEALS</button>
   <button class="scene" data-scene="stones">{{ theme.text.stones|upper }}</button>
   <button class="scene" data-scene="annals">ANNALS</button>
@@ -322,7 +328,7 @@
   <div class="rel-panel" role="dialog" aria-label="The Armory — the rack elevation">
     <div class="rel-head">
       <span class="rel-title" id="rel-title">ARMORY</span>
-      <span class="rel-sub">the realm's iron, rack by rack</span>
+      <span class="rel-sub">the lab's iron, rack by rack</span>
       <span class="rel-tools">
         <span class="rel-viewtoggle" role="group" aria-label="View the rack in 2D or 3D">
           <button class="rel-seg is-on" id="rel-2d" aria-pressed="true">2D</button>
@@ -350,7 +356,7 @@
   <div class="ldg-panel" role="dialog" aria-label="The Ledger — IP address map">
     <div class="ldg-head">
       <span class="ldg-title">LEDGER</span>
-      <span class="ldg-sub">every prefix in the realm — charted, reserved, or free ground</span>
+      <span class="ldg-sub">every prefix on the map — charted, reserved, or free ground</span>
       <button class="ldg-close" id="ldg-close" title="Close (Esc)">×</button>
     </div>
     <div class="ldg-list" id="ldg-list"></div>
@@ -397,10 +403,10 @@
      drawings of. calendar.js paints it from api/v2/rites; calendar-model.js
      decides what is where. The asked place's card carries the door. -->
 <div id="calendar" aria-hidden="true">
-  <div class="ldg-panel" role="dialog" aria-label="The Calendar — the realm's day">
+  <div class="ldg-panel" role="dialog" aria-label="The Calendar — the lab's day">
     <div class="ldg-head">
       <span class="ldg-title">CALENDAR</span>
-      <span class="ldg-sub">what the realm does for itself, on one day and one clock</span>
+      <span class="ldg-sub">what the lab does for itself, on one day and one clock</span>
       <button class="ldg-close" id="cal-close" title="Close (Esc)">×</button>
     </div>
     <div class="cal-head" id="cal-head"></div>
@@ -428,7 +434,7 @@
   <div class="ldg-panel" role="dialog" aria-label="The Seals — certificates">
     <div class="ldg-head">
       <span class="ldg-title">SEALS</span>
-      <span class="ldg-sub">what vouches for the realm, and when it lapses</span>
+      <span class="ldg-sub">what vouches for the lab, and when it lapses</span>
       <button class="ldg-close" id="sl-close" title="Close (Esc)">&times;</button>
     </div>
     <div class="rt-head" id="sl-head"></div>
@@ -461,7 +467,7 @@
   <div class="ldg-panel" role="dialog" aria-label="The Annals — event history">
     <div class="ldg-head">
       <span class="ldg-title">ANNALS</span>
-      <span class="ldg-sub">what befell the realm, and when</span>
+      <span class="ldg-sub">what befell the lab, and when</span>
       <button class="ldg-close" id="ann-close" title="Close (Esc)">×</button>
     </div>
     <div class="ann-bar" id="ann-head"></div>
@@ -673,7 +679,7 @@
         <button class="sp-sub" type="button">THE CARTOGRAPHER'S TABLE</button>
         <div class="sp-sec-body">
           <div class="sp-maps" id="sp-maps"></div>
-          <div class="sp-hint">Your choice, in this browser only — the realm's default is set at the Desk.
+          <div class="sp-hint">Your choice, in this browser only — the map's default is set at the Desk.
             Same land, different light; a different coastline needs its places re-surveyed.</div>
           <label class="sp-row">
             <span>Tilt the table</span>

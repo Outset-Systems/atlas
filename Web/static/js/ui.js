@@ -59,7 +59,7 @@ function togglePin(url) {
 
 function svcRow(list, svc) {
   const { name, url, kuma } = svc;
-  const sub = svc.group === 'CHRONICLE' ? 'a watching of the realm'
+  const sub = svc.group === 'CHRONICLE' ? 'a watching of the lab'
                                         : `a service of ${svc.group}`;
   const pinned = getPins().includes(url);
   const row = document.createElement('div');

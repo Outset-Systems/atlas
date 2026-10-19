@@ -80,7 +80,7 @@ async function build() {
   listEl.innerHTML = events.length
     ? events.map(rowHTML).join('')
     : `<div class="ldg-note">${showAll
-        ? esc(themeText('annals_empty', 'nothing has happened in the realm yet.'))
+        ? esc(themeText('annals_empty', 'nothing has happened on the map yet.'))
         : 'nothing is waiting to be acknowledged.'}</div>`;
 
   for (const btn of listEl.querySelectorAll('.ann-ack-btn')) {

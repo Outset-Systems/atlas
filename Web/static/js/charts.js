@@ -289,7 +289,7 @@ export async function drawChart(box, payload) {
   const ink = chartInk(box);
   const canvas = document.createElement('canvas');
   canvas.setAttribute('role', 'img');
-  canvas.setAttribute('aria-label', payload.title || 'a watching of the realm');
+  canvas.setAttribute('aria-label', payload.title || 'a watching of the lab');
   box.replaceChildren(canvas);
   const { ts, labels, datasets } = frame(payload, ink);
   const chart = new Chart(canvas, {

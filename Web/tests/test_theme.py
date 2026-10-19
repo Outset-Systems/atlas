@@ -88,3 +88,24 @@ def test_a_theme_names_its_own_maps(monkeypatch):
     monkeypatch.setattr(theme, "T", {**theme.T, "map_labels": {"a.webp": "The A Map"}})
     assert theme.map_label("a.webp") == "The A Map"
     assert theme.map_label("b.webp") == ""
+
+
+def _render_index(monkeypatch, name):
+    from app import app
+    _, t = theme.load(name)
+    monkeypatch.setattr(theme, "T", t)
+    with app.test_request_context("/"):
+        from flask import render_template
+        return render_template("index.html", editable=False, seeded=True,
+                               client_config={}, map_image="static/map/plain.webp",
+                               realm_title="Atlas", veil_title="ATLAS")
+
+
+def test_the_plain_theme_has_no_floating_island(monkeypatch):
+    """The floating islet was placed for one theme's own map art; on the plain
+    map, the demo lab or an empty install it hovered over nothing. A theme opts
+    in with "sky_island": true (v1.52.0)."""
+    _, plain = theme.load("plain")
+    assert plain.get("sky_island") is False
+    html = _render_index(monkeypatch, "plain")
+    assert 'id="sky-island"' not in html and 'id="sky-shadow"' not in html

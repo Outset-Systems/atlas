@@ -356,7 +356,7 @@ async function renderRealm() {
       </label>`;
   }).join('');
   el.innerHTML =
-    `<button class="sp-sub" type="button">THE REALM</button>
+    `<button class="sp-sub" type="button">THE LAB</button>
      <div class="sp-sec-body">
      <div class="acct-note">Where the seal sends you home, what is trimmed off a scroll's path,
        and the token the rites post their heartbeats with. Blank means “use the deployment value”.</div>
@@ -381,10 +381,10 @@ async function saveRealm() {
     if (!r.ok) { box.className = 'dir-result dir-bad'; box.textContent = j.error || 'Those settings were refused.'; return; }
     await renderRealm();
     const fresh = $('realm-result');
-    if (fresh) { fresh.className = 'dir-result dir-ok'; fresh.textContent = 'The realm is set. A reload picks up the Hub door and the vault root.'; }
+    if (fresh) { fresh.className = 'dir-result dir-ok'; fresh.textContent = 'Saved. A reload picks up the Hub door and the vault root.'; }
   } catch {
     box.className = 'dir-result dir-bad';
-    box.textContent = 'The save did not reach the realm.';
+    box.textContent = 'The save did not reach the server.';
   }
 }
 
@@ -541,7 +541,7 @@ async function saveSources() {
     A.repaintSignals?.();
   } catch {
     box.className = 'dir-result dir-bad';
-    box.textContent = 'The save did not reach the realm.';
+    box.textContent = 'The save did not reach the server.';
   }
 }
 
@@ -679,7 +679,7 @@ async function saveDirectory() {
     renderDirectory();
   } catch {
     box.className = 'dir-result dir-bad';
-    box.textContent = 'The save did not reach the realm.';
+    box.textContent = 'The save did not reach the server.';
   }
 }
 
@@ -699,7 +699,7 @@ async function signOut() {
     location.href = 'auth/login';
   } catch {
     if (btn) { btn.disabled = false; btn.textContent = 'Sign out'; }
-    A.showToast?.('The realm would not let go of you — reload and try again.');
+    A.showToast?.('Sign-out did not finish — reload and try again.');
   }
 }
 

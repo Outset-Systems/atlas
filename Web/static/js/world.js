@@ -283,6 +283,7 @@ A.ascend = function ascend() {
 function buildSkyIsland() {
   const island = $('sky-island');
   const shadow = $('sky-shadow');
+  if (!island || !shadow) return;   // a theme without a sky island (themes/*.json "sky_island")
   const w = A.MAPW * CFG.MESA_W, h = A.MAPH * CFG.MESA_H;
   const px = (CFG.MESA_POS.x / 100) * A.MAPW, py = (CFG.MESA_POS.y / 100) * A.MAPH;
   island.style.width = w + 'px';
