@@ -6,3 +6,13 @@ title = "atlas"
 
 [extend]
 useDefault = true
+
+# The tripwires tests' invented webhook secret (Web/tests/test_tripwires.py
+# and test_tripwires_db.py, `SECRET = ...`): generic-api-key flags it, in the
+# history too. Both conditions must hold, so these files are still scanned
+# for anything else.
+[[allowlists]]
+description = "invented webhook secret in the tripwires tests"
+condition = "AND"
+paths = ['''^Web/tests/test_tripwires(_db)?\.py$''']
+regexes = ['''^test-tripwires-secret-0123456789abcdef$''']
