@@ -3669,7 +3669,7 @@ body.constellation .mk.active .mk-dot { opacity: 0.35; }
 }
 .gs-ack:hover, .gs-copy:hover, .gs-setup-toggle:hover, .gs-add:hover,
 .gs-ack:focus-visible, .gs-copy:focus-visible, .gs-setup-toggle:focus-visible, .gs-add:focus-visible {
-  color: var(--gilt); border-color: var(--gilt); outline: none;
+  color: var(--gilt); border-color: var(--gilt);
 }
 .gs-ack:disabled { opacity: 0.4; cursor: default; }
 .gs-setup { border-top: 1px solid var(--ink-line); margin-top: 12px; padding-top: 10px; }
@@ -3920,3 +3920,16 @@ button.rl-crumb:focus-visible { outline: 2px solid var(--gilt-bright); outline-o
 :root[data-scheme="light"] .idx-zone { color: color-mix(in srgb, var(--zone-hue, var(--text-dim)) 40%, #282828); }
 :root[data-scheme="light"] .ldg-host-ip { color: color-mix(in srgb, var(--z-hue, var(--gilt)) 40%, #282828); }
 :root[data-scheme="light"] .ldg-port { color: color-mix(in srgb, var(--p-hue, var(--gilt)) 40%, #282828); }
+
+/* ── KEYBOARD FOCUS on the panels (v1.52.0, accessibility pass) ─────────────
+   One visible ring for every control a panel holds, in the panel's own gilt,
+   so it follows the colour scheme (the browser's default ring was the only
+   cue, and on some controls nothing showed). Mouse clicks draw nothing
+   (:focus-visible). The two search fields keep their borderless inputs and
+   light their frame instead. */
+:is(#index-drawer, .ldg-panel, .trb-panel, .rel-panel, .pth-panel, .pal-panel, .gl-panel,
+    .dsk-panel, .wiz-panel) :is(button, a, summary, [role="button"], [tabindex]):focus-visible {
+  outline: 2px solid var(--gilt); outline-offset: 2px;
+}
+.idx-search-wrap:focus-within { border-color: var(--gilt); }
+.pal-input-wrap:focus-within { border-bottom-color: var(--gilt); }
