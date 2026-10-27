@@ -111,7 +111,7 @@ def test_the_band_still_has_the_properties_that_make_that_trap_real():
     overflow, the rule stops being load-bearing and this file should be re-read
     rather than silently guarding nothing."""
     css = _read(CSS)
-    band = re.search(r"#scenes-list \{.*?\}", css, re.S)
+    band = re.search(r"^#scenes-list \{.*?\}", css, re.S | re.M)   # the base rule, not a scheme override
     assert band, "#scenes-list rule is gone"
     assert "backdrop-filter" in band.group(0)
     assert "overflow-x: auto" in band.group(0)

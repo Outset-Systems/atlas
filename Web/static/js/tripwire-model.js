@@ -54,6 +54,16 @@ export function roster({ overview = null, charted = [], live = {} } = {}) {
   let rows;
   if (overview && Array.isArray(overview.tripwires)) {
     rows = overview.tripwires.map((t) => ({ ...t, voice: VOICE_OF_STATE[t.state] || 'unheard' }));
+    /* A stone the decoy feed reports but the map has not charted is still
+       listed: the engine is the authority on what is planted, and hiding one
+       would be the map deciding a real tripwire does not exist. (A deployment
+       whose stones live only in the engine showed an empty scene in v1.52.0
+       until this was restored, 2026-10-20.) */
+    const have = new Set(rows.map((t) => String(t.id)));
+    for (const [id, info] of Object.entries(live || {})) {
+      if (have.has(String(id))) continue;
+      rows.push({ id, ...info, voice: voiceOf(info?.state), uncharted: true });
+    }
   } else {
     const byId = new Map();
     for (const s of charted) if (s && s.id) byId.set(s.id, { ...s });

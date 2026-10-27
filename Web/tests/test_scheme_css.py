@@ -30,9 +30,12 @@ MUST_FLIP = ["--abyss", "--surface", "--surface-2", "--ink-line", "--ink-soft", 
 #: tokens that are the same in both schemes (the parchment card, the CTA, the Depths)
 CONSTANT = ["--parchment", "--parchment-dim", "--card-ink", "--card-ink-soft", "--discover",
             "--discover-hover", "--depth", "--depth-rgb"]
+#: the chrome that floats over the map follows the scheme too (2026-10-20:
+#: "themes should also change the colour of all the flyouts")
+CHROME = ["#scenes-list", ".chrome", ".rl-crumbs", ".rl-locator", ".rl-hint", ".chron-fly-pop"]
 #: map-side containers: never under the light selector
-NIGHT = ["#stage", "#viewport", "#veil", ".chrome", "#scenes-list", "#card", "#toast",
-         "#colophon", "#drift-note", "#region-lens", ".zoom-stack", ".atlas-tools"]
+NIGHT = ["#stage", "#viewport", "#veil", "#card", "#toast",
+         "#colophon", "#drift-note", "#region-lens", ".rg-tab", ".mk-sat"]
 
 
 def _read(p):
@@ -109,6 +112,8 @@ def test_the_light_selector_names_the_panels_and_no_map_side_container():
         attr = "id" if p.startswith("#") else "class"
         assert re.search(rf'{attr}="[^"]*\b{re.escape(name)}\b', html) or p in (".dsk-panel", ".wiz-panel"), (
             f"{p} is under the light selector but the page has no such element")
+    for c in CHROME:
+        assert c in sel, f"{c} floats over the map and should follow the scheme"
     for n in NIGHT:
         assert n not in sel, f"{n} is map-side: the map is a night map in both schemes"
 

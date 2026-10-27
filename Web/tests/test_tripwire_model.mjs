@@ -50,6 +50,24 @@ test('roster from the overview: states become voices, loudest first', () => {
   assert.deepEqual(rows.map((r) => [r.id, r.voice]), [['c', 'speaking'], ['a', 'stirred'], ['b', 'silent']]);
 });
 
+test('roster with the overview still lists stones only the decoy feed knows', () => {
+  // the engine is the authority on what is planted: a deployment that charts
+  // no stones at all must still see the feed's (v1.52.0 regression, 10-20)
+  const rows = roster({
+    overview: { tripwires: [{ id: 'charted', name: 'Charted', state: 'quiet' }] },
+    live: { 'charted': { state: 'speaking' }, 'feed-only': { state: 'speaking' }, 'quiet-one': { state: 'silent' } },
+  });
+  assert.equal(rows[0].id, 'feed-only', 'a speaking stone sorts first, charted or not');
+  const ids = rows.map((r) => r.id);
+  assert.ok(ids.includes('feed-only') && ids.includes('quiet-one'), 'feed-only stones are listed');
+  assert.equal(rows.filter((r) => r.id === 'charted').length, 1, 'a charted stone is not listed twice');
+  assert.equal(rows.find((r) => r.id === 'charted').voice, 'silent', 'the overview\'s state wins for a charted stone');
+  assert.equal(rows.find((r) => r.id === 'feed-only').uncharted, true);
+  // an empty overview (no stones charted) shows every feed stone
+  const only = roster({ overview: { tripwires: [] }, live: { a: { state: 'silent' }, b: { state: 'stirred' } } });
+  assert.deepEqual(only.map((r) => r.id).sort(), ['a', 'b']);
+});
+
 test('roster without the overview: chart merged with the feed, feed wins', () => {
   const rows = roster({
     charted: [{ id: 'x', name: 'X', host: 'h1' }, { id: 'y', name: 'Y' }],

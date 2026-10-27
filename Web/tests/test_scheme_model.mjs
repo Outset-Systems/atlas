@@ -4,7 +4,7 @@
 
 import assert from 'node:assert/strict';
 import {
-  SCHEME_KEY, buttonFace, isToggleKey, otherScheme, parseStored, readStored,
+  SCHEME_KEY, buttonFace, isToggleKey, nextChoice, otherScheme, parseStored, readStored,
   resolveScheme, writeStored,
 } from '../static/js/scheme-model.js';
 
@@ -16,7 +16,8 @@ function test(name, fn) {
 
 const memory = (init = {}) => {
   const m = { ...init };
-  return { getItem: (k) => (k in m ? m[k] : null), setItem: (k, v) => { m[k] = String(v); }, m };
+  return { getItem: (k) => (k in m ? m[k] : null), setItem: (k, v) => { m[k] = String(v); },
+           removeItem: (k) => { delete m[k]; }, m };
 };
 const throwing = { getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); } };
 
@@ -60,12 +61,44 @@ test('storage that throws or is absent never breaks the page', () => {
   assert.equal(writeStored(undefined, 'dark'), false);
 });
 
-test('the button shows the scheme in force and says what a click does', () => {
-  const l = buttonFace('light'), d = buttonFace('dark');
-  assert.equal(l.glyph, '☀'); assert.equal(d.glyph, '☾');
-  assert.match(l.title, /switch to dark \(T\)$/);
-  assert.match(d.title, /switch to light \(T\)$/);
-  assert.equal(l.pressed, true); assert.equal(d.pressed, false);
+test('the cycle: auto → the scheme the system is not showing → the other → auto', () => {
+  // a system that prefers dark: the first click must show light
+  assert.equal(nextChoice(null, false), 'light');
+  assert.equal(nextChoice('light', false), 'dark');
+  assert.equal(nextChoice('dark', false), null);
+  // a system that prefers light: the first click must show dark
+  assert.equal(nextChoice(null, true), 'dark');
+  assert.equal(nextChoice('dark', true), 'light');
+  assert.equal(nextChoice('light', true), null);
+  // junk counts as auto
+  assert.equal(nextChoice('sepia', false), 'light');
+});
+
+test('every click in the cycle that leaves auto changes what is drawn', () => {
+  for (const sys of [true, false]) {
+    let choice = null;
+    const seen = [resolveScheme(choice, sys)];
+    for (let i = 0; i < 2; i++) { choice = nextChoice(choice, sys); seen.push(resolveScheme(choice, sys)); }
+    assert.notEqual(seen[0], seen[1], 'the first click flips the panels');
+    assert.notEqual(seen[1], seen[2]);
+  }
+});
+
+test('the button: ☾ dark, ☀ light, ◐ while following the system, and says what a click does', () => {
+  const l = buttonFace('light', false), d = buttonFace('dark', false), a = buttonFace(null, true);
+  assert.equal(l.glyph, '☀'); assert.equal(d.glyph, '☾'); assert.equal(a.glyph, '◐');
+  assert.equal(l.icon, 'sun'); assert.equal(d.icon, 'moon'); assert.equal(a.icon, 'auto');
+  assert.match(l.title, /^Light panels — switch to dark \(T\)$/);
+  assert.match(d.title, /^Dark panels — follow your system \(T\)$/);
+  assert.match(a.title, /^Light panels, following your system — switch to dark \(T\)$/);
+  assert.equal(l.pressed, true); assert.equal(d.pressed, false); assert.equal(a.pressed, true);
+});
+
+test('choosing auto forgets the stored pick', () => {
+  const s = memory({ [SCHEME_KEY]: 'dark' });
+  assert.equal(writeStored(s, null), true);
+  assert.equal(SCHEME_KEY in s.m, false);
+  assert.equal(readStored(s), null);
 });
 
 test('T toggles, but never while typing or with a modifier', () => {

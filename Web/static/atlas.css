@@ -91,7 +91,9 @@
    (the system's gold #b57614 is 3.3:1, fit only for 24px type, and the panels
    set their titles in 0.6–0.8rem Cinzel caps). */
 :root[data-scheme="light"] :is(#index-drawer, .ldg-panel, .trb-panel, .rel-panel, .pth-panel,
-                               .pal-panel, .gl-panel, .dsk-panel, .wiz-panel) {
+                               .pal-panel, .gl-panel, .dsk-panel, .wiz-panel,
+                               #scenes-list, .chrome, .rl-crumbs, .rl-locator, .rl-hint,
+                               .chron-fly-pop, .chron-arrow, .embed-max-arrow, #embed-max-close) {
   --abyss: #f9f5d7;
   --surface: #fbf1c7;
   --surface-2: #f2e5bc;
@@ -119,6 +121,32 @@
   --frame-ground: #f2e5bc;
   color-scheme: light;
 }
+
+/* THE LIGHT CHROME (2026-10-20) — every flyout follows the scheme, not just the
+   scene panels: the band, the round buttons, the region crumbs/locator/hint,
+   the watchings' arrows and pop-ups. They take the light tokens above; these
+   are the fills that were literals. Still night by design: the stage and its
+   markers, zone labels and region tabs (they are the map), the veil, and the
+   parchment card and toast (already light in both). */
+/* ⚠ one selector per specificity: `:is()` takes its MOST specific argument's
+   weight, so an id in the list would lift the class rules above .chrome.lit */
+:root[data-scheme="light"] .chrome { background: rgba(251, 241, 199, 0.6); }
+:root[data-scheme="light"] :is(.chron-arrow, .embed-max-arrow) { background: rgba(251, 241, 199, 0.82); }
+:root[data-scheme="light"] #embed-max-close { background: rgba(251, 241, 199, 0.82); }
+:root[data-scheme="light"] .chrome.lit { background: var(--gilt); }
+:root[data-scheme="light"] #scenes-list { background: rgba(251, 241, 199, 0.6); }
+:root[data-scheme="light"] #scenes-list .chrome { background: rgba(251, 241, 199, 0.42); }
+:root[data-scheme="light"] body.scene-open #scenes-list {
+  background: rgba(251, 241, 199, 0.95);
+  box-shadow: 0 12px 34px rgba(60, 56, 54, 0.22);
+}
+:root[data-scheme="light"] .scene { text-shadow: none; }
+:root[data-scheme="light"] .scene.active { background: rgba(var(--gilt-rgb), 0.12); }
+:root[data-scheme="light"] :is(.rl-crumbs, .rl-hint) {
+  background: rgba(251, 241, 199, 0.92);
+  box-shadow: 0 4px 18px rgba(60, 56, 54, 0.18);
+}
+:root[data-scheme="light"] .chron-fly-pop { box-shadow: 0 14px 40px rgba(60, 56, 54, 0.22); }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 /* the [hidden] attribute must win over explicit display rules (rows/headers set
@@ -801,10 +829,10 @@ body.depths #colophon { color: #3E5A52; }
   position: fixed; z-index: 960;
   width: 42px; height: 42px; border-radius: 50%;
   border: 1px solid rgba(var(--gilt-rgb), 0.35);
-  background: rgba(13,11,7,0.55); color: var(--gilt);
+  background: rgba(13,11,7,0.4); color: var(--gilt);   /* 0.55 until 2026-10-20 ("a bit transparent", like the band) */
   font-family: 'Cinzel', serif; font-size: 1rem;
   display: flex; align-items: center; justify-content: center;
-  cursor: pointer; backdrop-filter: blur(4px);
+  cursor: pointer; backdrop-filter: blur(8px);
   transition: border-color 250ms, box-shadow 250ms, opacity 600ms;
 }
 .chrome:hover { border-color: var(--gilt); box-shadow: 0 0 18px rgba(var(--gilt-rgb), 0.25); }
@@ -1185,7 +1213,7 @@ body.decoys-on .mk.has-stone .mk-label { opacity: 1; transform: translateX(-50%)
       carrying only a text-shadow like a marker label. Over a dark map that is
       elegant and over a bright stretch of parchment it is nearly unreadable —
       and this is the app's primary navigation, which has to be legible on all
-      of it, always. The fill is the SAME `rgba(13,11,7,0.55)` + gilt hairline
+      of it, always. The fill was the SAME `rgba(13,11,7,0.55)` + gilt hairline
       the round `.chrome` buttons use, so the band reads as one more piece of
       the same chrome rather than a new workstation.
 
@@ -1196,9 +1224,12 @@ body.decoys-on .mk.has-stone .mk-label { opacity: 1; transform: translateX(-50%)
   z-index: 960; display: flex; flex-wrap: nowrap; align-items: center;
   justify-content: flex-start; gap: 4px;
   padding: 3px 6px; border-radius: 4px;
-  background: rgba(13,11,7,0.55);
+  /* lighter than the round chrome's 0.55 since 2026-10-20 (owner: "a bit
+     transparent"); the stronger blur is what keeps the labels legible over a
+     bright stretch of map, the trap point 3 above describes */
+  background: rgba(13,11,7,0.45);
   border: 1px solid rgba(var(--gilt-rgb), 0.18);
-  backdrop-filter: blur(8px) saturate(1.1);
+  backdrop-filter: blur(12px) saturate(1.1);
   overflow-x: auto; overflow-y: visible;   /* visible: the cluster hangs BELOW */
   scrollbar-width: none;                   /* the row is the affordance */
   transition: opacity 600ms, background 200ms, border-color 200ms;
@@ -1235,6 +1266,8 @@ body.decoys-on .mk.has-stone .mk-label { opacity: 1; transform: translateX(-50%)
 }
 #scenes-list .menu-tools.peek,
 #scenes-list .menu-tools:has(.active) { width: 68px; opacity: 1; transform: none; }   /* two × (30 button + 4 gap): ☀/☾ and ⚙ */
+#scenes-list .chrome .ci-glyph { width: 16px; height: 16px; }   /* the band's 30px circles */
+#scenes-list .chrome { background: rgba(13,11,7,0.28); }        /* on the band's own fill: don't double it */
 #scenes-list .menu-tools .chrome {
   position: static; flex: none; margin-right: 4px;
   width: 30px; height: 30px; font-size: 0.95rem;
@@ -1266,7 +1299,7 @@ body.decoys-on .mk.has-stone .mk-label { opacity: 1; transform: translateX(-50%)
    So the in-band lamp keeps the gilt border and bright glyph and drops the
    fill, the growth and the pulse. It cannot overflow, so it cannot be cut. */
 #scenes-list .ci-menu.lit {
-  background: rgba(13,11,7,0.55);           /* the chrome's own fill, unchanged */
+  background: rgba(13,11,7,0.28);           /* the in-band chrome's fill, unchanged */
   border-color: rgba(var(--gilt-rgb), 0.7);
   color: var(--gilt-bright);
   transform: none;
@@ -2049,10 +2082,16 @@ body.drawer-open .pth-panel { right: calc(5vw + var(--drawer-clear)); }
 #palette {
   position: fixed; inset: 0; z-index: 990;
   display: flex; align-items: flex-start; justify-content: center;
-  padding-top: 16vh; background: rgba(6,5,3,0.55);
-  opacity: 0; pointer-events: none; transition: opacity 160ms ease;
+  padding-top: 16vh; background: rgba(6,5,3,0.45);
+  opacity: 0; pointer-events: none; transition: opacity 160ms ease, backdrop-filter 220ms ease;
 }
-#palette.open { opacity: 1; pointer-events: auto; }
+/* Dark: everything behind the finding-glass drains to grey, so the one thing in
+   colour is what you are typing into. Light: a soft cream wash and a little
+   blur instead — grey under a cream panel reads as broken, not as focus
+   (2026-10-20). Browsers without backdrop-filter keep the plain wash. */
+#palette.open { opacity: 1; pointer-events: auto; backdrop-filter: grayscale(1); -webkit-backdrop-filter: grayscale(1); }
+:root[data-scheme="light"] #palette { background: rgba(251, 241, 199, 0.22); }
+:root[data-scheme="light"] #palette.open { backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
 .pal-panel {
   width: min(560px, 92vw);
   background: linear-gradient(180deg, var(--surface-2), var(--surface));

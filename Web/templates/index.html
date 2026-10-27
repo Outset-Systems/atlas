@@ -152,8 +152,8 @@
      for constantly. Two buttons, so `#card`'s clearance shrank with it:
      grep MUST TRACK in atlas.css. -->
 <div class="zoom-stack">
-  <button class="chrome" id="btn-zoom-in" title="Closer (+)">+</button>
-  <button class="chrome" id="btn-zoom-out" title="Further (−)">−</button>
+  <button class="chrome" id="btn-zoom-in" title="Closer (+)" aria-label="Closer"><svg class="ci-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5.5v13M5.5 12h13"/></svg></button>
+  <button class="chrome" id="btn-zoom-out" title="Further (−)" aria-label="Further"><svg class="ci-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.5 12h13"/></svg></button>
   <!-- the network layer, PERMANENTLY under − (2026-09-02): it used to
        hide in the hover cluster with the journeys, but it is reached for as
        often as zoom is, and a control you use constantly should not need a
@@ -210,14 +210,14 @@
          map stays a night map. scheme.js sets its glyph, title and pressed
          state; the T key is the same control. -->
     <button class="chrome ci-scheme" id="btn-scheme" type="button"
-            title="Colour scheme (T)" aria-label="Colour scheme" aria-pressed="false">☾</button>
+            title="Colour scheme (T)" aria-label="Colour scheme" aria-pressed="false"><svg class="ci-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19.5 14.6A7.8 7.8 0 1 1 9.4 4.5a6.2 6.2 0 0 0 10.1 10.1Z"/></svg></button>
     <button class="chrome ci-gear" id="btn-menu-settings" data-scene="settings"
-            title="Settings" aria-label="Settings">⚙</button>
+            title="Settings" aria-label="Settings"><svg class="ci-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="5.6"/><circle cx="12" cy="12" r="2.1"/><path stroke-width="3" stroke-linecap="butt" d="M12 3.2v3.2M12 17.6v3.2M3.2 12h3.2M17.6 12h3.2M5.78 5.78l2.26 2.26M15.96 15.96l2.26 2.26M18.22 5.78l-2.26 2.26M8.04 15.96l-2.26 2.26"/></svg></button>
   </span>
   <!-- ☰ ends the band. It was a floating circle at top-right; in the band it
        is the same control in the same corner, minus a second piece of chrome
        for the eye to account for. -->
-  <button class="chrome ci-menu" id="btn-menu" title="Menu — the index (M)">☰</button>
+  <button class="chrome ci-menu" id="btn-menu" title="Menu — the index (M)" aria-label="Menu"><svg class="ci-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 7h15M4.5 12h15M4.5 17h15"/></svg></button>
 </nav>
 
 <!-- The map tools, revealed by hovering THE ATLAS and kept out by CLICKING it.
@@ -242,10 +242,10 @@
      ui.js instead of :hover for the same reason: the two elements are no
      longer relatives. -->
 <span class="atlas-tools" id="atlas-tools">
-      <button class="chrome ci-sky" id="btn-sky" title="Rise to {{ theme.text.sky }} · the Chronicle (S)">☁</button>
+      <button class="chrome ci-sky" id="btn-sky" title="Rise to {{ theme.text.sky }} · the Chronicle (S)" aria-label="{{ theme.text.sky }}"><svg class="ci-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.5 18H17a4 4 0 0 0 .6-7.95a5.5 5.5 0 0 0-10.5-1a4.5 4.5 0 0 0 .4 8.95Z"/></svg></button>
       <!-- the network glyph left this cluster 2026-09-02: it now sits
            permanently under − in `.zoom-stack`, the pair it is reached for with. -->
-      <button class="chrome ci-depths" id="btn-depths" title="Descend into the Depths (D)">☾</button>
+      <button class="chrome ci-depths" id="btn-depths" title="Descend into the Depths (D)" aria-label="The Depths"><svg class="ci-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5v9.5M8.5 9.5 12 13l3.5-3.5"/><path d="M3.5 17.5c1.4 1 2.8 1 4.2 0s2.8-1 4.2 0 2.8 1 4.2 0 2.8-1 4.2 0"/></svg></button>
       <!-- THE decoy feed WATCH (2026-08-15) — the decoys as a map layer: an
            eye over every place a stone guards, voiced by the live feed.
            It ENDS the second row (Link, same day) — an explicit reversal of the
