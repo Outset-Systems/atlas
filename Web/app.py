@@ -180,7 +180,7 @@ def _configure_sessions(app):
     secret), else one is generated once into `<data-dir>/secrets/session.key`.
 
     Cookie posture is decided ONCE at startup, never per request — deriving
-    Secure from a client-influenced header is a documented Hunt bug class.
+    Secure from a client-influenced header is a documented bug class.
     Secure defaults ON (production sits behind TLS); ATLAS_INSECURE_COOKIES=1
     is the explicit opt-out for plain-http LAN testing, where a browser would
     otherwise silently drop the cookie.

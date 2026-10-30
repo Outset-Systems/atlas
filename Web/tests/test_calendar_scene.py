@@ -134,7 +134,10 @@ def test_the_realms_day_is_mostly_drawable():
     drawable = [r for r in rites if timed(r)]
     assert len(drawable) >= 20, f"only {len(drawable)} of {len(rites)} rites carry an hour"
     listed = [r["name"] for r in rites if not timed(r)]
-    assert "Hunt Scribes" in listed, "'on every save' has no hour and must stay listed"
+    parked = [r["name"] for r in rites if r.get("cadence") == "parked"]
+    assert parked, "the dataset keeps at least one parked rite as the floor case"
+    for name in parked:
+        assert name in listed, f"{name!r} names no hour and must stay listed"
 
 
 def test_the_live_copy_matches_the_bundled_default():
