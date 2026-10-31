@@ -10,8 +10,8 @@
 import { A, CFG, $, esc, glassAttrs } from './config.js';
 import { makeScene } from './scene.js';
 import {
-  UH, KIND_HUE, ledColor, uLabel, slotKey, kindOf, setRackTheme,
-  buildDevices as modelBuildDevices, fits as modelFits, faceplate as modelFaceplate,
+  UH, KIND_HUE, ledColor, uLabel, slotKey, setRackTheme,
+  buildDevices as modelBuildDevices, buildRear, fits as modelFits, faceplate as modelFaceplate,
   rackList, rackTitle, inRack,
 } from './rack-model.js';
 setRackTheme(CFG.THEME);   // THE THEME (v1.48.0): which lab names are the gateway / the forge
@@ -47,7 +47,7 @@ const fits = (d, top) => modelFits(devices, rackU, d, top);
 const faceplate = (d) => modelFaceplate(d, ledFor(d.node));
 
 
-const rearHere = () => inRack(A.DATA.rack_rear, racks, rackId);
+const rearHereBuilt = () => buildRear(inRack(A.DATA.rack_rear, racks, rackId), nodeById);
 
 function pickRack(id) {
   rackId = id;
@@ -183,7 +183,7 @@ function showDetail(d) {
           `data-port="${idx}" style="--p-hue:${esc(z?.hue || '#C9A554')}" ` +
           `title="what hangs on port ${esc(i.name)}?">${esc(i.name)}</button>`;
       }).join('') + `</div><div class="rel-port-detail" hidden></div></div>`
-    : (n && (d.kind === 'gateway' || d.kind === 'patch')
+    : (n && ['gateway', 'switch', 'patch'].includes(d.kind)
         ? `<div class="rel-ports"><div class="ldg-note">no ports charted for this ` +
           `vessel yet — chart its <code>interfaces[]</code> in the map editor (PORTS) and ` +
           `the faceplate appears here, each port answering what hangs on it.</div></div>`
@@ -239,7 +239,7 @@ function showDetail(d) {
 }
 
 function renderRear() {
-  const rear = rearHere();
+  const rear = rearHereBuilt();
   let rearEl = rackEl.querySelector('.rel-rear');
   if (rearEl) rearEl.remove();
   if (!rear.length) return;
@@ -258,10 +258,11 @@ function renderRear() {
     b.addEventListener('click', () => {
       const r = rear[Number(b.dataset.rear)];
       if (!r) return;
-      const node = r.node ? A.DATA.nodes.find((nn) => nn.id === r.node) : null;
-      showDetail({ name: r.name, desc: r.desc, node, rear: true, size: 0, top: 0,
-                   kind: kindOf({ name: r.name, node: r.node }, node) });
+      if (view3d) A.armory3d.select(r.key);   // the scene picks it, and picks open the pane
+      else showDetail(r);
     });
+    b.addEventListener('pointerenter', () => { if (view3d) A.armory3d.hover(rear[Number(b.dataset.rear)]?.key); });
+    b.addEventListener('pointerleave', () => { if (view3d) A.armory3d.hover(null); });
   }
 }
 
@@ -334,8 +335,36 @@ function resetLayout() { localStorage.removeItem(OVR_KEY); location.reload(); }
 // vendor only loads when someone asks for it — and so a missing/broken vendor
 // can never take down the 2D elevation (the core app never imports it). The
 // detail pane is shared: a pick in 3D calls the same showDetail().
-let view3d = false, rel3dEl = null;
+let view3d = false, rel3dEl = null, legendEl = null;
 const ledStateFor = (node) => (node ? (A.signalsFeed?.nodes?.[node.id]?.state || '') : '');
+
+/* THE LEGEND: names stay off the faceplates (see render()), so in 3D they sit
+   here, top of the rack first. It is also the keyboard's way into the scene,
+   which a canvas alone does not offer. */
+function renderLegend() {
+  legendEl.innerHTML = [...devices].sort((a, b) => b.top - a.top).map((d) =>
+    `<button type="button" class="rel-legend-item" data-key="${esc(d.key)}">` +
+    `<span class="rel-dev-u">${esc(uLabel(d.top, d.size))}</span>${esc(d.name)}</button>`).join('');
+  for (const b of legendEl.querySelectorAll('.rel-legend-item')) {
+    b.addEventListener('click', () => A.armory3d.select(b.dataset.key));
+    for (const ev of ['pointerenter', 'focus'])
+      b.addEventListener(ev, () => A.armory3d.hover(b.dataset.key));
+    for (const ev of ['pointerleave', 'blur'])
+      b.addEventListener(ev, () => A.armory3d.hover(null));
+  }
+}
+const markLegend = (cls, key) => {
+  for (const b of legendEl.querySelectorAll('.rel-legend-item'))
+    b.classList.toggle(cls, b.dataset.key === key);
+};
+
+function setCamButton(name) {
+  for (const b of document.querySelectorAll('.rel-cam')) {
+    const on = b.dataset.view === name;
+    b.classList.toggle('is-on', on);
+    b.setAttribute('aria-pressed', String(on));
+  }
+}
 
 function setSeg(on3d) {
   const b2 = $('rel-2d'), b3 = $('rel-3d-btn');
@@ -347,6 +376,7 @@ function backTo2d() {
   view3d = false;
   A.armory3d?.exit();
   if (rel3dEl) rel3dEl.hidden = true;
+  if (legendEl) legendEl.hidden = true;
   if (elevEl) elevEl.hidden = false;
   $('rel-edit')?.removeAttribute('hidden');
   setSeg(false);
@@ -365,12 +395,17 @@ async function goto3d() {
   if (elevEl) elevEl.hidden = true;
   $('rel-edit')?.setAttribute('hidden', '');     // no drag-rearrange in 3D v1
   rel3dEl.hidden = false;                          // must be laid out before enter reads its size
+  legendEl.hidden = false;
+  renderLegend();
+  setCamButton('corner');
   setSeg(true);
   const ok = A.armory3d.enter({
     container: rel3dEl,
-    model: { devices, rackU },
+    model: { devices, rackU, rear: rearHereBuilt() },
     ledStateFor,
-    onPick: showDetail,
+    onPick: (d) => { showDetail(d); markLegend('is-on', d.key); },
+    onHover: (key) => markLegend('is-hover', key),
+    onTurn: () => setCamButton(''),
     onLost: () => { A.showToast?.('The 3D view was lost — back to the elevation.'); backTo2d(); },
   });
   if (!ok) { A.showToast?.('Could not start 3D — showing the elevation.'); backTo2d(); }
@@ -393,6 +428,14 @@ A.buildReliquary = function buildReliquary() {
   $('rel-save')?.addEventListener('click', (e) => { e.stopPropagation(); saveLayout(); });
   $('rel-reset')?.addEventListener('click', (e) => { e.stopPropagation(); resetLayout(); });
   rel3dEl = $('rel-3d');
+  legendEl = $('rel-3d-legend');
+  for (const b of root.querySelectorAll('.rel-cam')) {
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setCamButton(b.dataset.view);
+      A.armory3d?.view(b.dataset.view);
+    });
+  }
   $('rel-2d')?.addEventListener('click', (e) => { e.stopPropagation(); if (view3d) backTo2d(); });
   $('rel-3d-btn')?.addEventListener('click', (e) => { e.stopPropagation(); if (!view3d) goto3d(); });
   window.addEventListener('resize', () => { if (view3d) A.armory3d?.resize(); });

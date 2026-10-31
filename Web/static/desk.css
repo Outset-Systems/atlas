@@ -279,6 +279,16 @@
 /* a command to copy: the whole line visible, the button beside it */
 .wiz-cmd { display: flex; gap: 10px; align-items: center; margin: 0 0 12px; }
 .wiz-cmd .dsk-input { flex: 1; min-width: 0; }
+.wiz-net {
+  display: grid; grid-template-columns: 20px minmax(0, 1fr) 150px 72px; gap: 10px;
+  align-items: center; padding: 8px 0; border-bottom: 1px solid var(--hair);
+}
+.wiz-net-n { grid-column: 2 / -1; font-size: 0.76rem; color: var(--text-dim); }
+.wiz-note { font-size: 0.82rem; color: var(--text-dim); margin-top: 12px; }
+@media (max-width: 560px) {
+  .wiz-net { grid-template-columns: 20px minmax(0, 1fr) 72px; }
+  .wiz-net-sub { grid-column: 2 / -1; grid-row: 2; }
+}
 .wiz-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
 .wiz-choice {
   display: flex; flex-direction: column; gap: 8px; text-align: left;
@@ -527,8 +537,10 @@ body.pre #first-survey { display: none; }
 /* THE LIGHT SCHEME (v1.52.0): the Desk's frame follows the scheme through the
    tokens atlas.css restates on .dsk-panel/.wiz-panel; the form itself is
    parchment in both. Two one-offs no token describes. */
-:root[data-scheme="light"] .dsk-bar-sub code { background: rgba(60, 56, 54, 0.09); }
-:root[data-scheme="light"] .dsk-btn-warn:hover { color: #fbf1c7; }
+:root[data-scheme="light"] .dsk-btn-go { background: var(--gilt); border-color: var(--gilt); color: var(--on-gilt); }
+:root[data-scheme="light"] .dsk-btn-go:hover:not(:disabled) { background: #1e3a8a; border-color: #1e3a8a; color: var(--on-gilt); }
+:root[data-scheme="light"] .dsk-bar-sub code { background: rgba(15, 23, 42, 0.09); }
+:root[data-scheme="light"] .dsk-btn-warn:hover { color: #f8fafc; }
 
 /* REGIONS' "use the current view" (v1.52.0): a row across the whole form,
    seated above Left/Top/Width/Height as their heading, not a fifth field. */

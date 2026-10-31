@@ -350,7 +350,15 @@
       <div class="rel-rack">
         <div class="rel-power" aria-hidden="true"><span>{{ theme.text.relay_power }}</span></div>
         <div id="rel-elevation" role="list"></div>
-        <div id="rel-3d" hidden></div>
+        <div id="rel-3d" hidden>
+          <span class="rel-viewtoggle rel-cams" role="group" aria-label="Turn the rack">
+            <button class="rel-seg rel-cam is-on" data-view="corner" aria-pressed="true">Corner</button>
+            <button class="rel-seg rel-cam" data-view="front" aria-pressed="false">Front</button>
+            <button class="rel-seg rel-cam" data-view="side" aria-pressed="false">Side</button>
+            <button class="rel-seg rel-cam" data-view="rear" aria-pressed="false">Rear</button>
+          </span>
+        </div>
+        <div id="rel-3d-legend" class="rel-legend" hidden></div>
       </div>
       <aside id="rel-detail" class="rel-detail"></aside>
     </div>

@@ -102,6 +102,24 @@ def test_the_rack_column_has_a_width_of_its_own():
     assert re.search(r"width:\s*460px", elev), "the niche width moved; .rel-rack's calc must follow it"
 
 
+def test_the_desk_offers_every_faceplate_the_model_draws():
+    """`kind` is a select in the Desk and a key of KIND_HUE in rack-model.js. A
+    kind added to one and not the other is either unreachable or undrawable."""
+    import schema
+    model = _read(WEB / "static" / "js" / "rack-model.js")
+    hues = re.search(r"export const KIND_HUE =\s*\{(.*?)\}", model, re.S).group(1)
+    kinds = set(re.findall(r"(\w+):", hues))
+    assert set(schema.RACK_KINDS) - {"auto"} == kinds
+
+
+def test_every_kind_has_a_dressed_panel():
+    """A kind without a `.rel-<kind> .fp-panel` rule still draws, in the default
+    fill; the ones below are meant to read as their own iron in both views."""
+    css = _read(CSS)
+    for kind in ("gateway", "switch", "forge", "patch", "storage", "power", "enclosure"):
+        assert f".rel-{kind} .fp-panel" in css, kind
+
+
 if __name__ == "__main__":
     import pytest
     sys.exit(pytest.main([__file__, "-q"]))

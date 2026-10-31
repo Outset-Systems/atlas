@@ -5,19 +5,22 @@
    first screen is an empty map with no way in, and "edit this 1200-line JSON
    file" is not an onboarding.
 
-   Three steps, each of which can be skipped: name the atlas, add a realm (a
-   VLAN or segment, as the Desk calls it), then populate it — by hand, from a
-   device list, or from a survey you run. Everything after that is the Desk. */
+   Name the atlas, then choose how to start: bring in what the lab already
+   knows (a scan, the router's leases, a device list) and let its networks be
+   read off the devices, or set the networks up by hand first. Importing comes
+   first because it is the least typing (2026-10-31). Every step can be
+   skipped. Everything after that is the map editor. */
 
 import { A, $, esc } from '../config.js';
 import Editor from './store.js';
 import { buildForm, makeEl as el } from './form.js';
 import { openDesk, reviewCsv, LEASE_HELP } from './panel.js';
+import { suggestNetworks } from './wizard-model.js';
 
 let root, bodyEl, stepEl;
 let step = 0;
 
-const STEPS = ['THE ATLAS', 'A FIRST REALM', 'ITS PLACES'];
+const STEPS = ['NAME', 'START', 'NETWORKS', 'DEVICES'];
 
 function drawSteps() {
   stepEl.innerHTML = STEPS.map((label, i) =>
@@ -71,24 +74,118 @@ function stepRealm() {
   bodyEl.append(form.el);
   laterNote('The backdrop, the survey date and the host\'s memory and cores');
   bar(
-    button('Skip', '', stepZone),
+    button('Skip', '', stepStart),
     button('Next ›', 'go', async () => {
       try {
         await Editor.upsert('meta', null, form.read());
-        stepZone();
+        stepStart();
       } catch (err) { fail(err); }
     }));
 }
 
-/* ── 2. a realm ───────────────────────────────────────────────────────── */
-function stepZone() {
+/* ── 2. how to start ──────────────────────────────────────────────────── */
+function stepStart() {
   step = 1;
   drawSteps();
+  panel('How do you want to start?',
+    'Bring in what your lab already knows and the Atlas works out your networks from it, ' +
+    'or set them up yourself. You can do the others later.');
+  const choices = el('div', 'wiz-choices');
+  importChoices(choices, stepStart);
+  choices.append(choice('✎', 'Set up networks by hand',
+    'Add each VLAN or subnet yourself, then add its devices. Best when you know the layout.',
+    stepZone));
+  bodyEl.append(choices);
+  bar(button('‹ Back', '', stepRealm), button('I will do this later', '', close));
+}
+
+/** The three ways in that read something you already have. */
+function importChoices(host, back) {
+  host.append(choice('◈', 'Scan your network',
+    `Run <code>${esc(scanCommand())}</code> on a machine in that network, where you ` +
+    'have the right to, and paste what it prints. The Atlas never probes the network ' +
+    'itself. It reads what you hand it.',
+    () => paste('nmap', back)));
+  host.append(choice('⇄', 'Import from your router',
+    'Paste its DHCP lease file: every device that asked it for an address, with the name ' +
+    'it gave itself. No scan at all, and usually the best names.',
+    () => paste('leases', back)));
+  host.append(choice('☰', 'Import a device list',
+    'Paste a CSV: <code>name,ip,kind,zone,role,url</code>. Checked whole before ' +
+    'anything is written, with the line number of every problem.',
+    () => paste('csv', back)));
+}
+
+/* Each hue is one the map already reads well on its night ground. */
+const NET_HUES = ['#7FB0C4', '#7A9B6E', '#C9A554', '#C06B62', '#9B8BC4', '#D3869B'];
+
+/* ── networks found ───────────────────────────────────────────────────────
+   Read off the devices just brought in. `then` carries on to reviewing those
+   devices; with no network at all they would have nowhere to land, so skipping
+   on an empty Atlas goes to the by-hand step instead of on to a dead end. */
+function stepFound(ips, then) {
+  const found = suggestNetworks(ips, Editor.entries('zones'));
+  if (!found.length) { then(); return; }
+  step = 2;
+  drawSteps();
+  panel(found.length === 1 ? 'We found a network' : `We found ${found.length} networks`,
+    'Your devices sit on these. Name them, add a VLAN if you use one, and untick any you ' +
+    'do not want. This is a best guess from their addresses, and you can change it later.');
+  const rows = found.map((net) => {
+    const row = el('div', 'wiz-net');
+    const on = el('input', 'dsk-check');
+    on.type = 'checkbox';
+    on.checked = true;
+    on.setAttribute('aria-label', `Add ${net.subnet}`);
+    const name = el('input', 'dsk-input');
+    name.value = net.name;
+    name.setAttribute('aria-label', 'Network name');
+    const subnet = el('input', 'dsk-input dsk-mono wiz-net-sub');
+    subnet.value = net.subnet;
+    subnet.setAttribute('aria-label', 'Subnet');
+    const vlan = el('input', 'dsk-input');
+    vlan.placeholder = 'VLAN';
+    vlan.setAttribute('aria-label', 'VLAN, if it has one');
+    row.append(on, name, subnet, vlan,
+      el('div', 'wiz-net-n', `${net.count} device${net.count === 1 ? '' : 's'}`));
+    bodyEl.append(row);
+    return { net, on, name, subnet, vlan };
+  });
+  const noneYet = !Editor.entries('zones').length;
+  bar(
+    button(noneYet ? 'Set up by hand instead' : 'Skip', '', noneYet ? stepZone : then),
+    button('Add them ›', 'go', async () => {
+      const chosen = rows.filter((r) => r.on.checked);
+      if (!chosen.length) { (noneYet ? stepZone : then)(); return; }
+      const ops = chosen.map((r, i) => ({
+        op: 'insert', section: 'zones',
+        body: {
+          id: r.net.id,
+          name: r.name.value.trim() || r.net.name,
+          vlan: /^\d+$/.test(r.vlan.value.trim()) ? Number(r.vlan.value.trim()) : (r.vlan.value.trim() || '—'),
+          subnet: r.subnet.value.trim() || r.net.subnet,
+          hue: NET_HUES[i % NET_HUES.length],
+          lore: 'Newly surveyed ground.',
+          label_x: 20 + (i % 3) * 30,
+          label_y: 20 + Math.floor(i / 3) * 30,
+        },
+      }));
+      try {
+        await Editor.apply(ops, 'networks read from an import');
+        then();
+      } catch (err) { fail(err); }
+    }));
+}
+
+/* ── a network by hand ───────────────────────────────────────────────────────── */
+function stepZone() {
+  step = 2;
+  drawSteps();
   const existing = Editor.entries('zones');
-  panel('Add a realm',
+  panel('Add a network',
     existing.length
       ? `You have ${existing.length} already. Add another, or move on.`
-      : 'A realm is a VLAN or a network segment — every place belongs to one. ' +
+      : 'A VLAN or subnet. Every device belongs to one. ' +
         'Give it a subnet and ADDRESSES can chart it; give it a colour ' +
         'and everything on it is recognisable at a glance.');
 
@@ -105,7 +202,7 @@ function stepZone() {
   bodyEl.append(form.el);
   laterNote('Its card line, route colour and label position');
   bar(
-    button('‹ Back', '', stepRealm),
+    button('‹ Back', '', stepStart),
     button(existing.length ? 'Skip' : 'Skip for now', '', stepPlaces),
     button('Add it ›', 'go', async () => {
       try {
@@ -115,18 +212,18 @@ function stepZone() {
     }));
 }
 
-/* ── 3. its places ────────────────────────────────────────────────────── */
+/* ── its devices ────────────────────────────────────────────────────── */
 function stepPlaces() {
-  step = 2;
+  step = 3;
   drawSteps();
-  panel('Chart its places',
-    'Four ways in. None of them is permanent — anything charted can be renamed, ' +
+  panel('Add its devices',
+    'Four ways in. None of them is permanent: anything added can be renamed, ' +
     'moved or removed in the map editor afterwards.');
 
   const zones = Editor.entries('zones');
   if (!zones.length) {
     bodyEl.append(el('div', 'dsk-notice dsk-notice-warn',
-      'There are no segments yet, so places have nowhere to live. Go back and add one.'));
+      'There are no networks yet, so devices have nowhere to live. Go back and add one.'));
     bar(button('‹ Back', '', stepZone));
     return;
   }
@@ -137,22 +234,7 @@ function stepPlaces() {
     'Open the map editor and add places by hand. Best when you have a handful and know them well.',
     () => { close(); openDesk('nodes'); }));
 
-  choices.append(choice('☰', 'From a device list',
-    'Paste a CSV — <code>name,ip,kind,zone,role,url</code>. Validated whole before ' +
-    'anything is written, with the line number of every problem.',
-    () => paste('csv')));
-
-  choices.append(choice('◈', 'From a survey',
-    `Run <code>${esc(scanCommand())}</code> on a machine in that network, where you ` +
-    'have the right to, and paste what it prints. The Atlas never probes the network ' +
-    'itself — it reads what you hand it.',
-    () => paste('nmap')));
-
-  choices.append(choice('⇄', 'From your router',
-    'Paste its DHCP lease file: every device that asked it for an address, with the name ' +
-    'it gave itself. No scan at all, and usually the best names.',
-    () => paste('leases')));
-
+  importChoices(choices, stepPlaces);
   bodyEl.append(choices);
   bar(button('‹ Back', '', stepZone), button('I will do this later', '', close));
 }
@@ -200,10 +282,10 @@ function commandRow(cmd) {
   return row;
 }
 
-function paste(kind) {
+function paste(kind, back) {
   const csv = kind === 'csv';
   const leases = kind === 'leases';
-  panel(csv ? 'Paste your device list' : leases ? 'Paste your router\'s leases' : 'Paste your survey',
+  panel(csv ? 'Paste your device list' : leases ? 'Paste your router\'s leases' : 'Paste your scan',
     csv
       ? 'The first line is the header. Only <code>name</code> is required.'
       : leases
@@ -221,20 +303,27 @@ function paste(kind) {
       : '<?xml version="1.0"?><nmaprun …>  (paste the whole output here)';
   bodyEl.append(area);
   bar(
-    button('‹ Back', '', stepPlaces),
+    button('‹ Back', '', back),
     button('Read it ›', 'go', async () => {
-      if (!area.value.trim()) return;
+      const text = area.value;
+      if (!text.trim()) return;
       try {
         if (csv) {
-          close();
-          await reviewCsv(area.value);
+          const { nodes } = await Editor.importCsv(text);
+          stepFound(nodes.map((n) => n.ip), async () => {
+            close();
+            await reviewCsv(text);
+          });
         } else {
-          const res = leases ? await Editor.leases(area.value) : await Editor.scan(area.value);
-          close();
-          A.showToast?.(leases
-            ? `${res.seen} devices from ${res.format} leases — review them in THE SURVEY.`
-            : `${res.seen} answered — review them in THE SURVEY.`);
-          await openDesk('survey');
+          const res = leases ? await Editor.leases(text) : await Editor.scan(text);
+          const { observed } = await Editor.discovery();
+          stepFound(observed.filter((o) => o.undocumented && !o.ignored).map((o) => o.ip), async () => {
+            close();
+            A.showToast?.(leases
+              ? `${res.seen} devices from ${res.format} leases. Review them in THE SURVEY.`
+              : `${res.seen} devices answered. Review them in THE SURVEY.`);
+            await openDesk('survey');
+          });
         }
       } catch (err) { fail(err); }
     }));

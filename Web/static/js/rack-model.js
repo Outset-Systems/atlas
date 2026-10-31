@@ -11,7 +11,15 @@ export const UH = 34;                 // px per rack U (and the SVG unit height)
 export const RACK_W = 460;            // faceplate design width (px)
 
 export const KIND_HUE =
-  { gateway: '#5FA8D3', compute: '#C9A554', forge: '#C0714E', patch: '#8A8069' };
+  { gateway: '#5FA8D3', switch: '#5FA8D3', compute: '#C9A554', forge: '#C0714E',
+    patch: '#8A8069', storage: '#7DA38E', power: '#B8893C', enclosure: '#A89984' };
+
+/* How deep each kind runs when a slot does not say (`depth_mm`). Real iron is
+   not one depth: a patch panel is a plate and a rack UPS runs the full cabinet,
+   which is what the 3D view is for. */
+export const KIND_DEPTH_MM =
+  { gateway: 285, switch: 400, compute: 430, forge: 430, patch: 100,
+    storage: 480, power: 630, enclosure: 241 };
 
 //: node.state → LED hex. The caller resolves the state from its own signals
 //: feed and passes the string; '' means "no live signal, draw the dim default".
@@ -41,12 +49,35 @@ export function setRackTheme({ gatewayNodes = [], forgeNames = [] } = {}) {
   RACK_THEME.gatewayNodes = gatewayNodes.map(String);
   RACK_THEME.forgeNames = forgeNames.map(n => String(n).toLowerCase()).filter(Boolean);
 }
+/* Words that name a kind of iron in a slot's name or description. A slot's own
+   `kind` wins over these, so a misread description has a lever in the Desk. */
+const KIND_WORDS = [
+  ['power', /\b(ups|pdu)\b/i],
+  ['storage', /\b(nas|unas|jbod|synology)\b/i],
+  ['enclosure', /\b(rackmac|mac studio|mac mini)\b/i],
+  ['switch', /\b(switch|usw)\b/i],
+];
 export function kindOf(slot, node) {
+  if (KIND_HUE[slot.kind]) return slot.kind;
   const name = (slot.name || '').toLowerCase();
   if (name.includes('patch')) return 'patch';
-  if (RACK_THEME.gatewayNodes.includes(slot.node) || (node && node.kind === 'network')) return 'gateway';
+  if (RACK_THEME.gatewayNodes.includes(slot.node)) return 'gateway';
   if (RACK_THEME.forgeNames.some(f => name.includes(f))) return 'forge';
-  return 'compute';
+  const text = `${slot.name || ''} ${slot.desc || ''}`;
+  for (const [kind, words] of KIND_WORDS) if (words.test(text)) return kind;
+  return node && node.kind === 'network' ? 'gateway' : 'compute';
+}
+
+export const depthMm = (slot, kind) => {
+  const mm = Number(slot.depth_mm);
+  return mm > 0 ? mm : (KIND_DEPTH_MM[kind] || KIND_DEPTH_MM.compute);
+};
+
+/* The cabinet depth the 3D frame needs: the deepest vessel plus room for its
+   plugs, and room for the fittings that hang off the rear posts. */
+export function rackDepthMm(devices, rear = []) {
+  const deepest = Math.max(0, ...devices.map((d) => d.depth || 0));
+  return Math.max(500, deepest + 60 + (rear.length ? 130 : 0));
 }
 
 /* rack (raw slots) + a nodeById(id) resolver + pre-Save overrides → the device
@@ -78,10 +109,20 @@ export function buildDevices(rack, nodeById, overrides = {}) {
       slot.u = uLabel(top, size);
     }
     const node = slot.node ? nodeById(slot.node) : null;
+    const kind = kindOf(slot, node);
     return { slot, key: slotKey(slot), node, name: slot.name, desc: slot.desc,
-             size, top, kind: kindOf(slot, node) };
+             size, top, kind, depth: depthMm(slot, kind) };
   });
   return { devices, rackU };
+}
+
+/* The fittings behind the rack, in the shape the shared detail pane reads. */
+export function buildRear(rear, nodeById) {
+  return (rear || []).map((r, i) => {
+    const node = r.node ? nodeById(r.node) : null;
+    return { slot: r, key: `rear:${i}`, node, name: r.name, desc: r.desc,
+             rear: true, size: 0, top: 0, kind: kindOf(r, node) };
+  });
 }
 
 /* Would device `d` fit with its top at `top`, given the current layout? */
@@ -153,19 +194,67 @@ function faceCompute(size, ledHex, accent) {
   return svgWrap(size, `<g style="--fp-accent:${accent}">${vent}</g>${pwr}`);
 }
 
+function faceSwitch(size, ledHex) {
+  const H = size * UH, mid = H / 2, gap = 3, ph = 9;
+  const top = mid - ph - 1.5, low = mid + 1.5;
+  return svgWrap(size,
+    `<rect class="fp-screen" x="30" y="${mid - 9}" width="22" height="18" rx="2"/>` +
+    ports(62, top, 6, 12, ph, gap) + ports(62, low, 6, 12, ph, gap) +
+    ports(157, top, 6, 12, ph, gap) + ports(157, low, 6, 12, ph, gap) +
+    ports(262, mid - 5, 4, 18, 10, 5, 'fp-sfp') +
+    `<rect class="fp-badge" x="360" y="${mid - 7}" width="56" height="14" rx="2"/>` +
+    led(430, mid, ledHex));
+}
+function faceStorage(size, ledHex) {
+  const H = size * UH, rows = Math.min(3, size), cols = 4, gap = 4;
+  const bw = 90, bh = (H - 8 - (rows - 1) * gap) / rows;
+  let bays = '';
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++) {
+      const x = 30 + c * (bw + gap), y = 4 + r * (bh + gap);
+      bays += `<rect class="fp-bay" x="${x}" y="${y}" width="${bw}" height="${bh}" rx="1.5"/>` +
+              `<rect class="fp-btn" x="${x + 8}" y="${y + bh / 2 - 2}" width="34" height="4" rx="2"/>`;
+    }
+  return svgWrap(size, bays + led(430, H / 2, ledHex));
+}
+function facePower(size, ledHex) {
+  const H = size * UH, mid = H / 2, cols = 34, rows = Math.max(2, size * 2);
+  const vw = 6, vh = 5, gx = 3, gy = 4, x0 = 104;
+  const y0 = (H - (rows * (vh + gy) - gy)) / 2;
+  let vent = '';
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++)
+      vent += `<rect class="fp-vent" x="${x0 + c * (vw + gx)}" y="${y0 + r * (vh + gy)}" width="${vw}" height="${vh}" rx="1"/>`;
+  return svgWrap(size,
+    `<rect class="fp-screen" x="30" y="6" width="62" height="${H - 12}" rx="3"/>` +
+    `<g style="--fp-accent:${KIND_HUE.power}">${vent}</g>` + led(430, mid, ledHex));
+}
+function faceEnclosure(size, ledHex) {
+  const H = size * UH, y = H - 13, bx = RACK_W - 44;
+  const bay = (x) => `<rect class="fp-bay" x="${x}" y="6" width="176" height="${H - 12}" rx="2"/>` +
+    `<circle class="fp-btn" cx="${x + 18}" cy="${y}" r="4"/>` +
+    `<rect class="fp-port" x="${x + 32}" y="${y - 3}" width="14" height="6" rx="1"/>`;
+  return svgWrap(size, bay(30) + bay(214) + led(bx, H / 2, ledHex));
+}
+
 /* Where the LED sits on a device's faceplate, in faceplate coords
    (0..RACK_W × 0..size*UH), or null for a faceplate with no LED. The 3D
    view places a breathing light here; the 2D art draws it at the same spot. */
 export function ledSpot(d) {
   const H = d.size * UH;
   if (d.kind === 'patch') return null;
-  if (d.kind === 'gateway') return { x: 430, y: H / 2 };
+  if (['gateway', 'switch', 'storage', 'power'].includes(d.kind)) return { x: 430, y: H / 2 };
+  if (d.kind === 'enclosure') return { x: RACK_W - 44, y: H / 2 };
   return { x: RACK_W - 44, y: d.size >= 2 ? 40 : H / 2 + 8 };   // compute / forge
 }
 
 /* The faceplate for a device, with its live LED colour already resolved. */
 export function faceplate(d, ledHex) {
   if (d.kind === 'gateway') return faceGateway(d.size, ledHex);
+  if (d.kind === 'switch') return faceSwitch(d.size, ledHex);
+  if (d.kind === 'storage') return faceStorage(d.size, ledHex);
+  if (d.kind === 'power') return facePower(d.size, ledHex);
+  if (d.kind === 'enclosure') return faceEnclosure(d.size, ledHex);
   if (d.kind === 'patch') return facePatch(d.size);
   if (d.kind === 'forge') return faceCompute(d.size, ledHex, '#C0714E');
   return faceCompute(d.size, ledHex, '#C9A554');

@@ -21,13 +21,24 @@
 import { A, CFG } from './config.js';
 import * as THREE from './vendor/three.module.js';
 import { OrbitControls } from './vendor/OrbitControls.js';
-import { UH, RACK_W, faceplate, ledSpot, setRackTheme } from './rack-model.js';
+import { UH, RACK_W, faceplate, ledSpot, rackDepthMm, setRackTheme } from './rack-model.js';
 setRackTheme(CFG.THEME);   // THE THEME (v1.48.0)
 
 const NS = 'http://www.w3.org/2000/svg';
-const RAIL = 0.55;                       // rack-rail thickness, world units
-const DEPTH = 6.5;                       // vessel depth: a real rack cabinet, not a slab
+const RAIL = 0.55;                       // rack-post thickness, world units
 const WIDTH = RACK_W / UH;               // rack width in U-units (~13.5)
+const MM = WIDTH / 482.6;                // depth scale: a 19-inch panel spans WIDTH
+const FOV = 40;
+const GLIDE_MS = 900;                    // the app's 800–1200ms glide (spec 5)
+const REAR_W = 9.5;                      // a rear fitting, hung off the back posts
+const REAR_D = 106 * MM;
+/* The named turns of the rack, as OrbitControls angles (spec 5's clamp holds). */
+const VIEWS = {
+  corner: { theta: 0.6, phi: 1.28 },
+  front: { theta: 0, phi: 1.5 },
+  side: { theta: Math.PI / 2, phi: 1.5 },
+  rear: { theta: Math.PI - 0.5, phi: 1.32 },
+};
 const LED_BY_STATE = { healthy: '#8EC07C', degraded: '#FABD2F', down: '#FB4934',
                        maintenance: '#83A598', slumbering: '#7c748a' };
 const reduced = () => {
@@ -51,7 +62,7 @@ function tok(name, fallback) {
    --fp-accent var so compute/forge keep their accent). sRGB texture or gruvbox
    reads dark. */
 const FP_CLASSES = ['fp-panel', 'fp-ear', 'fp-hole', 'fp-screen', 'fp-glyph',
-  'fp-port', 'fp-sfp', 'fp-key', 'fp-vent', 'fp-badge', 'fp-btn', 'fp-led'];
+  'fp-port', 'fp-sfp', 'fp-key', 'fp-vent', 'fp-badge', 'fp-btn', 'fp-led', 'fp-bay'];
 const _styleCache = {};
 function fpStyle(kind) {
   if (_styleCache[kind]) return _styleCache[kind];
@@ -153,19 +164,21 @@ function getRenderer() {
   return renderer;
 }
 
-/* enter({ container, model, ledStateFor, onPick, onLost }):
+/* enter({ container, model, ledStateFor, onPick, onHover, onTurn, onLost }):
      container   — the element to fill with the canvas
-     model       — { devices, rackU } from rack-model (shared with the 2D view)
+     model       — { devices, rackU, rear } from rack-model (shared with the 2D view)
      ledStateFor — (node) => state string, for the live LED colour
      onPick      — (device) => void, the shared detail pane
+     onHover     — (key|null) => void, so the legend can answer the pointer
+     onTurn      — () => void, the viewer orbited by hand; no named view holds
      onLost      — () => void, called if the GL context is lost (fall back to 2D)
    Returns true if the scene came up, false if it could not (caller stays 2D). */
-function enter({ container, model, ledStateFor, onPick, onLost }) {
+function enter({ container, model, ledStateFor, onPick, onHover, onTurn, onLost }) {
   if (R) exit();
   if (!available() || !container) return false;
 
-  const rig = { container, onPick, onLost, disposables: [], devMeshes: [], leds: [],
-                raf: 0, selected: null, downXY: null };
+  const rig = { container, onPick, onHover, onLost, disposables: [], devMeshes: [], leds: [],
+                raf: 0, selected: null, hovered: null, downXY: null, glide: null };
   const w = container.clientWidth || 640;
   const h = container.clientHeight || 480;
 
@@ -177,7 +190,7 @@ function enter({ container, model, ledStateFor, onPick, onLost }) {
 
   const scene = new THREE.Scene();
   rig.scene = scene;
-  const camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 500);
+  const camera = new THREE.PerspectiveCamera(FOV, w / h, 0.1, 500);
   rig.camera = camera;
 
   // lighting (spec 2): one warm key, a soft hemi fill, no HDR, no blue rim.
@@ -189,7 +202,10 @@ function enter({ container, model, ledStateFor, onPick, onLost }) {
   scene.add(new THREE.AmbientLight(0xffffff, 0.12));
 
   const rackU = Math.max(1, model.rackU || 1);
-  const half = rackU / 2;
+  const rear = model.rear || [];
+  const rackD = rackDepthMm(model.devices, rear) * MM;   // the cabinet, front post to back
+  const frontZ = rackD / 2;
+  const railH = rackU + 0.8;
 
   // materials (spec 1): matte survey-table metal, gilt as line-edges.
   const chassis = new THREE.MeshStandardMaterial({
@@ -201,22 +217,19 @@ function enter({ container, model, ledStateFor, onPick, onLost }) {
   const gilt = new THREE.Color(tok('--gilt', '#d79921'));
   const giltBright = new THREE.Color(tok('--gilt-bright', '#fabd2f'));
   const giltMat = new THREE.LineBasicMaterial({ color: gilt, transparent: true, opacity: 0.85 });
-  rig.disposables.push(chassis, railMat, giltMat);
+  const hoverMat = new THREE.LineBasicMaterial({ color: gilt, transparent: true, opacity: 1 });
+  const selMat = new THREE.LineBasicMaterial({ color: giltBright, transparent: true, opacity: 1 });
+  rig.edgeMats = { rest: giltMat, hover: hoverMat, picked: selMat };
+  rig.disposables.push(chassis, railMat, giltMat, hoverMat, selMat);
 
-  const uToY = (centerU) => (centerU - (rackU + 1) / 2);   // U1 low, rackU high, centred
-
-  // vessels
-  for (const d of model.devices) {
-    const gh = d.size - 0.08;                       // small inter-U gap
-    const geo = new THREE.BoxGeometry(WIDTH, gh, DEPTH);
-    const state = ledStateFor ? ledStateFor(d.node) : '';
-    const ledHex = LED_BY_STATE[state] || '';
+  const addVessel = (d, gh, depth, x, y, z, faceIndex, ledHex) => {
+    const geo = new THREE.BoxGeometry(d.rear ? REAR_W : WIDTH, gh, depth);
     const face = new THREE.MeshBasicMaterial({ map: faceTexture(d, ledHex, maxAniso) });
     // BoxGeometry material order: px,nx,py,ny,pz(+Z=front),nz
-    const mats = [chassis, chassis, chassis, chassis, face, chassis];
+    const mats = [chassis, chassis, chassis, chassis, chassis, chassis];
+    mats[faceIndex] = face;
     const mesh = new THREE.Mesh(geo, mats);
-    const centerU = d.top - (d.size - 1) / 2;
-    mesh.position.set(0, uToY(centerU), 0);
+    mesh.position.set(x, y, z);
     mesh.userData.device = d;
     scene.add(mesh);
     rig.devMeshes.push(mesh);
@@ -228,6 +241,19 @@ function enter({ container, model, ledStateFor, onPick, onLost }) {
     mesh.userData.edges = edges;
     scene.add(edges);
     rig.disposables.push(edges.geometry);
+    return mesh;
+  };
+
+  const uToY = (centerU) => (centerU - (rackU + 1) / 2);   // U1 low, rackU high, centred
+
+  // vessels
+  for (const d of model.devices) {
+    const gh = d.size - 0.08;                       // small inter-U gap
+    const depth = (d.depth || 430) * MM;            // every vessel hangs from the front posts
+    const state = ledStateFor ? ledStateFor(d.node) : '';
+    const ledHex = LED_BY_STATE[state] || '';
+    const centerU = d.top - (d.size - 1) / 2;
+    const mesh = addVessel(d, gh, depth, 0, uToY(centerU), frontZ - depth / 2, 4, ledHex);
 
     // breathing LED for attention states (spec 4)
     if (state === 'degraded' || state === 'down') {
@@ -242,7 +268,7 @@ function enter({ container, model, ledStateFor, onPick, onLost }) {
           blending: THREE.AdditiveBlending, depthWrite: false,
         });
         const ledMesh = new THREE.Mesh(ledGeo, ledMat);
-        ledMesh.position.set(lx, ly, DEPTH / 2 + 0.02);
+        ledMesh.position.set(lx, ly, depth / 2 + 0.02);
         mesh.add(ledMesh);
         rig.leds.push(ledMesh);
         rig.disposables.push(ledGeo, ledMat);
@@ -250,30 +276,60 @@ function enter({ container, model, ledStateFor, onPick, onLost }) {
     }
   }
 
-  // rack rails + gilt frame outline
-  const railH = rackU + 0.4;
-  for (const sx of [-1, 1]) {
-    const rgeo = new THREE.BoxGeometry(RAIL, railH, DEPTH);
-    const rail = new THREE.Mesh(rgeo, railMat);
-    rail.position.set(sx * (WIDTH / 2 + RAIL / 2), 0, 0);
-    scene.add(rail);
-    rig.disposables.push(rgeo);
-    const redge = new THREE.LineSegments(new THREE.EdgesGeometry(rgeo), giltMat);
-    redge.position.copy(rail.position);
-    scene.add(redge);
-    rig.disposables.push(redge.geometry);
+  // the fittings behind the rack, hung off the back posts top-down
+  const rearStep = rear.length ? Math.min(2.2, railH / rear.length) : 0;
+  rear.forEach((r, i) => {
+    const y = railH / 2 - rearStep * (i + 0.5);
+    addVessel({ ...r, size: 2 }, rearStep - 0.2, REAR_D, 0, y, -rackD / 2 + REAR_D / 2 + RAIL / 2, 5, '');
+  });
+
+  // the four-post frame: posts, then the stretchers that tie them
+  const beam = (bw, bh, bd, x, y, z) => {
+    const geo = new THREE.BoxGeometry(bw, bh, bd);
+    const mesh = new THREE.Mesh(geo, railMat);
+    mesh.position.set(x, y, z);
+    scene.add(mesh);
+    const edge = new THREE.LineSegments(new THREE.EdgesGeometry(geo), giltMat);
+    edge.position.copy(mesh.position);
+    scene.add(edge);
+    rig.disposables.push(geo, edge.geometry);
+  };
+  const postX = WIDTH / 2 + RAIL / 2;
+  for (const sx of [-1, 1])
+    for (const sz of [-1, 1]) beam(RAIL, railH, RAIL, sx * postX, 0, sz * frontZ);
+  for (const sy of [-1, 1]) {
+    const y = sy * (railH / 2 + 0.12);
+    for (const sz of [-1, 1]) beam(WIDTH + RAIL * 2, 0.24, RAIL, 0, y, sz * frontZ);
+    for (const sx of [-1, 1]) beam(RAIL, 0.24, rackD, sx * postX, y, 0);
   }
 
+  // gilt U-rules on the front posts (spec 1): one mark per U, where a rail has them
+  const ticks = [];
+  for (let u = 0; u <= rackU; u++) {
+    const y = u - rackU / 2;
+    for (const sx of [-1, 1]) {
+      const inner = sx * WIDTH / 2, outer = sx * (WIDTH / 2 + RAIL);
+      ticks.push(inner, y, frontZ + RAIL / 2 + 0.01, outer, y, frontZ + RAIL / 2 + 0.01);
+    }
+  }
+  const tickGeo = new THREE.BufferGeometry();
+  tickGeo.setAttribute('position', new THREE.Float32BufferAttribute(ticks, 3));
+  scene.add(new THREE.LineSegments(tickGeo, giltMat));
+  rig.disposables.push(tickGeo);
+
   // contact shadow (spec 2 / 10): a soft radial-gradient plane grounds the rack.
-  const shadow = makeContactShadow();
-  shadow.position.set(0, -half - 0.35, 0);   // centred under the deep footprint
+  const shadow = makeContactShadow(rackD);
+  shadow.position.set(0, -railH / 2 - 0.3, 0);   // centred under the deep footprint
   shadow.rotation.x = -Math.PI / 2;
   scene.add(shadow);
   rig.disposables.push(shadow.geometry, shadow.material, shadow.material.map);
 
-  // camera framing: a 3/4 angle (spec 5), distance scaled to the rack height
-  const dist = Math.max(WIDTH, rackU, DEPTH) * 1.35 + 8;   // include depth so the deep cabinet frames
-  camera.position.set(dist * 0.62, dist * 0.28, dist * 0.82);
+  // camera framing: the distance that fits the whole cabinet at this aspect, at
+  // a 3/4 angle (spec 5) — rack height decides a tall rack, depth a deep one
+  rig.bounds = { height: railH + 1, depth: rackD };
+  const dist = fitDistance(camera, rig.bounds);
+  camera.position.setFromSpherical(
+    new THREE.Spherical(dist, VIEWS.corner.phi, VIEWS.corner.theta));
   camera.lookAt(0, 0, 0);
 
   const controls = new OrbitControls(camera, renderer.domElement);
@@ -287,11 +343,25 @@ function enter({ container, model, ledStateFor, onPick, onLost }) {
   controls.maxDistance = dist * 1.8;
   controls.rotateSpeed = 0.9;
   controls.update();
+  controls.addEventListener('start', () => {   // a hand on the rack outranks a glide
+    rig.glide = null;
+    if (onTurn) onTurn();
+  });
   rig.controls = controls;
 
   // selection: default to the crown vessel (parity with the 2D view)
   const crown = model.devices.find((d) => d.slot && d.slot.node === 'hypervisor')
     || model.devices[0];
+
+  const pickAt = (e) => {
+    const rect = renderer.domElement.getBoundingClientRect();
+    const ndc = new THREE.Vector2(
+      ((e.clientX - rect.left) / rect.width) * 2 - 1,
+      -((e.clientY - rect.top) / rect.height) * 2 + 1);
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(ndc, camera);
+    return ray.intersectObjects(rig.devMeshes, false)[0]?.object || null;
+  };
 
   // picking — distinguish a click from an orbit drag
   const onDown = (e) => { rig.downXY = [e.clientX, e.clientY]; };
@@ -300,24 +370,22 @@ function enter({ container, model, ledStateFor, onPick, onLost }) {
     const moved = Math.hypot(e.clientX - rig.downXY[0], e.clientY - rig.downXY[1]);
     rig.downXY = null;
     if (moved > 5) return;                    // that was an orbit, not a pick
-    const rect = renderer.domElement.getBoundingClientRect();
-    const ndc = new THREE.Vector2(
-      ((e.clientX - rect.left) / rect.width) * 2 - 1,
-      -((e.clientY - rect.top) / rect.height) * 2 + 1);
-    const ray = new THREE.Raycaster();
-    ray.setFromCamera(ndc, camera);
-    const hit = ray.intersectObjects(rig.devMeshes, false)[0];
-    if (hit) selectMesh(rig, hit.object, giltBright, gilt);
+    const mesh = pickAt(e);
+    if (mesh) selectMesh(rig, mesh);
   };
+  const onMove = (e) => { if (!e.buttons) hoverMesh(rig, pickAt(e)); };
+  const onLeave = () => hoverMesh(rig, null);
   renderer.domElement.addEventListener('pointerdown', onDown);
   renderer.domElement.addEventListener('pointerup', onUp);
-  rig.onDown = onDown; rig.onUp = onUp;
+  renderer.domElement.addEventListener('pointermove', onMove);
+  renderer.domElement.addEventListener('pointerleave', onLeave);
+  rig.onDown = onDown; rig.onUp = onUp; rig.onMove = onMove; rig.onLeave = onLeave;
 
   R = rig;
   // apply the default selection (fires onPick for the shared detail pane)
   if (crown) {
     const m = rig.devMeshes.find((x) => x.userData.device === crown);
-    if (m) selectMesh(rig, m, giltBright, gilt);
+    if (m) selectMesh(rig, m);
   }
 
   // render loop — continuous while damping/breathing; cheap for a dozen boxes
@@ -325,6 +393,7 @@ function enter({ container, model, ledStateFor, onPick, onLost }) {
   const tick = () => {
     rig.raf = requestAnimationFrame(tick);
     const t = clock.getElapsedTime();
+    stepGlide(rig);
     if (!reduced()) {
       for (let i = 0; i < rig.leds.length; i++) {
         // stagger like the map's marker-breathe — not synchronised
@@ -341,27 +410,69 @@ function enter({ container, model, ledStateFor, onPick, onLost }) {
   return true;
 }
 
-function selectMesh(rig, mesh, giltBright, gilt) {
-  // restore the previous selection to the shared gilt edge material
-  if (rig.selected && rig.selected.userData._selMat) {
-    rig.selected.userData.edges.material = rig.selected.userData._origMat;
-    rig.selected.userData._selMat.dispose();
-    rig.selected.userData._selMat = null;
-  }
+/* The distance at which the whole cabinet fits, whichever of its height or its
+   turned footprint runs out of frame first at this aspect. */
+function fitDistance(camera, { height, depth }) {
+  const t = Math.tan((FOV * Math.PI) / 360);
+  return Math.max((height / 2) / t, (Math.hypot(WIDTH, depth) / 2) / (t * camera.aspect)) * 1.4;
+}
+
+/* One edge material per state, so a vessel's outline is always recomputed from
+   what it is right now: picked outranks hovered outranks resting. */
+function paintEdges(rig, mesh) {
+  if (!mesh || !mesh.userData.edges) return;
+  const m = rig.edgeMats;
+  mesh.userData.edges.material =
+    mesh === rig.selected ? m.picked : mesh === rig.hovered ? m.hover : m.rest;
+}
+
+function selectMesh(rig, mesh) {
+  const prev = rig.selected;
   rig.selected = mesh;
-  if (mesh.userData.edges) {
-    const sel = mesh.userData.edges.material.clone();
-    sel.color.copy(giltBright);
-    sel.opacity = 1;
-    mesh.userData._origMat = mesh.userData.edges.material;
-    mesh.userData._selMat = sel;
-    mesh.userData.edges.material = sel;
-  }
-  void gilt;
+  paintEdges(rig, prev);
+  paintEdges(rig, mesh);
   if (rig.onPick && mesh.userData.device) rig.onPick(mesh.userData.device);
 }
 
-function makeContactShadow() {
+function hoverMesh(rig, mesh) {
+  if (mesh === rig.hovered) return;
+  const prev = rig.hovered;
+  rig.hovered = mesh;
+  paintEdges(rig, prev);
+  paintEdges(rig, mesh);
+  rig.renderer.domElement.style.cursor = mesh ? 'pointer' : '';
+  if (rig.onHover) rig.onHover(mesh ? mesh.userData.device.key : null);
+}
+
+const meshFor = (key) => R?.devMeshes.find((m) => m.userData.device.key === key) || null;
+
+/* Turn to a named view by swinging round the rack, never through it: the angles
+   ease, the distance holds. Reduced motion lands at once (spec 5). */
+function view(name) {
+  const to = VIEWS[name];
+  if (!R || !to) return;
+  const from = new THREE.Spherical().setFromVector3(R.camera.position);
+  if (reduced()) {
+    R.glide = null;
+    R.camera.position.setFromSpherical(from.set(from.radius, to.phi, to.theta));
+    return;
+  }
+  const turn = ((to.theta - from.theta + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+  R.glide = { start: performance.now(), radius: from.radius,
+              phi: from.phi, dPhi: to.phi - from.phi, theta: from.theta, dTheta: turn };
+}
+
+function stepGlide(rig) {
+  const g = rig.glide;
+  if (!g) return;
+  const k = Math.min(1, (performance.now() - g.start) / GLIDE_MS);
+  const ease = 1 - (1 - k) ** 3;
+  rig.camera.position.setFromSpherical(
+    new THREE.Spherical(g.radius, g.phi + g.dPhi * ease, g.theta + g.dTheta * ease));
+  if (k === 1) rig.glide = null;
+}
+
+function makeContactShadow(depth) {
   const c = document.createElement('canvas');
   c.width = c.height = 256;
   const ctx = c.getContext('2d');
@@ -373,7 +484,7 @@ function makeContactShadow() {
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false });
-  const plane = new THREE.Mesh(new THREE.PlaneGeometry(WIDTH * 1.5, DEPTH * 1.7), mat);
+  const plane = new THREE.Mesh(new THREE.PlaneGeometry(WIDTH * 1.6, depth * 1.5), mat);
   return plane;
 }
 
@@ -393,8 +504,10 @@ function exit() {
   const el = rig.renderer.domElement;
   el.removeEventListener('pointerdown', rig.onDown);
   el.removeEventListener('pointerup', rig.onUp);
+  el.removeEventListener('pointermove', rig.onMove);
+  el.removeEventListener('pointerleave', rig.onLeave);
+  el.style.cursor = '';
   rig.controls?.dispose();
-  if (rig.selected?.userData?._selMat) rig.selected.userData._selMat.dispose();
   // free this scene's GPU resources; KEEP the renderer + context for reuse
   for (const d of rig.disposables) { try { d.dispose?.(); } catch { /* */ } }
   rig.scene?.clear();
@@ -402,4 +515,10 @@ function exit() {
   if (el.parentNode) el.parentNode.removeChild(el);
 }
 
-A.armory3d = { available, enter, exit, resize, isActive: () => !!R };
+A.armory3d = {
+  available, enter, exit, resize, view,
+  isActive: () => !!R,
+  // the legend and the rear strip speak to the scene by vessel key
+  select: (key) => { const m = meshFor(key); if (m) selectMesh(R, m); },
+  hover: (key) => { if (R) hoverMesh(R, meshFor(key)); },
+};

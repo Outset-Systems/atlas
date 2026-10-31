@@ -84,41 +84,39 @@
    scene band, the veil, the announcements, the parchment card — keeps the
    night palette from :root by construction, not by a list of exceptions.
    `data-scheme` on <html> is set by scheme.js (stored choice, else the OS
-   preference). Values: the suite design system's Gruvbox Light Hard, with
-   two deliberate departures for legibility at panel sizes, both measured by
-   tests/test_scheme_css.py: --text-dim is fg3 #665c54 (the system's #7c6f64
-   is 4.3:1 on surface, under AA) and panel --gilt is a deeper amber #8a5a0b
-   (the system's gold #b57614 is 3.3:1, fit only for 24px type, and the panels
-   set their titles in 0.6–0.8rem Cinzel caps). */
+   preference). Values since 2026-10-31: cool slate with a blue accent, in place
+   of the warm Gruvbox Light and its amber. --gilt keeps its name because every
+   rule says `gilt`; here it is a deep blue, picked to clear AA at panel sizes
+   even on glass (below). All measured by tests/test_scheme_css.py. */
 :root[data-scheme="light"] :is(#index-drawer, .ldg-panel, .trb-panel, .rel-panel, .pth-panel,
                                .pal-panel, .gl-panel, .dsk-panel, .wiz-panel,
-                               #scenes-list, .chrome, .rl-crumbs, .rl-locator, .rl-hint,
+                               #scenes-list, .scene-home, .chrome, .rl-crumbs, .rl-locator, .rl-hint,
                                .chron-fly-pop, .chron-arrow, .embed-max-arrow, #embed-max-close) {
-  --abyss: #f9f5d7;
-  --surface: #fbf1c7;
-  --surface-2: #f2e5bc;
-  --ink-line: #d5c4a1;
-  --ink-soft: #7c6f64;
-  --text: #3c3836;
-  --text-dim: #665c54;
-  --text-soft: #504945;
-  --gilt: #8a5a0b;
-  --gilt-bright: #b57614;
-  --gilt-rgb: 138, 90, 11;
-  --on-gilt: #fbf1c7;
-  --sem-up: #79740e;
-  --sem-warn: #b57614;
-  --sem-down: #9d0006;
-  --sem-info: #076678;
-  --down-rgb: 157, 0, 6;
-  --tone-up: #79740e;
-  --tone-warn: #b57614;
-  --tone-down: #9d0006;
-  --tone-info: #076678;
-  --shade-rgb: 60, 56, 54;
+  --abyss: #f8fafc;
+  --surface: #f1f5f9;
+  --surface-2: #e2e8f0;
+  --ink-line: #cbd5e1;
+  --ink-soft: #64748b;
+  --text: #0f172a;
+  --text-dim: #334155;
+  --text-soft: #1e293b;
+  --gilt: #1e40af;
+  --gilt-bright: #2563eb;
+  --gilt-rgb: 30, 64, 175;
+  --on-gilt: #f8fafc;
+  --sem-up: #166534;
+  --sem-warn: #b45309;
+  --sem-down: #b91c1c;
+  --sem-info: #0369a1;
+  --down-rgb: 185, 28, 28;
+  --tone-up: #166534;
+  --tone-warn: #b45309;
+  --tone-down: #b91c1c;
+  --tone-info: #0369a1;
+  --shade-rgb: 15, 23, 42;
   --shade-k: 0.3;
-  --hair: rgba(60, 56, 54, 0.14);
-  --frame-ground: #f2e5bc;
+  --hair: rgba(15, 23, 42, 0.12);
+  --frame-ground: #e2e8f0;
   color-scheme: light;
 }
 
@@ -130,23 +128,51 @@
    parchment card and toast (already light in both). */
 /* ⚠ one selector per specificity: `:is()` takes its MOST specific argument's
    weight, so an id in the list would lift the class rules above .chrome.lit */
-:root[data-scheme="light"] .chrome { background: rgba(251, 241, 199, 0.6); }
-:root[data-scheme="light"] :is(.chron-arrow, .embed-max-arrow) { background: rgba(251, 241, 199, 0.82); }
-:root[data-scheme="light"] #embed-max-close { background: rgba(251, 241, 199, 0.82); }
+:root[data-scheme="light"] .chrome { background: rgba(248, 250, 252, 0.6); }
+:root[data-scheme="light"] :is(.chron-arrow, .embed-max-arrow) { background: rgba(248, 250, 252, 0.82); }
+:root[data-scheme="light"] #embed-max-close { background: rgba(248, 250, 252, 0.82); }
 :root[data-scheme="light"] .chrome.lit { background: var(--gilt); }
-:root[data-scheme="light"] #scenes-list { background: rgba(251, 241, 199, 0.6); }
-:root[data-scheme="light"] #scenes-list .chrome { background: rgba(251, 241, 199, 0.42); }
+:root[data-scheme="light"] #scenes-list { background: rgba(248, 250, 252, 0.6); }
+:root[data-scheme="light"] #scenes-list .chrome { background: rgba(248, 250, 252, 0.42); }
 :root[data-scheme="light"] body.scene-open #scenes-list {
-  background: rgba(251, 241, 199, 0.95);
-  box-shadow: 0 12px 34px rgba(60, 56, 54, 0.22);
+  background: rgba(248, 250, 252, 0.95);
+  box-shadow: 0 12px 34px rgba(15, 23, 42, 0.22);
 }
 :root[data-scheme="light"] .scene { text-shadow: none; }
 :root[data-scheme="light"] .scene.active { background: rgba(var(--gilt-rgb), 0.12); }
 :root[data-scheme="light"] :is(.rl-crumbs, .rl-hint) {
-  background: rgba(251, 241, 199, 0.92);
-  box-shadow: 0 4px 18px rgba(60, 56, 54, 0.18);
+  background: rgba(248, 250, 252, 0.92);
+  box-shadow: 0 4px 18px rgba(15, 23, 42, 0.18);
 }
-:root[data-scheme="light"] .chron-fly-pop { box-shadow: 0 14px 40px rgba(60, 56, 54, 0.22); }
+:root[data-scheme="light"] .chron-fly-pop { box-shadow: 0 14px 40px rgba(15, 23, 42, 0.22); }
+
+/* THE GLASS (2026-10-31, the owner: "a more transparent theme with a blue accent
+   instead of orange"). Light panels are frosted, so the map stays in the room.
+   The scrim thins with them, or the glass would only show a dark sheet. 0.8 is
+   not a taste: tests/test_scheme_css.py composites it over black, the worst
+   thing behind a panel, and --text-dim and --gilt must still clear AA there. */
+:root[data-scheme="light"] :is(.ldg-panel, .trb-panel, .rel-panel, .pth-panel, .pal-panel,
+                               .gl-panel, .dsk-panel, .wiz-panel) {
+  background: rgba(248, 250, 252, 0.8);
+  color: var(--text);   /* the page's cream is inherited as a colour, not a token */
+  -webkit-backdrop-filter: blur(22px) saturate(1.5);
+  backdrop-filter: blur(22px) saturate(1.5);
+  border-color: rgba(255, 255, 255, 0.55);
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28);
+}
+:root[data-scheme="light"] :is(#index-drawer) {
+  background: rgba(248, 250, 252, 0.8);
+  color: var(--text);
+  -webkit-backdrop-filter: blur(22px) saturate(1.5);
+  backdrop-filter: blur(22px) saturate(1.5);
+}
+:root[data-scheme="light"] #settings-panel { color: var(--text); }
+:root[data-scheme="light"] .scene-home { color: var(--text); }
+:root[data-scheme="light"] .scene-home .scene.active { background: rgba(var(--gilt-rgb), 0.12); }
+:root[data-scheme="light"] :is(#ledger, #calendar, #seals, #stones, #tribute, #reliquary,
+                               #accounts, #trust, #settings) {
+  background: rgba(15, 23, 42, 0.24);
+}
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 /* the [hidden] attribute must win over explicit display rules (rows/headers set
@@ -2099,7 +2125,7 @@ body.drawer-open .pth-panel { right: calc(5vw + var(--drawer-clear)); }
    blur instead — grey under a cream panel reads as broken, not as focus
    (2026-10-20). Browsers without backdrop-filter keep the plain wash. */
 #palette.open { opacity: 1; pointer-events: auto; backdrop-filter: grayscale(1); -webkit-backdrop-filter: grayscale(1); }
-:root[data-scheme="light"] #palette { background: rgba(251, 241, 199, 0.22); }
+:root[data-scheme="light"] #palette { background: rgba(248, 250, 252, 0.22); }
 :root[data-scheme="light"] #palette.open { backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
 .pal-panel {
   width: min(560px, 92vw);
@@ -3034,6 +3060,11 @@ body.pre #scenes-list { opacity: 0; pointer-events: none; }
 .rel-gateway .fp-panel { fill: #1e2630; }
 .rel-forge .fp-panel { fill: #2a221c; }
 .rel-patch .fp-panel { fill: #201f1b; }
+.rel-switch .fp-panel { fill: #1e2630; }
+.rel-storage .fp-panel { fill: #1e2522; }
+.rel-power .fp-panel { fill: #28231a; }
+.rel-enclosure .fp-panel { fill: #24231f; }
+.fp-bay { fill: rgba(0,0,0,0.34); stroke: rgba(var(--gilt-rgb), 0.38); stroke-width: 0.7; }
 .fp-ear { fill: rgba(0,0,0,0.28); stroke: rgba(var(--gilt-rgb), 0.28); stroke-width: 0.75; }
 .fp-hole { fill: #0c0c0a; stroke: rgba(var(--gilt-rgb), 0.32); stroke-width: 0.6; }
 .fp-port, .fp-sfp, .fp-key { fill: rgba(0,0,0,0.5); stroke: rgba(var(--gilt-rgb), 0.5); stroke-width: 0.8; }
@@ -3084,9 +3115,29 @@ body.pre #scenes-list { opacity: 0; pointer-events: none; }
 }
 #rel-3d[hidden] { display: none; }
 #rel-3d canvas { display: block; width: 100%; height: 100%; }
+.rel-cams { position: absolute; top: 8px; right: 8px; z-index: 1; }
+.rel-cams .rel-seg { background: rgba(29, 32, 33, 0.82); }
+.rel-cams .rel-seg:hover { background: rgba(60, 56, 54, 0.92); }
+.rel-cams .rel-seg.is-on { background: var(--gilt); color: var(--on-gilt); }
+
+/* The vessels' names, off the faceplates and on the keyboard's path into 3D. */
+.rel-legend { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.rel-legend[hidden] { display: none; }
+.rel-legend-item {
+  display: inline-flex; align-items: baseline; gap: 6px; min-width: 0; max-width: 100%;
+  background: rgba(var(--gilt-rgb), 0.06); border: 1px solid rgba(var(--gilt-rgb), 0.22);
+  color: var(--gilt); border-radius: 3px; padding: 3px 7px; cursor: pointer;
+  font-family: 'Cinzel', serif; font-size: 0.56rem; letter-spacing: 0.1em; text-transform: uppercase;
+  transition: background 150ms, border-color 150ms;
+}
+.rel-legend-item .rel-dev-u { opacity: 0.7; }
+.rel-legend-item:hover, .rel-legend-item.is-hover { background: rgba(var(--gilt-rgb), 0.16); }
+.rel-legend-item.is-on { border-color: var(--gilt); background: rgba(var(--gilt-rgb), 0.2); }
 
 @media (max-width: 720px) {
   #rel-3d { width: 100%; height: 52vh; }
+  /* the 2D rack keeps its drawn 460px; a canvas can fit the phone it is on */
+  .rel-rack:has(> #rel-3d:not([hidden])) { width: 100%; }
 }
 
 /* ── THE LEDGER: nested prefixes, pools, reservations (real CIDR) ────────
@@ -3955,11 +4006,11 @@ button.rl-crumb:focus-visible { outline: 2px solid var(--gilt-bright); outline-o
    cell, THE TRIBUTE's reserved stripes. Everything else flips through the
    tokens on the panel containers (top of this file). Rack devices stay dark
    metal in both schemes (the design notes, THE ARMORY rule 10). */
-:root[data-scheme="light"] .sp-btn-warn { color: #9d0006; border-color: rgba(157, 0, 6, 0.45); }
-:root[data-scheme="light"] .sp-btn-warn:hover { background: rgba(157, 0, 6, 0.1); }
-:root[data-scheme="light"] .sp-btn-go:hover { background: #9a6510; }
-:root[data-scheme="light"] .ldg-cell { background: rgba(60, 56, 54, 0.07); }
-:root[data-scheme="light"] .ldg-cell.edge { background: rgba(60, 56, 54, 0.16); }
+:root[data-scheme="light"] .sp-btn-warn { color: #b91c1c; border-color: rgba(185, 28, 28, 0.45); }
+:root[data-scheme="light"] .sp-btn-warn:hover { background: rgba(185, 28, 28, 0.1); }
+:root[data-scheme="light"] .sp-btn-go:hover { background: #1e3a8a; }
+:root[data-scheme="light"] .ldg-cell { background: rgba(15, 23, 42, 0.07); }
+:root[data-scheme="light"] .ldg-cell.edge { background: rgba(15, 23, 42, 0.16); }
 :root[data-scheme="light"] .trb-seg.reserve {
   background: repeating-linear-gradient(45deg, #d5c4a1, #d5c4a1 4px, #ebdbb2 4px, #ebdbb2 8px);
 }
@@ -3967,9 +4018,9 @@ button.rl-crumb:focus-visible { outline: 2px solid var(--gilt-bright); outline-o
 /* Dataset hues (a zone's, a port's) were chosen against the night palette; as
    TEXT on a light panel the pale ones vanish. Mixed 40/60 toward ink they keep
    their family and clear AA on cream; strokes and dots keep the pure hue. */
-:root[data-scheme="light"] .idx-zone { color: color-mix(in srgb, var(--zone-hue, var(--text-dim)) 40%, #282828); }
-:root[data-scheme="light"] .ldg-host-ip { color: color-mix(in srgb, var(--z-hue, var(--gilt)) 40%, #282828); }
-:root[data-scheme="light"] .ldg-port { color: color-mix(in srgb, var(--p-hue, var(--gilt)) 40%, #282828); }
+:root[data-scheme="light"] .idx-zone { color: color-mix(in srgb, var(--zone-hue, var(--text-dim)) 40%, #0f172a); }
+:root[data-scheme="light"] .ldg-host-ip { color: color-mix(in srgb, var(--z-hue, var(--gilt)) 40%, #0f172a); }
+:root[data-scheme="light"] .ldg-port { color: color-mix(in srgb, var(--p-hue, var(--gilt)) 40%, #0f172a); }
 
 /* ── KEYBOARD FOCUS on the panels (v1.52.0, accessibility pass) ─────────────
    One visible ring for every control a panel holds, in the panel's own gilt,

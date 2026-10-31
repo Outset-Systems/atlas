@@ -89,6 +89,9 @@ VM_STATES = ["on", "off"]
 RITE_CADENCES = ["continuous", "daily", "weekly", "monthly", "parked"]
 CERT_KINDS = ["tls", "ssh-host", "ca"]
 IFACE_KINDS = ["rj45", "sfp", "sfp+", "console", "power", "virtual"]
+#: The faceplates THE ARMORY can draw; mirrors KIND_HUE in rack-model.js.
+RACK_KINDS = ["auto", "compute", "forge", "gateway", "switch", "storage",
+              "power", "enclosure", "patch"]
 PREFIX_ROLES = ["prefix", "container", "reserved"]
 RANGE_KINDS = ["dhcp", "reserved"]
 #: How a service's button behaves — see LINK_FIELDS["open_in"] and glass.js.
@@ -394,6 +397,10 @@ SECTIONS = {
             f("desc", "text", label="Description",
               help="What this slot holds, in your words. Shown in the RACKS pane "
                    "for every vessel; for an uncharted one it also stands in for the role."),
+            f("kind", "select", options=RACK_KINDS, default="auto",
+              help="Which faceplate it wears. `auto` reads the name and Description."),
+            f("depth_mm", "int", label="Depth (mm)", min=0, max=1500,
+              help="How deep it runs, for the 3D rack. Blank uses a typical depth for its kind."),
         ]),
 
     "rack_rear": section(

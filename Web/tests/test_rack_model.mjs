@@ -11,7 +11,8 @@ import { rackList, rackTitle, inRack } from '../static/js/rack-model.js';
 import assert from 'node:assert/strict';
 import {
   UH, RACK_W, KIND_HUE, ledColor, slug, isEmpty, topU, slotKey, uLabel,
-  kindOf, setRackTheme, buildDevices, fits, faceplate, ledSpot,
+  kindOf, setRackTheme, buildDevices, buildRear, fits, faceplate, ledSpot,
+  depthMm, rackDepthMm, KIND_DEPTH_MM,
 } from '../static/js/rack-model.js';
 
 let passed = 0;
@@ -169,6 +170,81 @@ test('RACKS: a place and a name, one rack or many', () => {
     'two racks may each hold a Patch Panel');
   assert.equal(slotKey({ name: 'Patch Panel' }), 'slot:patch-panel', 'an existing lab keeps its saved keys');
   assert.equal(slotKey({ name: 'Patch Panel', rack: 'rack-b' }), 'slot:rack-b-patch-panel');
+});
+
+/* ── the wider armory: switches, storage, power, enclosures ──────────── */
+
+test('kindOf reads the iron from a slot name or description', () => {
+  setRackTheme({});
+  assert.equal(kindOf({ name: 'Core Switch', node: 'x' }, { kind: 'network' }), 'switch');
+  assert.equal(kindOf({ name: 'CLOSET-1', desc: 'USW-Pro-24-PoE' }, null), 'switch');
+  assert.equal(kindOf({ name: 'NAS', desc: 'Synology NAS' }, null), 'storage');
+  assert.equal(kindOf({ name: 'UNAS Pro 8' }, null), 'storage');
+  assert.equal(kindOf({ name: 'UPS 2U Pro' }, null), 'power');
+  assert.equal(kindOf({ name: 'CLOSET-2', desc: 'USP PDU Pro' }, null), 'power');
+  assert.equal(kindOf({ name: 'RackMac Studio' }, null), 'enclosure');
+  assert.equal(kindOf({ name: 'PDU', desc: 'Switched, eight outlets.' }, null), 'power');
+  assert.equal(kindOf({ name: 'App Host', desc: 'Switched to Debian' }, null), 'compute');
+});
+
+test('a slot kind beats the words, and auto or nonsense does not', () => {
+  assert.equal(kindOf({ name: 'UPS monitor', kind: 'compute' }, null), 'compute');
+  assert.equal(kindOf({ name: 'UPS', kind: 'auto' }, null), 'power');
+  assert.equal(kindOf({ name: 'UPS', kind: 'toaster' }, null), 'power');
+});
+
+test('a themed gateway keeps its faceplate whatever its description says', () => {
+  setRackTheme({ gatewayNodes: ['edge'], forgeNames: ['rig'] });
+  assert.equal(kindOf({ node: 'edge', desc: 'switch and router' }, null), 'gateway');
+  assert.equal(kindOf({ name: 'GPU Rig', desc: 'on the UPS' }, null), 'forge');
+  setRackTheme({});
+});
+
+test('depth comes from the slot, then the kind', () => {
+  assert.equal(depthMm({ depth_mm: 630 }, 'compute'), 630);
+  assert.equal(depthMm({ depth_mm: '' }, 'power'), KIND_DEPTH_MM.power);
+  assert.equal(depthMm({ depth_mm: 0 }, 'patch'), KIND_DEPTH_MM.patch);
+  for (const kind of Object.keys(KIND_HUE)) assert.ok(KIND_DEPTH_MM[kind] > 0, kind);
+});
+
+test('buildDevices carries depth, and the cabinet clears the deepest vessel', () => {
+  const rack = [{ u: 'U1–2', size: 2, name: 'UPS', depth_mm: 630 }, { u: 'U3', name: 'Host' }];
+  const { devices } = buildDevices(rack, () => null);
+  assert.equal(devices[0].depth, 630);
+  assert.equal(devices[1].depth, KIND_DEPTH_MM.compute);
+  assert.equal(rackDepthMm(devices), 690);
+  assert.equal(rackDepthMm(devices, [{}]), 820);      // rear fittings need their own room
+  assert.equal(rackDepthMm([]), 500);                 // an empty rack is still a cabinet
+});
+
+test('buildRear matches what the shared detail pane reads', () => {
+  const rear = buildRear(
+    [{ name: 'NAS', node: 'nas', desc: 'Synology NAS' }, { name: 'Shelf' }],
+    (id) => ({ id }));
+  assert.equal(rear[0].key, 'rear:0');
+  assert.equal(rear[0].node.id, 'nas');
+  assert.equal(rear[0].kind, 'storage');
+  assert.equal(rear[0].rear, true);
+  assert.equal(rear[1].node, null);
+  assert.deepEqual(buildRear(undefined, () => null), []);
+});
+
+test('every kind draws a faceplate, and every LED lands where the art puts it', () => {
+  for (const kind of Object.keys(KIND_HUE)) {
+    for (const size of [1, 2, 3]) {
+      const svg = faceplate({ kind, size }, '#FB4934');
+      assert.ok(svg.startsWith('<svg') && !svg.includes('undefined') && !svg.includes('NaN'),
+        `${kind} ${size}U`);
+      const spot = ledSpot({ kind, size });
+      if (spot) assert.ok(svg.includes(`cx="${spot.x}" cy="${spot.y}"`), `${kind} ${size}U LED`);
+    }
+  }
+});
+
+test('a storage faceplate shows four bays a row', () => {
+  const bays = (size) => faceplate({ kind: 'storage', size }, '').match(/fp-bay/g).length;
+  assert.equal(bays(1), 4);
+  assert.equal(bays(2), 8);
 });
 
 console.log(`rack-model: ${passed} passed`);

@@ -190,3 +190,25 @@ def test_the_toggle_is_in_the_band_and_boots_first():
     assert imports[:2] == ["config.js", "scheme.js"], (
         f"scheme.js must load right after config.js (got {imports[:3]}): data-scheme "
         "has to stand before any panel can open")
+
+
+def test_the_glass_still_reads_with_black_behind_it():
+    """Light panels are translucent, so the ground is not a token: composite the
+    panel's fill over black, the worst thing a panel can sit on (2026-10-31)."""
+    css = _strip_comments(_read(CSS))
+    m = re.search(r'\.wiz-panel\)\s*\{\s*background: rgba\((\d+), (\d+), (\d+), ([\d.]+)\)', css)
+    assert m, "the glass rule moved, or the panels went opaque again"
+    alpha = float(m.group(4))
+    ground = "#" + "".join(f"{round(int(m.group(i)) * alpha):02x}" for i in (1, 2, 3))
+    p = _scheme("light")
+    for fg in ("--text", "--text-dim", "--text-soft", "--gilt"):
+        r = _ratio(p[fg], ground)
+        assert r >= 4.5, f"{fg} {p[fg]} on glass over black ({ground}) is {r:.2f}:1"
+
+
+def test_the_light_accent_is_blue():
+    p = _scheme("light")
+    r, g, b = [int(p["--gilt"].lstrip("#")[i:i + 2], 16) for i in (0, 2, 4)]
+    assert b > r and b > g, "the light scheme's accent is blue, not amber"
+    light_rules = [l for l in _read(CSS).splitlines() if 'data-scheme="light"' in l]
+    assert not [l for l in light_rules if "251, 241, 199" in l], "a warm ground survived in the light rules"
