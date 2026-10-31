@@ -131,7 +131,7 @@ function build() {
       </div>
       ${rows.map(accountHTML).join('')}
     </div>`;
-  }).join('') || `<div class="ldg-note">no accounts charted — add them in the Desk,
+  }).join('') || `<div class="ldg-note">no accounts charted — add them in the map editor,
     on each place's own form. Surveyed by hand from the access baseline the
     weekly audit already diffs; chart the posture, never a credential.</div>`;
 }

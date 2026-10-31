@@ -40,7 +40,7 @@ function renderAccount() {
             : a.source === 'local' ? 'LOCAL ACCOUNT'
             : '';
   const badges = [
-    a.admin ? '<span class="acct-badge">SURVEYOR</span>' : '',
+    a.admin ? '<span class="acct-badge">ADMIN</span>' : '',
     via ? `<span class="acct-badge acct-badge-quiet">${via}</span>` : '',
     a.mode === 'accounts' && a.mfa ? '<span class="acct-badge acct-badge-quiet">MFA</span>' : '',
   ].join('');
@@ -49,8 +49,8 @@ function renderAccount() {
   // from its own session and others from the Hub's signed header, and only the
   // first can be signed out here.
   const note = a.canSignOut
-    ? (a.mfa ? 'A second factor guards this account.' : 'No second factor on this account.')
-    : `Named by ${themeText('hub_name', 'the Hub')}, which holds your session — sign out there.`;
+    ? (a.mfa ? 'Two-factor sign-in is on for this account.' : 'Two-factor sign-in is off for this account.')
+    : `Signed in through ${themeText('hub_name', 'the Hub')}. Sign out there.`;
   // The one door you did not come through has to be visible or it may as well
   // not be there: named by the Hub you can sign out THERE (the only place that
   // session ends) and — in hybrid — take an Atlas account instead; signed in
@@ -89,7 +89,7 @@ function renderAccount() {
     // ACCOUNT leads and the lore follows (2026-08-16 — the second ask
     // for this section in two days; a suffix translation was not enough, so
     // the plain word IS the name now and the seal is the flavor).
-    `<button class="sp-sub" type="button">ACCOUNT <span class="sp-sub-plain">· the seal you carry</span></button>
+    `<button class="sp-sub" type="button">ACCOUNT <span class="sp-sub-plain">· your sign-in</span></button>
      <div class="sp-sec-body">
      <div class="acct-row">${a.emblem ? `<span class="acct-worn">${esc(a.emblem)}</span>` : ''}<span class="acct-name">${who}</span>${badges}</div>
      <div class="acct-note">${note}</div>` + picker + pwForm +
@@ -156,8 +156,8 @@ async function changePassword() {
 const EMBLEMS = ['🗡','🛡','🏹','🪄','🧭','🗺','⚗','🔥','🌙','⭐','🍄','👁'];
 
 const hubNamedAdminHint =
-  `<div class="sp-hint">You are named by ${esc(themeText('hub_name', 'the Hub'))}. Managing accounts needs ` +
-  `an Atlas session — <a href="auth/login">sign in at the Atlas door</a>.</div>`;
+  `<div class="sp-hint">You are signed in through ${esc(themeText('hub_name', 'the Hub'))}. Managing accounts needs ` +
+  `an Atlas sign-in: <a href="auth/login">sign in to the Atlas directly</a>.</div>`;
 
 function authAdminPosture() {
   const a = CFG.AUTH;
@@ -210,7 +210,7 @@ async function loadUsers() {
   if (!body) return;
   let users = [];
   try { users = (await authApi('api/v2/auth/users')).users || []; }
-  catch { body.innerHTML = `<div class="sp-hint">The roster would not answer.</div>`; return; }
+  catch { body.innerHTML = `<div class="sp-hint">The user list could not be loaded.</div>`; return; }
   const me = CFG.AUTH.user;
   const rows = users.map((u) => {
     const chips =
@@ -235,8 +235,8 @@ async function loadUsers() {
       `<label class="usr-new-admin"><input type="checkbox" id="usr-new-admin"> admin</label>` +
       `<button class="sp-btn sp-btn-go" id="usr-create">Create</button>` +
     `</div>` +
-    `<div class="sp-hint">Local accounts only \u2014 directory people sign in with their AD ` +
-    `password and appear here on first bind. Blocking wins over both doors.</div>`;
+    `<div class="sp-hint">Local accounts only. Directory users sign in with their directory ` +
+    `password and appear here after their first sign-in. A blocked user cannot sign in either way.</div>`;
   body.querySelectorAll('.usr-act').forEach((b) => b.addEventListener('click', async () => {
     const u = b.dataset.u, act = b.dataset.act;
     try {
@@ -279,7 +279,7 @@ async function loadSignins() {
   let events = [];
   // the panel shows 60 — ask for 60, not the server's 200-row default
   try { events = (await authApi('api/v2/auth/audit?limit=60')).events || []; }
-  catch { body.innerHTML = `<div class="sp-hint">The ledger would not answer.</div>`; return; }
+  catch { body.innerHTML = `<div class="sp-hint">Sign-in history could not be loaded.</div>`; return; }
   const rows = events.map((e) =>
     `<div class="aud-row${/fail|locked|denied/.test(e.event) ? ' aud-bad' : ''}">` +
     `<span class="aud-ts" title="${esc(e.ts || '')}">${esc(stampLocal(e.ts))}</span>` +
@@ -297,8 +297,8 @@ function refreshSigninsIfOpen() {
   if (el && !el.hidden && !el.classList.contains('closed') && !el._load) loadSignins();
 }
 
-function renderUsers() { adminSection('sp-users', 'USERS', 'who may pass', loadUsers); }
-function renderSignins() { adminSection('sp-signins', 'SIGN-INS', 'the gate\u2019s ledger', loadSignins); }
+function renderUsers() { adminSection('sp-users', 'USERS', 'who can sign in', loadUsers); }
+function renderSignins() { adminSection('sp-signins', 'SIGN-IN HISTORY', 'recent attempts', loadSignins); }
 
 /* every settings section, in panel order — the ONE list a new section joins.
    renderAccount used to grow these as tail-calls, which made a function
@@ -319,12 +319,12 @@ function renderSettingsSections() {
    sends you and what the rites post with. */
 const REALM_FIELDS = [
   ['HUB_URL', 'Hub URL', 'https://hub.example.com'],
-  ['ATLAS_SCROLL_ROOT', 'Vault root (trimmed off scroll paths)', '/srv/docs/'],
-  ['ATLAS_BEAT_TOKEN', 'Heartbeat token (the rites post with it)', ''],
+  ['ATLAS_SCROLL_ROOT', 'Docs folder (removed from document paths)', '/srv/docs/'],
+  ['ATLAS_BEAT_TOKEN', 'Heartbeat token (scheduled jobs send it)', ''],
   // THE VIEWING GLASS (v1.38.2) — the last three env-only knobs, now live
-  ['ATLAS_EMBED_HOSTS', 'Glass: extra origins the map may frame', 'https://host:port https://other'],
-  ['ATLAS_EMBED_SERVICES', 'Glass: frame the dataset\u2019s own services (1/0)', '1'],
-  ['ATLAS_EMBED_PROBE', 'Glass: ask a service if it allows framing (1/0)', '1'],
+  ['ATLAS_EMBED_HOSTS', 'Embedding: extra sites the map may show', 'https://host:port https://other'],
+  ['ATLAS_EMBED_SERVICES', 'Embedding: show the map\u2019s own services (1 on, 0 off)', '1'],
+  ['ATLAS_EMBED_PROBE', 'Embedding: check a service allows it first (1 on, 0 off)', '1'],
 ];
 
 async function renderRealm() {
@@ -356,10 +356,11 @@ async function renderRealm() {
       </label>`;
   }).join('');
   el.innerHTML =
-    `<button class="sp-sub" type="button">THE LAB</button>
+    `<button class="sp-sub" type="button">LAB SETTINGS <span class="sp-sub-plain">· Hub, docs, heartbeats</span></button>
      <div class="sp-sec-body">
-     <div class="acct-note">Where the seal sends you home, what is trimmed off a scroll's path,
-       and the token the rites post their heartbeats with. Blank means “use the deployment value”.</div>
+     <div class="acct-note">The Hub link, the folder removed from document paths, the token scheduled jobs
+       send with their heartbeats, and which sites the map may show inside itself.
+       Leave a field blank to use the deployment value.</div>
      ${rows}
      <div class="sp-actions"><button class="sp-btn sp-btn-go" id="realm-save">Save</button></div>
      <div class="dir-result" id="realm-result"></div>
@@ -409,11 +410,11 @@ async function renderDeployment() {
       `<span class="dep-val${k.secret ? ' dep-secret' : ''}">${esc(k.value || (k.source === 'default' ? '—' : ''))}</span>` +
       `<span class="dir-src">${esc(SRC[k.source] || k.source)}</span></div>`).join('');
   el.innerHTML =
-    `<button class="sp-sub" type="button">THE DEPLOYMENT</button>
+    `<button class="sp-sub" type="button">DEPLOYMENT <span class="sp-sub-plain">· every setting, read-only</span></button>
      <div class="sp-sec-body">
      <div class="acct-note">v${esc(d.version)} · ${esc(d.mode)} mode · self-report ${d.metrics ? 'on' : 'off'}.
-       Every knob the Atlas knows and where its value came from — reading only; the two
-       forms above are the only pens.</div>
+       Every setting the Atlas knows and where its value came from. To change one, use
+       Data sources or Lab settings; the rest are set in the deployment.</div>
      <div class="dep-list">${rows}</div>
      </div>`;
   A.applySettingsFolds?.();
@@ -428,7 +429,7 @@ async function renderDeployment() {
    force came from. Keys are write-only: the form never learns a stored one,
    only that one is set; TEST with a blank key asks with the one in force. */
 const SRC_FIELDS = [
-  ['ATLAS_SIGNALS_SOURCES', 'Signals sources', 'kuma,prometheus,deception'],
+  ['ATLAS_SIGNALS_SOURCES', 'Live sources (comma-separated)', 'kuma,prometheus,deception'],
   ['ATLAS_PROM_URL', 'Prometheus URL', 'http://prometheus:9090'],
   ['ATLAS_LOKI_URL', 'Loki URL', 'http://loki:3100'],
   ['ATLAS_KUMA_URL', 'Uptime-Kuma URL', 'http://kuma:3001'],
@@ -471,10 +472,10 @@ async function renderSources() {
     ? (hub.enabled || []).map((s) => `${esc(s)} <em>${esc(hub.last?.[s] || 'not asked yet')}</em>`).join(' · ')
     : 'no live source is running — the map is static';
   el.innerHTML =
-    `<button class="sp-sub" type="button">THE SOURCES</button>
+    `<button class="sp-sub" type="button">DATA SOURCES <span class="sp-sub-plain">· health, metrics and logs</span></button>
      <div class="sp-sec-body">
-     <div class="acct-note">What the realm asks for its numbers, its signals and its stones.
-       Blank means “use the deployment value”. Live now: ${state}.</div>
+     <div class="acct-note">Where the map gets its health, metrics, logs and tripwires. Test a source before
+       you save. Leave a field blank to use the deployment value. Live now: ${state}.</div>
      ${rows}
      <div class="sp-actions src-tests">
        ${SRC_TESTS.map(([k, name]) => `<button class="sp-btn" data-test="${k}">Test ${esc(name)}</button>`).join('')}
@@ -536,7 +537,7 @@ async function saveSources() {
     const fresh = $('src-result');
     if (fresh) {
       fresh.className = 'dir-result dir-ok';
-      fresh.textContent = 'The sources are set. The next poll asks the new ones; the watchings redraw as they refresh.';
+      fresh.textContent = 'Saved. The next poll uses the new sources, and charts update as they refresh.';
     }
     A.repaintSignals?.();
   } catch {
@@ -562,8 +563,8 @@ const DIR_FIELDS = [
   ['ATLAS_LDAP_BASE_DN', 'Base DN', 'DC=example,DC=com'],
   ['ATLAS_LDAP_UPN_DOMAIN', 'UPN domain', 'derived from the base DN'],
   ['ATLAS_LDAP_CA_FILE', 'CA bundle', '/run/secrets/directory-ca.pem'],
-  ['ATLAS_LDAP_ACCESS_GROUPS', 'May sign in (groups)', 'Atlas-Viewers'],
-  ['ATLAS_LDAP_ADMIN_GROUPS', 'Are surveyors (groups)', 'Atlas-Admins'],
+  ['ATLAS_LDAP_ACCESS_GROUPS', 'Groups allowed to sign in', 'Atlas-Viewers'],
+  ['ATLAS_LDAP_ADMIN_GROUPS', 'Admin groups', 'Atlas-Admins'],
   ['ATLAS_LDAP_TIMEOUT', 'Timeout (s)', '5'],
 ];
 const SOURCE_LABEL = { settings: 'set here', deployment: 'from the deployment', unset: 'unset' };
@@ -575,7 +576,7 @@ async function renderDirectory() {
   el.hidden = posture === 'hide';
   if (el.hidden) return;
   if (posture === 'hub-named') {
-    el.innerHTML = `<button class="sp-sub" type="button">THE DIRECTORY</button>` +
+    el.innerHTML = `<button class="sp-sub" type="button">DIRECTORY SIGN-IN <span class="sp-sub-plain">· Active Directory or LDAP</span></button>` +
       `<div class="sp-sec-body">${hubNamedAdminHint}</div>`;
     A.applySettingsFolds?.();
     return;
@@ -597,17 +598,17 @@ async function renderDirectory() {
       </label>`;
   }).join('');
   el.innerHTML =
-    `<button class="sp-sub" type="button">THE DIRECTORY</button>
+    `<button class="sp-sub" type="button">DIRECTORY SIGN-IN <span class="sp-sub-plain">· Active Directory or LDAP</span></button>
      <div class="sp-sec-body">
-     <div class="acct-note">Who the realm asks about a name it does not keep itself.
-       Blank means “use the deployment value”.</div>
+     <div class="acct-note">Lets people sign in with their directory account. Test a real account, then Save.
+       Leave a field blank to use the deployment value.</div>
      ${rows}
      <div class="dir-test">
-       <input class="dir-input" id="dir-user" placeholder="a directory name to test with" autocomplete="off">
+       <input class="dir-input" id="dir-user" placeholder="a directory username to test" autocomplete="off">
        <input class="dir-input" id="dir-pass" type="password" placeholder="their password" autocomplete="off">
      </div>
      <div class="sp-actions">
-       <button class="sp-btn" id="dir-test">Test the binding</button>
+       <button class="sp-btn" id="dir-test">Test sign-in</button>
        <button class="sp-btn sp-btn-go" id="dir-save" disabled title="Test a real account first">Save</button>
      </div>
      <div class="dir-result" id="dir-result"></div>
@@ -629,7 +630,7 @@ async function testDirectory() {
   const box = $('dir-result');
   const btn = $('dir-test');
   box.className = 'dir-result';
-  box.textContent = 'Asking the directory…';
+  box.textContent = 'Testing the sign-in…';
   btn.disabled = true;
   try {
     const r = await fetch('api/v2/admin/auth/test', {
@@ -642,7 +643,7 @@ async function testDirectory() {
     if (j.ok) {
       box.className = 'dir-result dir-ok';
       box.textContent = `${$('dir-user').value} was admitted` +
-        (j.is_admin ? ' as a SURVEYOR — this config can be saved.'
+        (j.is_admin ? ' as an admin. You can save this now.'
                     : ' — but not as a surveyor. A directory-only sign-in still needs a proven admin.');
       // the password was only ever needed for the bind; don't leave it sitting in the DOM
       $('dir-pass').value = '';
@@ -675,7 +676,7 @@ async function saveDirectory() {
       return;
     }
     box.className = 'dir-result dir-ok';
-    box.textContent = 'The directory is set. New sign-ins use it from now on.';
+    box.textContent = 'Saved. New sign-ins use this directory from now on.';
     renderDirectory();
   } catch {
     box.className = 'dir-result dir-bad';

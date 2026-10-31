@@ -98,7 +98,7 @@ function build() {
       </div>
       ${group.map(sealHTML).join('')}
     </div>`;
-  }).join('') || '<div class="ldg-note">no seals charted — add them in the Desk.</div>';
+  }).join('') || '<div class="ldg-note">no seals charted — add them in the map editor.</div>';
 }
 
 const scene = makeScene({ id: 'seals', closeId: 'sl-close', build: () => build() });

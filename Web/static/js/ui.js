@@ -445,7 +445,7 @@ function renderSources() {
   if (!el) return;
   const src = A.signalsSources;
   if (!src) {
-    el.innerHTML = '<span class="sp-src sp-src-silent">no feed — the watchers are silent</span>';
+    el.innerHTML = '<span class="sp-src sp-src-silent">no feed: nothing is reporting</span>';
     return;
   }
   const names = Object.keys(src);

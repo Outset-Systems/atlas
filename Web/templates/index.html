@@ -481,12 +481,12 @@
   </div>
 </div>
 
-<!-- THE SURVEYOR'S DESK — where the map is written (admins only; the server
+<!-- THE MAP EDITOR — where the map is written (admins only; the server
      decides whether the chrome that opens this is rendered at all) -->
 <div id="desk" aria-hidden="true">
-  <div class="dsk-panel" role="dialog" aria-label="The Surveyor's Desk — edit the map">
+  <div class="dsk-panel" role="dialog" aria-label="Map editor">
     <div class="dsk-head">
-      <span class="dsk-title" id="dsk-title">THE SURVEYOR'S DESK</span>
+      <span class="dsk-title" id="dsk-title">MAP EDITOR</span>
       <span class="dsk-sub" id="dsk-sub"></span>
       <button class="ldg-close" id="dsk-close" title="Close (Esc)">×</button>
     </div>
@@ -501,7 +501,7 @@
 <div id="wizard" aria-hidden="true">
   <div class="wiz-panel" role="dialog" aria-label="The first survey — set up this Atlas">
     <div class="dsk-head">
-      <span class="dsk-title">THE FIRST SURVEY</span>
+      <span class="dsk-title">GUIDED SETUP</span>
       <span class="dsk-sub">charting a lab from nothing</span>
       <button class="ldg-close" id="wiz-close" title="Close (Esc)">×</button>
     </div>
@@ -619,89 +619,104 @@
   <div class="ldg-panel" role="dialog" aria-label="Settings">
     <div class="ldg-head">
       <span class="ldg-title">SETTINGS</span>
-      <span class="ldg-sub">who you are, what the map asks, and how it is drawn</span>
+      <span class="ldg-sub">your account, the map, its connections and admin</span>
       <button class="ldg-close" id="set-close" title="Close (Esc)">&times;</button>
     </div>
     <div id="settings-panel">
+      <!-- Four groups, each hidden when nothing in it applies to this viewer.
+           Section ids and data-sec keys are the stored folds and the targets of
+           account.js, table.js and the editor: reword freely, rename never. -->
+      <div class="sp-group" data-group="you">
+      <div class="sp-group-name">YOU</div>
       <!-- Who you are on this instance. Built by ui.js from CFG.AUTH, because
            what belongs here differs per auth mode and only the server knows the
            mode (see settings.auth_config). Empty in standalone — no gate, no
            identity, nothing honest to say. -->
       <div class="sp-account sp-sec" id="sp-account" data-sec="account" hidden></div>
-      <!-- THE DIRECTORY: AD/LDAPS settings, admin-only and only where an Atlas
-           session can exist (accounts / hybrid). Built by ui.js from
-           /api/admin/auth, which is itself admins-only — the chrome is hidden
-           AND the API refuses, so this is not a client-side secret. -->
-      <div class="sp-directory sp-sec" id="sp-directory" data-sec="directory" hidden></div>
-      <!-- THE SOURCES (v1.37.0): where the Atlas asks for its numbers (Prometheus,
-           Loki), its signals (Uptime-Kuma) and its stones (the decoy feed). Admins in any
-           mode; built by account.js from /api/v2/admin/integrations, which is
-           itself admins-only. Keys are write-only — the form never sees one. -->
-      <div class="sp-sec" id="sp-integrations" data-sec="integrations" hidden></div>
-      <!-- THE REALM (v1.38.0): Hub URL, vault root, heartbeat token — the same
-           settings layer as THE SOURCES. THE DEPLOYMENT: every knob, read-only. -->
-      <div class="sp-sec" id="sp-realm" data-sec="realm" hidden></div>
-      <div class="sp-sec" id="sp-deployment" data-sec="deployment" hidden></div>
-      <!-- USERS + SIGN-INS: the accounts store's admin ledger (2026-08-16).
-           Built by ui.js; hidden outside accounts/hybrid or for non-admins, and
-           a Hub-named admin gets the pointer to the Atlas door instead of
-           buttons that would 401. -->
-      <div class="sp-sec" id="sp-users" data-sec="users" hidden></div>
-      <div class="sp-sec" id="sp-signins" data-sec="signins" hidden></div>
-      <div class="sp-sec" data-sec="survey">
-        <button class="sp-sub" type="button">THE SURVEY</button>
+      <!-- THE CARTOGRAPHER'S TABLE (2026-08-15): the viewer's own backdrop and
+           the theme that rides it, per browser — the Desk still owns uploads and
+           the realm-wide default. Rows built by static/js/table.js from
+           /api/v2/maps; the tilt is the first arc of the worlds plan. -->
+      <div class="sp-sec" data-sec="table">
+        <button class="sp-sub" type="button">MAP STYLE <span class="sp-sub-plain">· background and tilt</span></button>
         <div class="sp-sec-body">
+          <div class="sp-maps" id="sp-maps"></div>
+          <div class="sp-hint">Your choice, in this browser only. The default for everyone is set in the map editor.
+            A background with a different shape may need its places moved.</div>
           <label class="sp-row">
-            <span>Move the dots</span>
-            <input type="checkbox" id="sp-editmode">
+            <span>Tilt the map</span>
+            <input type="checkbox" id="sp-tilt">
           </label>
-          <div class="sp-hint" id="sp-edit-hint" hidden>Drag any place to reposition it. Changes save in this browser.</div>
-          <div class="sp-actions">
-            <button class="sp-btn sp-btn-go" id="sp-save">Save to map</button>
-            <button class="sp-btn" id="sp-copy">Copy</button>
-            <button class="sp-btn sp-btn-warn" id="sp-reset">Reset</button>
-          </div>
-          <div class="sp-hint">Save = permanent, for everyone. Reset = discard your unsaved moves.</div>
+          <div class="sp-hint">Shows the map at an angle.</div>
         </div>
       </div>
       <!-- THE SEEKING: hand the index search's words to DEGOOG (the realm's own
            public metasearch) when the map has no answer. Off by default — the
            index is about the realm; the wider seeking is opt-in. -->
       <div class="sp-sec" data-sec="seeking">
-        <button class="sp-sub" type="button">THE SEEKING</button>
+        <button class="sp-sub" type="button">WEB SEARCH <span class="sp-sub-plain">· when the map has no answer</span></button>
         <div class="sp-sec-body">
           <label class="sp-row">
-            <span>Seek with Degoog</span>
+            <span>Offer a web search with Degoog</span>
             <input type="checkbox" id="sp-degoog">
           </label>
-          <div class="sp-hint">With this on, the index search also offers your words to DEGOOG — for the things the map does not chart. Saved in this browser.</div>
+          <div class="sp-hint">With this on, the map search also offers to send your words to Degoog. Saved in this browser.</div>
         </div>
       </div>
-      <!-- THE CARTOGRAPHER'S TABLE (2026-08-15): the viewer's own backdrop and
-           the theme that rides it, per browser — the Desk still owns uploads and
-           the realm-wide default. Rows built by static/js/table.js from
-           /api/v2/maps; the tilt is the first arc of the worlds plan. -->
-      <div class="sp-sec" data-sec="table">
-        <button class="sp-sub" type="button">THE CARTOGRAPHER'S TABLE</button>
+      </div>
+      <div class="sp-group" data-group="map">
+      <div class="sp-group-name">THE MAP</div>
+      <div class="sp-sec" data-sec="survey">
+        <button class="sp-sub" type="button">MOVE PLACES <span class="sp-sub-plain">· drag them on the map</span></button>
         <div class="sp-sec-body">
-          <div class="sp-maps" id="sp-maps"></div>
-          <div class="sp-hint">Your choice, in this browser only — the map's default is set at the Desk.
-            Same land, different light; a different coastline needs its places re-surveyed.</div>
           <label class="sp-row">
-            <span>Tilt the table</span>
-            <input type="checkbox" id="sp-tilt">
+            <span>Drag places on the map</span>
+            <input type="checkbox" id="sp-editmode">
           </label>
-          <div class="sp-hint">The sand table seen at an angle.</div>
+          <div class="sp-hint" id="sp-edit-hint" hidden>Drag any place to move it. Moves stay in this browser until you save.</div>
+          <div class="sp-actions">
+            <button class="sp-btn sp-btn-go" id="sp-save">Save to map</button>
+            <button class="sp-btn" id="sp-copy">Copy</button>
+            <button class="sp-btn sp-btn-warn" id="sp-reset">Reset</button>
+          </div>
+          <div class="sp-hint">Save to map keeps your moves for everyone. Copy puts the positions on your clipboard. Reset discards unsaved moves.</div>
         </div>
       </div>
+      </div>
+      <div class="sp-group" data-group="connections">
+      <div class="sp-group-name">CONNECTIONS</div>
+      <!-- THE SOURCES (v1.37.0): where the Atlas asks for its numbers (Prometheus,
+           Loki), its signals (Uptime-Kuma) and its stones (the decoy feed). Admins in any
+           mode; built by account.js from /api/v2/admin/integrations, which is
+           itself admins-only. Keys are write-only — the form never sees one. -->
+      <div class="sp-sec" id="sp-integrations" data-sec="integrations" hidden></div>
       <!-- Diagnostics: which signal sources are actually reporting. The feed already
            carries this; surfacing it answers "why does the map look wrong?" here
            instead of by curling /api/signals. -->
       <div class="sp-sec" data-sec="watchers">
-        <button class="sp-sub" type="button">THE WATCHERS</button>
+        <button class="sp-sub" type="button">SOURCE STATUS <span class="sp-sub-plain">· what is reporting now</span></button>
         <div class="sp-sec-body">
           <div class="sp-sources" id="sp-sources"></div>
         </div>
+      </div>
+      <!-- THE DIRECTORY: AD/LDAPS settings, admin-only and only where an Atlas
+           session can exist (accounts / hybrid). Built by ui.js from
+           /api/admin/auth, which is itself admins-only — the chrome is hidden
+           AND the API refuses, so this is not a client-side secret. -->
+      <div class="sp-directory sp-sec" id="sp-directory" data-sec="directory" hidden></div>
+      </div>
+      <div class="sp-group" data-group="admin">
+      <div class="sp-group-name">ADMIN</div>
+      <!-- USERS + SIGN-INS: the accounts store's admin ledger (2026-08-16).
+           Built by ui.js; hidden outside accounts/hybrid or for non-admins, and
+           a Hub-named admin gets the pointer to the Atlas door instead of
+           buttons that would 401. -->
+      <div class="sp-sec" id="sp-users" data-sec="users" hidden></div>
+      <div class="sp-sec" id="sp-signins" data-sec="signins" hidden></div>
+      <!-- THE REALM (v1.38.0): Hub URL, vault root, heartbeat token — the same
+           settings layer as THE SOURCES. THE DEPLOYMENT: every knob, read-only. -->
+      <div class="sp-sec" id="sp-realm" data-sec="realm" hidden></div>
+      <div class="sp-sec" id="sp-deployment" data-sec="deployment" hidden></div>
       </div>
     </div>
   </div>

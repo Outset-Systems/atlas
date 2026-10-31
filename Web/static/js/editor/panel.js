@@ -362,7 +362,7 @@ function seatRegionView(form) {
     const view = A.regionViewFor?.(parentId) || null;
     const source = !view ? 'the map'
       : view.fromLens ? `the detailed map of ${view.from}` : 'the main map';
-    let title = `Fill Left, Top, Width and Height with what ${source} behind the Desk shows now`;
+    let title = `Fill Left, Top, Width and Height with what ${source} behind the editor shows now`;
     if (view && !view.direct) {
       title += `, carried onto ${onto} through its rectangle` +
         (parentId ? `. To frame it on that map itself, open ${parent?.name || parentId} first` : '');
@@ -376,7 +376,7 @@ function seatRegionView(form) {
     const { view, onto, source } = read();
     if (!view) { help.textContent = 'The map is not drawn yet.'; return; }
     if (!view.rect) {
-      help.textContent = `The view shows none of ${onto}. Close the Desk, frame the area, and open it again.`;
+      help.textContent = `The view shows none of ${onto}. Close the editor, frame the area, and open it again.`;
       return;
     }
     const { x, y, w, h } = view.rect;
@@ -384,7 +384,7 @@ function seatRegionView(form) {
     help.textContent = `From ${source}: ${w} × ${h} % at ${x}, ${y}. Save to keep it.`;
   });
   retitle();
-  help.textContent = 'Frame the area on the map before opening the Desk, then fill the rectangle from it.';
+  help.textContent = 'Frame the area on the map before opening the editor, then fill the rectangle from it.';
   const hold = el('div');
   hold.append(btn);
   row.append(el('span', 'dsk-label', 'The rectangle'), hold, help);
@@ -463,7 +463,7 @@ async function drawChanges() {
   bodyEl.innerHTML = '';
   const { revisions, kept } = await Editor.revisions();
   if (!revisions.length) {
-    bodyEl.append(notice('Nothing has been changed through the Desk yet.'));
+    bodyEl.append(notice('Nothing has been changed in the map editor yet.'));
     return;
   }
   bodyEl.append(el('div', 'dsk-bar',
@@ -708,7 +708,7 @@ export async function openDesk(sectionKey) {
   root.setAttribute('aria-hidden', 'false');
   A.closeCard?.();
   if (!booted) {
-    bodyEl.innerHTML = '<div class="dsk-notice">Opening the desk…</div>';
+    bodyEl.innerHTML = '<div class="dsk-notice">Opening the map editor…</div>';
     try {
       await Editor.load();
       await Editor.loadRepairs();

@@ -304,7 +304,7 @@ function paint() {
   listEl.innerHTML = view.groups.length
     ? rulerHTML(today ? 'UTC · the hairline is now' : `UTC · ${dayName(day.getUTCDay()).toUpperCase()} — not today`)
       + view.groups.map((g) => groupHTML(g, ctx)).join('')
-    : '<div class="ldg-note">no rites charted — add them in the Desk.</div>';
+    : '<div class="ldg-note">no rites charted — add them in the map editor.</div>';
 }
 
 async function build() {

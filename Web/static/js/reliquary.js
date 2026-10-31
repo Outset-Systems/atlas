@@ -185,7 +185,7 @@ function showDetail(d) {
       }).join('') + `</div><div class="rel-port-detail" hidden></div></div>`
     : (n && (d.kind === 'gateway' || d.kind === 'patch')
         ? `<div class="rel-ports"><div class="ldg-note">no ports charted for this ` +
-          `vessel yet — chart its <code>interfaces[]</code> in the Desk (PORTS) and ` +
+          `vessel yet — chart its <code>interfaces[]</code> in the map editor (PORTS) and ` +
           `the faceplate appears here, each port answering what hangs on it.</div></div>`
         : '');
 

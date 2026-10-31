@@ -883,9 +883,18 @@ body.depths #colophon { color: #3E5A52; }
    "a section with a visible section before it" that gets the rule, not a
    named one (the old `.sp-account .sp-sub:first-child` exception was that
    named one, and wrong the moment ACCOUNT was hidden). */
-#settings-panel > .sp-sec > .sp-sub { border-top: none; padding-top: 0; margin-top: 8px; }
-#settings-panel > .sp-sec:not([hidden]) ~ .sp-sec > .sp-sub {
+.sp-group > .sp-sec > .sp-sub { border-top: none; padding-top: 0; margin-top: 8px; }
+.sp-group > .sp-sec:not([hidden]) ~ .sp-sec > .sp-sub {
   border-top: 1px solid var(--ink-line); padding-top: 11px; margin-top: 14px;
+}
+/* Four plain groups. One with nothing for this viewer disappears whole, name
+   and all: which sections exist depends on the auth mode and on being an admin. */
+.sp-group:not(:has(> .sp-sec:not([hidden]))) { display: none; }
+.sp-group + .sp-group { margin-top: 22px; }
+.sp-group-name {
+  font-family: 'Alegreya Sans', sans-serif; font-size: 0.68rem; font-weight: 700;
+  letter-spacing: 0.14em; color: var(--text-dim); padding-bottom: 6px;
+  border-bottom: 1px solid rgba(var(--gilt-rgb), 0.35);
 }
 .sp-row { display: flex; align-items: center; justify-content: space-between; font-size: 0.86rem; cursor: pointer; }
 .sp-row input { width: 16px; height: 16px; accent-color: var(--gilt); cursor: pointer; }
@@ -969,7 +978,7 @@ a.sp-btn { text-decoration: none; text-align: center; display: block; }
    auto keeps it hugging the name while the fold caret holds the far edge. */
 .sp-sub-plain {
   font-family: 'Alegreya Sans', sans-serif; font-size: 0.72rem;
-  letter-spacing: 0.02em; text-transform: lowercase; color: var(--text-dim);
+  letter-spacing: 0.02em; text-transform: none; color: var(--text-dim);
   margin-right: auto;
 }
 .sp-sec > .sp-sub::after {

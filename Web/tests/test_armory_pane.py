@@ -139,3 +139,20 @@ def test_the_old_names_are_gone_from_the_scene_band():
     card = (WEB / "static" / "js" / "card.js").read_text(encoding="utf-8")
     assert "◈ ROUTE" in card and "◈ TOPOLOGY" in card
     assert "◈ ROAD" not in card and "◈ PATH" not in card
+
+
+def test_settings_are_grouped_in_plain_words():
+    """Settings reads by task, and no section's key moved (2026-10-31)."""
+    html = (WEB / "templates" / "index.html").read_text(encoding="utf-8")
+    panel = html[html.index('id="settings-panel"'):html.index("Toast for unbuilt scenes")]
+    panel = re.sub(r"<!--.*?-->", "", panel, flags=re.S)   # comments may keep history
+    groups = re.findall(r'class="sp-group" data-group="(\w+)"', panel)
+    assert groups == ["you", "map", "connections", "admin"]
+    for key in ("account", "directory", "integrations", "realm", "deployment", "users",
+                "signins", "survey", "seeking", "table", "watchers"):
+        assert f'data-sec="{key}"' in panel, f"the stored fold for {key} would be lost"
+    for old in ("THE SURVEY<", "THE SEEKING", "CARTOGRAPHER", "THE WATCHERS<"):
+        assert old not in panel
+    account = (WEB / "static" / "js" / "account.js").read_text(encoding="utf-8")
+    for old in (">THE SOURCES<", ">THE DIRECTORY<", ">THE LAB<", ">THE DEPLOYMENT<", "SURVEYOR"):
+        assert old not in account

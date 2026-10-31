@@ -64,7 +64,7 @@ function summaryHTML(prefixes, charted) {
           }).join('') + `</div></div>`;
       }).join('')
     : `<div class="ldg-note">port-level truth awaits the surveyor — add <code>ports</code> ` +
-      `from the Desk (or curate <code>interfaces[]</code>) and every faceplate appears here, ` +
+      `from the map editor (or curate <code>interfaces[]</code>) and every faceplate appears here, ` +
       `coloured by realm.</div>`;
 
   return `<div class="ldg-block ldg-path" style="--z-hue:#C9A554">
@@ -194,7 +194,7 @@ function build() {
     (roots.length
       ? roots.map((p) => prefixHTML(p, charted)).join('')
       : `<div class="ldg-note">no ground surveyed yet — give a realm a subnet, or add a ` +
-        `<code>prefix</code> from the Desk, and its addresses appear here.</div>`);
+        `<code>prefix</code> from the map editor, and its addresses appear here.</div>`);
 
   // an unclaimed address is still worth seeing: hosts outside every prefix
   const loose = [...charted.entries()].filter(([value]) =>

@@ -57,7 +57,7 @@ function fail(err) {
    (the backdrop, the host's memory and cores, label positions…) wait in the
    Desk, where they are one click away once there is a map to tune. */
 function laterNote(what) {
-  bodyEl.append(el('p', 'wiz-blurb', `${what} — all in the Desk (E), whenever you want them.`));
+  bodyEl.append(el('p', 'wiz-blurb', `${what} — all in the map editor (E), whenever you want them.`));
 }
 
 /* ── 1. the atlas ─────────────────────────────────────────────────────── */
@@ -121,7 +121,7 @@ function stepPlaces() {
   drawSteps();
   panel('Chart its places',
     'Four ways in. None of them is permanent — anything charted can be renamed, ' +
-    'moved or removed from the Desk afterwards.');
+    'moved or removed in the map editor afterwards.');
 
   const zones = Editor.entries('zones');
   if (!zones.length) {
@@ -134,7 +134,7 @@ function stepPlaces() {
   const choices = el('div', 'wiz-choices');
 
   choices.append(choice('✎', 'One at a time',
-    'Open the Desk and add places by hand. Best when you have a handful and know them well.',
+    'Open the map editor and add places by hand. Best when you have a handful and know them well.',
     () => { close(); openDesk('nodes'); }));
 
   choices.append(choice('☰', 'From a device list',

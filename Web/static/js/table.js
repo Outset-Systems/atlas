@@ -95,7 +95,7 @@ async function buildTable() {
     if (r.ok) maps = (await r.json()).maps || [];
   } catch { /* the rows below say so */ }
   if (!maps.length) {
-    holder.innerHTML = '<div class="sp-hint">No renders answered — the realm’s own backdrop stands.</div>';
+    holder.innerHTML = '<div class="sp-hint">No map images found. Using the default background.</div>';
     return;
   }
   const current = stored();
@@ -130,17 +130,16 @@ function buildProvisioners(holder) {
   wrap.className = 'spm-new';
   wrap.innerHTML =
     `<div class="sp-actions">` +
-      `<button class="sp-btn" id="spm-upload">Upload a render…</button>` +
+      `<button class="sp-btn" id="spm-upload">Upload a map image…</button>` +
       `<input type="file" id="spm-file" accept="image/png,image/jpeg,image/gif,image/webp" hidden>` +
     `</div>` +
     `<div class="sp-actions spm-survey-row">` +
       `<input class="dir-input spm-grow" id="spm-query" type="text" autocomplete="off" spellcheck="false"` +
-        ` placeholder="an address or a zip code…" aria-label="Survey the real world — address or zip">` +
-      `<button class="sp-btn sp-btn-go" id="spm-survey">Survey</button>` +
+        ` placeholder="an address or a zip code…" aria-label="Build a map from an address or zip code">` +
+      `<button class="sp-btn sp-btn-go" id="spm-survey">Build map</button>` +
     `</div>` +
-    `<div class="sp-hint">Upload adds a render to the gallery for everyone. The survey` +
-      ` draws the real buildings around an address — OpenStreetMap knows the` +
-      ` footprints; the table lends the light.</div>`;
+    `<div class="sp-hint">Upload adds an image to the list for everyone. Build map draws the real` +
+      ` buildings around an address from OpenStreetMap.</div>`;
   holder.append(wrap);
 
   /* both actions ride the Desk's own client (editor/store.js) — the third

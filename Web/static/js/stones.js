@@ -274,7 +274,7 @@ function paint() {
   const at = listEl.scrollTop;
   listEl.innerHTML = unmatchedHTML(ov?.unmatched) + (groups
     || `<div class="ldg-note">no ${esc(plural().toLowerCase())} charted yet — add a honeypot or a
-        canary token in the Desk; DATA.md says what one may safely be called.</div>`)
+        canary token in the map editor; DATA.md says what one may safely be called.</div>`)
     + setupBlock(Boolean(ov));
   listEl.scrollTop = at;
   wire();
