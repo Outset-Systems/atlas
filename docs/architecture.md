@@ -322,9 +322,9 @@ flowchart TD
   imports, so load order is the only coupling and a missing module degrades to
   a no-op (`A.buildX?.()`). `tools/check-boot.mjs` checks that every function
   the boot sequence calls is defined somewhere.
-- **Scenes** are full-screen views over the map (the address ledger, the
-  rack, the calendar, certificates, decoys, the event history, the network
-  path, accounts). `scene.js` provides `makeScene({ id, closeId, build,
+- **Scenes** are full-screen views over the map (addresses, the
+  racks, resources, the calendar, certificates, tripwires, the event history,
+  the topology, accounts). `scene.js` provides `makeScene({ id, closeId, build,
   onClose })` so each module supplies only what it draws.
 - **Pure models** (`camera-model.js`, `calendar-model.js`, `ipam.js`,
   `project.js`, `rack-model.js`) have no DOM access and are unit tested with
