@@ -25,7 +25,7 @@ const SCENE_EDITORS = [
   { at: '#reliquary .rel-tools', section: 'rack', title: 'Add, remove or re-describe the rack' },
   { at: '#tribute .trb-head', section: 'vms', title: 'Add or remove vassals' },
   { at: '#ledger .ldg-head', section: 'prefixes', title: 'Edit realms, prefixes and addressing' },
-  { at: '#path .ldg-head', section: 'routes', title: 'Add or remove roads' },
+  { at: '#path .ldg-head', section: 'routes', title: 'Add or remove routes' },
   { at: '#calendar .ldg-head', section: 'rites', title: 'Add or remove rites' },
   { at: '#stones .ldg-head', section: 'stones', title: 'Add a honeypot or a canary token' },
   { at: '#chronicle .chron-head', section: 'chronicle', title: 'Add or remove watchings' },
@@ -63,7 +63,7 @@ function addSettingsEntry() {
   body.className = 'sp-sec-body';
   body.innerHTML =
     '<div class="sp-hint">Add, change or remove anything on the map — places, realms, ' +
-    'prefixes, roads, the rack, the vassals, the rites. Every change is recorded and ' +
+    'prefixes, routes, the racks, the vassals, the rites. Every change is recorded and ' +
     'can be undone.</div>';
   const open = document.createElement('button');
   open.className = 'sp-btn sp-btn-go';

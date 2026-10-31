@@ -740,8 +740,8 @@ function drawConstellationLines(n, entries, points, auto) {
     // "follow THIS one" — so both land on focusService, which draws the full
     // charted chain hop through hop (2026-08-09)
     const hops = Array.isArray(link.path) ? link.path.filter(Boolean).length : 0;
-    const tip = `${link.label} — ${hops ? `follow its road, ${hops} hop${hops === 1 ? '' : 's'}`
-                                        : 'follow its roads'}`;
+    const tip = `${link.label} — ${hops ? `follow its route, ${hops} hop${hops === 1 ? '' : 's'}`
+                                        : 'follow its routes'}`;
     const spokeD = `M ${hx} ${hy} L ${sx} ${sy}`;
     g.appendChild(hitTwin(spokeD, i, tip));
     const spoke = document.createElementNS(SVGNS, 'path');
@@ -931,7 +931,7 @@ A.openConstellation = function openConstellation(id, { auto = false } = {}) {
     A.setCardMinimized?.(true);
     const passing = entries.filter((e) => e.passing).length;
     A.showToast(`${n.name} split into ${entries.length} ${entries.length === 1 ? 'service' : 'services'}` +
-      (passing ? ` (${passing} passing through)` : '') + ` — click a service or one of its roads to follow it.`);
+      (passing ? ` (${passing} passing through)` : '') + ` — click a service or one of its routes to follow it.`);
   }
   return true;
 };

@@ -180,10 +180,10 @@
   <span class="scene-home" id="scene-home">
     <button class="scene active" data-scene="atlas">ATLAS</button>
   </span>
-  <button class="scene" data-scene="rack">ARMORY</button>
-  <button class="scene" data-scene="tribute">TRIBUTE</button>
-  <button class="scene" data-scene="ledger">LEDGER</button>
-  <button class="scene" data-scene="path">PATH</button>
+  <button class="scene" data-scene="rack">RACKS</button>
+  <button class="scene" data-scene="tribute">RESOURCES</button>
+  <button class="scene" data-scene="ledger">ADDRESSES</button>
+  <button class="scene" data-scene="path">TOPOLOGY</button>
   <!-- THE RITES and THE FORGE live here since v1.45.0; the title says so for
        anyone who comes looking for either by its old name. -->
   <button class="scene" data-scene="calendar" title="THE RITES and THE FORGE — every scheduled job in the lab on one clock">CALENDAR</button>
@@ -328,12 +328,13 @@
   </div>
 </article>
 
-<!-- THE ARMORY — the physical rack as an illuminated hardware elevation -->
+<!-- RACKS — each physical rack as an illuminated hardware elevation -->
 <div id="reliquary" aria-hidden="true">
-  <div class="rel-panel" role="dialog" aria-label="The Armory — the rack elevation">
+  <div class="rel-panel" role="dialog" aria-label="Racks — the rack elevation">
     <div class="rel-head">
-      <span class="rel-title" id="rel-title">ARMORY</span>
-      <span class="rel-sub">the lab's iron, rack by rack</span>
+      <span class="rel-title" id="rel-title">RACKS</span>
+      <span class="rel-sub">every rack, unit by unit</span>
+      <span class="rel-viewtoggle rel-racks" id="rel-racks" role="group" aria-label="Choose a rack" hidden></span>
       <span class="rel-tools">
         <span class="rel-viewtoggle" role="group" aria-label="View the rack in 2D or 3D">
           <button class="rel-seg is-on" id="rel-2d" aria-pressed="true">2D</button>
@@ -356,11 +357,11 @@
   </div>
 </div>
 
-<!-- THE LEDGER — NetBox-style IPAM: prefixes, utilization, hosts -->
+<!-- ADDRESSES — NetBox-style IPAM: prefixes, utilization, hosts -->
 <div id="ledger" aria-hidden="true">
-  <div class="ldg-panel" role="dialog" aria-label="The Ledger — IP address map">
+  <div class="ldg-panel" role="dialog" aria-label="Addresses — IP address map">
     <div class="ldg-head">
-      <span class="ldg-title">LEDGER</span>
+      <span class="ldg-title">ADDRESSES</span>
       <span class="ldg-sub">every prefix on the map — charted, reserved, or free ground</span>
       <button class="ldg-close" id="ldg-close" title="Close (Esc)">×</button>
     </div>
@@ -368,11 +369,11 @@
   </div>
 </div>
 
-<!-- THE TRIBUTE — the hypervisor's 64 GB divided among its vassals -->
+<!-- RESOURCES — the hypervisor's 64 GB divided among its vassals -->
 <div id="tribute" aria-hidden="true">
-  <div class="trb-panel" role="dialog" aria-label="The Tribute — memory and processor allocation">
+  <div class="trb-panel" role="dialog" aria-label="Resources — memory and processor allocation">
     <div class="trb-head">
-      <span class="trb-title">TRIBUTE</span>
+      <span class="trb-title">RESOURCES</span>
       <span class="trb-sub">{{ theme.text.tribute_sub }}</span>
       <button class="trb-close" id="trb-close" title="Close (Esc)">×</button>
     </div>
@@ -388,12 +389,12 @@
   </div>
 </div>
 
-<!-- THE PATH — the realm's topology, tier by tier (SolarWinds-style, hand-drawn) -->
+<!-- TOPOLOGY — the realm's topology, tier by tier (SolarWinds-style, hand-drawn) -->
 <div id="path" aria-hidden="true">
-  <div class="pth-panel" role="dialog" aria-label="The Path — network topology">
+  <div class="pth-panel" role="dialog" aria-label="Topology — the network, tier by tier">
     <div class="ldg-head">
-      <span class="ldg-title">PATH</span>
-      <span class="ldg-sub">from the wild to the vassals — every road, alive</span>
+      <span class="ldg-title">TOPOLOGY</span>
+      <span class="ldg-sub">from the internet to the guests — every route, live</span>
       <button class="ldg-close" id="pth-close" title="Close (Esc)">×</button>
     </div>
     <div class="pth-body"><svg id="pth-svg"></svg><div id="pth-nodes"></div></div>

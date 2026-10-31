@@ -1,4 +1,4 @@
-/* Atlas — THE LEDGER (NetBox-style IPAM).
+/* Atlas — ADDRESSES (was THE LEDGER; NetBox-style IPAM).
 
    Rebuilt on real CIDR maths (`ipam.js`). It used to assume a /24 everywhere:
    the prefix was the first three octets of an address and the grid was a fixed
@@ -72,7 +72,7 @@ function summaryHTML(prefixes, charted) {
       <span class="ldg-zname">THE SURVEY</span>
       <span class="ldg-zsub">${prefixes.length} prefixes · ${charted.size} charted souls · ` +
       `${countLabel(free)} free grounds</span>
-      <span class="ldg-zcount">roads live in THE PATH</span>
+      <span class="ldg-zcount">routes live in TOPOLOGY</span>
     </div>
     ${ports}
   </div>`;

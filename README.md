@@ -25,8 +25,8 @@ colours it with live health from Prometheus, Loki and Uptime Kuma.
   Canarytokens or any script can call, and say so out loud when a source stops
   answering. Admins only: where bait sits stays secret. The Atlas never plants
   bait itself.
-- **Views for the details:** an address ledger built on real CIDR maths, rack
-  elevations in 2D and 3D, the network path from the internet inwards,
+- **Views for the details:** an IP address view built on real CIDR maths, rack
+  elevations in 2D and 3D, the network topology from the internet inwards,
   certificate expiry, a calendar of scheduled jobs that notices when one did
   not run, an event history, and detailed maps for a room or a rack that open
   as you zoom in (with links straight to one, `#region=<id>`).

@@ -1,8 +1,9 @@
-/* Atlas — THE ARMORY (was THE RELIQUARY): the physical rack as an
+/* Atlas — RACKS (was THE ARMORY, THE RELIQUARY): each physical rack as an
    illuminated front-elevation with hardware-accurate engraved faceplates. Every
    vessel sits in a true U-slot; in Rearrange mode you can drag one to a free slot
    and Save the layout (persisted server-side via /api/rack, exactly like the map's
-   moved dots). Renamed + rebuilt 2026-07-20. ARMORY_NAME is the one knob.
+   moved dots). Rebuilt 2026-07-20. Titled by place since 2026-10-31:
+   `Server room — Rack A`, with a picker when the lab charts more than one.
    The rack model + faceplate art moved to rack-model.js 2026-08-23 so the 3D
    deep-dive (armory3d.js) draws the same vessels from the same source (F5). */
 
@@ -11,15 +12,17 @@ import { makeScene } from './scene.js';
 import {
   UH, KIND_HUE, ledColor, uLabel, slotKey, kindOf, setRackTheme,
   buildDevices as modelBuildDevices, fits as modelFits, faceplate as modelFaceplate,
+  rackList, rackTitle, inRack,
 } from './rack-model.js';
 setRackTheme(CFG.THEME);   // THE THEME (v1.48.0): which lab names are the gateway / the forge
 
-const ARMORY_NAME = 'ARMORY';
 const OVR_KEY = 'atlas-rack-overrides';   // { slotKey: topU } — per-browser, pre-Save
+const RACK_KEY = 'atlas-rack-current';    // which rack this browser last looked at
 
 let root, elevEl, detailEl, titleEl, rackEl;
 let editing = false;
 let devices = [], rackU = 12;
+let racks = [], rackId = null;
 
 const nodeById = (id) => A.DATA.nodes.find((n) => n.id === id);
 const ledFor = (node) => ledColor(node ? A.signalsFeed?.nodes?.[node.id]?.state : '');
@@ -30,7 +33,13 @@ const writeOvr = (o) => { try { localStorage.setItem(OVR_KEY, JSON.stringify(o))
 // These thin wrappers keep this module's `devices`/`rackU` state and bind the
 // live LED feed; the pure model + SVG art are in rack-model.js.
 function buildDevices() {
-  const built = modelBuildDevices(A.DATA.rack, nodeById, readOvr());
+  racks = rackList(A.DATA.racks, CFG.THEME?.text?.rack_location);
+  if (!racks.some((r) => r.id === rackId)) {
+    let saved = null;
+    try { saved = localStorage.getItem(RACK_KEY); } catch { /* private mode */ }
+    rackId = racks.some((r) => r.id === saved) ? saved : racks[0].id;
+  }
+  const built = modelBuildDevices(inRack(A.DATA.rack, racks, rackId), nodeById, readOvr());
   devices = built.devices;
   rackU = built.rackU;
 }
@@ -38,8 +47,42 @@ const fits = (d, top) => modelFits(devices, rackU, d, top);
 const faceplate = (d) => modelFaceplate(d, ledFor(d.node));
 
 
+const rearHere = () => inRack(A.DATA.rack_rear, racks, rackId);
+
+function pickRack(id) {
+  rackId = id;
+  try { localStorage.setItem(RACK_KEY, id); } catch { /* private mode */ }
+  const was3d = view3d;
+  if (was3d) backTo2d();
+  render();
+  if (was3d) goto3d();
+}
+
+/* The title says where the rack stands. The picker only appears with a second
+   rack, and spells the place out only when the racks stand in different ones. */
+function renderRackNav() {
+  const here = racks.find((r) => r.id === rackId);
+  if (titleEl) titleEl.textContent = rackTitle(here);
+  const nav = $('rel-racks');
+  if (!nav) return;
+  nav.hidden = racks.length < 2;
+  const oneSite = new Set(racks.map((r) => r.location)).size === 1;
+  nav.innerHTML = racks.map((r) => {
+    const on = r.id === rackId;
+    return `<button class="rel-seg${on ? ' is-on' : ''}" data-rack="${esc(r.id)}" aria-pressed="${on}">` +
+      `${esc(oneSite ? r.name : rackTitle(r))}</button>`;
+  }).join('');
+  for (const b of nav.querySelectorAll('[data-rack]')) {
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (b.dataset.rack !== rackId) pickRack(b.dataset.rack);
+    });
+  }
+}
+
 function render() {
   buildDevices();
+  renderRackNav();
   elevEl.style.height = (rackU * UH) + 'px';
   elevEl.innerHTML = '';
   const occ = new Set();
@@ -83,7 +126,7 @@ function render() {
     if (cel) cel.classList.add('active');
     showDetail(crown);
   } else {
-    detailEl.innerHTML = '<p class="rel-detail-lore">The rack stands empty.</p>';
+    detailEl.innerHTML = '<p class="rel-detail-lore">This rack is empty.</p>';
   }
   renderRear();
 }
@@ -196,7 +239,7 @@ function showDetail(d) {
 }
 
 function renderRear() {
-  const rear = A.DATA.rack_rear || [];
+  const rear = rearHere();
   let rearEl = rackEl.querySelector('.rel-rear');
   if (rearEl) rearEl.remove();
   if (!rear.length) return;
@@ -286,7 +329,7 @@ async function saveLayout() {
 
 function resetLayout() { localStorage.removeItem(OVR_KEY); location.reload(); }
 
-// ── 2D ⇄ 3D (THE ARMORY deep-dive) ───────────────────────────────────────────
+// ── 2D ⇄ 3D (the RACKS deep-dive) ───────────────────────────────────────────
 // The 3D view is armory3d.js, lazy-imported on first request so the ~1 MB three
 // vendor only loads when someone asks for it — and so a missing/broken vendor
 // can never take down the 2D elevation (the core app never imports it). The
@@ -346,7 +389,6 @@ A.buildReliquary = function buildReliquary() {
   elevEl = $('rel-elevation');
   detailEl = $('rel-detail');
   rackEl = elevEl.parentElement;
-  if (titleEl) titleEl.textContent = ARMORY_NAME;
   $('rel-edit')?.addEventListener('click', (e) => { e.stopPropagation(); setEditing(!editing); });
   $('rel-save')?.addEventListener('click', (e) => { e.stopPropagation(); saveLayout(); });
   $('rel-reset')?.addEventListener('click', (e) => { e.stopPropagation(); resetLayout(); });

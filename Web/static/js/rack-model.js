@@ -1,5 +1,5 @@
 /* Atlas — rack-model.js: the shared, DOM-free model + faceplate art
-   for THE ARMORY. Both the 2D elevation (reliquary.js) and the 3D deep-dive
+   for RACKS. Both the 2D elevation (reliquary.js) and the 3D deep-dive
    (armory3d.js) build their device list and draw their faceplates from HERE, so
    the two views can never disagree about what is in the rack or what a vessel
    looks like. No `A`, no `document`, no localStorage: every input is passed in,
@@ -26,7 +26,8 @@ export const topU = (slot) => {
   const m = String(slot.u).match(/\d+/g);
   return m ? Math.max(...m.map(Number)) : 0;
 };
-export const slotKey = (slot) => slot.node || ('slot:' + slug(slot.name));
+export const slotKey = (slot) => slot.node ||
+  ('slot:' + slug(slot.rack ? `${slot.rack} ${slot.name}` : slot.name));   // mirrors overlays.slot_key
 export const uLabel = (top, size) => (size <= 1 ? `U${top}` : `U${top - size + 1}–${top}`);
 
 /* Which faceplate a slot wears. Takes the already-resolved node so the model
@@ -52,6 +53,20 @@ export function kindOf(slot, node) {
    list and the rack height. Pure but for one deliberate write: an override
    rewrites its slot's `u` label (as the 2D drag did), so the caller's dataset
    reflects the moved vessel. */
+/* The racks to show, always at least one: a lab that charted none has the one
+   rack it always had, so nothing needs migrating. */
+export function rackList(racks, fallbackLocation = '') {
+  const list = (racks || []).filter((r) => r && r.id);
+  if (!list.length) return [{ id: '', name: 'Rack A', location: fallbackLocation }];
+  return list.map((r) => ({ id: r.id, name: r.name || r.id, location: r.location || fallbackLocation }));
+}
+export const rackTitle = (r) => (r.location ? `${r.location} — ${r.name}` : r.name);
+/** What sits in rack `id`. An unset or unknown `rack` means the first rack. */
+export function inRack(entries, list, id) {
+  const known = new Set(list.map((r) => r.id));
+  return (entries || []).filter((e) => (known.has(e.rack) ? e.rack : list[0].id) === id);
+}
+
 export function buildDevices(rack, nodeById, overrides = {}) {
   rack = rack || [];
   const rackU = Math.max(1, ...rack.map(topU));

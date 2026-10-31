@@ -149,7 +149,7 @@ A.openCard = function openCard(n) {
   // the split rings), so a pure transit place like PANGOLIN still offers ⁘.
   const entries = A.serviceEntriesFor?.(n.id) || [];
   const splitHTML = entries.length
-    ? `<button class="card-split" id="btn-card-split" title="Draw each service as its own dot, with the roads it uses">` +
+    ? `<button class="card-split" id="btn-card-split" title="Draw each service as its own dot, with the routes it uses">` +
       `<span class="cs-glyph" aria-hidden="true">⁘</span>` +
       `<span class="cs-off">SPLIT INTO ITS SERVICES</span>` +
       `<span class="cs-on">GATHER ITS SERVICES</span>` +
@@ -294,7 +294,7 @@ function showServiceDetail(node, link) {
     `<p class="csv-desc">${desc
       ? esc(desc)
       : `Hosted on <strong>${esc(node.name)}</strong>${roleShort ? ` — ${esc(roleShort)}` : ''}, ` +
-        `answering at ${esc(where)}. Follow the roads to its live metrics, or open it directly.`}</p>` +
+        `answering at ${esc(where)}. Follow the routes to its live metrics, or open it directly.`}</p>` +
     // ONE row of actions (2026-08-15): OPEN IT HERE with PATH and ROAD
     // beside it. They were four stacked buttons — VIEW ITS METRICS, VIEW IN
     // THE PATH, FOLLOW ITS ROAD — which made every service pane a third taller
@@ -305,10 +305,10 @@ function showServiceDetail(node, link) {
     `<div class="csv-actions">` +
       `<a class="csv-open" href="${esc(link.url)}" target="_blank" rel="noopener"` +
         `${glassAttrs(link.label, `a service of ${node.name}`, link.open_in)}>OPEN IT HERE ›</a>` +
-      `<button class="csv-metrics" id="csv-path" title="Show it in THE PATH — the tier diagram">◈ PATH</button>` +
+      `<button class="csv-metrics" id="csv-path" title="Show it in TOPOLOGY — the tier diagram">◈ TOPOLOGY</button>` +
       // the map-side twin of PATH: the same road, drawn where you already are
       // instead of in the tier diagram (2026-08-11)
-      `<button class="csv-metrics" id="csv-road" title="Follow its road on the map">◈ ROAD</button>` +
+      `<button class="csv-metrics" id="csv-road" title="Follow its route on the map">◈ ROUTE</button>` +
     `</div>` +
     `<div class="csv-url">${esc(host(link.url))}</div>`;
   svc.querySelector('#csv-back').addEventListener('click', (e) => {

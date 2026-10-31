@@ -809,6 +809,18 @@
       "kind": "mesh"
     }
   ],
+  "racks": [
+    {
+      "id": "rack-a",
+      "name": "Rack A",
+      "location": "Home office"
+    },
+    {
+      "id": "rack-b",
+      "name": "Rack B",
+      "location": "Home office"
+    }
+  ],
   "rack": [
     {
       "u": "U12",
@@ -844,6 +856,22 @@
       "name": "NAS",
       "node": "nas",
       "desc": "Four bays, one spare."
+    },
+    {
+      "rack": "rack-b",
+      "u": "U6",
+      "size": 1,
+      "name": "Patch Panel",
+      "node": "",
+      "desc": "12-port panel for the garage run."
+    },
+    {
+      "rack": "rack-b",
+      "u": "U1–2",
+      "size": 2,
+      "name": "Test Bench",
+      "node": "",
+      "desc": "Whatever is being tried this week."
     }
   ],
   "vms": [

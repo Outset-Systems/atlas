@@ -137,7 +137,10 @@ def slot_key(slot):
     """
     if slot.get("node"):
         return slot["node"]
-    return "slot:" + re.sub(r"[^a-z0-9]+", "-", str(slot.get("name", "")).lower()).strip("-")
+    name = str(slot.get("name", ""))
+    if slot.get("rack"):           # two racks may each hold a "Patch Panel"
+        name = f"{slot['rack']} {name}"
+    return "slot:" + re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
 
 
 def top_u(slot):
@@ -162,8 +165,16 @@ def _rack_clean(data, submitted):
     stops a hand-crafted POST from parking a 2U box at U1.
     """
     rack = data.get("rack", [])
-    height = max([1] + [top_u(s) for s in rack])
-    sizes = {slot_key(s): int(s.get("size", 1) or 1) for s in rack}
+    racks = [r.get("id") for r in data.get("racks") or [] if isinstance(r, dict)]
+
+    def home(slot):            # unset or unknown means the first rack, as in rack-model.js
+        return slot.get("rack") if slot.get("rack") in racks else (racks[0] if racks else "")
+
+    heights = {}
+    for s in rack:
+        heights[home(s)] = max(heights.get(home(s), 1), top_u(s))
+    slots = {slot_key(s): s for s in rack}
+    sizes = {key: int(s.get("size", 1) or 1) for key, s in slots.items()}
     clean = {}
     for key, top in submitted.items():
         if key not in sizes:
@@ -172,7 +183,7 @@ def _rack_clean(data, submitted):
             top = int(top)
         except (TypeError, ValueError):
             continue
-        if sizes[key] <= top <= height:
+        if sizes[key] <= top <= heights[home(slots[key])]:
             clean[key] = top
     return clean
 

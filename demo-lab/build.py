@@ -272,12 +272,18 @@ VMS = [
     {"id": "standby", "host": "hypervisor", "vcpu": 2, "ram_gb": 4, "demand_gb": 0, "state": "off"},
 ]
 
+RACKS = [
+    {"id": "rack-a", "name": "Rack A", "location": "Home office"},
+    {"id": "rack-b", "name": "Rack B", "location": "Home office"},
+]
 RACK = [
     {"u": "U12", "size": 1, "name": "Patch Panel", "node": "", "desc": "24-port keystone panel, every drop labelled."},
     {"u": "U11", "size": 1, "name": "Core Switch", "node": "core-switch", "desc": "24× 1GbE, 4× SFP+, PoE for the cameras."},
     {"u": "U9–10", "size": 2, "name": "Gateway", "node": "gateway", "desc": "Fanless router, six 2.5GbE ports."},
     {"u": "U5–8", "size": 4, "name": "Hypervisor", "node": "hypervisor", "desc": "4U tower on a shelf."},
     {"u": "U1–4", "size": 4, "name": "NAS", "node": "nas", "desc": "Four bays, one spare."},
+    {"rack": "rack-b", "u": "U6", "size": 1, "name": "Patch Panel", "node": "", "desc": "12-port panel for the garage run."},
+    {"rack": "rack-b", "u": "U1–2", "size": 2, "name": "Test Bench", "node": "", "desc": "Whatever is being tried this week."},
 ]
 RACK_REAR = [
     {"name": "UPS", "node": "", "desc": "1500 VA, about 20 minutes for the rack."},
@@ -419,7 +425,7 @@ def dataset():
                  "art": "demo-lab render (build.py), label-free",
                  "map_image": "demo-lab.webp",
                  "tribute": {"total_gb": 128, "host_reserve_gb": 8, "cpu_cores": 16, "cpu_threads": 32}},
-        "zones": ZONES, "nodes": NODES, "routes": ROUTES, "rack": RACK, "vms": VMS,
+        "zones": ZONES, "nodes": NODES, "routes": ROUTES, "racks": RACKS, "rack": RACK, "vms": VMS,
         "signals": {"kuma": KUMA, "drift_ignore": ["offsite", "nas-2"]},
         "rack_rear": RACK_REAR, "chronicle": CHRONICLE, "abyss": ABYSS,
         "rites": RITES, "certs": CERTS,

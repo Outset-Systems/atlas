@@ -105,3 +105,37 @@ def test_the_rack_column_has_a_width_of_its_own():
 if __name__ == "__main__":
     import pytest
     sys.exit(pytest.main([__file__, "-q"]))
+
+
+def test_two_racks_keep_their_own_slots_and_heights():
+    """The same name in two racks is two slots, and a rack's height is its own."""
+    import overlays
+    data = {
+        "racks": [{"id": "a", "name": "Rack A"}, {"id": "b", "name": "Rack B"}],
+        "rack": [
+            {"rack": "a", "u": "U12", "size": 1, "name": "Patch Panel"},
+            {"rack": "b", "u": "U4", "size": 1, "name": "Patch Panel"},
+            {"u": "U1", "size": 1, "name": "No rack set"},
+        ],
+    }
+    assert overlays.slot_key(data["rack"][0]) == "slot:a-patch-panel"
+    assert overlays.slot_key(data["rack"][1]) == "slot:b-patch-panel"
+    assert overlays.slot_key(data["rack"][2]) == "slot:no-rack-set"
+    clean = overlays._rack_clean(data, {
+        "slot:a-patch-panel": 10,
+        "slot:b-patch-panel": 9,     # rack B is 4U: refused, though rack A has room
+        "slot:no-rack-set": 11,      # unset means the first rack, which is 12U
+    })
+    assert clean == {"slot:a-patch-panel": 10, "slot:no-rack-set": 11}
+
+
+def test_the_old_names_are_gone_from_the_scene_band():
+    """Plain words on the band and the flyout (2026-10-31)."""
+    html = (WEB / "templates" / "index.html").read_text(encoding="utf-8")
+    for word in ("RACKS", "RESOURCES", "ADDRESSES", "TOPOLOGY"):
+        assert f">{word}</button>" in html
+    for word in ("ARMORY", "TRIBUTE", "LEDGER", "PATH"):
+        assert f">{word}</button>" not in html
+    card = (WEB / "static" / "js" / "card.js").read_text(encoding="utf-8")
+    assert "◈ ROUTE" in card and "◈ TOPOLOGY" in card
+    assert "◈ ROAD" not in card and "◈ PATH" not in card

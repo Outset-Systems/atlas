@@ -1,4 +1,4 @@
-/* Atlas — THE PATH: the realm's topology, tier by tier
+/* Atlas — TOPOLOGY (was THE PATH): the realm, tier by tier
    (2026-07-11, broken back out of the Ledger and rebuilt SolarWinds-NPM-style):
 
      tier 0  THE WILD · CLOUDFLARE          (the world beyond)
@@ -91,7 +91,7 @@ function traceEdge(a, b, crossing) {
     ` · ${chain.length} stops</span>`).join('');
   legendEl.insertAdjacentHTML('afterbegin',
     `<span class="pth-lg pth-lg-note pth-lg-trace">◈ ${crossing.length} ` +
-    `${crossing.length === 1 ? 'road crosses' : 'roads cross'} this hop — click it again to release</span>` + names);
+    `${crossing.length === 1 ? 'route crosses' : 'routes cross'} this hop — click it again to release</span>` + names);
 }
 
 /** Strip the marks a trace leaves, and nothing else. Kept separate from
@@ -188,8 +188,8 @@ function build() {
     hit.dataset.b = e.b;
     const title = document.createElementNS(SVGNS, 'title');
     title.textContent = crossing.length === 1
-      ? `${crossing[0].link.label} crosses here — click to trace its road`
-      : `${crossing.length} services cross here — click to trace their roads`;
+      ? `${crossing[0].link.label} crosses here — click to trace its route`
+      : `${crossing.length} services cross here — click to trace their routes`;
     hit.appendChild(title);
     hit.addEventListener('click', (ev) => {
       ev.stopPropagation();

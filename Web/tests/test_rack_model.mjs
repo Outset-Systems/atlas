@@ -7,6 +7,7 @@
    the faceplate art. Plain node, no framework — same shape as test_project.mjs.
    DOM-free by design: every input is passed in, so nothing here needs a browser. */
 
+import { rackList, rackTitle, inRack } from '../static/js/rack-model.js';
 import assert from 'node:assert/strict';
 import {
   UH, RACK_W, KIND_HUE, ledColor, slug, isEmpty, topU, slotKey, uLabel,
@@ -144,6 +145,30 @@ test('ledSpot locates the LED per kind, null for patch', () => {
   assert.deepEqual(ledSpot({ kind: 'compute', size: 1 }), { x: RACK_W - 44, y: UH / 2 + 8 });
   assert.deepEqual(ledSpot({ kind: 'forge', size: 2 }), { x: RACK_W - 44, y: 40 });
   assert.equal(ledSpot({ kind: 'patch', size: 1 }), null);
+});
+
+// ── RACKS: a place and a name, one rack or many ─────────────────────────────
+test('RACKS: a place and a name, one rack or many', () => {
+  const fallback = rackList(undefined, 'Home lab');
+  assert.deepEqual(fallback, [{ id: '', name: 'Rack A', location: 'Home lab' }],
+    'a lab that charted no racks still has its one rack');
+  assert.equal(rackTitle(fallback[0]), 'Home lab — Rack A');
+  assert.equal(rackTitle({ name: 'Rack A', location: '' }), 'Rack A');
+
+  const two = rackList([{ id: 'a', name: 'Rack A', location: 'Server room' }, { id: 'b', name: 'Rack B' }], 'Home');
+  assert.equal(rackTitle(two[0]), 'Server room — Rack A');
+  assert.equal(rackTitle(two[1]), 'Home — Rack B', 'a blank location falls back to the theme');
+
+  const slots = [{ name: 'one' }, { name: 'two', rack: 'b' }, { name: 'lost', rack: 'gone' }];
+  assert.deepEqual(inRack(slots, two, 'a').map((s) => s.name), ['one', 'lost'],
+    'unset or unknown goes to the first rack, never disappears');
+  assert.deepEqual(inRack(slots, two, 'b').map((s) => s.name), ['two']);
+  assert.deepEqual(inRack(undefined, two, 'a'), []);
+
+  assert.notEqual(slotKey({ name: 'Patch Panel', rack: 'a' }), slotKey({ name: 'Patch Panel', rack: 'b' }),
+    'two racks may each hold a Patch Panel');
+  assert.equal(slotKey({ name: 'Patch Panel' }), 'slot:patch-panel', 'an existing lab keeps its saved keys');
+  assert.equal(slotKey({ name: 'Patch Panel', rack: 'rack-b' }), 'slot:rack-b-patch-panel');
 });
 
 console.log(`rack-model: ${passed} passed`);

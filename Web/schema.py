@@ -144,13 +144,13 @@ LINK_FIELDS = [
     f("container", "text",
       help="Docker container name, if cAdvisor scrapes it — powers 'view its metrics'."),
     f("connects", "strings", label="Reaches", ref="nodes",
-      help="Places this one service talks to. Narrows the reach web on THE PATH."),
-    f("path", "strings", label="Road out", ref="nodes",
+      help="Places this one service talks to. Narrows the reach web in TOPOLOGY."),
+    f("path", "strings", label="Route out", ref="nodes",
       help="The hops its traffic actually takes, IN ORDER, starting from this "
            "place — e.g. `gateway, edge, traefik, pangolin, the-wild` for "
            "something reached from the internet. Drawn as a chain instead of a "
            "star, so the map can say *through*. Every consecutive pair must be a "
-           "charted route, or the map is drawing a road that isn't there."),
+           "charted route, or the map is drawing a route that isn't there."),
     f("open_in", "select", options=OPEN_IN, default="auto", label="Opens",
       help="`auto` asks the service whether it allows framing and shows it in "
            "THE VIEWING GLASS when it does. `here` insists. `tab` never frames "
@@ -221,8 +221,8 @@ SECTIONS = {
               help="The realm's primary prefix, e.g. `10.0.20.0/24`. "
                    "Use `—` for a segment with no addressing."),
             f("hue", "color", required=True, help="The realm's colour, used everywhere."),
-            f("net_hue", "color", label="Road colour",
-              help="Optional separate colour for this realm's roads on the network layer."),
+            f("net_hue", "color", label="Route colour",
+              help="Optional separate colour for this realm's routes on the network layer."),
             f("lore", "longtext", required=True, help="The in-world line shown on its card."),
             f("label_x", "percent", label="Label X", required=True,
               help="Where the realm's name sits on the map, 0–100% across."),
@@ -292,7 +292,7 @@ SECTIONS = {
             f("shape", "select", options=NODE_SHAPES,
               help="Marker shape. Blank = the default circle."),
             f("parent", "ref", ref="nodes",
-              help="Its host, if this is a vassal. Draws it as a child on THE PATH, "
+              help="Its host, if this is a vassal. Draws it as a child in TOPOLOGY, "
                    "and means its alarms fold into the host's when the host goes dark."),
             f("depends_on", "strings", ref="nodes", label="Depends on",
               help="Places this one cannot work without. When one of them goes dark, "
@@ -307,7 +307,7 @@ SECTIONS = {
               help="Draw a CPU + RAM gauge on its card (needs node-exporter and LAN HTTP)."),
             f("planned", "bool", help="Charted but not yet built — drawn faint."),
             f("off_map", "bool", label="Off the map",
-              help="Charted, but not drawn. Its services still list in THE INDEX; its marker and its roads are skipped. For a place that is decided but not yet laid."),            f("require_group", "text", label="Requires group",
+              help="Charted, but not drawn. Its services still list in THE INDEX; its marker and its routes are skipped. For a place that is decided but not yet laid."),            f("require_group", "text", label="Requires group",
               help="Hide this place from anyone whose Hub groups don't include it."),
             f("links", "objects", of=LINK_FIELDS, label="Services",
               help="Everything hosted here. Each becomes a card button and an Index row."),
@@ -318,10 +318,10 @@ SECTIONS = {
         ]),
 
     "routes": section(
-        "routes", "road", "roads", noun="route",
+        "routes", "route", "routes", noun="route",
         id_field=None, title_field=None,
-        lore="the roads between places — what the network layer draws",
-        subtitle="Network links. Drawn on the map's ◈ layer and on THE PATH.",
+        lore="the routes between places — what the network layer draws",
+        subtitle="Network links. Drawn on the map's ◈ layer and in TOPOLOGY.",
         fields=[
             f("from", "ref", ref="nodes", required=True),
             f("to", "ref", ref="nodes", required=True),
@@ -354,7 +354,7 @@ SECTIONS = {
         "interfaces", "port", "ports", noun="interface",
         id_field=None, title_field="name",
         lore="every port on every vessel — the copper truth",
-        subtitle="Physical and virtual ports. Draws the port map in THE LEDGER.",
+        subtitle="Physical and virtual ports. Draws the port map in ADDRESSES.",
         fields=[
             f("device", "ref", ref="nodes", required=True, help="Which place owns this port."),
             f("name", "text", required=True, help="Port name or number, e.g. `1` or `eth0`."),
@@ -366,12 +366,25 @@ SECTIONS = {
             f("note", "text"),
         ]),
 
+    "racks": section(
+        "racks", "rack", "racks", noun="rack",
+        lore="where the iron stands",
+        subtitle="Each rack and where it stands. RACKS shows them as `Location — Name`.",
+        fields=[
+            f("id", "slug", required=True, help="Short unique key, e.g. `rack-a`."),
+            f("name", "text", required=True, help="The rack's own name, e.g. `Rack A`."),
+            f("location", "text",
+              help="Where it stands, e.g. `Server room`. Blank uses the theme's default."),
+        ]),
+
     "rack": section(
         "rack", "vessel", "vessels", noun="rack slot",
         id_field=None, title_field="name",
         lore="the iron in its niches — the front elevation",
-        subtitle="Rack slots, front of rack. THE ARMORY draws these.",
+        subtitle="Rack slots, front of rack. RACKS draws these.",
         fields=[
+            f("rack", "ref", ref="racks", label="Rack",
+              help="Which rack it sits in. Blank means the first rack."),
             f("u", "text", label="U slot", required=True,
               help="`U7` for one unit, `U3–U4` for two. The Rearrange tool writes this too."),
             f("name", "text", required=True, help="What sits here."),
@@ -379,7 +392,7 @@ SECTIONS = {
             f("node", "ref", ref="nodes",
               help="The place this vessel is, if it's charted on the map."),
             f("desc", "text", label="Description",
-              help="What this slot holds, in your words. Shown in the Armory's pane "
+              help="What this slot holds, in your words. Shown in the RACKS pane "
                    "for every vessel; for an uncharted one it also stands in for the role."),
         ]),
 
@@ -389,6 +402,8 @@ SECTIONS = {
         lore="what hangs behind the rack",
         subtitle="Rear-of-rack items — PDUs, shelves, anything without a front U.",
         fields=[
+            f("rack", "ref", ref="racks", label="Rack",
+              help="Which rack it hangs behind. Blank means the first rack."),
             f("name", "text", required=True),
             f("desc", "text", label="Description"),
             f("node", "ref", ref="nodes"),
@@ -397,7 +412,7 @@ SECTIONS = {
     "vms": section(
         "vms", "vassal", "vassals", noun="vm",
         lore="the host's memory, divided among those it carries",
-        subtitle="Virtual machines and their allocations. THE TRIBUTE draws these.",
+        subtitle="Virtual machines and their allocations. RESOURCES draws these.",
         fields=[
             f("id", "ref", ref="nodes", required=True,
               help="The charted place this vassal is. Must match a place id."),
@@ -626,7 +641,7 @@ SECTIONS = {
                    "`floor-2.webp`. Blank uses the render the Atlas ships with. "
                    "Upload your own in the Desk. Places are positioned in fractions "
                    "of the image, so swapping it keeps every marker where it is."),
-            f("tribute", "object", label="The Tribute", of=[
+            f("tribute", "object", label="Resources", of=[
                 f("total_gb", "number", label="Host memory (GB)", min=0,
                   help="How much the hypervisor has in total."),
                 f("host_reserve_gb", "number", label="Reserved for the host (GB)", min=0,
@@ -638,7 +653,7 @@ SECTIONS = {
                   help="Logical processors — what a vCPU is actually assigned "
                        "against. This is the denominator of the vCPU score, so a "
                        "wrong number here reads as false headroom."),
-              ], help="The numbers THE TRIBUTE divides among the vassals."),
+              ], help="The numbers RESOURCES divides among the vassals."),
         ]),
 }
 
@@ -659,7 +674,7 @@ SIGNAL_FIELDS = [
 
 # Order the editor presents them in — inventory first, then the wiring.
 SECTION_ORDER = ["nodes", "zones", "regions", "prefixes", "routes", "interfaces",
-                 "rack", "rack_rear", "vms", "rites", "certs", "stones",
+                 "racks", "rack", "rack_rear", "vms", "rites", "certs", "stones",
                  "maintenance", "chronicle", "abyss", "meta"]
 
 #: Sections the dataset writer must ignore — they live in their own stores.
@@ -670,7 +685,7 @@ NON_DATASET = tuple(k for k, s in SECTIONS.items() if s["store"] != "dataset")
 # The write path uses this to decide where a brand-new section goes; using the
 # presentation order put the first `prefixes[]` above `meta`.
 FILE_ORDER = ("meta", "zones", "regions", "nodes", "routes", "prefixes", "interfaces",
-              "rack", "rack_rear", "vms", "signals", "chronicle", "abyss", "rites",
+              "racks", "rack", "rack_rear", "vms", "signals", "chronicle", "abyss", "rites",
               "certs", "stones")
 
 # Sections the dataset may carry that the catalogue does not model. They round-

@@ -89,7 +89,7 @@ function stepZone() {
     existing.length
       ? `You have ${existing.length} already. Add another, or move on.`
       : 'A realm is a VLAN or a network segment — every place belongs to one. ' +
-        'Give it a subnet and the Ledger can chart its addresses; give it a colour ' +
+        'Give it a subnet and ADDRESSES can chart it; give it a colour ' +
         'and everything on it is recognisable at a glance.');
 
   const seed = {
@@ -103,7 +103,7 @@ function stepZone() {
   const unasked = { lore: 'Newly surveyed ground.', label_x: 50, label_y: 50 };
   const form = buildForm('zones', seed, { only: ['name', 'id', 'vlan', 'subnet', 'hue'] });
   bodyEl.append(form.el);
-  laterNote('Its card line, road colour and label position');
+  laterNote('Its card line, route colour and label position');
   bar(
     button('‹ Back', '', stepRealm),
     button(existing.length ? 'Skip' : 'Skip for now', '', stepPlaces),
