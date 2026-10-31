@@ -338,23 +338,7 @@ async function renderRealm() {
     if (!r.ok) throw new Error(String(r.status));
     cfg = await r.json();
   } catch { el.hidden = true; return; }
-  const rows = REALM_FIELDS.map(([key, label, hint]) => {
-    const f = cfg.settings[key] || {};
-    const src = SOURCE_LABEL[f.source] || '';
-    if (f.secret) {
-      return `<label class="dir-row">
-          <span class="dir-label">${esc(label)}<span class="dir-src">${esc(f.set ? src + ' · kept' : 'unset')}</span></span>
-          <input class="dir-input" type="password" data-key="${key}" data-secret="1" value=""
-                 placeholder="${f.set ? 'leave blank to keep the stored token' : 'not set'}"
-                 autocomplete="new-password" spellcheck="false">
-        </label>`;
-    }
-    return `<label class="dir-row">
-        <span class="dir-label">${esc(label)}<span class="dir-src">${esc(src)}</span></span>
-        <input class="dir-input" data-key="${key}" value="${esc(f.value || '')}" placeholder="${esc(hint)}"
-               autocomplete="off" spellcheck="false">
-      </label>`;
-  }).join('');
+  const rows = settingsRows(REALM_FIELDS, cfg, 'token');
   el.innerHTML =
     `<button class="sp-sub" type="button">LAB SETTINGS <span class="sp-sub-plain">· Hub, docs, heartbeats</span></button>
      <div class="sp-sec-body">
@@ -450,23 +434,7 @@ async function renderSources() {
     if (!r.ok) throw new Error(String(r.status));
     cfg = await r.json();
   } catch { el.hidden = true; return; }   // not an admin after all, or no editing API
-  const rows = SRC_FIELDS.map(([key, label, hint]) => {
-    const f = cfg.settings[key] || {};
-    const src = SOURCE_LABEL[f.source] || '';
-    if (f.secret) {
-      return `<label class="dir-row">
-          <span class="dir-label">${esc(label)}<span class="dir-src">${esc(f.set ? src + ' · kept' : 'unset')}</span></span>
-          <input class="dir-input" type="password" data-key="${key}" data-secret="1" value=""
-                 placeholder="${f.set ? 'leave blank to keep the stored key' : 'not set'}"
-                 autocomplete="new-password" spellcheck="false">
-        </label>`;
-    }
-    return `<label class="dir-row">
-        <span class="dir-label">${esc(label)}<span class="dir-src">${esc(src)}</span></span>
-        <input class="dir-input" data-key="${key}" value="${esc(f.value || '')}" placeholder="${esc(hint)}"
-               autocomplete="off" spellcheck="false">
-      </label>`;
-  }).join('');
+  const rows = settingsRows(SRC_FIELDS, cfg, 'key');
   const hub = cfg.hub || {};
   const state = (hub.enabled || []).length
     ? (hub.enabled || []).map((s) => `${esc(s)} <em>${esc(hub.last?.[s] || 'not asked yet')}</em>`).join(' · ')
@@ -569,6 +537,30 @@ const DIR_FIELDS = [
 ];
 const SOURCE_LABEL = { settings: 'set here', deployment: 'from the deployment', unset: 'unset' };
 
+/* One row of a settings form, shared by Data sources, Lab settings and
+   Directory sign-in. A stored secret never reaches the page: the form only
+   learns that one is set, and a blank field keeps it. */
+const textRow = (key, label, hint, value, src) =>
+  `<label class="dir-row">
+        <span class="dir-label">${esc(label)}<span class="dir-src">${esc(src)}</span></span>
+        <input class="dir-input" data-key="${key}" value="${esc(value)}" placeholder="${esc(hint)}"
+               autocomplete="off" spellcheck="false">
+      </label>`;
+const secretRow = (key, label, src, set, noun) =>
+  `<label class="dir-row">
+          <span class="dir-label">${esc(label)}<span class="dir-src">${esc(set ? src + ' · kept' : 'unset')}</span></span>
+          <input class="dir-input" type="password" data-key="${key}" data-secret="1" value=""
+                 placeholder="${set ? `leave blank to keep the stored ${noun}` : 'not set'}"
+                 autocomplete="new-password" spellcheck="false">
+        </label>`;
+function settingsRows(fields, cfg, noun) {
+  return fields.map(([key, label, hint]) => {
+    const f = cfg.settings[key] || {};
+    const src = SOURCE_LABEL[f.source] || '';
+    return f.secret ? secretRow(key, label, src, f.set, noun) : textRow(key, label, hint, f.value || '', src);
+  }).join('');
+}
+
 async function renderDirectory() {
   const el = $('sp-directory');
   if (!el) return;
@@ -588,15 +580,8 @@ async function renderDirectory() {
     cfg = await r.json();
   } catch { el.hidden = true; return; }   // not an admin after all, or no editing API
   el.hidden = false;
-  const rows = DIR_FIELDS.map(([key, label, hint]) => {
-    const val = esc(cfg.settings[key] || '');
-    const src = SOURCE_LABEL[cfg.sources[key]] || '';
-    return `<label class="dir-row">
-        <span class="dir-label">${esc(label)}<span class="dir-src">${esc(src)}</span></span>
-        <input class="dir-input" data-key="${key}" value="${val}" placeholder="${esc(hint)}"
-               autocomplete="off" spellcheck="false">
-      </label>`;
-  }).join('');
+  const rows = DIR_FIELDS.map(([key, label, hint]) =>
+    textRow(key, label, hint, cfg.settings[key] || '', SOURCE_LABEL[cfg.sources[key]] || '')).join('');
   el.innerHTML =
     `<button class="sp-sub" type="button">DIRECTORY SIGN-IN <span class="sp-sub-plain">· Active Directory or LDAP</span></button>
      <div class="sp-sec-body">
