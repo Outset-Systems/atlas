@@ -183,3 +183,9 @@ def test_hub_mode_admin(tmp_path):
         assert r.status_code == 403 and r.get_json() == {"error": "admins only"}
     finally:
         auth.AUTH_MODE = original
+
+
+def test_a_window_that_is_not_an_object_is_a_problem_not_a_crash(client):
+    r = client.post(f"{ADMIN}/maintenance", headers=WRITE, json={"windows": ["x", 7]})
+    assert r.status_code == 422
+    assert r.get_json()["problems"] == ["window #1: not an object", "window #2: not an object"]

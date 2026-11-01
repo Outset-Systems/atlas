@@ -20,6 +20,7 @@ import embeddable
 import settings
 import whois
 from context import atlas
+from redaction import redact_for_groups
 
 from . import bp
 
@@ -39,7 +40,9 @@ def embeddable_verdict():
     makes an outbound request from inside the lab on behalf of whoever calls
     it, and without that check it would be an open fetcher wearing the Atlas's
     network position. The dataset is admin-written and the map already links to
-    every URL in it, so the answer set is exactly "the buttons that exist".
+    every URL in it, so the answer set is exactly "the buttons that exist" —
+    for THIS viewer: a `require_group` place's buttons are not on their map,
+    so probing one on their behalf would confirm the address is charted.
     """
     url = (request.args.get("url") or "").strip()
     if not url:
@@ -49,7 +52,8 @@ def embeddable_verdict():
         data, stamp, _ = ctx.dataset()
     except (OSError, ValueError):
         return jsonify({"error": "dataset unreadable"}), 500
-    if url not in embeddable.charted(data, stamp):
+    data, group_key = redact_for_groups(data)
+    if url not in embeddable.charted(data, (stamp, group_key)):
         log.warning("refused an embeddable probe for an uncharted url: %s", url[:120])
         return jsonify({"error": "that address is not on this map"}), 400
 

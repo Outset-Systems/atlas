@@ -139,10 +139,14 @@ def occurrence(window, now=None):
         return ("active", start, end) if now < end else ("ended", start, end)
 
     # Jump straight to roughly the right occurrence, then settle. Bounded, so a
-    # window from years ago cannot spin the loop.
+    # window from years ago cannot spin the loop. The jump must UNDER-shoot:
+    # the loop only walks forward, so landing past the current occurrence
+    # reports an active window as upcoming. 28 days as the monthly period
+    # overshot a real month by ~2.5 days each, enough after two years to skip
+    # the live one; 31 is the longest month, so it always lands short.
     elapsed = now - start
     period = {"daily": timedelta(days=1), "weekly": timedelta(weeks=1),
-              "monthly": timedelta(days=28)}[repeat]
+              "monthly": timedelta(days=31)}[repeat]
     n = max(0, int(elapsed / period) - 1)
     for _ in range(HORIZON_DAYS + 4):
         current = _nth(start, repeat, n)
@@ -215,8 +219,6 @@ def save(windows, actor="unknown"):
     """
     with _STORE.locked():
         stored = _STORE.load()
-        stored["windows"] = windows
-        stored.setdefault("_comment", None)
         payload = {"nodes": stored["nodes"], "windows": windows}
         _STORE.save(payload)
     log.info("maintenance windows saved by %s: %d window(s), %d legacy node(s)",

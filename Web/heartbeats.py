@@ -36,6 +36,7 @@ own history follows.
 """
 
 import logging
+import math
 import os
 import re
 import time
@@ -156,8 +157,17 @@ def record_beat(key, status="ok", note="", duration_s=None, source=""):
         "note": str(note or "")[:300],
         "source": str(source or "")[:64],
     }
-    seconds = parse_duration(duration_s) if isinstance(duration_s, str) else duration_s
-    if isinstance(seconds, (int, float)) and seconds >= 0:
+    seconds = duration_s
+    if isinstance(duration_s, str):
+        # The field is named in seconds, so a bare "4.2" is 4.2 s. Only a
+        # unit-suffixed string ("4m", "1.5h") goes through `parse_duration`,
+        # whose bare-number-means-minutes rule is for the hand-typed
+        # `expect_every`, not for this.
+        try:
+            seconds = float(duration_s)
+        except ValueError:
+            seconds = parse_duration(duration_s)
+    if isinstance(seconds, (int, float)) and math.isfinite(seconds) and seconds >= 0:
         beat["duration_s"] = round(float(seconds), 2)
 
     with _STORE.locked():
@@ -215,7 +225,6 @@ def sweep_dropped_files():
                 first = note.split(" ", 1)[0].strip(":,-—").lower()
                 if first in ("fail", "failed", "error"):
                     status = "fail"
-            os.remove(path)
         except OSError as e:
             log.warning("could not adopt beat file %s: %s", name, e)
             continue
@@ -234,9 +243,16 @@ def sweep_dropped_files():
                     "note": note, "source": "file", "runs": runs[-KEEP_RUNS:],
                 }
                 _STORE.save(store)
-            adopted.append(key)
-        except OSError as e:                # pragma: no cover - defensive
+        except OSError as e:
+            # The file stays for the next sweep: removing it first and then
+            # failing to write the beat lost the turning entirely.
             log.warning("could not record dropped beat %s: %s", key, e)
+            continue
+        adopted.append(key)
+        try:
+            os.remove(path)
+        except OSError as e:
+            log.warning("recorded beat %s but could not remove its file: %s", name, e)
     return adopted
 
 

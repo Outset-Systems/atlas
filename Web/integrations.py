@@ -91,6 +91,8 @@ def flag(name, default=True):
     if raw == "":
         return default
     return raw == "1"
+
+
 #: Stored encrypted, never returned by `describe()`.
 SECRETS = ("ATLAS_KUMA_API_KEY", "ATLAS_DECOYS_KEY", "ATLAS_BEAT_TOKEN", "ATLAS_PROXMOX_TOKEN",
            "ATLAS_PORTAINER_KEY", "ATLAS_KOMODO_KEY", "ATLAS_KOMODO_SECRET", "ATLAS_NETBOX_API_TOKEN")
@@ -187,17 +189,9 @@ def _load():
 def _env(name):
     """The deployment's value: the variable, or `<NAME>_FILE` for a secret
     (the docker-secret convention the signals layer has always honoured)."""
-    val = (envnames.env(name) or "").strip()
-    if val or name not in SECRETS:
-        return val
-    fpath = envnames.env(name + "_FILE")
-    if fpath and os.path.exists(fpath):
-        try:
-            with open(fpath, encoding="utf-8") as fh:
-                return fh.read().strip()
-        except OSError as e:  # pragma: no cover - defensive
-            log.warning("could not read secret file %s: %s", fpath, e)
-    return ""
+    if name in SECRETS:
+        return envnames.secret(name)
+    return (envnames.env(name) or "").strip()
 
 
 def _stored(name):

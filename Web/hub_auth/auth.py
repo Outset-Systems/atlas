@@ -52,8 +52,11 @@ DEFAULT_EXEMPT = frozenset([
 # ── Signed-token identity ─────────────────────────────────────────────────────
 #: Which header carries the Hub's signed identity (envnames: ATLAS_HUB_AUTH_HEADER).
 SIGNED_HEADER = envnames.env("ATLAS_HUB_AUTH_HEADER")
-_SIGNED_HEADER = SIGNED_HEADER
 _CLOCK_SKEW = 30          # seconds of tolerance on iat/exp
+#: The longest life a token may claim. The Hub mints per request with a
+#: 120 s default; anything longer is a minting bug, and a captured token
+#: should never stay good for longer than this whatever `exp` says.
+_MAX_TTL = 300
 _UNSET = object()
 
 
@@ -98,10 +101,18 @@ def verify_token(token: str):
     except Exception:
         return None
     now = time.time()
-    if float(claims.get("exp", 0)) < now - _CLOCK_SKEW:
+    try:
+        exp = float(claims.get("exp", 0))
+        iat = float(claims.get("iat", now))
+    except (TypeError, ValueError):
+        return None               # a signed but malformed claim is a refusal, not a 500
+    if exp < now - _CLOCK_SKEW:
         return None
-    if float(claims.get("iat", now)) > now + _CLOCK_SKEW:
+    if iat > now + _CLOCK_SKEW:
         return None
+    if exp - iat > _MAX_TTL + 1:
+        return None               # server-side cap: the Hub does not set our replay window
+        # (+1: a minter that reads the clock twice claims 300.000004 s, not 300)
     return claims
 
 
@@ -133,7 +144,7 @@ def _claims():
     cached = getattr(g, "_hub_claims", _UNSET)
     if cached is not _UNSET:
         return cached
-    claims = verify_token(request.headers.get(_SIGNED_HEADER, ""))
+    claims = verify_token(request.headers.get(SIGNED_HEADER, ""))
     try:
         g._hub_claims = claims
     except Exception:
@@ -213,16 +224,6 @@ def get_remote_user() -> str:
     return envnames.env("ATLAS_STANDALONE_USER", "local")
 
 
-def get_remote_email() -> str:
-    """Get the current user's email (hub mode) or empty string (standalone)."""
-    if AUTH_MODE == "hub":
-        claims = _claims()
-        if claims is not None:
-            return str(claims.get("e", ""))
-        return request.headers.get("X-Remote-Email", "")
-    return envnames.env("ATLAS_STANDALONE_EMAIL", "")
-
-
 def get_remote_groups() -> list:
     """Get the current user's groups as a list (hub mode) or empty list (standalone)."""
     if AUTH_MODE == "hub":
@@ -238,12 +239,3 @@ def get_remote_groups() -> list:
     raw = envnames.env("ATLAS_STANDALONE_GROUPS", "")
     return [g.strip() for g in raw.split(",") if g.strip()]
 
-
-def is_in_hub_mode() -> bool:
-    """True if the app is configured to run behind Hub."""
-    return AUTH_MODE == "hub"
-
-
-def is_standalone() -> bool:
-    """True if the app is configured for standalone operation."""
-    return AUTH_MODE == "standalone"

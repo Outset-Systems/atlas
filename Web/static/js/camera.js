@@ -32,6 +32,47 @@ A.cam = cam;
    is in the temporal dead zone for anything that calls view() early. */
 const _cardCss = getComputedStyle(document.documentElement);
 const _cardPx = (name) => parseFloat(_cardCss.getPropertyValue(name)) || 0;
+
+/* The world ends at the abyss's own foot (owner, 2026-11-01). A fixed depth left
+   a black spacer under it, as tall as the carousel was short: a realm whose
+   watchings are all buttons stood 176px high over 1500px of nothing. Measured,
+   and cached, because `view()` runs on every camera move and this must not read
+   layout there. Refreshed when a section changes height, the window changes or the
+   map loads.
+
+   Both sections undo the camera's fit scale (`--fit`, atlas.css), so a section is
+   `height / fit` tall in map pixels. The sky's grows upward from just over the
+   clouds, and the sky only ever gains room: it has clouds to show, not a spacer. */
+let voidDepth = CFG.VOID_DEPTH, skyNorth = CFG.SKY_NORTH;
+function measureWorld() {
+  const abyss = $('abyss'), sky = $('chronicle');
+  if (!A.MAPH) return;
+  const fit = model.fitScale(view());
+  abyss?.style.setProperty('--fit', fit);
+  sky?.style.setProperty('--fit', fit);
+  if (abyss?.offsetHeight) {
+    voidDepth = (abyss.offsetTop + (abyss.offsetHeight + CFG.VOID_FOOT_PX) / fit) / A.MAPH - 1;
+  }
+  if (sky?.offsetHeight) {
+    const top = Math.max(CFG.SKY_TOP, sky.offsetHeight / fit / A.MAPH + CFG.SKY_GAP);
+    sky.style.top = `${(-top * 100).toFixed(2)}%`;
+    skyNorth = Math.max(CFG.SKY_NORTH, top + CFG.VOID_FOOT_PX / fit / A.MAPH);
+  }
+  if (A.apply) { A.clampCam(); A.apply(false); }
+}
+A.measureWorld = measureWorld;
+
+/** Where a journey leaves the camera: the section framed below the band, centred in
+    the room if it is short. Its height is already true pixels (`--fit`). */
+A.landOn = (id) => {
+  const section = $(id), crown = $('scenes-list').getBoundingClientRect().bottom + 8;
+  const air = Math.max(0, (innerHeight - crown - section.offsetHeight) / 2);
+  return crown + air - section.offsetTop * cam.k;
+};
+const sectionWatch = new ResizeObserver(measureWorld);
+sectionWatch.observe($('abyss'));
+sectionWatch.observe($('chronicle'));
+addEventListener('resize', measureWorld);
 const CARD_SHARE_PX = _cardPx('--card-w') + 2 * _cardPx('--card-edge');
 const narrowScreen = matchMedia('(max-width: 720px)');
 
@@ -43,7 +84,7 @@ function view() {
     vw: innerWidth, vh: innerHeight,
     mapW: A.MAPW, mapH: A.MAPH,
     kMin: cam.min, kMax: cam.max,
-    voidDepth: CFG.VOID_DEPTH, skyNorth: CFG.SKY_NORTH,
+    voidDepth, skyNorth,
     cardSharePx: CARD_SHARE_PX, narrow: narrowScreen.matches,
   };
 }
@@ -255,7 +296,11 @@ addEventListener('keydown', (e) => {
   if (e.key === '/' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
     e.preventDefault(); A.openPalette?.(); return;
   }
-  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  // a field or an editable keeps its own keys; so does any modifier chord
+  // (ctrl+minus is the browser's zoom, not the map's — editor/index.js wireKeys
+  // guards the same way). Escape alone stays reachable from everywhere.
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName || '') || e.target.isContentEditable) return;
+  if (e.key !== 'Escape' && (e.ctrlKey || e.metaKey || e.altKey)) return;
   const pan = CFG.PAN_KEY_PX;
   switch (e.key) {
     // the glass sits over everything, so it swallows the first Escape alone —

@@ -349,6 +349,12 @@ def discovery_decide():
     elif action == "unignore":
         discovery.set_ignored(keys, False)
     elif action == "forget":
+        if atlas().backend == "db":
+            # `discovery.forget` edits the FILE inbox; on the db backend that
+            # file is not the inbox, so the edit would succeed and change
+            # nothing the viewer can see.
+            return jsonify({"error": "forget is not available on the db backend "
+                                     "— ignore the device instead"}), 400
         discovery.forget(keys)
     else:
         return jsonify({"error": f"unknown action {action!r}"}), 400
@@ -404,6 +410,9 @@ def maintenance_save():
     problems = []
     seen = set()
     for i, window in enumerate(body["windows"]):
+        if not isinstance(window, dict):
+            problems.append(f"window #{i + 1}: not an object")
+            continue
         label = window.get("id") or f"#{i + 1}"
         problems += [f"window {label}: {p}"
                      for p in schema.check_entry("maintenance", window, strict=True)]

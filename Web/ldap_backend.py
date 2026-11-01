@@ -112,7 +112,10 @@ def _under(dn: str, base_dn: str) -> bool:
     """True when `dn` sits inside the configured base DN."""
     if not base_dn:
         return True
-    return _norm_dn(dn).endswith(_norm_dn(base_dn))
+    dn, base = _norm_dn(dn), _norm_dn(base_dn)
+    # the base itself, or a component boundary before it: a bare suffix
+    # match would let `dc=notexample,dc=com` pass for `dc=example,dc=com`
+    return dn == base or dn.endswith("," + base)
 
 
 def _in_scope(raw_groups, base_dn, scope):

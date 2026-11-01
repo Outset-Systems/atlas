@@ -79,3 +79,38 @@ plus `Sec-Fetch-Site`), which blocks cross-site request forgery. Secrets
 saved in the app (TOTP secrets, integration keys) are encrypted with a master
 key kept in `/data/secrets/`, so a backup of `/data` is as sensitive as the
 running instance.
+
+## Hardening log
+
+### 2026-11-01
+
+A defensive review of the app, the image and the publishing tooling. Fixed in
+this pass:
+
+- `cryptography` is now required at `>=46.0.7` (the old upper bound kept the
+  image on a release with open advisories). The app uses Fernet only.
+- Hub signed-identity tokens are refused when they claim a lifetime over 300
+  seconds, and a signed token with a malformed `exp`/`iat` is refused rather
+  than raising.
+- Changing or disabling a second factor (`/api/v2/auth/mfa/setup`,
+  `/mfa/disable`) now requires the current password and, when a factor is
+  already enabled, a fresh code from it. The code is consumed. Re-enrolling
+  over a live factor without that proof is refused.
+- The code typed to confirm an enrollment can no longer be replayed at the
+  login that follows; backup codes are burnt in the same statement that
+  checks them, so two workers cannot both accept one.
+- Directory sign-in never records the reserved admin group as an ordinary
+  clearance group; the admin flag is the only admin path.
+- The Content Security Policy adds `base-uri 'none'`, `form-action 'self'`
+  and `object-src 'none'`.
+- LDAP group scoping matches the base DN on a component boundary.
+- The public build gate allow-lists every binary that may ship, fails on a
+  theme file other than the public one, and fails when an exclusion entry
+  no longer matches anything.
+
+Known and accepted, unchanged by this pass:
+
+- `GET /api/v2/whois` is a whois relay with no rate limit in `standalone`
+  mode. Run that mode on loopback or a trusted network only.
+- There is no global request-body size cap or request rate limit; put the
+  app behind a reverse proxy that provides them.

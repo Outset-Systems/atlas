@@ -90,9 +90,19 @@ LOG_LEVELS, LOG_LEVELS_REJECTED = _parse_log_levels(
 DEBUG = os.environ.get("ATLAS_DEBUG") == "1"
 
 # ── The dataset ──────────────────────────────────────────────────────────────
+def data_dir():
+    """The directory beside the dataset, where every sibling store lives
+    (`accounts.db`, `secrets/`, `integrations.json`, the drop-dirs). LIVE,
+    reading the environment each call: a test re-points `ATLAS_DATA` without
+    rebuilding the app, and the callers that must follow it
+    (`accounts_db_path`, `crypto_at_rest`) use this rather than the boot-time
+    `DATA_DIR` below, which the import-time paths are built from."""
+    return os.path.dirname(os.environ.get("ATLAS_DATA", "/data/lab-data.json")) or "."
+
+
 DATA_PATH = os.environ.get("ATLAS_DATA", "/data/lab-data.json")
 DEFAULT_DATA_PATH = os.path.join(HERE, "default-lab-data.json")
-DATA_DIR = os.path.dirname(DATA_PATH) or "."
+DATA_DIR = data_dir()
 
 # Atlas for Teams Phase 1: "file" = the classic hand-edited
 # JSON (default, byte-for-byte unchanged); "db" = the SQLAlchemy store serving
@@ -177,17 +187,7 @@ def beat_token():
             return value
     except Exception:  # noqa: BLE001 — the env path below is the deployment's own
         pass
-    value = os.environ.get("ATLAS_BEAT_TOKEN")
-    if value:
-        return value.strip()
-    path = os.environ.get("ATLAS_BEAT_TOKEN_FILE")
-    if path and os.path.exists(path):
-        try:
-            with open(path, encoding="utf-8") as handle:
-                return handle.read().strip() or None
-        except OSError:
-            return None
-    return None
+    return envnames.secret("ATLAS_BEAT_TOKEN") or None
 
 
 def accounts_db_path():
@@ -198,8 +198,7 @@ def accounts_db_path():
     explicit = os.environ.get("ATLAS_ACCOUNTS_DB")
     if explicit:
         return explicit
-    data_dir = os.path.dirname(os.environ.get("ATLAS_DATA", "/data/lab-data.json")) or "."
-    return os.path.join(data_dir, "accounts.db")
+    return os.path.join(data_dir(), "accounts.db")
 
 
 def _read_only():
@@ -309,40 +308,32 @@ def mfa_required():
     return (os.environ.get("ATLAS_MFA_REQUIRED", "") or "").strip().lower()
 
 # ── Deployment-specific addresses ────────────────────────────────────────────
-# These three used to be constants — the Grafana base was hard-coded in
-# `static/js/config.js` and the vault root in `static/js/ui.js`, which meant
-# every copy of the app shipped with one particular lab's internal address and
-# one particular person's drive letter in its served JavaScript. They are
-# configuration, and they default to nothing, so an Atlas that has not been
-# told about a Grafana simply doesn't draw Grafana panels.
+# THE VIEWING GLASS knobs, LIVE (v1.38.2). The Grafana base used to be
+# hard-coded in `static/js/config.js` and the vault root in `static/js/ui.js`,
+# which meant every copy of the app shipped with one particular lab's internal
+# address and one particular person's drive letter in its served JavaScript.
+# They are configuration: these read THE SETTINGS first (integrations.py,
+# group "glass") and the environment second, so an operator can widen
+# frame-src or turn the probe off without a redeploy. Unset, they default to
+# nothing and the glass degrades quietly rather than pointing at a host that
+# isn't there.
 #
-# ⚠ The lab deploy needs ATLAS_GRAFANA and ATLAS_EMBED_HOSTS set in its
-# compose to keep the card vitals and the Chronicle embeds it has today —
-# see the deployment notes. Unset, they degrade quietly rather than pointing at a host
-# that isn't there.
-
-# Hosts the Chronicle may embed in an iframe (space-separated origins).
-EMBED_HOSTS = os.environ.get("ATLAS_EMBED_HOSTS", "")
-
-# Widen `frame-src` to the origins the dataset already links to, so THE VIEWING
-# GLASS can show a service in a pane over the map instead of a new tab. Only
-# ever the origins the map itself points at — this is not a wildcard, and it
-# grants those pages nothing: a framed cross-origin document still cannot read
-# or touch the Atlas. Set 0 to keep the CSP to EMBED_HOSTS alone, in which case
-# every outward button falls back to opening a tab.
-EMBED_SERVICES = os.environ.get("ATLAS_EMBED_SERVICES", "1") == "1"
-
-# Ask a service whether it allows framing before offering to frame it. Off, the
-# glass simply tries and falls back — which costs one blank pane per refusing
-# service instead of one HEAD request per service per quarter-hour.
-EMBED_PROBE = os.environ.get("ATLAS_EMBED_PROBE", "1") == "1"
-
-
-# THE VIEWING GLASS knobs, LIVE (v1.38.2): the three constants above are the
-# deployment's values; these read THE SETTINGS first (integrations.py, group
-# "glass") so an operator can widen frame-src or turn the probe off without a
-# redeploy. Call sites use these; the constants stay for anything that only
-# ever wanted the boot-time value.
+# ATLAS_EMBED_HOSTS     Hosts the Chronicle may embed in an iframe
+#                       (space-separated origins).
+# ATLAS_EMBED_SERVICES  Widen `frame-src` to the origins the dataset already
+#                       links to, so THE VIEWING GLASS can show a service in a
+#                       pane over the map instead of a new tab. Only ever the
+#                       origins the map itself points at — this is not a
+#                       wildcard, and it grants those pages nothing: a framed
+#                       cross-origin document still cannot read or touch the
+#                       Atlas. 0 keeps the CSP to ATLAS_EMBED_HOSTS alone, in
+#                       which case every outward button falls back to opening
+#                       a tab.
+# ATLAS_EMBED_PROBE     Ask a service whether it allows framing before
+#                       offering to frame it. Off, the glass simply tries and
+#                       falls back — which costs one blank pane per refusing
+#                       service instead of one HEAD request per service per
+#                       quarter-hour.
 def embed_hosts():
     import integrations
     return integrations.get("ATLAS_EMBED_HOSTS")
@@ -360,9 +351,6 @@ def embed_probe():
 # (GRAFANA_URL — `ATLAS_GRAFANA` — lived here until v1.36.0. Grafana was
 # decommissioned 2026-09-03: the card vitals and the watchings both draw from
 # Prometheus/Loki themselves, and nothing in this app points at it any more.)
-
-# Prefix trimmed off `scroll` paths for display (the full path is still copied).
-SCROLL_ROOT = os.environ.get("ATLAS_SCROLL_ROOT", "")
 
 
 def auth_config():
@@ -429,7 +417,8 @@ def hub_url():
 
 
 def _scroll_root():
-    """THE REALM (v1.38.0): the settings file first, then ATLAS_SCROLL_ROOT."""
+    """Prefix trimmed off `scroll` paths for display (the full path is still
+    copied). THE REALM (v1.38.0): the settings file first, then ATLAS_SCROLL_ROOT."""
     import integrations
     return integrations.get("ATLAS_SCROLL_ROOT")
 

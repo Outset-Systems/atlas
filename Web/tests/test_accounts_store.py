@@ -2,6 +2,7 @@
 
 import os
 import sys
+import time
 
 import pytest
 
@@ -75,10 +76,10 @@ def test_a_directory_identity_never_overwrites_a_local_account(store):
 
 def test_ldap_upsert_mirrors_directory(store):
     store.upsert_ldap_user("alice", groups=["HUB-Atlas"], is_admin=False)
-    store.upsert_ldap_user("alice", groups=["HUB-Atlas", "atlas-admins"], is_admin=True)
+    store.upsert_ldap_user("alice", groups=["HUB-Atlas", "atlas-surveyors"], is_admin=True)
     acc = store.get_user("alice")
     assert acc["is_admin"] == 1
-    assert store.groups_of(acc) == ["HUB-Atlas", "atlas-admins"]
+    assert store.groups_of(acc) == ["HUB-Atlas", "atlas-surveyors"]
     # revocation mirrors too
     store.upsert_ldap_user("alice", groups=[], is_admin=False)
     assert store.get_user("alice")["is_admin"] == 0
@@ -139,7 +140,8 @@ def test_mfa_roundtrip_and_backup_codes(store):
     acc = store.get_user("ops")
     assert acc["mfa_enabled"] == 1
     assert secret not in (acc["mfa_secret"] or "")      # encrypted at rest
-    assert store.verify_mfa_or_backup("ops", pyotp.TOTP(secret).now())
+    # the enrolment code is spent (2026-11-01); the next step signs in
+    assert store.verify_mfa_or_backup("ops", pyotp.TOTP(secret).at(time.time() + 30))
     # a backup code works exactly once
     assert store.verify_mfa_or_backup("ops", codes[0])
     assert not store.consume_backup_code("ops", codes[0])
@@ -192,3 +194,87 @@ def test_admin_counting(store):
 
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-q"]))
+
+
+# ── 2026-11-01 security review ───────────────────────────────────────────────
+
+def test_schema_is_ensured_once_per_path(store, tmp_path, monkeypatch):
+    """init_db ran four CREATE TABLEs and an index on EVERY accounts call —
+    get_user is on the per-request auth path. Now a path is ensured once per
+    process, keyed on the resolved path so a fresh DB still gets its schema."""
+    store.create_local_user("ops", PW)
+    with store._connect() as conn:                      # a later call must not rebuild it
+        conn.execute("DROP TABLE login_throttle")
+        conn.commit()
+    assert store.get_user("ops")["username"] == "ops"
+    with store._connect() as conn:
+        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    assert "login_throttle" not in tables
+    # a different path is a different database and is born whole
+    monkeypatch.setenv("ATLAS_ACCOUNTS_DB", str(tmp_path / "other.db"))
+    assert store.get_user("ops") is None
+    assert store.throttled("ops", "127.0.0.1") is False       # login_throttle exists here
+
+
+def test_the_reserved_admin_group_never_lands_in_a_directory_row(store):
+    """`_clean_groups` refuses the admin group on a local account; a directory
+    row took whatever the directory said. The flag is the only admin path, so
+    the name is dropped at the mirror — not raised, since a login is not the
+    place to blow up."""
+    reserved = store.RESERVED_ADMIN_GROUP
+    acc = store.upsert_ldap_user("alice", groups=["HUB-Atlas", reserved, " "], is_admin=True)
+    assert store.groups_of(acc) == ["HUB-Atlas"]
+    assert acc["is_admin"] == 1
+
+
+def test_the_enrollment_code_is_spent_at_the_next_login(store):
+    """confirm_mfa used to clear mfa_last_step, so the very code just typed to
+    enrol still opened a login for the rest of its window."""
+    pyotp = pytest.importorskip("pyotp")
+    pytest.importorskip("cryptography")
+    import time
+    store.create_local_user("ops", PW)
+    secret, _, _ = store.start_mfa_enrollment("ops")
+    totp = pyotp.TOTP(secret)
+    t0 = time.time()
+    store.confirm_mfa("ops", totp.at(t0))
+    assert store.get_user("ops")["mfa_last_step"] == int(t0 // 30)
+    assert not store.verify_mfa_code("ops", totp.at(t0), now=t0)           # replayed
+    assert store.verify_mfa_code("ops", totp.at(t0 + 30), now=t0 + 30)     # the next one
+
+
+def test_re_enrolment_over_a_live_factor_needs_proof(store):
+    pyotp = pytest.importorskip("pyotp")
+    pytest.importorskip("cryptography")
+    store.create_local_user("ops", PW)
+    secret, _, _ = store.start_mfa_enrollment("ops")
+    store.confirm_mfa("ops", pyotp.TOTP(secret).now())
+    with pytest.raises(ValueError, match="already enabled"):
+        store.start_mfa_enrollment("ops")
+    assert store.get_user("ops")["mfa_pending_secret"] is None       # nothing was overwritten
+    secret2, _, _ = store.start_mfa_enrollment("ops", reauthenticated=True)
+    assert secret2 != secret
+
+
+def test_a_backup_code_burns_in_the_statement_that_checks_it(store, monkeypatch):
+    """Check-then-update let two workers both accept one code. The UPDATE now
+    carries `AND used = 0` and only a changed row is a sign-in: here another
+    worker burns the row between the match and the update."""
+    pytest.importorskip("pyotp")
+    pytest.importorskip("cryptography")
+    store.create_local_user("ops", PW)
+    codes = store.generate_backup_codes("ops")
+    real = store.check_password_hash
+
+    def other_worker_wins(code_hash, code):
+        ok = real(code_hash, code)
+        if ok:
+            with store._connect() as conn:
+                conn.execute("UPDATE mfa_backup_codes SET used = 1 WHERE username = 'ops'")
+                conn.commit()
+        return ok
+
+    monkeypatch.setattr(store, "check_password_hash", other_worker_wins)
+    assert not store.consume_backup_code("ops", codes[0])
+    monkeypatch.setattr(store, "check_password_hash", real)
+    assert store.consume_backup_code("ops", codes[1]) is False     # burnt above too

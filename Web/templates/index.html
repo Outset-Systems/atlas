@@ -47,8 +47,9 @@
     <div id="sky-map-light" aria-hidden="true"></div>
     <div id="void-fade" aria-hidden="true"></div>
     <div id="void" aria-hidden="true"></div>
-    <!-- the Depths' own atmosphere: bioluminescent fog filling the descent,
-         the mirror of the Sky's clouds+glow (2026-07-12) -->
+    <!-- the Depths' own atmosphere: bioluminescent fog behind the section, the
+         mirror of the Sky's clouds+glow (2026-07-12). It starts below the black
+         band under the map, where the edge and internet pins sit (2026-11-01). -->
     <div id="depths-realm" aria-hidden="true">
       <div class="depths-glow"></div>
       <div class="depths-motes"></div>
@@ -177,8 +178,12 @@
      corners. THE ATLAS is the home button and does three jobs — see the
      comment on `.scene-home` in atlas.css. -->
 <nav id="scenes-list" aria-label="Scenes">
+  <button class="band-arrow" id="band-prev" aria-label="Earlier sections">‹</button>
+  <!-- The labels scroll on their own, beside the buttons at the band's end, so the
+       two cannot overlap. ‹ › show only while something is out of reach. -->
+  <div class="band-labels" id="band-labels">
   <span class="scene-home" id="scene-home">
-    <button class="scene active" data-scene="atlas">ATLAS</button>
+    <button class="scene active" data-scene="atlas" title="Back to the whole map">ATLAS</button>
   </span>
   <button class="scene" data-scene="rack">RACKS</button>
   <button class="scene" data-scene="tribute">RESOURCES</button>
@@ -195,6 +200,8 @@
        everyone else regardless, so this is courtesy, not the control. -->
   <button class="scene" data-scene="accounts" id="scene-accounts" hidden>ACCOUNTS</button>
   <button class="scene" data-scene="trust" id="scene-trust" hidden>THE TRUST</button>
+  </div>
+  <button class="band-arrow" id="band-next" aria-label="Later sections">›</button>
   <!-- ⚙ SITS IN THE BAND, to the left of ☰ (2026-09-04). It used to
        hang BELOW ☰ as a fixed cluster OUTSIDE the nav — a sibling, because the
        band's backdrop-filter and overflow would have positioned a `fixed`
@@ -234,8 +241,8 @@
      A 2×2 block also reads as one object hanging off one button, which a row
      of five never did.
 
-     The pin button is gone: THE ATLAS's own click is the pin now, so the
-     cluster no longer has to carry a control for its own persistence.
+     One column beside `.zoom-stack`, dropped by hovering THE ATLAS (owner,
+     2026-11-01). Top to bottom: sky, depths, tripwires.
 
      ⚠ It lives OUTSIDE #scenes-list on purpose. The band carries
      `backdrop-filter`, which makes it the containing block for `position:
@@ -246,15 +253,9 @@
      longer relatives. -->
 <span class="atlas-tools" id="atlas-tools">
       <button class="chrome ci-sky" id="btn-sky" title="Rise to {{ theme.text.sky }} · the Chronicle (S)" aria-label="{{ theme.text.sky }}"><svg class="ci-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.5 18H17a4 4 0 0 0 .6-7.95a5.5 5.5 0 0 0-10.5-1a4.5 4.5 0 0 0 .4 8.95Z"/></svg></button>
-      <!-- the network glyph left this cluster 2026-09-02: it now sits
-           permanently under − in `.zoom-stack`, the pair it is reached for with. -->
       <button class="chrome ci-depths" id="btn-depths" title="Descend into the Depths (D)" aria-label="The Depths"><svg class="ci-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5v9.5M8.5 9.5 12 13l3.5-3.5"/><path d="M3.5 17.5c1.4 1 2.8 1 4.2 0s2.8-1 4.2 0 2.8 1 4.2 0 2.8-1 4.2 0"/></svg></button>
       <!-- THE decoy feed WATCH (2026-08-15) — the decoys as a map layer: an
-           eye over every place a stone guards, voiced by the live feed.
-           It ENDS the second row (Link, same day) — an explicit reversal of the
-           "👁 sits above ☾" order from the single column, which the two-row
-           grouping supersedes: the descent is the journey this row is about,
-           and the watch is who is looking while you take it. -->
+           eye over every place a stone guards, voiced by the live feed. -->
       <button class="chrome ci-decoys" id="btn-decoys" title="Show the {{ theme.text.stones_watch }} — the {{ theme.text.stones }}, where they stand (G)" aria-label="{{ theme.text.stones_watch|capitalize }} layer">
         <svg class="ci-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
           <path d="M2.5 11 C 6 6.4, 18 6.4, 21.5 11 C 18 15.6, 6 15.6, 2.5 11 Z"/>
@@ -304,7 +305,7 @@
 </aside>
 
 <!-- Ivory detail card -->
-<article id="card" aria-hidden="true">
+<article id="card" class="card-left" aria-hidden="true">
   <div class="card-bar"></div>
   <!-- portrait + close pinned OUTSIDE the scroll area so the emblem/logo is
        always visible even when a tall card scrolls (2026-07-12) -->

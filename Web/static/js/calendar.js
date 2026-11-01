@@ -27,7 +27,7 @@
 
    calendar-model.js decides what is where; this only paints. */
 
-import { A, $, esc } from './config.js';
+import { A, $, esc, ago, nodeById } from './config.js';
 import { makeScene } from './scene.js';
 import {
   DAY_MIN, layoutDay, layoutForge, nextTurning, fmtClock, dayName,
@@ -45,13 +45,7 @@ const VERDICT = {
   unwatched: { cls: 'v-unwatched', mark: '·' },
 };
 
-function elapsed(seconds) {
-  const mins = Math.round(seconds / 60);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  if (mins < 1440) return `${Math.round(mins / 60)}h ago`;
-  return `${Math.round(mins / 1440)}d ago`;
-}
+const elapsed = (seconds) => ago(seconds * 1000);
 
 /* How long ago the rite last turned.
 
@@ -198,7 +192,7 @@ function rowHTML(lane, { nowMin, today }) {
 /** A group of rows under one head — a forge, a turning, or the listed. */
 function groupHTML(group, ctx) {
   const place = group.kind === 'forge'
-    ? ((A.DATA?.nodes || []).find((n) => n.id === group.place)?.name || group.place.toUpperCase())
+    ? (nodeById(group.place)?.name || group.place.toUpperCase())
     : null;
   const drawn = group.lanes.filter((l) => l.today.length || l.every).length;
   const silent = group.lanes.filter((l) => ['missed', 'failed'].includes(l.rite.verdict)).length;

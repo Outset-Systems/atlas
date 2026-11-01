@@ -122,3 +122,35 @@ def test_cached_right(app, monkeypatch):
 def test_gated_right():
     from api import v2 as api_v2
     assert "/api/v2/vitals" not in "".join(api_v2.EXEMPT_PATHS)
+
+
+def test_a_hidden_place_has_no_vitals_for_the_uncleared(tmp_path, monkeypatch):
+    """A `require_group` place answers "no such place" to a viewer without the
+    group — the same sentence as an unknown id, so the 404 confirms nothing —
+    and the per-node cache an admin just warmed must not answer for them."""
+    import hub_auth.auth as auth
+    from api.v2 import vitals as vt
+    data = json.load(open(BUNDLED, encoding="utf-8"))
+    node = data["nodes"][0]
+    node["id"], node["ip"], node["require_group"] = "probe-me", "10.9.9.9", "HUB-decoy"
+    p = tmp_path / "lab-data.json"
+    p.write_text(json.dumps(data), encoding="utf-8")
+    handle = fresh_app(ATLAS_AUTH_MODE="hub", ATLAS_DATA_BACKEND="file", ATLAS_DATA=str(p))
+    monkeypatch.setenv("ATLAS_PROM_URL", "http://prom.test:9090")
+    monkeypatch.setattr(vt, "_range_query",
+                        lambda *a, **k: _matrix([[1700000000, "12.3"]]))
+    vt._cache.clear()
+    original = auth.AUTH_MODE
+    auth.AUTH_MODE = "hub"
+    try:
+        c = handle.app.test_client()
+        admin = {"X-Remote-User": "ops", "X-Remote-Groups": "atlas-admins"}
+        plain = {"X-Remote-User": "alice", "X-Remote-Groups": "HL-Nobody"}
+        assert c.get("/api/v2/vitals/probe-me", headers=admin).status_code == 200
+        assert "probe-me" in vt._cache, "the admin's ask warmed the cache"
+        r = c.get("/api/v2/vitals/probe-me", headers=plain)
+        assert r.status_code == 404
+        assert r.get_json()["error"] == "no such place"
+        assert c.get("/api/v2/vitals/not-a-place", headers=plain).get_json() == r.get_json()
+    finally:
+        auth.AUTH_MODE = original

@@ -283,9 +283,13 @@ function paint() {
 /* `withSignals` only on open and after an acknowledgement: the signals poll
    itself calls refreshStonesScene, and asking it for signals again from
    there would be a loop. */
+let busy = false;   // a refresh in flight; the poll's echo of it is dropped
 async function refresh(withSignals = false) {
-  await Promise.all([A.loadTripwires(),
-                     withSignals ? A.refreshSignals?.().catch(() => {}) : null]);
+  busy = true;
+  try {
+    await Promise.all([A.loadTripwires(),
+                       withSignals ? A.refreshSignals?.().catch(() => {}) : null]);
+  } finally { busy = false; }
   paint();
   A.paintDecoys?.();
 }
@@ -302,8 +306,8 @@ A.closeStones = close;
    tripwire touched while you are looking lights where it stands. The scroll
    position survives the repaint (paint keeps it). */
 A.refreshStonesScene = function refreshStonesScene() {
-  if (!root?.classList.contains('open')) return;
-  refresh();
+  if (!root?.classList.contains('open') || busy) return;   // busy: opening asked
+  refresh();                                               // for signals, which land here
 };
 
 A.buildStonesScene = function buildStonesScene() {

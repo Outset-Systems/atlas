@@ -11,7 +11,7 @@
    health from the signals feed on every open. Click a node → fly to it on the
    map. Pure SVG + DOM, no libraries. */
 
-import { A, $, esc } from './config.js';
+import { A, $, esc, zoneById, FALLBACK_HUE } from './config.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 let root, svg, nodesEl, legendEl;
@@ -128,7 +128,6 @@ function build() {
   // Filtering here is enough for the roads too: the edge loop below requires
   // both endpoints to have a position, so their routes drop out with them.
   const nodes = A.DATA.nodes.filter((n) => !n.off_map);
-  const zoneById = Object.fromEntries(A.DATA.zones.map((z) => [z.id, z]));
   const feed = A.signalsFeed?.nodes || {};
 
   // lay tiers out on a normalized 100×100 grid
@@ -201,10 +200,10 @@ function build() {
 
   nodesEl.innerHTML = nodes.map((n) => {
     const p = pos[n.id];
-    const z = zoneById[n.zone];
+    const z = zoneById(n.zone);
     const st = feed[n.id]?.state;
     return `<button class="pth-node k-${esc(n.kind || 'vm')}${st ? ' st-' + esc(st) : ''}"
-      style="left:${p.x}%;top:${p.y}%;--n-hue:${esc(n.hue || z?.hue || '#C9A554')}" data-id="${esc(n.id)}">
+      style="left:${p.x}%;top:${p.y}%;--n-hue:${esc(n.hue || z?.hue || FALLBACK_HUE)}" data-id="${esc(n.id)}">
       <span class="pth-dot"><span class="svc-health ${st ? (A.svcHealthClass[st] || '') : ''}"></span></span>
       <span class="pth-name">${esc(n.name)}</span>
       <span class="pth-ip">${esc(n.ip && n.ip !== '—' ? n.ip : (n.kind === 'network' ? 'beyond' : ''))}</span>

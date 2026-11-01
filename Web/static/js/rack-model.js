@@ -23,8 +23,8 @@ export const KIND_DEPTH_MM =
 
 //: node.state → LED hex. The caller resolves the state from its own signals
 //: feed and passes the string; '' means "no live signal, draw the dim default".
-const LED_BY_STATE = { healthy: '#8EC07C', degraded: '#FABD2F', down: '#FB4934',
-                       maintenance: '#83A598', slumbering: '#7c748a' };
+export const LED_BY_STATE = { healthy: '#8EC07C', degraded: '#FABD2F', down: '#FB4934',
+                              maintenance: '#83A598', slumbering: '#7c748a' };
 export const ledColor = (state) => LED_BY_STATE[state] || '';
 
 export const slug = (s) =>

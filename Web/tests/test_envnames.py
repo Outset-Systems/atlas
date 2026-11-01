@@ -16,7 +16,7 @@ needs_legacy = pytest.mark.skipif(legacy_names is None, reason="public build: no
 
 RENAMED = ["ATLAS_AUTH_MODE", "ATLAS_HUB_SECRET", "ATLAS_HUB_SECRET_FILE",
            "ATLAS_DECOYS_URL", "ATLAS_DECOYS_KEY", "ATLAS_DECOYS_KEY_FILE",
-           "ATLAS_STANDALONE_USER", "ATLAS_STANDALONE_EMAIL", "ATLAS_STANDALONE_GROUPS"]
+           "ATLAS_STANDALONE_USER", "ATLAS_STANDALONE_GROUPS"]
 
 
 @pytest.fixture
@@ -57,3 +57,22 @@ def test_hub_auth_reads_the_configured_header(clean_env):
     finally:
         clean_env.setenv("ATLAS_HUB_AUTH_HEADER", "X-Hub-Auth")
         importlib.reload(auth)
+
+
+def test_secret_reads_the_value_then_the_file(clean_env, tmp_path):
+    """One reader for every token and key: the variable wins, the `_FILE`
+    sibling is the docker-secret fallback, both stripped; a named file that
+    cannot be read is the default, never a crash."""
+    clean_env.delenv("ATLAS_TEST_SECRET", raising=False)
+    clean_env.delenv("ATLAS_TEST_SECRET_FILE", raising=False)
+    assert envnames.secret("ATLAS_TEST_SECRET") == ""
+    assert envnames.secret("ATLAS_TEST_SECRET", default=None) is None
+    f = tmp_path / "secret"
+    f.write_text("  from-the-file\n", encoding="utf-8")
+    clean_env.setenv("ATLAS_TEST_SECRET_FILE", str(f))
+    assert envnames.secret("ATLAS_TEST_SECRET") == "from-the-file"
+    clean_env.setenv("ATLAS_TEST_SECRET", " from-the-env ")
+    assert envnames.secret("ATLAS_TEST_SECRET") == "from-the-env"
+    clean_env.setenv("ATLAS_TEST_SECRET", "")
+    clean_env.setenv("ATLAS_TEST_SECRET_FILE", str(tmp_path / "missing"))
+    assert envnames.secret("ATLAS_TEST_SECRET", default="x") == "x"

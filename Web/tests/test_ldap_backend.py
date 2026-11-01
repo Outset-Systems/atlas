@@ -244,3 +244,16 @@ def test_backends_order_and_gating(ldap_env, monkeypatch):
 
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-q"]))
+
+
+def test_the_base_dn_scope_is_a_component_boundary():
+    """`_under` was a bare suffix match (2026-11-01 review): the intent is
+    "this DN, or one beneath it", so the base itself passes and a DN whose
+    last component merely ENDS with the base's text does not."""
+    import ldap_backend
+    base = "DC=example,DC=com"
+    assert ldap_backend._under("CN=atlas-admins,OU=Groups,DC=example,DC=com", base)
+    assert ldap_backend._under("dc=example, dc=com", base)                  # the base itself
+    assert not ldap_backend._under("CN=atlas-admins,DC=notexample,DC=com", base)
+    assert not ldap_backend._under("CN=atlas-admins,DC=example,DC=com,DC=au", base)
+    assert ldap_backend._under("CN=anything", "")                            # no base: no scope

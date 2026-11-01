@@ -128,3 +128,13 @@ def test_calendar_day_uses_the_hub_when_configured(app_env, monkeypatch):
     monkeypatch.setattr(requests, "get", lambda *a, **k: (_ for _ in ()).throw(OSError("down")))
     v = h.app.test_client().get("/api/v2/calendar?day=2026-09-07").get_json()
     assert v["fleet"] is False and v["hub_error"] and any(p["app"] == "atlas" for p in v["planned"])
+
+
+def test_a_clock_with_seconds_or_a_zone_is_still_a_clock():
+    """`at` is hand-typed: "13:45:00" and "13:45 UTC" used to raise on the
+    split and take the whole manifest down with them."""
+    from api.v2.manifest import cadence_of
+    plain = cadence_of({"cadence": "daily", "at": "13:45"})
+    assert cadence_of({"cadence": "daily", "at": "13:45:00"}) == plain
+    assert cadence_of({"cadence": "daily", "at": "13:45 UTC"}) == plain
+    assert cadence_of({"cadence": "daily", "at": "9:05"}) == cadence_of({"cadence": "daily", "at": "09:05"})

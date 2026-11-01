@@ -313,7 +313,8 @@ SECTIONS = {
               help="Draw a CPU + RAM gauge on its card (needs node-exporter and LAN HTTP)."),
             f("planned", "bool", help="Charted but not yet built — drawn faint."),
             f("off_map", "bool", label="Off the map",
-              help="Charted, but not drawn. Its services still list in THE INDEX; its marker and its routes are skipped. For a place that is decided but not yet laid."),            f("require_group", "text", label="Requires group",
+              help="Charted, but not drawn. Its services still list in THE INDEX; its marker and its routes are skipped. For a place that is decided but not yet laid."),
+            f("require_group", "text", label="Requires group",
               help="Hide this place from anyone whose Hub groups don't include it."),
             f("links", "objects", of=LINK_FIELDS, label="Services",
               help="Everything hosted here. Each becomes a card button and an Index row."),
@@ -521,7 +522,7 @@ SECTIONS = {
                    "instead of catching them."),
             f("kind", "select", options=STONE_KINDS, required=True,
               default="web-bug", help="What sort of bait it is."),
-            f("host", "node", label="Guards",
+            f("host", "ref", ref="nodes", label="Guards",
               help="The place this stone watches. Internal bookkeeping — unlike "
                    "`name`, this never leaves the realm, which is why it may say "
                    "what it really is."),
@@ -690,9 +691,6 @@ SECTION_ORDER = ["nodes", "zones", "regions", "prefixes", "routes", "interfaces"
                  "racks", "rack", "rack_rear", "vms", "rites", "certs", "stones",
                  "maintenance", "chronicle", "abyss", "meta"]
 
-#: Sections the dataset writer must ignore — they live in their own stores.
-NON_DATASET = tuple(k for k, s in SECTIONS.items() if s["store"] != "dataset")
-
 # Order they sit in the *file*, which is a different question: the dataset is
 # read by people, and it opens with `meta` and the realms, not with the places.
 # The write path uses this to decide where a brand-new section goes; using the
@@ -700,10 +698,6 @@ NON_DATASET = tuple(k for k, s in SECTIONS.items() if s["store"] != "dataset")
 FILE_ORDER = ("meta", "zones", "regions", "nodes", "routes", "prefixes", "interfaces",
               "racks", "rack", "rack_rear", "vms", "signals", "chronicle", "abyss", "rites",
               "certs", "stones")
-
-# Sections the dataset may carry that the catalogue does not model. They round-
-# trip untouched; the editor simply has no page for them.
-UNMODELLED_TOP_KEYS = ("signals",)
 
 
 def get(key):
@@ -724,7 +718,8 @@ def field(section_key, field_name):
 
 
 def catalogue():
-    """The whole catalogue, JSON-ready, for `/api/admin/schema`."""
+    """The whole catalogue, JSON-ready — the editor reads it inside
+    `/api/v2/admin/context`."""
     return {
         "order": SECTION_ORDER,
         "sections": {k: SECTIONS[k] for k in SECTION_ORDER if k in SECTIONS},

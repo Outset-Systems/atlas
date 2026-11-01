@@ -1,7 +1,7 @@
 /* Atlas — the world on the stage: zone labels, markers, the
    floating vision orb, the network layer, and the Depths/sky transitions. */
 
-import { A, CFG, REDUCED, $, esc, zoneById } from './config.js';
+import { A, CFG, REDUCED, $, esc, zoneById, nodeById, FALLBACK_HUE, DRAG_END, postJSON } from './config.js';
 import { unproject } from './project.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
@@ -13,21 +13,18 @@ const markersEl = $('markers');
 // label fade and the reach painter never have to ask "is this a real place?"
 const satsEl = $('satellites');
 
-const nodeById = (id) => A.DATA.nodes.find(n => n.id === id);
-
 /* ── Zone labels ─────────────────────────────────────── */
 function buildZoneLabels() {
   for (const z of A.DATA.zones) {
-    if (z.hide_label) continue;   // some VLANs keep their territory but drop the map text
-    const kin = z.id === 'depths';
+    // some VLANs keep their territory but drop the map text. The Depths never
+    // draw theirs: the section below the map carries the name in its own heading.
+    if (z.hide_label || z.id === 'depths') continue;
     const el = document.createElement('div');
-    el.className = 'zone-label' + (kin ? ' depths-kin' : '');
+    el.className = 'zone-label';
     el.style.left = z.label_x + '%';
     el.style.top = z.label_y + '%';
     el.style.color = z.hue;
-    // THE DEPTHS headline is scenery, not a label — it alone takes ~2.6× the
-    // size (its opacity/tracking/data-line live with the .depths-kin CSS)
-    el.style.fontSize = (kin ? Math.round(CFG.ZONE_LABEL_PX * 2.6) : CFG.ZONE_LABEL_PX) + 'px';
+    el.style.fontSize = CFG.ZONE_LABEL_PX + 'px';
     el.innerHTML = `${esc(z.name)}<small>vlan ${esc(z.vlan)} · ${esc(z.subnet)}</small>`;
     zoneLabelsEl.appendChild(el);
   }
@@ -43,8 +40,7 @@ let lastDim = null, lastLabeled = null;
 function updateZoneLabelFade() {
   // zone names read at survey zoom and fade as you fly closer; location labels
   // take over past the close-up threshold. With the network layer up the VLAN
-  // labels hide (the territory hulls carry compact tags) — but THE DEPTHS is a
-  // region marker for the descent, not a VLAN tag, so it stays.
+  // labels hide (the territory hulls carry compact tags).
   const t = Math.max(0, Math.min(1, (A.cam.k / A.fitScale() - 1) / 1.2));
   if (inDepths) {
     // Down in the dark the CSS owns the labels (`body.depths .zone-label`,
@@ -62,7 +58,7 @@ function updateZoneLabelFade() {
       lastDim = dim;
       zoneLabelsEl.style.opacity = '';   // fade per-label now, not the whole layer
       for (const el of zoneLabelsEl.children) {
-        el.style.opacity = el.classList.contains('depths-kin') ? '' : dim;
+        el.style.opacity = dim;
       }
     }
   }
@@ -79,17 +75,16 @@ function resetFadeCache() { lastDim = null; lastLabeled = null; }
 
 /* ── The Depths: scroll south past the table's edge ───── */
 let inDepths = false;
+let inSky = false;       // ☁ lit, the sky's half of the descent's lit ☾
+let onCentre = true;     // the view is on the map's middle; returning wakes the drift note
 let shoreSnap = false;   // one-shot: zoomed-in scroll into a shore settles the camera once
 
 function toggleDepths(force) {
   const next = force ?? !inDepths;
-  if (next === inDepths) return;   // stating a state you're in is a no-op, not a re-toast
+  if (next === inDepths) return;   // stating a state you're in is a no-op
   inDepths = next;
   document.body.classList.toggle('depths', inDepths);
   $('btn-depths').classList.toggle('lit', inDepths);
-  A.showToast(inDepths
-    ? 'You descend into the Depths — nothing down here leaves…'
-    : 'You workstation. The sun returns to the sand.');
 }
 
 /** The viewport's edges in image-y — the projection every Depths decision
@@ -147,6 +142,15 @@ function updateShades(userMove) {
   const depthQ = depthT.toFixed(2), skyQ = skyT.toFixed(2);
   if (depthQ !== lastDepthQ) { lastDepthQ = depthQ; shadeEl()?.style.setProperty('--depth-t', depthQ); }
   if (skyQ !== lastSkyQ) { lastSkyQ = skyQ; skyLightEl()?.style.setProperty('--sky-t', skyQ); }
+  if (inSky ? skyT < CFG.SKY_RELEASE : skyT > CFG.SKY_ENGAGE) {
+    inSky = !inSky;
+    $('btn-sky').classList.toggle('lit', inSky);
+  }
+  const offCentre = Math.abs((topImgY + bottomImgY) / 2 / A.MAPH - 0.5);
+  if (onCentre ? offCentre > CFG.CENTRE_LEAVE : offCentre < CFG.CENTRE_ENTER) {
+    onCentre = !onCentre;
+    if (onCentre) A.wakeDrift?.();
+  }
 
   // table UI belongs to the table — anything OPEN (the ◈ legend, the ivory
   // card, THE INDEX, the scene flyout) fades out as the camera leaves for the
@@ -208,7 +212,7 @@ function centerDepths(gliding = true) {
   toggleDepths(true);
   A.cam.k = A.fitScale();
   A.cam.x = (innerWidth - A.MAPW * A.cam.k) / 2;
-  A.cam.y = innerHeight * 0.5 - A.MAPH * CFG.DESCEND_TO * A.cam.k;
+  A.cam.y = A.landOn('abyss');
   A.clampCam();
   A.apply(gliding);
 }
@@ -271,7 +275,7 @@ A.ascend = function ascend() {
   A.closeCard();
   A.cam.k = A.fitScale();
   A.cam.x = (innerWidth - A.MAPW * A.cam.k) / 2;
-  A.cam.y = innerHeight * 0.5 + A.MAPH * CFG.ASCEND_TO * A.cam.k;
+  A.cam.y = A.landOn('chronicle');
   A.clampCam();
   A.apply(true);
 };
@@ -345,16 +349,16 @@ function buildRoutes() {
     hull, so ground and road read as one vocabulary. */
 function routeBaseHue(node) {
   const z = zoneById(node.zone);
-  return z?.net_hue || node.hue || (z ? z.hue : '#C9A554');
+  return z?.net_hue || node.hue || (z ? z.hue : FALLBACK_HUE);
 }
 
 /** A line (road or reach-line) whose destination is down/degraded takes on amber
     while keeping its VLAN tint — the one alarm language shared by the whole map. */
 function paintReachLine(p) {
-  const base = p.dataset.base || '#C9A554';
+  const base = p.dataset.base || FALLBACK_HUE;
   const st = A.signalsFeed?.nodes?.[p.dataset.to]?.state;
   const hue = (st === 'down' || st === 'degraded')
-    ? `color-mix(in srgb, ${base} 42%, #FABD2F)`
+    ? `color-mix(in srgb, ${base} 42%, var(--sem-warn))`
     : base;
   p.style.setProperty('--route-hue', hue);
   p.classList.toggle('reach-alarm', st === 'down');
@@ -367,10 +371,10 @@ function paintReachLine(p) {
 A.paintRoutes = function paintRoutes() {
   const nodes = A.signalsFeed?.nodes || {};
   for (const p of overlay.querySelectorAll('path.route')) {
-    const base = p.dataset.base || '#C9A554';
+    const base = p.dataset.base || FALLBACK_HUE;
     const st = nodes[p.dataset.to]?.state;
     const hue = (st === 'down' || st === 'degraded')
-      ? `color-mix(in srgb, ${base} 42%, #FABD2F)`   // some amber, but keep the VLAN's tint
+      ? `color-mix(in srgb, ${base} 42%, var(--sem-warn))`   // some amber, but keep the VLAN's tint
       : base;
     p.style.setProperty('--route-hue', hue);
     p.classList.toggle('route-alarm', st === 'down');
@@ -877,6 +881,8 @@ function focusService(i, fromRoad) {
 
     Returns true when a ring is standing afterwards, so callers can tell a real
     split from a place that had nothing to scatter. */
+const ringZoom = () => Math.max(A.cam.min, A.fitScale() * CFG.CONSTELLATION_ZOOM);
+
 A.openConstellation = function openConstellation(id, { auto = false } = {}) {
   if (constellation && constellation.id === id) return true;   // already standing
   A.collapseConstellation();
@@ -913,7 +919,7 @@ A.openConstellation = function openConstellation(id, { auto = false } = {}) {
   // frame the ring: pull back enough that the widest satellite has room. Done
   // for the automatic split too — without it a ring opened at focus zoom hangs
   // its outer satellites off the edge of the screen.
-  const k = Math.max(A.cam.min, A.fitScale() * CFG.CONSTELLATION_ZOOM);
+  const k = ringZoom();
   if (auto) {
     // the card stays up in this mode, so the ring has to be offset into the
     // screen the card leaves free — the same anchoring focusNode does for a
@@ -1067,13 +1073,7 @@ A.resetPositions = function resetPositions() {
 A.savePositions = async function savePositions() {
   const o = posOverrides();
   if (!Object.keys(o).length) return { saved: 0 };
-  const r = await fetch('api/v2/positions', {
-    method: 'POST',
-    // X-Atlas-Write proves the request came from the Atlas itself, not from
-    // another origin riding the Hub's session cookie (see Web/security.py)
-    headers: { 'Content-Type': 'application/json', 'X-Atlas-Write': '1' },
-    body: JSON.stringify(o),
-  });
+  const r = await postJSON('api/v2/positions', o);   // carries the write proof (config.js)
   if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.status);
   const res = await r.json();
   localStorage.removeItem(POS_KEY);   // now canonical; drop the local overlay
@@ -1101,9 +1101,11 @@ function buildMarkers() {
   A.DATA.nodes.forEach((n, i) => {
     if (n.off_map) return;   // charted, not drawn — see schema `off_map`
     const zone = zoneById(n.zone);
-    const hue = n.hue || (zone ? zone.hue : '#C9A554');   // per-node override (e.g. The GPU box's ember)
+    const hue = n.hue || (zone ? zone.hue : FALLBACK_HUE);   // per-node override (e.g. The GPU box's ember)
     const mk = document.createElement('div');
-    const kin = n.zone === 'depths' || n.id === 'the-wild'; // the-wild glows out in the black
+    // anything charted below the table (the edge, the internet) lives in the
+    // black band, so it glows there; dimming it left a pin nobody could read
+    const kin = n.zone === 'depths' || n.y > 100;
     mk.className = 'mk' + (kin ? ' depths-kin' : '') + (n.planned ? ' mk-planned' : '');
     mk.dataset.id = n.id;
     mk.dataset.kind = n.kind || 'vm';
@@ -1152,14 +1154,16 @@ function buildMarkers() {
       const up = () => {
         mk.classList.remove('dragging');
         mk.removeEventListener('pointermove', move);
-        mk.removeEventListener('pointerup', up);
+        for (const t of DRAG_END) mk.removeEventListener(t, up);
         const o = posOverrides();
         o[n.id] = { x: n.x, y: n.y };
-        localStorage.setItem(POS_KEY, JSON.stringify(o));
+        try { localStorage.setItem(POS_KEY, JSON.stringify(o)); } catch { /* private mode: the move still draws */ }
         A.redrawLines?.();   // routes + territories follow the moved dot
       };
       mk.addEventListener('pointermove', move);
-      mk.addEventListener('pointerup', up);
+      // a drag can end without a pointerup — the browser cancels it, or the
+      // capture is lost — and every ending must clean up (camera.js does the same)
+      for (const t of DRAG_END) mk.addEventListener(t, up);
     });
     markersEl.appendChild(mk);
   });
@@ -1203,6 +1207,9 @@ function focusNode(id, glide = true, toggle = false) {
     A.setCardSide?.(a.cardLeft);
     A.glideTo(n.x, n.y, k, a.x);
   }
+  // the ring frames the card's side after it opens, so state that side first, or
+  // a card that lands on the other edge crosses the screen on its way in
+  if (willSplit) A.setCardSide?.(A.focusAnchor(n.x, ringZoom()).cardLeft);
   A.openCard(n);
   // after the card, so the ring's own camera framing is the last word and the
   // card is already sized when focusAnchor measures around it

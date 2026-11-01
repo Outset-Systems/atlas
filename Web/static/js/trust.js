@@ -193,4 +193,3 @@ A.buildTrustScene = function buildTrustScene() {
   headEl = $('tr-head');
 };
 
-export { open, close };

@@ -21,6 +21,7 @@ change, compared against the value stamped into the session at login, so a
 stolen or stale cookie fails closed the moment credentials change.
 """
 
+import hmac
 import logging
 import os
 import re
@@ -75,8 +76,20 @@ def _connect():
     return conn
 
 
+#: Paths whose schema this process has already ensured. init_db runs at the
+#: top of every accounts call and get_user sits on the per-request auth path,
+#: so the four CREATE TABLEs and the index must not be re-issued every time.
+#: Keyed on the RESOLVED path, not a flag: the tests point each case at a
+#: fresh temp DB, and a deployment can repoint ATLAS_ACCOUNTS_DB between
+#: tests of its own.
+_ensured_paths = set()
+
+
 def init_db():
-    os.makedirs(os.path.dirname(db_path()) or ".", exist_ok=True)
+    path = os.path.abspath(db_path())
+    if path in _ensured_paths and _migrated and os.path.exists(path):
+        return                       # a reset `_migrated` re-runs the ALTERs
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     with _connect() as conn:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS users (
@@ -129,6 +142,7 @@ def init_db():
         # Last, so it can reach every table above — not just `users`.
         _migrate(conn)
         conn.commit()
+    _ensured_paths.add(path)
 
 
 _migrated = False
@@ -319,7 +333,11 @@ def upsert_ldap_user(username, *, display_name="", email="", groups=(), is_admin
     """
     username = _norm(username)
     init_db()
-    groups_csv = ",".join(g.strip() for g in groups if g.strip())
+    # The directory's raw list may carry the reserved admin group (that is
+    # how is_admin was decided); it is dropped here rather than refused, since
+    # a login is not the place to raise. The flag is the only admin path.
+    groups_csv = ",".join(
+        g for g in (g.strip() for g in groups) if g and g != RESERVED_ADMIN_GROUP)
     existing = get_user(username)
     if existing and (existing.get("source") or "") != "ldap":
         raise SourceConflict(
@@ -442,10 +460,16 @@ def bump_session_epoch(username):
 BACKUP_CODE_COUNT = 10
 
 
-def start_mfa_enrollment(username):
+def start_mfa_enrollment(username, *, reauthenticated=False):
     """Pending secret, not active until confirmed. Returns
     (secret, provisioning_uri, qr_svg) — QR rendered in-process so the secret
-    never leaves this process."""
+    never leaves this process.
+
+    An account that already holds a factor is not re-enrolled on a bare
+    session (2026-11-01): a stolen cookie could otherwise swap the owner's
+    authenticator for its own and mint fresh backup codes. The route proves
+    the caller first (current password, and a fresh code from the live
+    factor) and says so with `reauthenticated=True`."""
     import io
 
     import pyotp
@@ -453,6 +477,10 @@ def start_mfa_enrollment(username):
     import qrcode.image.svg
 
     import crypto_at_rest
+    acc = get_user(username)
+    if acc and acc.get("mfa_enabled") and not reauthenticated:
+        raise ValueError("MFA is already enabled — confirm the current password "
+                         "and a fresh code to replace it.")
     secret = pyotp.random_base32()
     with _connect() as conn:
         conn.execute("UPDATE users SET mfa_pending_secret = ? WHERE username = ?",
@@ -467,21 +495,37 @@ def start_mfa_enrollment(username):
     return secret, uri, buf.getvalue().decode("utf-8")
 
 
-def confirm_mfa(username, code):
+def _matching_step(secret, code, now=None):
+    """The TOTP step `code` is good for, within ±1 of the current one, or
+    None. Constant-time per candidate; the caller decides what the step
+    means (recorded on confirm, must be LATER than the last on verify)."""
     import pyotp
+    code = (code or "").strip()
+    if not code.isdigit():
+        return None
+    totp = pyotp.TOTP(secret)
+    current = int((now if now is not None else time.time()) // totp.interval)
+    return next((s for s in (current - 1, current, current + 1)
+                 if hmac.compare_digest(totp.at(s * totp.interval), code)), None)
 
+
+def confirm_mfa(username, code):
     import crypto_at_rest
     acc = get_user(username)
     if not acc or not acc.get("mfa_pending_secret"):
         raise ValueError("No pending MFA enrollment for this account.")
     secret = crypto_at_rest.decrypt_text(acc["mfa_pending_secret"])
-    if not pyotp.TOTP(secret).verify(code, valid_window=1):
+    step = _matching_step(secret, code)
+    if step is None:
         raise ValueError("Incorrect code.")
     with _connect() as conn:
+        # The confirming step is recorded, not cleared (2026-11-01): with NULL
+        # here the very code just typed was still good at the login that
+        # followed, for the rest of its ±1 window.
         conn.execute(
             "UPDATE users SET mfa_enabled = 1, mfa_secret = ?, mfa_pending_secret = NULL, "
-            "mfa_last_step = NULL WHERE username = ?",
-            (crypto_at_rest.encrypt_text(secret), _norm(username)))
+            "mfa_last_step = ? WHERE username = ?",
+            (crypto_at_rest.encrypt_text(secret), step, _norm(username)))
         conn.commit()
     return generate_backup_codes(username)
 
@@ -506,22 +550,11 @@ def verify_mfa_code(username, code, now=None):
     replayed for ~90 s after the real sign-in. Now the matching step must be
     LATER than the last one accepted, and the check-and-record is a single
     conditional UPDATE so two gunicorn workers cannot both accept it."""
-    import hmac
-    import time
-
-    import pyotp
-
     import crypto_at_rest
     acc = get_user(username)
     if not acc or not acc.get("mfa_enabled") or not acc.get("mfa_secret"):
         return False
-    code = (code or "").strip()
-    if not code.isdigit():
-        return False
-    totp = pyotp.TOTP(crypto_at_rest.decrypt_text(acc["mfa_secret"]))
-    current = int((now if now is not None else time.time()) // totp.interval)
-    step = next((s for s in (current - 1, current, current + 1)
-                 if hmac.compare_digest(totp.at(s * totp.interval), code)), None)
+    step = _matching_step(crypto_at_rest.decrypt_text(acc["mfa_secret"]), code, now)
     if step is None:
         return False
     with _connect() as conn:
@@ -563,10 +596,14 @@ def consume_backup_code(username, code):
             (username,)).fetchall()
         for row in rows:
             if check_password_hash(row["code_hash"], code):
-                conn.execute("UPDATE mfa_backup_codes SET used = 1 WHERE id = ?",
-                             (row["id"],))
+                # Burn it in the same statement that checks it is unburnt: two
+                # workers that both matched this row race here, and only the
+                # one whose UPDATE changed the row may sign in on it.
+                cur = conn.execute(
+                    "UPDATE mfa_backup_codes SET used = 1 WHERE id = ? AND used = 0",
+                    (row["id"],))
                 conn.commit()
-                return True
+                return cur.rowcount == 1
     return False
 
 

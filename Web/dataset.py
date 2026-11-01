@@ -8,7 +8,7 @@ write through.
 Three things make it safe enough to put behind a button:
 
 **Ops, not documents.** A save is a list of small typed operations
-(`upsert` / `delete` / `insert` / `move` / `set`), never "here is the whole
+(`upsert` / `delete` / `insert` / `move`), never "here is the whole
 file". That is what makes a change describable in the log, reversible, and
 checkable field by field — and it means a buggy client can't blank the map by
 POSTing `{}`.
@@ -48,7 +48,7 @@ log = logging.getLogger("atlas.data.dataset")
 # generations is ~2 MB — cheap enough that pruning is about tidiness, not space.
 KEEP_REVISIONS = 50
 
-OPS = ("upsert", "insert", "delete", "move", "set")
+OPS = ("upsert", "insert", "delete", "move")
 
 
 class ConflictError(Exception):
@@ -256,21 +256,6 @@ def _apply_one(data, op):
     kind = op.get("op")
     if kind not in OPS:
         raise RejectedError(f"unknown operation {kind!r}")
-
-    if kind == "set":
-        path = str(op.get("path") or "")
-        if not path:
-            raise RejectedError("set needs a path")
-        parts = path.split(".")
-        target = data
-        for part in parts[:-1]:
-            nxt = target.get(part)
-            if not isinstance(nxt, dict):
-                nxt = {}
-                target[part] = nxt
-            target = nxt
-        target[parts[-1]] = op.get("value")
-        return f"set {path}"
 
     section_key = op.get("section")
     s = _section_or_reject(section_key)

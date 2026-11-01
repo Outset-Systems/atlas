@@ -275,7 +275,8 @@ def test_the_viewer_gallery_lists_every_render_with_a_fetchable_url(arena):
         in_use = (json.load(fh).get("meta") or {}).get("map_image") or mapart.DEFAULT
     assert next(m for m in maps if m["default"])["name"] == in_use
     assert bundled["url"] == f"static/map/{mapart.DEFAULT}"
-    assert bundled["label"] == mapart.DEFAULT.rsplit(".", 1)[0]
+    import theme
+    assert bundled["label"] == (theme.map_label(mapart.DEFAULT) or mapart.DEFAULT.rsplit(".", 1)[0])
     assert bundled["theme"] is None
     assert sum(1 for m in maps if m["default"]) == 1
     # nothing the Desk's gallery knows (sizes, bundled flag) leaks to viewers

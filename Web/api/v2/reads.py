@@ -8,6 +8,7 @@ one. They are plain Flask views. Redaction,
 helpers (`redaction.py`, `context.py`).
 """
 
+import hashlib
 import logging
 
 from flask import jsonify, make_response, request
@@ -35,8 +36,10 @@ def lab_data():
 
     resp = make_response(jsonify(data))
     stamps = "-".join(str(m) for m in ctx.overlay_mtimes())
-    resp.set_etag(f"{settings.APP_VERSION}-{mtime}-{stamps}-"
-                  f"{hash(group_tag + overlay_tag) & 0xffffffff:x}")
+    # sha1, not hash(): str hashing is salted per interpreter, so two gunicorn
+    # workers would mint two ETags for one body and every If-None-Match missed
+    tags = hashlib.sha1((group_tag + overlay_tag).encode("utf-8")).hexdigest()[:8]
+    resp.set_etag(f"{settings.APP_VERSION}-{mtime}-{stamps}-{tags}")
     # `private` + `Vary` (below): a shared cache must never hand one viewer's
     # redacted dataset — or an admin's unredacted one — to the next.
     resp.headers["Cache-Control"] = "private, no-cache"

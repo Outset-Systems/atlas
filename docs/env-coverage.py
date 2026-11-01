@@ -10,13 +10,15 @@ collects the names the code reads from the environment:
   * os.environ.get("X"), os.environ["X"], os.getenv("X"), "X" in os.environ
   * the app's own readers that take a variable name: envnames.env("X"),
     envnames.is_set("X"), integrations.get("X") / flag("X"),
-    auth_config.get("X"), ldap_backend._cfg("X"), signals._read_secret("X")
+    auth_config.get("X"), ldap_backend._cfg("X"), signals._read_secret("X"),
+    envnames.secret("X")
   * the allow-list tuples the Settings screen writes (ALLOWED, SECRETS,
     GROUPS) and envnames.DEFAULTS
   * any string literal that is exactly an environment-style name
     (ATLAS_*, HUB_*, NETBOX_*, PROMETHEUS_*)
 
-Names read as a secret (integrations.SECRETS, signals._read_secret) also
+Names read as a secret (integrations.SECRETS, signals._read_secret,
+envnames.secret) also
 accept a NAME_FILE variant, so NAME_FILE must be documented too.
 
 A name counts as documented when it appears in backticks in
@@ -36,9 +38,9 @@ SKIP_DIRS = {"tests", "__pycache__", ".pytest-tmp", "node_modules", "vendor"}
 
 ENV_NAME = re.compile(r"^(?:ATLAS|HUB|NETBOX|PROMETHEUS)_[A-Z0-9_]+$")
 #: Call targets whose first argument is an environment variable name.
-READERS = {"get", "getenv", "env", "is_set", "flag", "_cfg", "_read_secret", "_env"}
+READERS = {"get", "getenv", "env", "is_set", "flag", "_cfg", "_read_secret", "_env", "secret"}
 #: Readers that also honour NAME_FILE.
-SECRET_READERS = {"_read_secret"}
+SECRET_READERS = {"_read_secret", "secret"}
 #: Module-level tuples/dicts that list variable names.
 NAME_LISTS = {"ALLOWED", "SECRETS", "GROUPS", "DEFAULTS", "URLS", "BOOLS"}
 

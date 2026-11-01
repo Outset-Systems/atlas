@@ -32,7 +32,7 @@
    baseline, exactly as THE SEALS is surveyed from the hosts. So it says so,
    rather than implying the map went and looked just now. */
 
-import { A, $, esc, zoneById } from './config.js';
+import { A, $, esc, zoneById, FALLBACK_HUE } from './config.js';
 import { makeScene } from './scene.js';
 
 let root, listEl, headEl;
@@ -121,7 +121,7 @@ function build() {
     .sort((a, z) => z.loud - a.loud || a.node.name.localeCompare(z.node.name));
 
   listEl.innerHTML = blocks.map(({ node, rows, loud: n }) => {
-    const hue = zoneById(node.zone)?.hue || '#C9A554';
+    const hue = zoneById(node.zone)?.hue || FALLBACK_HUE;
     return `<div class="ldg-block" style="--z-hue:${esc(hue)}">
       <div class="ldg-zhead">
         <span class="ldg-zname">${esc(node.name)}</span>

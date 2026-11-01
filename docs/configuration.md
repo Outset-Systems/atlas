@@ -102,7 +102,6 @@ In `standalone` mode there is no sign-in; these name the single implied user.
 | Variable | Default | What it does | Secret | Settings screen |
 |---|---|---|---|---|
 | `ATLAS_STANDALONE_USER` | `local` | The user name recorded as the author of changes. | no | no |
-| `ATLAS_STANDALONE_EMAIL` | (empty) | That user's email. | no | no |
 | `ATLAS_STANDALONE_GROUPS` | (empty) | Comma-separated groups for that user. | no | no |
 
 ### Accounts mode (and the sign-in half of hybrid)

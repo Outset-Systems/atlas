@@ -15,11 +15,11 @@ network, not just tls-proxy and the Hub. Both proxies now have pinned
 addresses so they can be named instead of counted.
 
 ⚠ These tests must never `importlib.reload` atlas_auth or settings. Reloading
-rebinds a module's functions to NEW objects, and `test_mfa_policy` asserts
-`accounts_v2._mfa_policy_applies is atlas_auth.mfa_policy_applies` — an
-identity check that a reload here breaks from the other side of the suite.
-`client_ip` reads `settings.TRUSTED_PROXIES` at call time, so setting the
-attribute is enough.
+rebinds a module's functions to NEW objects, and other modules that imported
+them (or patched them) are left holding the old ones — `test_mfa_policy` once
+asserted an identity that a reload here broke from the other side of the
+suite. `client_ip` reads `settings.TRUSTED_PROXIES` at call time, so setting
+the attribute is enough.
 """
 import os
 import sys

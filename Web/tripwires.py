@@ -68,15 +68,7 @@ limiter = _RateLimiter(limit=RATE_LIMIT, window=60.0)
 def secret():
     """The webhook secret (ATLAS_TRIPWIRES_SECRET, or the file named by
     ATLAS_TRIPWIRES_SECRET_FILE), or '' when unset or too short to trust."""
-    value = (envnames.env("ATLAS_TRIPWIRES_SECRET") or "").strip()
-    if not value:
-        path = envnames.env("ATLAS_TRIPWIRES_SECRET_FILE")
-        if path and os.path.exists(path):
-            try:
-                with open(path, encoding="utf-8") as fh:
-                    value = fh.read().strip()
-            except OSError as e:  # pragma: no cover - defensive
-                log.warning("could not read tripwires secret file: %s", e)
+    value = envnames.secret("ATLAS_TRIPWIRES_SECRET")
     if value and len(value) < SECRET_MIN:
         log.warning("ATLAS_TRIPWIRES_SECRET is shorter than %d characters; ignored", SECRET_MIN)
         return ""
@@ -142,9 +134,8 @@ def authenticate(raw):
             return None, _refuse("bad signature", 401)
         return "hmac", None
 
-    raw_auth = request.headers.get("Authorization", "")
-    given = raw_auth[7:].strip() if raw_auth.lower().startswith("bearer ") else ""
-    given = given or (request.args.get("key") or "").strip()
+    import security
+    given = security.bearer_token(request) or (request.args.get("key") or "").strip()
     if not given:
         return None, _refuse("missing credential (bearer key, ?key=, or X-Atlas-Signature)", 401)
 
@@ -448,23 +439,22 @@ def is_trip(event):
     return isinstance(event, dict) and event.get("kind") == "tripwire"
 
 
-def listing_without_trips(limit=100, visible=None, unacked_only=False):
+def listing_without_trips(limit=100, visible=None, unacked_only=False,
+                          visible_services=None):
     """The annals for a viewer not cleared for tripwires: trip rows removed
     BEFORE the limit, so the page is still `limit` long."""
     out = [e for e in events.listing(limit=events.KEEP, visible=visible,
-                                     unacked_only=unacked_only) if not is_trip(e)]
+                                     unacked_only=unacked_only,
+                                     visible_services=visible_services)
+           if not is_trip(e)]
     return out[:limit]
 
 
-def counts_without_trips(visible=None):
+def counts_without_trips(visible=None, visible_services=None):
     """`events.counts()` with trip rows left out of every total — a bare
     "1 unacknowledged" would say a tripwire just fired."""
-    rows = listing_without_trips(limit=events.KEEP, visible=visible)
-    day_ago = iso_utc(time.time() - 86400)
-    return {"total": len(rows),
-            "unacked": sum(1 for e in rows if not e.get("ack")
-                           and e.get("gravity") in ("grave", "warn")),
-            "last_24h": sum(1 for e in rows if e.get("at", "") >= day_ago)}
+    return events._counts(listing_without_trips(limit=events.KEEP, visible=visible,
+                                                visible_services=visible_services))
 
 
 # ── the read model ───────────────────────────────────────────────────────────

@@ -20,17 +20,20 @@ export const CFG = {
   DRAG_THRESHOLD_PX: 3,
 
   // the world beyond the table — the two shores MIRROR each other (2026-07-12):
-  // content anchored 0.48 past either edge, glide target 0.44 past either edge
-  VOID_DEPTH: 0.90,      // scrollable blackness below (room to see the whole abyss carousel)
-  SKY_NORTH: 0.60,       // scrollable sky above (clouds, Upper Deck, Chronicle head at -0.48)
-  DEPTHS_ENGAGE: 1.22,   // auto-descend when view bottom passes this × map height (user
-                         // moves only — see checkVoid). 1.22 sits just shy of the abyss
-                         // head (1.26): descent begins as the charts arrive, not the
+  // content anchored past either edge; the glides land on it (camera.js A.landOn)
+  VOID_DEPTH: 0.45,      // scrollable world below, until camera.js measures the abyss's foot
+  VOID_FOOT_PX: 56,      // past that foot: the colophon's strip, so it never sits on the buttons
+  SKY_NORTH: 0.60,       // scrollable sky above (clouds, Upper Deck), more if the Chronicle needs it
+  SKY_TOP: 0.48,         // the Chronicle's head sits this far above the map, or higher if tall
+  SKY_GAP: 0.06,         // and its foot clears the map's north edge by this, × map height
+  DEPTHS_ENGAGE: 1.10,   // auto-descend when view bottom passes this × map height (user
+                         // moves only — see checkVoid). 1.10 sits just shy of the abyss
+                         // head (1.14): descent begins as the section arrives, not the
                          // moment the table's edge shows (1.045 was table edge + 4.5%,
                          // inside the bottom-margin of an ordinary split/focus frame)
   DEPTHS_RELEASE: 0.96,  // …and surface again below this (wide hysteresis = no flicker)
-  DESCEND_TO: 1.50,      // ☾ glide target — lands ON the abyss charts (head is at 1.26), × map height
-  ASCEND_TO: 0.44,       // rise target above the top edge (frames the Chronicle), × map height
+  SKY_ENGAGE: 0.5,       // ☁ lights past this share of the climb (world.js skyT), and goes
+  SKY_RELEASE: 0.3,      // out below this. Any move, so ☁ and S light it as scrolling does
 
   // the floating vision orb (where it hovers; the cloud/islet is pure CSS now)
   MESA_POS: { x: 57.5, y: 27.0 },
@@ -44,6 +47,9 @@ export const CFG = {
   FOCUS_ZOOM: 2.1,       // × fit scale when gliding to a node
   BREATHE_S: 3.2,
   TOAST_MS: 2600,
+  DRIFT_REST_MS: 5000,   // the drift note stays this long, then its 1s fade: gone by 6s
+  CENTRE_ENTER: 0.15,    // the view counts as on the map's middle within this share of it,
+  CENTRE_LEAVE: 0.25,    // and has left past this (wide hysteresis = no flicker)
 
   // live signals (the "alive" layer — /api/signals)
   SIGNALS_POLL_MS: 30000,   // matches the server-side 30s cache; 0 disables polling
@@ -144,6 +150,45 @@ export const $ = (id) => document.getElementById(id);
 
 /** the zone an entry names — one lookup, not one per module */
 export const zoneById = (id) => A.DATA.zones.find(z => z.id === id);
+/** and the place — the same lookup, which six modules had each spelled again */
+export const nodeById = (id) => A.DATA.nodes.find(n => n.id === id);
+
+/** THE GOLD a marker or a chip falls back to when its zone names no hue
+    (the design notes --gilt). A FALLBACK only: a live gold is `var(--gilt)` in CSS,
+    so the light scheme can restate it; this literal is for canvas, 3D and
+    the inline `--mk-hue` a marker carries, which have no cascade to read. */
+export const FALLBACK_HUE = '#C9A554';
+
+/** the events that end a pointer drag — up, cancelled by the browser, or the
+    capture lost — so every drag handler registers and removes the same three */
+export const DRAG_END = ['pointerup', 'pointercancel', 'lostpointercapture'];
+
+/** "3m ago" from an elapsed span in milliseconds. The one shape every panel
+    speaks (THE SENTINELS, THE ANNALS, THE CALENDAR, the sources strip);
+    tripwire-model.js keeps a standalone twin because the Node tests import
+    it with no document to stand on, and this file needs one. */
+export function ago(ms) {
+  const s = Math.max(0, Math.round((Number(ms) || 0) / 1000));
+  if (s < 60) return 'just now';
+  if (s < 3600) return `${Math.round(s / 60)}m ago`;
+  if (s < 86400) return `${Math.round(s / 3600)}h ago`;
+  return `${Math.round(s / 86400)}d ago`;
+}
+
+/** The write proof. X-Atlas-Write is what shows a request came from the
+    Atlas itself and not from another origin riding the Hub's session cookie
+    (Web/security.py); every JSON write carries both headers, from here. */
+export const WRITE_HEADERS = Object.freeze({ 'Content-Type': 'application/json', 'X-Atlas-Write': '1' });
+
+/** POST `body` as JSON with the write proof; returns the raw Response so each
+    caller keeps its own reading of the answer. `opts` may override anything
+    (method, extra headers). An undefined body sends none. */
+export const postJSON = (path, body, opts = {}) => fetch(path, {
+  method: 'POST',
+  ...opts,
+  headers: { ...WRITE_HEADERS, ...(opts.headers || {}) },
+  ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+});
 
 /** escape a data-file string for safe interpolation into innerHTML */
 export function esc(s) {

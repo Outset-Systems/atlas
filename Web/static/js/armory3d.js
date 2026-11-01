@@ -21,7 +21,7 @@
 import { A, CFG } from './config.js';
 import * as THREE from './vendor/three.module.js';
 import { OrbitControls } from './vendor/OrbitControls.js';
-import { UH, RACK_W, faceplate, ledSpot, rackDepthMm, setRackTheme } from './rack-model.js';
+import { UH, RACK_W, LED_BY_STATE, faceplate, ledSpot, rackDepthMm, setRackTheme } from './rack-model.js';
 setRackTheme(CFG.THEME);   // THE THEME (v1.48.0)
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -39,8 +39,6 @@ const VIEWS = {
   side: { theta: Math.PI / 2, phi: 1.5 },
   rear: { theta: Math.PI - 0.5, phi: 1.32 },
 };
-const LED_BY_STATE = { healthy: '#8EC07C', degraded: '#FABD2F', down: '#FB4934',
-                       maintenance: '#83A598', slumbering: '#7c748a' };
 const reduced = () => {
   try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
   catch { return false; }

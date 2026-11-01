@@ -150,3 +150,14 @@ def test_the_shipped_demo_dataset_carries_no_stones():
     if not os.path.exists(demo):
         pytest.skip("demo dataset not in this checkout")
     assert "stones" not in json.load(open(demo, encoding="utf-8"))
+
+
+def test_the_guarded_place_is_a_reference_to_a_node():
+    """`host` points at a place, so it is a `ref` like every other node
+    reference: the editor offers a picker, a stone guarding a place that is
+    not charted is a problem, and removing a place reports the stones that
+    watched it."""
+    assert ("host", "nodes") in schema.refs_of("stones")
+    assert schema.field("stones", "host")["type"] == "ref"
+    problems = validate({"nodes": [], **_data(_stone(host="nowhere"))})
+    assert any("host" in p and "nowhere" in p for p in problems), problems

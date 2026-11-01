@@ -298,3 +298,12 @@ if __name__ == "__main__":
             mp.undo()
     print(f"\n{passed} passed, {failed} failed")
     sys.exit(1 if failed else 0)
+
+
+def test_maintenance_is_a_marker_state(tmp_path):
+    """Kuma's state 3 is `maintenance`; a static or relayed feed saying the
+    same must keep it, not strip it as an unknown voice."""
+    p = tmp_path / "signals.json"
+    p.write_text(json.dumps({"nodes": {"downloads": {"state": "maintenance"}}}), encoding="utf-8")
+    assert S.StaticFileAdapter(str(p)).fetch()["nodes"]["downloads"]["state"] == "maintenance"
+    assert S._KUMA_STATE[3] == S.MAINTENANCE == "maintenance"

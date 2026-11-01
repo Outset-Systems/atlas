@@ -4,6 +4,7 @@
   "map_art": "plain.webp",
   "veil_sigil": "",
   "maps": ["plain.webp"],
+  "guest_maps": [],
   "map_labels": {},
   "sky_island": false,
   "text": {

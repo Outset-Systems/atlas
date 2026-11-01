@@ -16,9 +16,8 @@
 
    All writes go through the existing admin routes, with the same header. */
 
-import { A, CFG, $, esc } from './config.js';
+import { A, CFG, $, esc, WRITE_HEADERS, postJSON } from './config.js';
 
-const WRITE = { 'Content-Type': 'application/json', 'X-Atlas-Write': '1' };
 const SOURCE = { file: 'saved', env: 'deployment', default: 'default' };
 const LIFETIME = (d) => (d ? `${d} days` : 'never expires');
 
@@ -78,7 +77,7 @@ function setupHTML() {
 function systemCard(sys) {
   const rows = sys.fields.map((f) => {
     if (f.kind === 'insecure') {
-      return `<label class="con-check"><input type="checkbox" data-key="${f.key}"${f.value === '1' ? ' checked' : ''}>
+      return `<label class="con-check"><input type="checkbox" data-key="${esc(f.key)}"${f.value === '1' ? ' checked' : ''}>
         ${esc(f.label)} <span class="con-meta">(skip the certificate check)</span></label>`;
     }
     const secret = f.kind === 'secret';
@@ -86,22 +85,22 @@ function systemCard(sys) {
     const chip = secret ? (f.set ? 'kept' : 'unset') : (SOURCE[f.source] || '');
     return `<label class="dir-row">
         <span class="dir-label">${esc(f.label)}<span class="dir-src">${esc(chip)}</span></span>
-        <input class="dir-input" data-key="${f.key}"${secret ? ' type="password" data-secret="1" autocomplete="new-password"' : ' autocomplete="off"'}
+        <input class="dir-input" data-key="${esc(f.key)}"${secret ? ' type="password" data-secret="1" autocomplete="new-password"' : ' autocomplete="off"'}
                value="${secret ? '' : esc(f.value)}" placeholder="${esc(hint)}" spellcheck="false">
       </label>`;
   }).join('');
-  return `<details class="con-system" data-system="${sys.key}"${sys.configured ? ' open' : ''}>
+  return `<details class="con-system" data-system="${esc(sys.key)}"${sys.configured ? ' open' : ''}>
       <summary><span class="con-name">${esc(sys.name)}</span>
         <span class="con-meta">${sys.configured ? 'set up' : 'not set up'} · ${esc(sys.about)}</span></summary>
       <div class="acct-note">${esc(sys.credential)}</div>
       ${rows}
       <div class="sp-actions">
-        <button class="sp-btn" type="button" data-sys-test="${sys.key}">Test</button>
-        <button class="sp-btn" type="button" data-sys-review="${sys.key}"${sys.configured ? '' : ' disabled title="Save a URL and credential first"'}>Review</button>
-        <button class="sp-btn sp-btn-go" type="button" data-sys-save="${sys.key}">Save</button>
+        <button class="sp-btn" type="button" data-sys-test="${esc(sys.key)}">Test</button>
+        <button class="sp-btn" type="button" data-sys-review="${esc(sys.key)}"${sys.configured ? '' : ' disabled title="Save a URL and credential first"'}>Review</button>
+        <button class="sp-btn sp-btn-go" type="button" data-sys-save="${esc(sys.key)}">Save</button>
       </div>
-      <div class="dir-result" data-sys-result="${sys.key}"></div>
-      <div class="con-review" data-review="${sys.key}" hidden></div>
+      <div class="dir-result" data-sys-result="${esc(sys.key)}"></div>
+      <div class="con-review" data-review="${esc(sys.key)}" hidden></div>
     </details>`;
 }
 
@@ -114,7 +113,7 @@ function systemValues(card) {
 }
 
 async function post(url, body) {
-  const r = await fetch(url, { method: 'POST', headers: WRITE, body: JSON.stringify(body) });
+  const r = await postJSON(url, body);
   return { r, j: await r.json().catch(() => ({})) };
 }
 
@@ -461,7 +460,7 @@ export async function renderConnections() {
   for (const b of el.querySelectorAll('[data-revoke]')) {
     b.addEventListener('click', async () => {
       if (!confirm(`Revoke "${b.dataset.name}"? Anything using it stops at once.`)) return;
-      await fetch(`api/v2/admin/tokens/${encodeURIComponent(b.dataset.revoke)}`, { method: 'DELETE', headers: WRITE });
+      await fetch(`api/v2/admin/tokens/${encodeURIComponent(b.dataset.revoke)}`, { method: 'DELETE', headers: WRITE_HEADERS });
       await renderConnections();
     });
   }

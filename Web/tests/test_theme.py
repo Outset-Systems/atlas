@@ -84,6 +84,18 @@ def test_another_themes_maps_are_kept_but_not_offered(tmp_path, monkeypatch):
     assert "plain.webp" in theme.foreign_maps()
 
 
+def test_a_theme_can_invite_another_themes_map(tmp_path, monkeypatch):
+    """Only the one it names: the rest of that theme's set stays out."""
+    (tmp_path / "plain.json").write_text(json.dumps(_read("plain")), encoding="utf-8")
+    (tmp_path / "isles.json").write_text(json.dumps(
+        {"map_art": "isles-main.webp", "maps": ["isles-main.webp", "isles-north.webp"]}),
+        encoding="utf-8")
+    monkeypatch.setattr(theme, "THEMES_DIR", str(tmp_path))
+    monkeypatch.setattr(theme, "NAME", "plain")
+    monkeypatch.setattr(theme, "T", {**theme.load("plain")[1], "guest_maps": ["isles-main.webp"]})
+    assert theme.foreign_maps() == {"isles-north.webp"}
+
+
 def test_a_theme_names_its_own_maps(monkeypatch):
     monkeypatch.setattr(theme, "T", {**theme.T, "map_labels": {"a.webp": "The A Map"}})
     assert theme.map_label("a.webp") == "The A Map"

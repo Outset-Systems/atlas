@@ -29,8 +29,8 @@
        vw, vh,          the window (innerWidth / innerHeight)
        mapW, mapH,      the map image (A.MAPW / A.MAPH)
        kMin, kMax,      the zoom floor and ceiling (cam.min / cam.max)
-       voidDepth,       CFG.VOID_DEPTH  — scrollable blackness below the table
-       skyNorth,        CFG.SKY_NORTH   — scrollable sky above it
+       voidDepth,       scrollable world below the table: the abyss's measured foot
+       skyNorth,        scrollable sky above it, grown to fit the Chronicle
        cardSharePx,     the card's on-screen width + its two insets
        narrow,          the <=720px bottom-sheet case
      }

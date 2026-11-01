@@ -6,7 +6,7 @@
    (`A.showToast`, `A.applySettingsFolds`); the block referenced no other ui.js
    local. Registered in atlas.js after ui.js. */
 
-import { A, CFG, $, esc, themeText } from './config.js';
+import { A, CFG, $, esc, themeText, WRITE_HEADERS, postJSON } from './config.js';
 import { renderConnections } from './connections.js';
 
 /* ── Who you are on this instance ─────────────────────────────────────────
@@ -175,7 +175,7 @@ async function authApi(path, opts) {
 
 const authPost = (path, payload) => authApi(path, {
   method: 'POST',
-  headers: { 'Content-Type': 'application/json', 'X-Atlas-Write': '1' },
+  headers: WRITE_HEADERS,
   body: JSON.stringify(payload || {}),
 });
 
@@ -308,8 +308,11 @@ function renderSettingsSections() {
   renderAccount();
   renderDirectory();
   renderConnections();
-  renderSources();
-  renderRealm();
+  // THE SOURCES and THE REALM are two sections of ONE file (integrations.json),
+  // read once here and handed to both; each re-reads alone after its own save.
+  const integrations = readIntegrations();
+  renderSources(integrations);
+  renderRealm(integrations);
   renderDeployment();
   renderUsers();
   renderSignins();
@@ -329,17 +332,24 @@ const REALM_FIELDS = [
   ['ATLAS_EMBED_PROBE', 'Embedding: check a service allows it first (1 on, 0 off)', '1'],
 ];
 
-async function renderRealm() {
+/* integrations.json as the server shows it to an admin; null when the viewer
+   is not one after all, or there is no editing API — the sections hide then. */
+async function readIntegrations() {
+  if (!CFG.AUTH.admin) return null;
+  try {
+    const r = await fetch('api/v2/admin/integrations', { headers: { 'Accept': 'application/json' } });
+    if (!r.ok) throw new Error(String(r.status));
+    return await r.json();
+  } catch { return null; }
+}
+
+async function renderRealm(pending = readIntegrations()) {
   const el = $('sp-realm');
   if (!el) return;
   el.hidden = !CFG.AUTH.admin;
   if (el.hidden) return;
-  let cfg;
-  try {
-    const r = await fetch('api/v2/admin/integrations', { headers: { 'Accept': 'application/json' } });
-    if (!r.ok) throw new Error(String(r.status));
-    cfg = await r.json();
-  } catch { el.hidden = true; return; }
+  const cfg = await pending;
+  if (!cfg) { el.hidden = true; return; }
   const rows = settingsRows(REALM_FIELDS, cfg, 'token');
   el.innerHTML =
     `<button class="sp-sub" type="button">LAB SETTINGS <span class="sp-sub-plain">· Hub, docs, heartbeats</span></button>
@@ -360,10 +370,7 @@ async function saveRealm() {
   const values = {};
   for (const input of document.querySelectorAll('#sp-realm .dir-input[data-key]')) values[input.dataset.key] = input.value.trim();
   try {
-    const r = await fetch('api/v2/admin/integrations', {
-      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Atlas-Write': '1' },
-      body: JSON.stringify({ settings: values }),
-    });
+    const r = await postJSON('api/v2/admin/integrations', { settings: values });
     const j = await r.json();
     if (!r.ok) { box.className = 'dir-result dir-bad'; box.textContent = j.error || 'Those settings were refused.'; return; }
     await renderRealm();
@@ -425,17 +432,13 @@ const SRC_FIELDS = [
 ];
 const SRC_TESTS = [['prometheus', 'Prometheus'], ['loki', 'Loki'], ['kuma', 'Kuma'], ['decoys', themeText('decoy_source', 'Decoy feed')]];
 
-async function renderSources() {
+async function renderSources(pending = readIntegrations()) {
   const el = $('sp-integrations');
   if (!el) return;
   el.hidden = !CFG.AUTH.admin;
   if (el.hidden) return;
-  let cfg;
-  try {
-    const r = await fetch('api/v2/admin/integrations', { headers: { 'Accept': 'application/json' } });
-    if (!r.ok) throw new Error(String(r.status));
-    cfg = await r.json();
-  } catch { el.hidden = true; return; }   // not an admin after all, or no editing API
+  const cfg = await pending;
+  if (!cfg) { el.hidden = true; return; }   // not an admin after all, or no editing API
   const rows = settingsRows(SRC_FIELDS, cfg, 'key');
   const hub = cfg.hub || {};
   const state = (hub.enabled || []).length
@@ -473,11 +476,7 @@ async function testSource(kind, btn) {
   box.textContent = `Asking ${kind}…`;
   btn.disabled = true;
   try {
-    const r = await fetch('api/v2/admin/integrations/test', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Atlas-Write': '1' },
-      body: JSON.stringify({ kind, settings: sourceValues() }),
-    });
+    const r = await postJSON('api/v2/admin/integrations/test', { kind, settings: sourceValues() });
     const j = await r.json();
     box.className = 'dir-result ' + (j.ok ? 'dir-ok' : 'dir-bad');
     box.textContent = j.ok ? j.detail : (j.error || `${kind} did not answer.`);
@@ -492,11 +491,7 @@ async function testSource(kind, btn) {
 async function saveSources() {
   const box = $('src-result');
   try {
-    const r = await fetch('api/v2/admin/integrations', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Atlas-Write': '1' },
-      body: JSON.stringify({ settings: sourceValues() }),
-    });
+    const r = await postJSON('api/v2/admin/integrations', { settings: sourceValues() });
     const j = await r.json();
     if (!r.ok) {
       box.className = 'dir-result dir-bad';
@@ -620,11 +615,8 @@ async function testDirectory() {
   box.textContent = 'Testing the sign-in…';
   btn.disabled = true;
   try {
-    const r = await fetch('api/v2/admin/auth/test', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Atlas-Write': '1' },
-      body: JSON.stringify({ settings: directoryValues(),
-                             username: $('dir-user').value, password: $('dir-pass').value }),
+    const r = await postJSON('api/v2/admin/auth/test', {
+      settings: directoryValues(), username: $('dir-user').value, password: $('dir-pass').value,
     });
     const j = await r.json();
     if (j.ok) {
@@ -651,11 +643,7 @@ async function testDirectory() {
 async function saveDirectory() {
   const box = $('dir-result');
   try {
-    const r = await fetch('api/v2/admin/auth', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Atlas-Write': '1' },
-      body: JSON.stringify({ settings: directoryValues() }),
-    });
+    const r = await postJSON('api/v2/admin/auth', { settings: directoryValues() });
     const j = await r.json();
     if (!r.ok) {
       box.className = 'dir-result dir-bad';
@@ -679,10 +667,7 @@ async function signOut() {
   const btn = $('acct-signout');
   if (btn) { btn.disabled = true; btn.textContent = 'Signing out…'; }
   try {
-    const r = await fetch('api/v2/auth/logout', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Atlas-Write': '1' },
-    });
+    const r = await postJSON('api/v2/auth/logout');
     if (!r.ok) throw new Error('refused');
     location.href = 'auth/login';
   } catch {

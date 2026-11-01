@@ -11,13 +11,9 @@
    write and can put any of them back. That is strictly better than local
    pending state, because it survives a closed tab. */
 
-import { A } from '../config.js';
+import { A, WRITE_HEADERS } from '../config.js';
 
 const API = 'api/v2/admin';
-
-/** Writes carry a header a cross-origin page cannot set without a preflight
-    this app never answers — see Web/security.py. */
-const WRITE_HEADERS = { 'Content-Type': 'application/json', 'X-Atlas-Write': '1' };
 
 export class EditorError extends Error {
   constructor(message, problems, status) {
@@ -111,7 +107,6 @@ export const Editor = {
   remove(section, ref, cascade) {
     return this.apply([{ op: 'delete', section, ...ref, cascade: Boolean(cascade) }]);
   },
-  setPath(path, value) { return this.apply([{ op: 'set', path, value }]); },
 
   /* ── store-agnostic mutations ──────────────────────────────────────────
      The Desk renders every section from one catalogue and must not know

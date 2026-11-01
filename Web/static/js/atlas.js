@@ -2,7 +2,7 @@
    Modules: config.js (CFG + shared context A) · camera.js · world.js · ui.js.
    Hub contract: relative paths only. */
 
-import { A, CFG, REDUCED, $ } from './config.js';
+import { A, CFG, REDUCED, $, esc } from './config.js';
 import './scheme.js';   // THE COLOUR SCHEME (v1.52.0): first, so data-scheme stands before any panel opens
 // table.js FIRST among the siblings: it swaps the backdrop src at import time,
 // and boot() below measures whatever src is standing when the image settles
@@ -82,6 +82,7 @@ async function boot() {
 
   A.buildWorld();
   A.buildUI();
+  A.measureWorld();
   A.buildGlass();
   A.buildPalette();
   A.buildReliquary();
@@ -122,7 +123,6 @@ async function boot() {
 boot().catch(err => {
   console.error('atlas boot failed:', err);
   $('veil').innerHTML =
-    `<div class="veil-inner"><div class="veil-title" style="font-size:1.2rem;letter-spacing:0.2em">` +
-    `THE SURVEY COULD NOT BE READ</div>` +
-    `<p style="margin-top:14px;color:#8A8069;font-family:'Alegreya Sans',sans-serif">${String(err).replace(/[<>]/g, '')}</p></div>`;
+    `<div class="veil-inner veil-fail"><div class="veil-title">THE SURVEY COULD NOT BE READ</div>` +
+    `<p>${esc(String(err))}</p></div>`;
 });

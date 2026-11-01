@@ -335,3 +335,33 @@ def test_a_rite_that_never_reported_writes_no_event(arena):
     arena._signals._cache = None
     client.get("/api/v2/signals")
     assert [e for e in events.listing(limit=50) if e["kind"] == "rite"] == []
+
+
+def test_a_bare_duration_string_is_seconds(beats):
+    """The field is `duration_s`: a client that sends "4.2" means 4.2 seconds,
+    not 4.2 minutes (`parse_duration`'s bare-number rule is for the hand-typed
+    `expect_every`). A unit suffix is still honoured."""
+    assert beats.record_beat("x", duration_s="4.2")["duration_s"] == 4.2
+    assert beats.record_beat("x", duration_s="4m")["duration_s"] == 240.0
+    assert beats.record_beat("x", duration_s=4.25)["duration_s"] == 4.25
+    assert "duration_s" not in beats.record_beat("x", duration_s="soon")
+
+
+def test_a_dropped_file_outlives_a_store_that_would_not_take_it(beats, monkeypatch):
+    """Record first, remove second: removing the file and then failing to write
+    the beat lost the turning for good. Now the file waits for the next sweep."""
+    directory = os.environ["ATLAS_BEATS_DIR"]
+    os.makedirs(directory, exist_ok=True)
+    path = os.path.join(directory, "nightly-backup")
+    open(path, "w", encoding="utf-8").close()
+
+    def refuse(_store):
+        raise OSError("disk full")
+    monkeypatch.setattr(beats._STORE, "save", refuse)
+    assert beats.sweep_dropped_files() == []
+    assert os.path.exists(path), "the file was removed before its beat was recorded"
+
+    monkeypatch.undo()
+    assert beats.sweep_dropped_files() == ["nightly-backup"]
+    assert not os.path.exists(path)
+    assert beats.status_for([_rite()])[0]["verdict"] == "kept"

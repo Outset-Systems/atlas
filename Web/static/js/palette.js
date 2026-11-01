@@ -2,7 +2,7 @@
    surveyor's finding-glass. Fuzzy-find any place or service, arrow to it, Enter
    to glide there / open it. The biggest daily-use win, zero dependencies. */
 
-import { A, CFG, $, esc, host } from './config.js';
+import { A, CFG, $, esc, host, zoneById, FALLBACK_HUE } from './config.js';
 
 let root, input, listEl;
 let items = [];       // full searchable index: {kind, label, sub, hue, run}
@@ -12,11 +12,10 @@ let active = 0;       // highlighted index into `shown`
 /** Build the flat search index once the dataset + DOM exist. */
 function buildIndex() {
   items = [];
-  const zoneById = (id) => A.DATA.zones.find((z) => z.id === id);
 
   for (const n of A.DATA.nodes) {
     const zone = zoneById(n.zone);
-    const hue = zone ? zone.hue : '#C9A554';
+    const hue = zone ? zone.hue : FALLBACK_HUE;
     items.push({
       kind: 'place',
       label: n.name,

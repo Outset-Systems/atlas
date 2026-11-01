@@ -204,3 +204,19 @@ def test_a_stale_stamp_is_a_conflict(client):
     r = client.post("/api/v2/admin/maintenance", headers=WRITE,
                     json={"windows": [], "expect": stamp})
     assert r.status_code == 409
+
+
+def test_a_monthly_window_is_still_found_years_later(store):
+    """The occurrence jump must land SHORT of the current one: a 28-day
+    estimate of a month overshot by ~2.5 days each, so after two and a half
+    years it skipped the live occurrence and an open window read "upcoming"
+    — which is to say, suppressed nothing on the night it was for."""
+    window = {"id": "patch-night", "nodes": ["downloads"], "repeat": "monthly",
+              "starts": "2024-01-15T02:00:00Z", "ends": "2024-01-15T04:00:00Z"}
+    later = datetime(2026, 10, 15, 3, 0, tzinfo=timezone.utc)
+    state, start, end = store.occurrence(window, later)
+    assert state == "active", (state, start, end)
+    assert (start.year, start.month, start.day) == (2026, 10, 15)
+    assert store.under_repair(later) == set(), "nothing stored yet"
+    write(store, {"windows": [window]})
+    assert store.under_repair(later) == {"downloads"}

@@ -96,12 +96,20 @@ def test_password_change(realm):
 def test_mfa_setup_hands_back_a_fresh_secret(realm):
     c = realm.app.test_client()
     login_as(c, "alice", PW)
+    # a session alone no longer opens the factor (2026-11-01): the current
+    # password is owed, the way /password has always demanded it
     r = c.post(f"{AUTH}/mfa/setup", headers=WRITE)
+    assert r.status_code == 400
+    assert r.get_json() == {"ok": False, "error": "Current password is required."}
+    r = c.post(f"{AUTH}/mfa/setup", headers=WRITE, json={"current": "wrong-wrong-wrong"})
+    assert r.status_code == 401
+    assert r.get_json() == {"ok": False, "error": "Current password is wrong."}
+    r = c.post(f"{AUTH}/mfa/setup", headers=WRITE, json={"current": PW})
     assert r.status_code == 200
     body = r.get_json()
     assert body["ok"] and set(body) == {"ok", "secret", "uri", "qr_svg"}
     assert body["secret"] in body["uri"]
-    again = c.post(f"{AUTH}/mfa/setup", headers=WRITE).get_json()
+    again = c.post(f"{AUTH}/mfa/setup", headers=WRITE, json={"current": PW}).get_json()
     assert again["secret"] != body["secret"]
 
 
@@ -176,6 +184,7 @@ def _enroll(username):
 
 
 def test_mfa_login_flow(realm):
+    import time
     import pyotp
     secret = _enroll("alice")
     c = realm.app.test_client()
@@ -183,8 +192,10 @@ def test_mfa_login_flow(realm):
     assert r.get_json() == {"ok": True, "mfa_required": True}
     r = c.post(f"{AUTH}/login/mfa", headers=WRITE, json={"code": "000000"})
     assert r.status_code == 401 and r.get_json()["error"] == "Incorrect code."
-    # the pending state survived the failure
-    r = c.post(f"{AUTH}/login/mfa", headers=WRITE, json={"code": pyotp.TOTP(secret).now()})
+    # the pending state survived the failure; the enrolment code itself is
+    # spent (2026-11-01), so the login uses the next step
+    r = c.post(f"{AUTH}/login/mfa", headers=WRITE,
+               json={"code": pyotp.TOTP(secret).at(time.time() + 30)})
     assert r.status_code == 200 and r.get_json() == {"ok": True, "is_admin": False}
     assert c.get("/api/v2/lab-data").status_code == 200
 
@@ -194,11 +205,12 @@ def test_mfa_disable_under_policy(realm, monkeypatch):
     c = realm.app.test_client()
     r, _ = login_as(c, "ops", PW)
     assert r.status_code == 200
-    # policy off: disabling when not enrolled is idempotent
-    assert c.post(f"{AUTH}/mfa/disable", headers=WRITE).get_json() == {"ok": True}
+    # policy off: disabling when not enrolled is idempotent (with the password)
+    r = c.post(f"{AUTH}/mfa/disable", headers=WRITE, json={"current": PW})
+    assert r.get_json() == {"ok": True}
     # policy on (read live): refused
     monkeypatch.setattr(settings, "mfa_required", lambda: "1")
-    r = c.post(f"{AUTH}/mfa/disable", headers=WRITE)
+    r = c.post(f"{AUTH}/mfa/disable", headers=WRITE, json={"current": PW})
     assert r.status_code == 403 and "ATLAS_MFA_REQUIRED" in r.get_json()["error"]
 
 
@@ -218,6 +230,68 @@ def test_admins_policy_fences_the_surveyor_on_the_live_route(realm, monkeypatch)
     r = c2.post(f"{AUTH}/login", headers=WRITE, json={"username": "alice", "password": PW})
     assert r.get_json()["mfa_required"] is False
     assert c2.get("/api/v2/lab-data").status_code == 200
+
+
+def test_mfa_setup_over_a_live_factor_needs_the_factor_too(realm):
+    """2026-11-01: a stolen session could swap the owner's authenticator for
+    its own. Re-enrolment now owes the password AND a fresh code from the
+    live factor, and the code is consumed."""
+    import time
+    import pyotp
+    c = realm.app.test_client()
+    login_as(c, "alice", PW)
+    t0 = time.time()
+    secret = _enroll("alice")                      # consumes the step at t0
+    totp = pyotp.TOTP(secret)
+    r = c.post(f"{AUTH}/mfa/setup", headers=WRITE, json={"current": PW})
+    assert r.status_code == 400
+    assert r.get_json() == {"ok": False, "error": "A current authenticator code is required."}
+    r = c.post(f"{AUTH}/mfa/setup", headers=WRITE, json={"current": PW, "code": totp.at(t0)})
+    assert r.status_code == 403 and r.get_json()["error"] == "Incorrect code."     # spent
+    r = c.post(f"{AUTH}/mfa/setup", headers=WRITE,
+               json={"current": PW, "code": totp.at(t0 + 30)})
+    assert r.status_code == 200 and r.get_json()["secret"] != secret
+    # the live factor stands until the new one is confirmed
+    import accounts
+    assert accounts.get_user("alice")["mfa_enabled"] == 1
+
+
+def test_mfa_disable_needs_the_password_and_the_factor(realm):
+    import time
+    import pyotp
+    c = realm.app.test_client()
+    login_as(c, "alice", PW)
+    t0 = time.time()
+    secret = _enroll("alice")
+    totp = pyotp.TOTP(secret)
+    r = c.post(f"{AUTH}/mfa/disable", headers=WRITE)
+    assert r.status_code == 400
+    r = c.post(f"{AUTH}/mfa/disable", headers=WRITE, json={"code": totp.at(t0 + 30)})
+    assert r.status_code == 400                      # a code, but no password
+    assert r.get_json()["error"] == "Current password is required."
+    # that code was consumed by the check above, so even a complete body
+    # carrying it again is refused — one code, one use
+    r = c.post(f"{AUTH}/mfa/disable", headers=WRITE,
+               json={"current": PW, "code": totp.at(t0 + 30)})
+    assert r.status_code == 403
+    import accounts
+    assert accounts.get_user("alice")["mfa_enabled"] == 1
+    # the store answers directly here — the real clock has no third step to give
+    accounts.disable_mfa("alice")
+    assert accounts.get_user("alice")["mfa_enabled"] == 0
+
+
+def test_forced_enrollment_needs_no_second_proof(realm, monkeypatch):
+    """The password login a moment ago IS the proof for the fenced state:
+    login.js posts `mfa/setup` with no body from that page and must go on
+    working."""
+    import settings
+    monkeypatch.setattr(settings, "mfa_required", lambda: "admins")
+    c = realm.app.test_client()
+    r = c.post(f"{AUTH}/login", headers=WRITE, json={"username": "ops", "password": PW})
+    assert r.get_json() == {"ok": True, "mfa_setup_required": True}
+    r = c.post(f"{AUTH}/mfa/setup", headers=WRITE)
+    assert r.status_code == 200 and r.get_json()["ok"]
 
 
 def test_login_throttle(realm, monkeypatch):

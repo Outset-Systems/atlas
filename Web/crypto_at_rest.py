@@ -40,12 +40,9 @@ class DecryptionError(RuntimeError):
     """A real Fernet token would not open — almost always the wrong master key."""
 
 
-def _data_dir():
-    return os.path.dirname(os.environ.get("ATLAS_DATA", "/data/lab-data.json")) or "."
-
-
 def _key_file_path():
-    return os.path.join(_data_dir(), "secrets", "master.key")
+    import settings   # live: follows ATLAS_DATA, as the tests re-point it
+    return os.path.join(settings.data_dir(), "secrets", "master.key")
 
 
 def _load_key() -> bytes:

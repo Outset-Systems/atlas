@@ -17,7 +17,9 @@ alembic>=1.13,<2
 # deployments never load these
 pyotp>=2.9,<3
 qrcode>=7.4,<9
-cryptography>=42,<46
+# >=46.0.7: below it seven advisories stay open (the 2026-11-01 review);
+# the Atlas uses Fernet only, whose API is unchanged across these majors
+cryptography>=46.0.7,<51
 ldap3>=2.9,<3
 # THE REAL-WORLD SURVEY only (worldsurvey.py) — lazy-imported; an Atlas that
 # never surveys never loads it

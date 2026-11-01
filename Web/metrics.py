@@ -42,17 +42,8 @@ _REQUESTS = _LATENCY = _CHART_FETCHES = _CHART_SECONDS = _SOURCE_STATE = _BUILD 
 
 
 def _token():
-    value = (os.environ.get("ATLAS_METRICS_TOKEN") or "").strip()
-    if value:
-        return value
-    path = os.environ.get("ATLAS_METRICS_TOKEN_FILE")
-    if path and os.path.exists(path):
-        try:
-            with open(path, encoding="utf-8") as fh:
-                return fh.read().strip()
-        except OSError as e:  # pragma: no cover - defensive
-            log.warning("could not read metrics token file %s: %s", path, e)
-    return ""
+    import envnames
+    return envnames.secret("ATLAS_METRICS_TOKEN")
 
 
 def _setup():
@@ -117,9 +108,15 @@ def _observe_dataset():
     decom found it. Now the Atlas measures it on every scrape (cheap: two
     hashes of ~80 KB, cached a minute) and `AtlasDatasetDrift` pages after a
     day. Absent files count as drift too: a missing default is a build
-    problem, a missing live file is the fallback map."""
+    problem, a missing live file is the fallback map.
+
+    File backend only: on the db backend `DATA_PATH` is not the dataset, so
+    hashing it read as permanent drift. There is nothing to compare there
+    yet, and no reading beats a false one."""
     import hashlib
     import settings
+    if settings.DATA_BACKEND != "file":
+        return
     now = time.monotonic()
     if now - _drift_cache["at"] < 60 and _drift_cache["value"] is not None:
         return
@@ -165,9 +162,9 @@ def scrape():
     token = _token()
     if not token:
         return {"error": "metrics are not configured (ATLAS_METRICS_TOKEN unset)"}, 404
-    given = request.headers.get("Authorization", "")
-    if not given.startswith("Bearer ") or not hmac.compare_digest(
-            given[7:].strip().encode("utf-8"), token.encode("utf-8")):
+    import security
+    given = security.bearer_token(request)
+    if not given or not hmac.compare_digest(given.encode("utf-8"), token.encode("utf-8")):
         return Response("unauthorized\n", status=401, mimetype="text/plain")
     from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
     try:

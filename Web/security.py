@@ -80,6 +80,16 @@ def write_refusal():
     return None
 
 
+def bearer_token(req=None):
+    """The token in `Authorization: Bearer <token>`, or "" when the header is
+    absent or carries another scheme. Scheme matched without regard to case,
+    the token stripped — the one reading every token-taking route shares
+    (api_tokens, ingest, tripwires, the beat endpoint, /metrics)."""
+    header = (req or request).headers.get("Authorization", "")
+    scheme, _, token = header.partition(" ")
+    return token.strip() if scheme.lower() == "bearer" else ""
+
+
 def actor():
     """Who is making this change, for the change log.
 

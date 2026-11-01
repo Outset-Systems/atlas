@@ -38,6 +38,15 @@ OLD_STONE = {"id": "nas-restore-share", "name": "Restoration-Keys", "kind": "win
              "placement": "a decoy folder on the file store", "mimics": "the restore keys",
              "retired": False, "note": "collection"}
 
+#: `host` is a reference to a charted place (schema: `ref="nodes"`), so the
+#: stones below are validated inside a realm that charts `nas`.
+CHARTED = {
+    "zones": [{"id": "vault", "name": "The Vault", "vlan": 33, "subnet": "10.77.33.0/24",
+               "hue": "#C9A554", "lore": "Where the files sleep.", "label_x": 10, "label_y": 5}],
+    "nodes": [{"id": "nas", "name": "NAS", "kind": "physical", "zone": "vault", "x": 10, "y": 10,
+               "role": "File store", "lore": "The vault's one keeper."}],
+}
+
 STONES = [
     {"id": "canary-fs", "name": "FILESRV-OLD", "kind": "honeypot-host", "zone": "internal",
      "severity": "critical", "sensor": "opencanary-1", "host": "nas"},
@@ -130,7 +139,9 @@ def _trip_events():
 # ── the schema: extended, never forked ──────────────────────────────────────
 
 def test_an_old_shape_stone_still_validates():
-    assert validate({"stones": [OLD_STONE]}) == []
+    assert validate({**CHARTED, "stones": [OLD_STONE]}) == []
+    # ...and a host that is not charted is a dangling reference, as any other
+    assert validate({"stones": [OLD_STONE]}) == ["stone 'nas-restore-share': unknown host 'nas'"]
     assert schema.stone_family(OLD_STONE) == "token"
 
 
@@ -142,7 +153,7 @@ def test_every_old_kind_is_still_a_kind():
 
 
 def test_the_new_fields_validate():
-    assert validate({"stones": STONES}) == []
+    assert validate({**CHARTED, "stones": STONES}) == []
     fields = {f["name"] for f in schema.fields_of("stones")}
     assert {"family", "sensor", "planted", "expires"} <= fields
     json.dumps(schema.catalogue())
@@ -162,8 +173,8 @@ def test_bad_new_values_are_problems(bad):
 
 
 def test_a_blank_expiry_is_none():
-    assert validate({"stones": [{**OLD_STONE, "expires": ""}]}) == []
-    assert validate({"stones": [{**OLD_STONE, "expires": "—"}]}) == []
+    assert validate({**CHARTED, "stones": [{**OLD_STONE, "expires": ""}]}) == []
+    assert validate({**CHARTED, "stones": [{**OLD_STONE, "expires": "—"}]}) == []
 
 
 def test_two_stones_answering_to_one_sensor_is_a_problem():

@@ -40,7 +40,8 @@ HEALTHY = "healthy"      # breathing gold
 DEGRADED = "degraded"    # amber
 DOWN = "down"            # slow red pulse
 SLUMBERING = "slumbering"  # grey (e.g. The standby host, intentionally off)
-_VALID_STATES = frozenset((HEALTHY, DEGRADED, DOWN, SLUMBERING))
+MAINTENANCE = "maintenance"  # planned quiet — Kuma's own state 3
+_VALID_STATES = frozenset((HEALTHY, DEGRADED, DOWN, SLUMBERING, MAINTENANCE))
 
 # ── decoy voices (the decoy feed) ─────────────────────────────────────────────
 # A DIFFERENT vocabulary from the marker states above, on purpose. A stone is
@@ -67,17 +68,7 @@ def _read_secret(name):
     except Exception:  # noqa: BLE001 — the settings layer never silences a source
         log.warning("integrations unreadable while resolving %s", name, exc_info=True)
     import envnames
-    val = envnames.env(name)
-    if val:
-        return val.strip()
-    path = envnames.env(name + "_FILE")
-    if path and os.path.exists(path):
-        try:
-            with open(path, encoding="utf-8") as f:
-                return f.read().strip()
-        except OSError as e:  # pragma: no cover - defensive
-            log.warning("could not read secret file %s: %s", path, e)
-    return None
+    return envnames.secret(name) or None
 
 
 class _Adapter:
@@ -374,7 +365,7 @@ class PrometheusAdapter(_Adapter):
 
 
 # Kuma monitor_status values → Atlas marker states (0 down · 1 up · 2 pending · 3 maint)
-_KUMA_STATE = {0: DOWN, 1: HEALTHY, 2: DEGRADED, 3: "maintenance"}
+_KUMA_STATE = {0: DOWN, 1: HEALTHY, 2: DEGRADED, 3: MAINTENANCE}
 
 
 #: When two monitors map to the SAME place, the worse state wins.
@@ -388,7 +379,7 @@ _KUMA_STATE = {0: DOWN, 1: HEALTHY, 2: DEGRADED, 3: "maintenance"}
 #: "a place is healthy only if everything watching it is" is the answer that
 #: cannot go wrong. `maintenance` outranks healthy so a place under a known
 #: window still says so.
-_STATE_RANK = {HEALTHY: 0, SLUMBERING: 1, "maintenance": 2, DEGRADED: 3, DOWN: 4}
+_STATE_RANK = {HEALTHY: 0, SLUMBERING: 1, MAINTENANCE: 2, DEGRADED: 3, DOWN: 4}
 
 
 def _worse(a, b):
@@ -612,7 +603,7 @@ def make_adapters():
         elif name == "prometheus":
             url = integrations.get("ATLAS_PROM_URL")
             if url:
-                adapters.append(PrometheusAdapter(url))   # ip_map pushed by app._apply_kuma_map
+                adapters.append(PrometheusAdapter(url))   # ip_map pushed by api.v2.feeds._apply_kuma_map
             else:
                 log.warning("prometheus source requested but ATLAS_PROM_URL unset — skipping")
         else:

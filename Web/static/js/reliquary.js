@@ -7,7 +7,7 @@
    The rack model + faceplate art moved to rack-model.js 2026-08-23 so the 3D
    deep-dive (armory3d.js) draws the same vessels from the same source (F5). */
 
-import { A, CFG, $, esc, glassAttrs } from './config.js';
+import { A, CFG, $, esc, glassAttrs, nodeById, FALLBACK_HUE, DRAG_END, postJSON } from './config.js';
 import { makeScene } from './scene.js';
 import {
   UH, KIND_HUE, ledColor, uLabel, slotKey, setRackTheme,
@@ -24,7 +24,6 @@ let editing = false;
 let devices = [], rackU = 12;
 let racks = [], rackId = null;
 
-const nodeById = (id) => A.DATA.nodes.find((n) => n.id === id);
 const ledFor = (node) => ledColor(node ? A.signalsFeed?.nodes?.[node.id]?.state : '');
 
 const readOvr = () => { try { return JSON.parse(localStorage.getItem(OVR_KEY) || '{}'); } catch { return {}; } };
@@ -99,7 +98,7 @@ function render() {
     el.className = `rel-dev rel-${d.kind}`;
     el.style.top = ((rackU - d.top) * UH) + 'px';
     el.style.height = (d.size * UH) + 'px';
-    el.style.setProperty('--u-hue', KIND_HUE[d.kind] || '#C9A554');
+    el.style.setProperty('--u-hue', KIND_HUE[d.kind] || FALLBACK_HUE);
     el.dataset.key = d.key;
     // The name is OFF the faceplate (2026-08-10). It was printed across
     // the drawn unit, which is the one part of this scene meant to be looked at
@@ -138,7 +137,7 @@ function select(d, el) {
 }
 
 function showDetail(d) {
-  const n = d.node, hue = KIND_HUE[d.kind] || '#C9A554';
+  const n = d.node, hue = KIND_HUE[d.kind] || FALLBACK_HUE;
   detailEl.style.setProperty('--rel-hue', hue);
   const role = n ? n.role : (d.desc || 'reserved');
   const ip = n && n.ip && n.ip !== '—' ? n.ip : '';
@@ -180,7 +179,7 @@ function showDetail(d) {
       `<div class="ldg-ports">` + ports.map((i, idx) => {
         const z = A.DATA.zones.find((zz) => String(zz.vlan) === String(i.vlan));
         return `<button type="button" class="ldg-port rel-port${i.poe ? ' poe' : ''}" ` +
-          `data-port="${idx}" style="--p-hue:${esc(z?.hue || '#C9A554')}" ` +
+          `data-port="${idx}" style="--p-hue:${esc(z?.hue || FALLBACK_HUE)}" ` +
           `title="what hangs on port ${esc(i.name)}?">${esc(i.name)}</button>`;
       }).join('') + `</div><div class="rel-port-detail" hidden></div></div>`
     : (n && ['gateway', 'switch', 'patch'].includes(d.kind)
@@ -285,7 +284,7 @@ function attachDrag(el, d) {
       try { el.releasePointerCapture(e.pointerId); } catch { /* */ }
       el.classList.remove('grabbing', 'blocked');
       el.removeEventListener('pointermove', move);
-      el.removeEventListener('pointerup', up);
+      for (const t of DRAG_END) el.removeEventListener(t, up);
       if (fits(d, curTop) && curTop !== d.top) {
         d.top = curTop; d.slot.u = uLabel(curTop, d.size);
         const o = readOvr(); o[d.key] = curTop; writeOvr(o);
@@ -294,7 +293,7 @@ function attachDrag(el, d) {
       render();
     };
     el.addEventListener('pointermove', move);
-    el.addEventListener('pointerup', up);
+    for (const t of DRAG_END) el.addEventListener(t, up);   // cancel and lost capture end it too
   });
 }
 
@@ -312,13 +311,7 @@ async function saveLayout() {
   const o = readOvr();
   if (!Object.keys(o).length) { A.showToast?.('Nothing moved yet.'); return; }
   try {
-    const r = await fetch('api/v2/rack', {
-      method: 'POST',
-      // X-Atlas-Write is what proves this came from the Atlas and not another
-      // origin — a cross-site page cannot set it (see Web/security.py)
-      headers: { 'Content-Type': 'application/json', 'X-Atlas-Write': '1' },
-      body: JSON.stringify(o),
-    });
+    const r = await postJSON('api/v2/rack', o);   // carries the write proof (config.js)
     if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.status);
     const res = await r.json();
     localStorage.removeItem(OVR_KEY);

@@ -9,7 +9,6 @@ hub_auth — dual-mode authentication and Hub integration helpers
 from .auth import (
     require_hub_or_standalone,
     get_remote_user,
-    get_remote_email,
     get_remote_groups,
     AUTH_MODE,
 )
@@ -24,7 +23,6 @@ __all__ = [
     "verify_token",
     "require_hub_or_standalone",
     "get_remote_user",
-    "get_remote_email",
     "get_remote_groups",
     "AUTH_MODE",
     "app_status",

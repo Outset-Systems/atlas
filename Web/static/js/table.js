@@ -25,7 +25,7 @@
    gate rather than reaching the style engine. Clearing the override removes
    the inline tokens and the stylesheet's own :root wins again. */
 
-import { A, $, esc, CFG, canAdminWrite } from './config.js';
+import { A, $, esc, canAdminWrite } from './config.js';
 
 const WALLPAPER_KEY = 'atlas-wallpaper';
 const TILT_KEY = 'atlas-tilt';

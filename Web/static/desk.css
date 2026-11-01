@@ -284,7 +284,6 @@
   align-items: center; padding: 8px 0; border-bottom: 1px solid var(--hair);
 }
 .wiz-net-n { grid-column: 2 / -1; font-size: 0.76rem; color: var(--text-dim); }
-.wiz-note { font-size: 0.82rem; color: var(--text-dim); margin-top: 12px; }
 @media (max-width: 560px) {
   .wiz-net { grid-template-columns: 20px minmax(0, 1fr) 72px; }
   .wiz-net-sub { grid-column: 2 / -1; grid-row: 2; }
@@ -419,38 +418,6 @@ body.pre #first-survey { display: none; }
 .ann-ack-btn:hover { color: var(--gilt); border-color: var(--gilt); }
 .ann-ack-btn:disabled { opacity: 0.4; cursor: default; }
 
-/* ── the repairs ── */
-.rep-row {
-  display: flex; flex-direction: column; gap: 5px;
-  padding: 10px 12px; border-bottom: 1px solid rgba(80,73,69,0.4);
-  border-left: 2px solid transparent;
-}
-.rep-row.rep-active { border-left-color: var(--sem-info); background: rgba(131,165,152,0.06); }
-.rep-row.rep-upcoming { border-left-color: var(--gilt); }
-.rep-row.rep-ended { border-left-color: var(--ink-soft); opacity: 0.65; }
-.rep-row.rep-invalid { border-left-color: var(--sem-down); }
-.rep-main { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
-.rep-reason {
-  font-family: 'Cinzel', serif; font-size: 0.72rem; letter-spacing: 0.1em; color: var(--text);
-}
-.rep-nodes { display: flex; flex-wrap: wrap; gap: 5px; }
-.rep-node {
-  font-family: 'JetBrains Mono', monospace; font-size: 0.68rem;
-  color: var(--text-dim); border: 1px solid var(--ink-line);
-  border-radius: 20px; padding: 1px 8px;
-}
-.rep-when {
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-  font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: var(--text-dim);
-}
-.rep-arrow { color: var(--ink-soft); }
-.rep-repeat {
-  font-family: 'Cinzel', serif; font-size: 0.52rem; letter-spacing: 0.14em;
-  text-transform: uppercase; color: var(--gilt);
-  border: 1px solid rgba(var(--gilt-rgb),0.4); border-radius: 20px; padding: 1px 8px;
-}
-.rep-note { font-family: 'Alegreya Sans', sans-serif; font-size: 0.84rem; color: var(--text-dim); }
-
 /* a window's state, echoed in the Desk's table */
 .dsk-table tr.dsk-w-active td:first-child { box-shadow: inset 2px 0 0 var(--sem-info); }
 .dsk-table tr.dsk-w-ended td { opacity: 0.6; }
@@ -538,7 +505,7 @@ body.pre #first-survey { display: none; }
    tokens atlas.css restates on .dsk-panel/.wiz-panel; the form itself is
    parchment in both. Two one-offs no token describes. */
 :root[data-scheme="light"] .dsk-btn-go { background: var(--gilt); border-color: var(--gilt); color: var(--on-gilt); }
-:root[data-scheme="light"] .dsk-btn-go:hover:not(:disabled) { background: #1e3a8a; border-color: #1e3a8a; color: var(--on-gilt); }
+:root[data-scheme="light"] .dsk-btn-go:hover:not(:disabled) { background: var(--gilt-deep); border-color: var(--gilt-deep); color: var(--on-gilt); }
 :root[data-scheme="light"] .dsk-bar-sub code { background: rgba(15, 23, 42, 0.09); }
 :root[data-scheme="light"] .dsk-btn-warn:hover { color: #f8fafc; }
 

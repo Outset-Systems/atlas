@@ -13,7 +13,7 @@
 
    Roads and topology live in THE PATH (path.js). */
 
-import { A, CFG, $, esc } from './config.js';
+import { A, CFG, $, esc, zoneById, nodeById, FALLBACK_HUE } from './config.js';
 import { makeScene } from './scene.js';
 import {
   GRID_LIMIT, chartedAddresses, countLabel, drawable, formatAddress,
@@ -27,8 +27,7 @@ function liveDot(id) {
   return `<span class="svc-health ${st ? (A.svcHealthClass[st] || '') : ''}" title="${esc(st || 'no signal')}"></span>`;
 }
 
-const zoneById = (id) => A.DATA.zones.find((z) => z.id === id);
-const hueOf = (prefix) => zoneById(prefix.zone)?.hue || '#C9A554';
+const hueOf = (prefix) => zoneById(prefix.zone)?.hue || FALLBACK_HUE;
 
 /* Every OTHER charted place answering on this address. chartedAddresses keeps
    one holder per address so the grid stays one-cell-one-lease; this is how the
@@ -52,12 +51,12 @@ function summaryHTML(prefixes, charted) {
 
   const ports = Object.keys(byDevice).length
     ? Object.entries(byDevice).map(([device, list]) => {
-        const node = A.DATA.nodes.find((n) => n.id === device);
+        const node = nodeById(device);
         return `<div class="ldg-portgroup"><span class="ldg-portgroup-name">` +
           `${esc(node?.name || device)}</span><div class="ldg-ports">` +
           list.map((i) => {
             const z = A.DATA.zones.find((zz) => String(zz.vlan) === String(i.vlan));
-            return `<span class="ldg-port${i.poe ? ' poe' : ''}" style="--p-hue:${esc(z?.hue || '#C9A554')}" ` +
+            return `<span class="ldg-port${i.poe ? ' poe' : ''}" style="--p-hue:${esc(z?.hue || FALLBACK_HUE)}" ` +
               `title="${esc(i.name)} · ${esc(i.kind || 'rj45')}${i.vlan ? ' · vlan ' + esc(i.vlan) : ' · trunk'}` +
               `${i.speed ? ' · ' + esc(i.speed) : ''}${i.poe ? ' · PoE' : ''}${i.peer ? ' → ' + esc(i.peer) : ''}">` +
               `${esc(i.name)}</span>`;
@@ -67,7 +66,7 @@ function summaryHTML(prefixes, charted) {
       `from the map editor (or curate <code>interfaces[]</code>) and every faceplate appears here, ` +
       `coloured by realm.</div>`;
 
-  return `<div class="ldg-block ldg-path" style="--z-hue:#C9A554">
+  return `<div class="ldg-block ldg-path" style="--z-hue:var(--gilt)">
     <div class="ldg-zhead">
       <span class="ldg-zname">THE SURVEY</span>
       <span class="ldg-zsub">${prefixes.length} prefixes · ${charted.size} charted souls · ` +

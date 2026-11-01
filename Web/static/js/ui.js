@@ -1,11 +1,10 @@
 /* Atlas — screen-space UI: the ivory card, THE INDEX drawer,
    the command-column flyouts, scene buttons, and toasts. */
 
-import { A, CFG, $, esc, host, glassAttrs, zoneById, isMixed, canAdminWrite } from './config.js';
-import { settleScry, chronicleItems, buildChronicle, buildAbyss } from './chronicle.js';
+import { A, CFG, $, esc, host, glassAttrs, zoneById, canAdminWrite, ago, FALLBACK_HUE } from './config.js';
+import { chronicleItems, buildChronicle, buildAbyss } from './chronicle.js';
 import { makeScene } from './scene.js';
 
-const card = $('card');
 const drawer = $('index-drawer');
 const toast = $('toast');
 
@@ -90,7 +89,7 @@ function allServices() {
     if (!n.links?.length) continue;
     const zone = zoneById(n.zone);
     for (const l of n.links) {
-      out.push({ ghue: zone ? zone.hue : '#C9A554', group: n.name,
+      out.push({ ghue: zone ? zone.hue : FALLBACK_HUE, group: n.name,
         gsub: n.ip !== '—' ? n.ip : '', name: l.label, url: l.url, kuma: l.kuma,
         open_in: l.open_in });
     }
@@ -106,7 +105,7 @@ function buildServices() {
 
   const pinned = svcs.filter(s => pins.includes(s.url));
   if (pinned.length) {
-    zoneHeader(list, '#C9A554', `PINNED <span class="sub">favorites</span>`);
+    zoneHeader(list, 'var(--gilt)', `PINNED <span class="sub">favorites</span>`);   // the app's gold, per scheme
     for (const s of pinned) svcRow(list, s);
   }
 
@@ -231,7 +230,7 @@ function updateSeekRow() {
   const row = $('idx-seek');
   if (!row) return;
   const q = idxSearch.value.trim();
-  row.hidden = !(degoogOn() && q && !$('idx-search-wrap')?.hidden && degoogService());
+  row.hidden = !(degoogOn() && q && degoogService());
 }
 $('idx-seek')?.addEventListener('click', () => {
   const svc = degoogService();
@@ -265,6 +264,7 @@ function setSceneActive(name) {
   // same `.active` — the CSS styles it in its own chrome dress.
   document.querySelectorAll('[data-scene]').forEach(b => b.classList.toggle('active', b.dataset.scene === name));
   $('btn-menu')?.classList.toggle('lit', name !== 'atlas');
+  document.querySelector(`.scene[data-scene="${name}"]`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   /* `body.scene-open` lifts the scene band above the overlays and firms up its
      fill (atlas.css) — the switcher is the one control you still want while a
      scene is up, and at z-960 under an `inset: 0` z-985 overlay it was buried,
@@ -324,16 +324,18 @@ document.querySelectorAll('[data-scene]').forEach(btn => {
                      accounts: A.openAccounts, trust: A.openTrust,
                      settings: A.openSettings };
     const deselect = btn.classList.contains('active');
-    /* THE ATLAS is the home button and does the job that is AVAILABLE (Link,
-       2026-08-15). With a scene up, the useful act is leaving it. Already on
-       the atlas, that gesture is spare — it PINS the map tools it reveals on
-       hover (second ask, same day; it used to toggle the Index, which is what
-       ☰ at the other end of the band is for). One button cannot mean two
-       things at once; it can mean whichever one is on offer, and each of the
-       two acts on the thing the button already owns. */
-    if (btn.dataset.scene === 'atlas' && !A.sceneOpen) { A.toggleToolsPin(); return; }
+    /* THE ATLAS is the home button (owner, 2026-11-01): it closes whatever is
+       up and brings the whole map back to centre. A.home and not A.recenter,
+       because from the Depths home is the map, not the middle of the Depths. */
+    if (btn.dataset.scene === 'atlas') {
+      closeAllScenes();
+      setSceneActive('atlas');
+      A.closeCard?.();
+      A.home(true);
+      return;
+    }
     closeAllScenes();
-    if (deselect || btn.dataset.scene === 'atlas') { setSceneActive('atlas'); return; }
+    if (deselect) { setSceneActive('atlas'); return; }
     setSceneActive(btn.dataset.scene);
     scenes[btn.dataset.scene]?.();
   });
@@ -347,16 +349,11 @@ $('btn-zoom-out').addEventListener('click', () => A.zoomAt(innerWidth / 2, inner
 $('btn-depths').addEventListener('click', () => A.descend());
 $('btn-net').addEventListener('click', () => A.toggleNet());
 
-/* ── Two clusters hang off the band, one at each end ──────────────────────
-   THE ATLAS reveals the map tools; ☰ reveals ⚙. Both are deliberately NOT
-   descendants of the band — see the comment on `.atlas-tools` in atlas.css
-   (its backdrop-filter would position them against the band and its overflow
-   would then clip them away) — so neither can use `:hover` on an ancestor and
-   both are wired here. Two elements, one hover state, one body of code.
-
-   The close is DELAYED because there is a gap between the band and the
-   circles: without it, crossing that gap counts as leaving and the cluster
-   shuts under the pointer on its way to the button it just revealed. */
+/* The map tools drop down from THE ATLAS (owner, 2026-11-01), a column beside
+   the zoom column: sky, depths, tripwires. Not `:hover`, because the cluster
+   is not a descendant of the band (see `.atlas-tools` in atlas.css). The close is
+   delayed so the pointer can cross the gap and reach the column it just opened.
+   A touch screen has no hover, so atlas.css keeps the column out there. */
 function hoverReveal(anchor, cluster, delay = 220) {
   if (!anchor || !cluster) return;
   let timer = null;
@@ -373,6 +370,26 @@ function hoverReveal(anchor, cluster, delay = 220) {
   });
 }
 hoverReveal($('scene-home'), $('atlas-tools'));
+
+/* The band's labels scroll in their own strip. `.over` brings out ‹ › only while
+   something is out of reach; they are dimmed at the end they have reached. */
+const labels = $('band-labels');
+function paintBandArrows() {
+  const room = labels.scrollWidth - labels.clientWidth;
+  $('scenes-list').classList.toggle('over', room > 1);
+  $('band-prev').disabled = labels.scrollLeft <= 1;
+  $('band-next').disabled = labels.scrollLeft >= room - 1;
+}
+const slideBand = (by) => labels.scrollBy({ left: by, behavior: 'smooth' });
+$('band-prev').addEventListener('click', () => slideBand(-240));
+$('band-next').addEventListener('click', () => slideBand(240));
+labels.addEventListener('scroll', paintBandArrows, { passive: true });
+labels.addEventListener('wheel', (e) => {
+  if (!e.deltaY || labels.scrollWidth <= labels.clientWidth) return;
+  e.preventDefault();
+  labels.scrollLeft += e.deltaY;
+}, { passive: false });
+new ResizeObserver(paintBandArrows).observe(labels);
 
 /* ── SETTINGS is a scene (2026-09-04) ──────────────────────────────
    It was the drawer's tabless third section, and that shape cost a rule per
@@ -401,39 +418,6 @@ A.openSettings = settingsScene.open;
 A.closeSettings = settingsScene.close;
 settingsScene.mount();
 
-/* ── THE ATLAS's click IS the pin (2026-08-15) ──────────────────────
-   The cluster used to carry its own pin button, which meant the tools you
-   reached for were four buttons and one button about the buttons. The gesture
-   moved to the anchor instead: hover THE ATLAS to see the tools, CLICK it to
-   keep them out, click again to let them hide. The pin glyph is gone.
-
-   This replaces the click's old job (toggling the Index), which now belongs
-   to ☰ alone — the drawer hangs off ☰ at the other end of the band, so it was
-   already the honest control for it. With a scene open the click still comes
-   home; leaving a scene remains the thing that matters most, and the tools
-   are hidden in there anyway (`body.scene-open .atlas-tools`).
-
-   The choice is still remembered, because a pin that forgets is a pin you
-   set every visit — and the key is unchanged so an existing preference
-   carries over rather than silently resetting on this release. */
-const atlasTools = $('atlas-tools');
-let toolsPinned = false;
-const TOOLS_PIN_KEY = 'atlas.toolsPinned';   // remembered across reloads since v1.16.0 — the key must not change
-try { toolsPinned = localStorage.getItem(TOOLS_PIN_KEY) === '1'; } catch { /* private mode */ }
-const setToolsPinned = (on) => {
-  toolsPinned = on;
-  atlasTools?.classList.toggle('pinned', on);
-  const home = $('scene-home')?.querySelector('.scene');
-  if (home) {
-    home.title = on ? 'The map tools stay out — click to let them hide'
-                    : 'The atlas · click to keep the map tools out';
-    home.setAttribute('aria-pressed', on ? 'true' : 'false');
-  }
-  try { localStorage.setItem(TOOLS_PIN_KEY, on ? '1' : '0'); } catch { /* private mode */ }
-};
-setToolsPinned(toolsPinned);
-A.toggleToolsPin = () => setToolsPinned(!toolsPinned);
-
 /* ── Settings — the sections' own wiring: THE WATCHERS, THE SURVEY, THE SEEKING ── */
 
 /* Which signal sources are reporting (and how stale). A silent Kuma degrades the
@@ -452,8 +436,7 @@ function renderSources() {
     el.innerHTML = '<span class="sp-src sp-src-silent">no sources configured</span>';
     return;
   }
-  const secs = A.signalsAt ? Math.max(0, Math.round((Date.now() - A.signalsAt) / 1000)) : null;
-  const age = secs === null ? '' : secs < 60 ? `${secs}s ago` : `${Math.round(secs / 60)}m ago`;
+  const age = A.signalsAt ? ago(Date.now() - A.signalsAt) : '';
   el.innerHTML =
     names.map((n) => `<span class="sp-src sp-src-${src[n] === 'ok' ? 'ok' : 'silent'}">${esc(n)}</span>`).join('') +
     (age ? `<span class="sp-src-age">read ${age}</span>` : '');
@@ -548,8 +531,8 @@ $('sp-reset').addEventListener('click', (e) => {
    (2026-08-10). Settings is a scene now (2026-09-04): its scrim, its ×,
    Escape and the band close it, exactly as they close every other scene. */
 // The agent has no chrome button anymore — the watcher lives on the map, in the Lost
-// Woods, reachable like any other place (2026-07-11). Dark is the only theme
-// (the design notes: "the app IS dark"); the light-mode experiment is retired.
+// Woods, reachable like any other place (2026-07-11). The colour scheme is
+// scheme.js's (v1.52.0): the panels follow it, the map stays a night map.
 /* (#sky-title's listener retired 2026-08-15 — see world.js by buildSkyIsland) */
 
 /* The two region headings read their facts from the dataset (2026-08-15).

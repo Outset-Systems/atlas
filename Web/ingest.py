@@ -84,10 +84,8 @@ limiter = _RateLimiter()
 
 
 def _bearer():
-    raw = request.headers.get("Authorization", "")
-    if raw.lower().startswith("bearer "):
-        return raw[7:].strip()
-    return None
+    import security
+    return security.bearer_token(request) or None
 
 
 def authenticate():

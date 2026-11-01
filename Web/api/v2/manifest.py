@@ -61,9 +61,9 @@ def cadence_of(rite):
     if m:                                                   # ':35' = hourly at :35
         return om.cadence("cron", expr=f"{int(m.group(1))} * * * *", tz="UTC")
     hhmm = None
-    if _HHMM.match(at):
-        h, mi = at.split(":")
-        hhmm = f"{int(h):02d}:{int(mi):02d}"
+    m = _HHMM.match(at)
+    if m:                                                   # '13:45', also '13:45:00' / '13:45 UTC'
+        hhmm = f"{int(m.group(1)):02d}:{int(m.group(2)):02d}"
     else:
         found = _HHMM.search(when)
         if found:
@@ -142,7 +142,7 @@ def build(now=None):
         settings.APP_KEY, settings.APP_BRAND, settings.APP_VERSION,
         card=om.card(lab_url=os.environ.get("ATLAS_LAB_URL", "").strip() or None,
                      production_url=os.environ.get("ATLAS_PRODUCTION_URL", "").strip() or None,
-                     icon="map", accent_color="#C9A554"),
+                     icon="map", accent_color=settings.ACCENT_COLOR),
         auth=_auth(),
         schedule=om.schedule(tz="UTC", blocks=_blocks(rites), chains=[],
                              run_endpoint=None, toggle_endpoint=None,

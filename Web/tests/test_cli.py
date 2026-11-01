@@ -73,3 +73,18 @@ if __name__ == "__main__":
             print(f"  FAIL {name}: {e}")
     print("PASS" if not failures else f"{failures} FAILURE(S)")
     sys.exit(1 if failures else 0)
+
+
+def test_import_netbox_reports_an_unreadable_token_file_instead_of_crashing():
+    import argparse
+    saved = {k: os.environ.pop(k, None) for k in ("NETBOX_TOKEN", "NETBOX_TOKEN_FILE")}
+    os.environ["NETBOX_TOKEN_FILE"] = os.path.join(TMP, "no-such-token-file")
+    try:
+        args = argparse.Namespace(token=None, token_file=None)
+        assert cli.cmd_import_netbox(args) == 2
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v

@@ -71,8 +71,8 @@ def text(key):
 def foreign_maps():
     """Bundled renders that belong to some OTHER theme's map set. They stay
     resolvable (a dataset may still name one), but the viewer's gallery does
-    not offer them: the owner's Atlas should not list another realm's maps."""
-    own = set(T.get("maps") or []) | {T.get("map_art")}
+    not offer them, unless the theme invites one with `guest_maps`."""
+    own = set(T.get("maps") or []) | set(T.get("guest_maps") or []) | {T.get("map_art")}
     other = set()
     try:
         names = os.listdir(THEMES_DIR)

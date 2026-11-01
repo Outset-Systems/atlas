@@ -1,7 +1,8 @@
-"""Group-based redaction — shared by the legacy endpoints and the v1 read API.
+"""Group-based redaction — shared by every surface that serves the dataset:
+the v2 read API, the signals feed, the annals, the card vitals.
 
 Any node or service link carrying `require_group` is visible only to a viewer
-whose Hub groups include it. Extracted from app.py (work item 7) so the v1 API
+whose Hub groups include it. Extracted from app.py (work item 7) so every API
 enforces the *same* rule rather than a second copy of it: a security control
 with two implementations is a security control with one bug waiting.
 
@@ -217,8 +218,9 @@ def _scrub_value(holder, name, ftype, hidden, defining):
 
 
 def _scrub_signals_block(d, hidden):
-    """`signals` is UNMODELLED_TOP_KEYS — the schema cannot describe it, so it
-    is scrubbed by hand. `signals.kuma` maps a monitor NAME to a node id, so it
+    """`signals` is not in the catalogue (it round-trips untouched; the editor
+    has no page for it) — the schema cannot describe it, so it is scrubbed by
+    hand. `signals.kuma` maps a monitor NAME to a node id, so it
     leaks both the hidden id and the name of the monitor watching it."""
     block = d.get("signals")
     if not isinstance(block, dict):

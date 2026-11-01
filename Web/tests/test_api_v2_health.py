@@ -132,31 +132,6 @@ def test_signed_in_health_has_parity_with_status(realm):
     assert c.get("/api/v2/does-not-exist").status_code == 404
 
 
-def test_viewer_resolves_through_v1_helpers(realm):
-    """The auth adapter reports exactly what security.py/redaction.py say."""
-    from api.v2.auth import current_viewer
-    c = realm.app.test_client()
-    with realm.app.test_request_context("/api/v2/health"):
-        anon = current_viewer()
-    assert anon.actor == "unknown" and anon.groups == frozenset() and not anon.is_admin
-
-    login_as(c, "ops", PW)
-    cookie = c.get_cookie("atlas_session")
-    assert cookie is not None
-    with realm.app.test_request_context(
-            "/api/v2/health", headers={"Cookie": f"atlas_session={cookie.value}"}):
-        admin = current_viewer()
-    assert admin.actor == "ops" and admin.is_admin and "atlas-admins" in admin.groups
-
-    login_as(c, "alice", PW)
-    cookie = c.get_cookie("atlas_session")
-    with realm.app.test_request_context(
-            "/api/v2/health", headers={"Cookie": f"atlas_session={cookie.value}"}):
-        plain = current_viewer()
-    assert plain.actor == "alice" and not plain.is_admin
-    assert plain.groups == frozenset()
-
-
 def test_admin_required_refuses_like_api_admin(realm):
     from api.v2.auth import admin_required, write_required
     from flask import jsonify
@@ -213,3 +188,17 @@ def test_hub_mode_gates_v2_with_the_same_rule(tmp_path):
                       Call(headers={"X-Remote-User": "ops"}))
     finally:
         auth.AUTH_MODE = original
+
+
+def test_bearer_token_is_read_one_way(realm):
+    """Every token-taking route shares `security.bearer_token`: the scheme
+    without regard to case, the token stripped, "" for anything else."""
+    import security
+    cases = {"Bearer abc": "abc", "bearer  abc ": "abc", "BEARER abc": "abc",
+             "Basic abc": "", "Bearer": "", "": ""}
+    for header, want in cases.items():
+        with realm.app.test_request_context("/api/v2/health",
+                                            headers={"Authorization": header}):
+            assert security.bearer_token() == want, header
+    with realm.app.test_request_context("/api/v2/health"):
+        assert security.bearer_token() == ""

@@ -71,8 +71,12 @@ def cmd_import_netbox(args):
             return 2
     token = token or os.environ.get("NETBOX_TOKEN")
     if not token and os.environ.get("NETBOX_TOKEN_FILE"):
-        with open(os.environ["NETBOX_TOKEN_FILE"], encoding="utf-8") as f:
-            token = f.read().strip()
+        try:
+            with open(os.environ["NETBOX_TOKEN_FILE"], encoding="utf-8") as f:
+                token = f.read().strip()
+        except OSError as e:
+            print(f"error: cannot read NETBOX_TOKEN_FILE: {e}", file=sys.stderr)
+            return 2
     if not token:
         print("error: no NetBox token (--token/--token-file or NETBOX_TOKEN[_FILE])",
               file=sys.stderr)

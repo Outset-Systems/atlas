@@ -18,7 +18,7 @@
    vouch for. Badges are repainted on every signals poll (signals.js calls
    A.paintDecoys), so a stone that starts speaking lights where it stands. */
 
-import { A, $, esc, themeText } from './config.js';
+import { A, $, themeText } from './config.js';
 import { legacySources, listening, roster, watchByNode as watchModel } from './tripwire-model.js';
 
 let on = false;
@@ -76,7 +76,8 @@ function paint() {
       mk.querySelector('.mk-dot')?.appendChild(eye);
     }
     eye.dataset.voice = watch.voice;
-    eye.title = `${esc(String(watch.count))} stone${watch.count === 1 ? '' : 's'} · ${watch.voice} — open THE ${esc(themeText('stones', 'Decoys').toUpperCase())}`;
+    // a DOM property, not markup — no escaping wanted here
+    eye.title = `${watch.count} stone${watch.count === 1 ? '' : 's'} · ${watch.voice} — open THE ${themeText('stones', 'Decoys').toUpperCase()}`;
   }
 }
 /* The signals poll calls this every 30s. While the layer is UP, an admin's

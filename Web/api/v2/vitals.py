@@ -36,6 +36,7 @@ import time
 from flask import jsonify
 
 from context import atlas
+from redaction import cleared, viewer_groups
 
 from . import bp
 
@@ -99,12 +100,6 @@ def vitals(node_id):
         return jsonify({"error": "vitals are not configured "
                                  "(ATLAS_PROM_URL unset)"}), 404
 
-    now = time.time()
-    with _cache_lock:
-        hit = _cache.get(node_id)
-        if hit and hit[0] > now:
-            return jsonify(hit[1])
-
     ctx = atlas()
     try:
         data, _, _ = ctx.dataset()
@@ -112,10 +107,20 @@ def vitals(node_id):
         log.error("vitals: lab data unreadable: %s", e)
         return jsonify({"error": f"lab data unreadable: {e}"}), 500
 
+    # The clearance check comes BEFORE the cache: the cache is per node, not
+    # per viewer, so an admin opening a card would otherwise warm it for the
+    # next viewer, who is not cleared to know the place exists. Same sentence
+    # as an unknown id on purpose — "forbidden" would confirm it does.
     node = next((n for n in data.get("nodes", [])
                  if n.get("id") == node_id), None)
-    if node is None:
+    if node is None or not cleared(node, viewer_groups()):
         return jsonify({"error": "no such place"}), 404
+
+    now = time.time()
+    with _cache_lock:
+        hit = _cache.get(node_id)
+        if hit and hit[0] > now:
+            return jsonify(hit[1])
     ip = str(node.get("ip") or "").split("/")[0].strip()
     if not ip or ip == "—":
         return jsonify({"error": "this place has no address to ask about"}), 404

@@ -105,6 +105,7 @@ function refuse(reason) {
 
 function show(entry) {
   current = entry;
+  entry.loaded = false;   // a ↻ re-shows the same entry; the watchdog must see THIS load
   root.hidden = false;
   titleEl.textContent = entry.title || '';
   subEl.textContent = entry.sub || '';

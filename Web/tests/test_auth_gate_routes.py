@@ -222,8 +222,10 @@ def test_mfa_login_flow(realm):
     r = c.post("/api/v2/auth/login/mfa", json={"code": "000000"},
                headers=WRITE)
     assert r.status_code == 401
-    r = c.post("/api/v2/auth/login/mfa", json={"code": pyotp.TOTP(secret).now()},
-               headers=WRITE)
+    # the enrolment code is spent (2026-11-01): the next step signs in
+    import time as _time
+    r = c.post("/api/v2/auth/login/mfa",
+               json={"code": pyotp.TOTP(secret).at(_time.time() + 30)}, headers=WRITE)
     assert r.get_json()["ok"]
     assert c.get("/api/v2/lab-data").status_code == 200
 
@@ -587,8 +589,9 @@ def _signed(secret, user, groups):
     import hmac
     import json
     import time as _time
+    now = _time.time()
     payload = json.dumps({"u": user, "g": groups,
-                          "iat": _time.time(), "exp": _time.time() + 300}).encode()
+                          "iat": now, "exp": now + 300}).encode()
     b64 = base64.urlsafe_b64encode(payload).decode().rstrip("=")
     sig = hmac.new(secret, b64.encode(), hashlib.sha256).digest()
     return f"{b64}.{base64.urlsafe_b64encode(sig).decode().rstrip('=')}"
@@ -612,6 +615,56 @@ def test_hybrid_accepts_the_hubs_signed_identity(tmp_path):
         import redaction
         with handle.app.test_request_context("/", headers={"X-Hub-Auth": token}):
             assert redaction.sees_everything(redaction.viewer_groups()) is True
+    finally:
+        ka.AUTH_SECRET = original
+
+
+def _token(secret, **claims):
+    """A signed token with whatever claims the test wants — the shape
+    `_signed` builds, with the clock in the caller's hands."""
+    import base64
+    import hashlib
+    import hmac
+    import json
+    b64 = base64.urlsafe_b64encode(json.dumps(claims).encode()).decode().rstrip("=")
+    sig = hmac.new(secret, b64.encode(), hashlib.sha256).digest()
+    return f"{b64}.{base64.urlsafe_b64encode(sig).decode().rstrip('=')}"
+
+
+def test_a_signed_token_may_not_claim_a_long_life():
+    """2026-11-01: the Atlas accepted whatever `exp` the Hub minted, so a Hub
+    bug (or a captured token with a generous lifetime) set the replay window.
+    Now `exp - iat` is capped server-side."""
+    import time
+    import hub_auth.auth as ka
+    secret = b"a-shared-secret"
+    original = ka.AUTH_SECRET
+    ka.AUTH_SECRET = secret
+    try:
+        now = time.time()
+        assert ka.verify_token(_token(secret, u="ops", iat=now, exp=now + 120))["u"] == "ops"
+        assert ka.verify_token(_token(secret, u="ops", iat=now, exp=now + ka._MAX_TTL)) is not None
+        # a second of slop is allowed (a minter reading the clock twice); two is not
+        assert ka.verify_token(_token(secret, u="ops", iat=now, exp=now + ka._MAX_TTL + 2)) is None
+        assert ka.verify_token(_token(secret, u="ops", iat=now - 7200, exp=now + 60)) is None
+    finally:
+        ka.AUTH_SECRET = original
+
+
+def test_a_malformed_claim_is_a_refusal_not_a_crash():
+    """A correctly signed token with `"exp": "soon"` raised inside
+    verify_token and 500'd the request; only the secret holder can mint one,
+    so this is robustness — it must read as a plain refusal."""
+    import time
+    import hub_auth.auth as ka
+    secret = b"a-shared-secret"
+    original = ka.AUTH_SECRET
+    ka.AUTH_SECRET = secret
+    try:
+        now = time.time()
+        assert ka.verify_token(_token(secret, u="ops", iat=now, exp="soon")) is None
+        assert ka.verify_token(_token(secret, u="ops", iat=None, exp=now + 60)) is None
+        assert ka.verify_token(_token(secret, u="ops", iat=[1], exp=now + 60)) is None
     finally:
         ka.AUTH_SECRET = original
 
@@ -760,6 +813,18 @@ def test_anonymous_csp_does_not_enumerate_the_realm(embed_realm):
     assert frame_src == "'self'", (
         "an anonymous caller was handed the embed allowlist: " + frame_src)
     assert EMBED_SENTINEL not in r.headers.get("Content-Security-Policy", "")
+
+
+def test_csp_carries_the_directives_default_src_does_not_govern(embed_realm):
+    """`default-src` is no fallback for `base-uri`, `form-action` or
+    `object-src` (2026-11-01 review): without them a stray <base> rewrites
+    every relative URL and a form may post anywhere. Asserted on both sides
+    of the gate, since the anonymous CSP is built separately."""
+    c = embed_realm.app.test_client()
+    for resp in (c.get("/auth/login"), c.get("/", follow_redirects=True)):
+        csp = resp.headers.get("Content-Security-Policy", "")
+        for directive in ("base-uri 'none'", "form-action 'self'", "object-src 'none'"):
+            assert directive in csp, f"{directive!r} missing from {csp!r}"
 
 
 def test_authenticated_csp_still_carries_the_embed_hosts(embed_realm):
@@ -970,8 +1035,9 @@ def test_resetting_mfa_removes_the_factor_and_ends_the_sessions(realm):
     alice = realm.app.test_client()
     r, ztok = _login(alice, "alice")
     assert r.get_json()["mfa_required"]
-    alice.post("/api/v2/auth/login/mfa", json={"code": pyotp.TOTP(secret).now()},
-               headers=WRITE)
+    import time as _time
+    alice.post("/api/v2/auth/login/mfa",      # the next step: enrolment spent this one
+               json={"code": pyotp.TOTP(secret).at(_time.time() + 30)}, headers=WRITE)
     assert alice.get("/api/v2/auth/me").get_json()["mfa_enabled"] is True
 
     admin = realm.app.test_client()

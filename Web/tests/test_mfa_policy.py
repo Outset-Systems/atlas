@@ -49,7 +49,13 @@ def test_admins_policy_reads_the_flag_not_a_group(monkeypatch):
 
 def test_the_login_route_uses_the_one_implementation():
     """The regression this file exists for: the route the browser posts to
-    must fence exactly what the policy says — no private copy."""
-    import atlas_auth
+    must fence exactly what the policy says — no private copy, and (since
+    2026-11-01) no module alias either: the route reads
+    `atlas_auth.mfa_policy_applies` at call time, so a test that patches the
+    one function patches the live path."""
+    import inspect
     from api.v2 import accounts_v2
-    assert accounts_v2._mfa_policy_applies is atlas_auth.mfa_policy_applies
+    assert not hasattr(accounts_v2, "_mfa_policy_applies")
+    src = inspect.getsource(accounts_v2)
+    assert "def mfa_policy_applies" not in src
+    assert src.count("atlas_auth.mfa_policy_applies(") >= 2          # login and disable

@@ -34,6 +34,7 @@ import logging
 from flask import jsonify, request
 
 import heartbeats
+import security
 import settings
 
 from . import bp
@@ -58,9 +59,7 @@ def rite_beat(key):
                       "directory instead",
         }), 503
 
-    header = request.headers.get("Authorization", "")
-    presented = header[7:].strip() if header[:7].lower() == "bearer " else \
-        request.headers.get("X-Atlas-Beat", "")
+    presented = security.bearer_token(request) or request.headers.get("X-Atlas-Beat", "")
     # bytes, not str: compare_digest raises TypeError on non-ASCII str, and
     # `presented` is attacker-controlled header text (werkzeug decodes latin-1)
     # -- a garbage token must be a 403, never a 500. Same class as the decoy feed

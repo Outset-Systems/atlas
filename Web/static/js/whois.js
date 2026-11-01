@@ -12,15 +12,15 @@
    registries on the viewer's behalf; this module only carries the asking and
    the showing. Same-origin fetch — the CSP's `default-src 'self'` covers it. */
 
-import { A, $ } from './config.js';
-
 const MAX_SHOWN = 20000;   // whois text is unbounded prose; the pane is not
 
 let asking = false;
 
-async function ask(q) {
-  const out = $('aw-out');
-  const go = $('aw-go');
+/* Every element is found from the pane that holds it, by CLASS: two
+   watchings may each carry the deep, and ids would make them one. */
+async function ask(side, q) {
+  const out = side.querySelector('.aw-out');
+  const go = side.querySelector('.aw-go');
   if (!out || asking) return;
   asking = true;
   if (go) { go.disabled = true; go.textContent = '…'; }
@@ -41,7 +41,7 @@ async function ask(q) {
     out.textContent = 'the deep did not answer — the Atlas could not be reached.';
   } finally {
     asking = false;
-    const goNow = $('aw-go');   // the carousel may have re-rendered mid-ask
+    const goNow = side.isConnected ? go : null;   // the carousel may have re-rendered mid-ask
     if (goNow) { goNow.disabled = false; goNow.textContent = 'ASK'; }
   }
 }
@@ -49,11 +49,12 @@ async function ask(q) {
 /* the form submit IS the wiring — Enter in the input and the ASK button both
    arrive here, however many times the slide has been rebuilt */
 document.addEventListener('submit', (e) => {
-  if (e.target?.id !== 'aw-form') return;
+  const side = e.target?.closest?.('.aw-side');
+  if (!side || !e.target.classList.contains('aw-form')) return;
   e.preventDefault();
   e.stopPropagation();
-  const q = ($('aw-input')?.value || '').trim();
-  if (q) ask(q);
+  const q = (side.querySelector('.aw-input')?.value || '').trim();
+  if (q) ask(side, q);
 }, true);
 
 /* a click inside the pane must not fall through to the viewport's

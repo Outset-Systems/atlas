@@ -17,6 +17,7 @@ so there is no code path that can read across sites. The tests assert that
 per endpoint (`tests/test_api_v2_sites_scoping.py`).
 """
 
+import hashlib
 from datetime import timezone
 
 from flask import abort, current_app, jsonify, make_response, request
@@ -94,8 +95,9 @@ def site_lab_data(slug):
     data, gkey = redact_for_groups(data)
     resp = make_response(jsonify(data))
     version, ts = stamp
-    resp.set_etag(f"{current_app.config.get('APP_VERSION', 'v1')}-{slug}-{version}-{ts}"
-                  f"-{hash(gkey) & 0xffffffff:x}")
+    # sha1, not hash(): see reads.lab_data — a salted hash is a per-worker ETag
+    gtag = hashlib.sha1(gkey.encode("utf-8")).hexdigest()[:8]
+    resp.set_etag(f"{current_app.config.get('APP_VERSION', 'v1')}-{slug}-{version}-{ts}-{gtag}")
     resp.headers["Cache-Control"] = "private, no-cache"
     if problems:
         resp.headers["X-Atlas-Data-Problems"] = str(len(problems))

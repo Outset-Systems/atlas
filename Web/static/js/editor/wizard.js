@@ -117,7 +117,7 @@ function importChoices(host, back) {
 }
 
 /* Each hue is one the map already reads well on its night ground. */
-const NET_HUES = ['#7FB0C4', '#7A9B6E', '#C9A554', '#C06B62', '#9B8BC4', '#D3869B'];
+const NET_HUES = ['#7FB0C4', '#7A9B6E', '#C49A52', '#C06B62', '#9B8BC4', '#D3869B'];   // the design notes zone hues first
 
 /* ── networks found ───────────────────────────────────────────────────────
    Read off the devices just brought in. `then` carries on to reviewing those
@@ -193,7 +193,7 @@ function stepZone() {
     id: existing.length ? '' : 'main',
     name: existing.length ? '' : 'Main',
     vlan: existing.length ? '' : 1,
-    subnet: '', hue: '#C9A554',
+    subnet: '', hue: '#C49A52',
   };
   // required by the catalogue but nothing a newcomer has an opinion on yet;
   // an insert is written whole, so they go in with the form's answers

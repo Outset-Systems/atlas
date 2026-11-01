@@ -10,7 +10,7 @@
    everyone else reads. Events inherit the map's redaction server-side, so a
    place a viewer cannot see never appears here either. */
 
-import { A, $, esc, themeText } from './config.js';
+import { A, $, esc, themeText, ago } from './config.js';
 import { makeScene } from './scene.js';
 
 let root, listEl, headEl;
@@ -29,11 +29,7 @@ const PHRASE = {
 function when(iso) {
   const then = new Date(iso);
   if (Number.isNaN(then.getTime())) return iso || '';
-  const mins = Math.round((Date.now() - then.getTime()) / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  if (mins < 1440) return `${Math.round(mins / 60)}h ago`;
-  return `${Math.round(mins / 1440)}d ago`;
+  return ago(Date.now() - then.getTime());
 }
 
 function rowHTML(e) {

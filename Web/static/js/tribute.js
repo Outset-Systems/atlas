@@ -3,18 +3,17 @@
    bars per VM show each one's assigned RAM and how full it runs. The standby host slumbers.
    Live headroom math from vms[] (VM Configuration Scroll). */
 
-import { A, $, esc } from './config.js';
+import { A, $, esc, zoneById, nodeById, FALLBACK_HUE } from './config.js';
 import { makeScene } from './scene.js';
 
 let root, vesselEl, sumEl, listEl, cpuVesselEl, cpuSumEl, built = false;
 
-const nodeById = (id) => A.DATA.nodes.find((n) => n.id === id);
 const nameOf = (id) => { const n = nodeById(id); return n ? n.name : id.toUpperCase(); };
 
 function zoneHue(id) {
   const n = nodeById(id);
-  const z = n && A.DATA.zones.find((zz) => zz.id === n.zone);
-  return z ? z.hue : '#C9A554';
+  const z = n && zoneById(n.zone);
+  return z ? z.hue : FALLBACK_HUE;
 }
 
 function buildTribute() {

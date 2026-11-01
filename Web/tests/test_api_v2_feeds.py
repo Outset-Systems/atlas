@@ -170,3 +170,52 @@ def test_signals_fresh_build_records_the_annals(tmp_path):
     c.get("/api/v2/signals")
     events = c.get("/api/v2/events").get_json()["events"]
     assert any(e["target"] == "app-host" and e["to"] == "down" for e in events)
+
+
+def test_service_history_takes_the_monitor_gate(tmp_path):
+    """A service event names its MONITOR, not a node id, so the node gate on
+    the annals used to let it through: a viewer with no clearance read the
+    name of every monitor on a hidden place. The service rows take
+    `visible_monitors` — the same seam the signals feed itself uses."""
+    import hub_auth.auth as auth
+    env = _env(tmp_path)                    # first: it copies the bundled map in
+    data = tmp_path / "lab-data.json"       # ...which this overwrites
+    doc = {"meta": {"title": "Test Realm"}, "zones": [], "routes": [],
+           "nodes": [{"id": "public-place", "name": "Public", "kind": "physical",
+                      "x": 10, "y": 10,
+                      "links": [{"label": "Open", "url": "https://open.test",
+                                 "kuma": "open-monitor"}]},
+                     {"id": "secret-place", "name": "Secret", "kind": "physical",
+                      "x": 20, "y": 20, "require_group": "HUB-decoy",
+                      "links": [{"label": "Vault", "url": "https://vault.test",
+                                 "kuma": "vault-monitor"}]}]}
+    data.write_text(json.dumps(doc), encoding="utf-8")
+
+    def services(state):
+        (tmp_path / "signals.json").write_text(json.dumps({
+            "services": {"open-monitor": {"state": state},
+                         "vault-monitor": {"state": state}}}), encoding="utf-8")
+
+    services("healthy")
+    handle = fresh_app(ATLAS_AUTH_MODE="hub", **env)
+    original = auth.AUTH_MODE
+    auth.AUTH_MODE = "hub"
+    try:
+        c = handle.app.test_client()
+        admin = {"X-Remote-User": "ops", "X-Remote-Groups": "atlas-admins"}
+        plain = {"X-Remote-User": "alice", "X-Remote-Groups": "HL-Nobody"}
+        c.get("/api/v2/signals", headers=admin)              # seeds the state
+        services("down")
+        handle._signals._cache = None                        # bypass the 30s hub cache
+        c.get("/api/v2/signals", headers=admin)              # records the transition
+
+        seen = c.get("/api/v2/events", headers=admin).get_json()
+        assert {e["target"] for e in seen["events"]} == {"open-monitor", "vault-monitor"}
+        assert seen["counts"]["total"] == 2
+
+        shown = c.get("/api/v2/events", headers=plain).get_json()
+        assert [e["target"] for e in shown["events"]] == ["open-monitor"], \
+            "a hidden place's monitor leaked through the annals"
+        assert shown["counts"]["total"] == 1, "the counts gave the hidden row away"
+    finally:
+        auth.AUTH_MODE = original

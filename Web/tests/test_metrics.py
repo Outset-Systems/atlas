@@ -128,3 +128,16 @@ def test_budgeted_right(client, monkeypatch):
     # the ceiling does not leak into the next request on this thread
     assert getattr(ch._deadline, "at", None) is None
     assert ch._timeout(8) == (ch._CONNECT_S, 8)
+
+
+def test_drift_is_not_measured_on_the_db_backend(client, monkeypatch):
+    """On the db backend `DATA_PATH` is not the dataset, so hashing it read as
+    drift forever. No reading beats a false one: the gauge is left alone."""
+    import metrics
+    import settings
+    touched = []
+    monkeypatch.setattr(settings, "DATA_BACKEND", "db")
+    monkeypatch.setattr(metrics, "_DRIFT", type("G", (), {"set": lambda self, v: touched.append(v)})())
+    metrics._drift_cache["at"] = 0.0
+    metrics._observe_dataset()
+    assert touched == []

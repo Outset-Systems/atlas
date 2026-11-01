@@ -257,13 +257,15 @@ def events_feed():
     """
     ctx = atlas()
     groups = viewer_groups()
-    visible = None
+    visible = services = None
     if not sees_everything(groups):
         try:
             data, _, _ = ctx.dataset()
             visible = {n.get("id") for n in data.get("nodes", []) if cleared(n, groups)}
+            # a service row names its monitor, so it takes the monitor gate
+            services = visible_monitors(data, groups)
         except (OSError, ValueError):
-            visible = set()
+            visible, services = set(), set()
     limit = min(request.args.get("limit", type=int) or 100, events.KEEP)
     unacked = request.args.get("unacked") == "1"
     if sees_everything(groups):
@@ -271,9 +273,11 @@ def events_feed():
                 "counts": events.counts(visible=visible)}
     else:
         # TRIPWIRES: a trip row (and its share of the counts) is admin-only
-        body = {"events": tripwires.listing_without_trips(limit=limit, visible=visible,
-                                                          unacked_only=unacked),
-                "counts": tripwires.counts_without_trips(visible=visible)}
+        body = {"events": tripwires.listing_without_trips(
+                    limit=limit, visible=visible, unacked_only=unacked,
+                    visible_services=services),
+                "counts": tripwires.counts_without_trips(visible=visible,
+                                                         visible_services=services)}
     resp = make_response(jsonify(body))
     resp.headers["Cache-Control"] = "no-store"
     return vary_on_viewer(resp)

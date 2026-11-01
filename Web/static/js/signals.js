@@ -16,8 +16,9 @@ const STATE_CLASS = { degraded: 's-degraded', down: 's-down', slumbering: 's-slu
 const CAUSED_CLASS = 's-caused';
 const ALL_STATE_CLASSES = Object.values(STATE_CLASS);
 // full hue swap by state (inline style beats the CSS class, so we set it here).
-// Dark is the only theme now — resolve the semantic vars ONCE instead of a
-// getComputedStyle per marker per poll (2026-07-11 perf pass).
+// The map is a night map in both schemes (atlas.css THE LIGHT SCHEME), so the
+// semantic vars are resolved ONCE instead of a getComputedStyle per marker per
+// poll (2026-07-11 perf pass).
 const STATE_VAR = { down: '--sem-down', degraded: '--sem-warn', slumbering: '--sem-slumber', maintenance: '--sem-warn' };
 let _hueCache = null;
 function stateHue(state) {
@@ -76,9 +77,9 @@ function apply(feed) {
   for (const mk of markersEl().children) {
     const info = nodes[mk.dataset.id];
     mk.classList.remove(...ALL_STATE_CLASSES, CAUSED_CLASS);
+    mk.title = '';   // "behind …" belongs to one poll, not to the marker forever
     if (!info || !info.state || info.state === 'healthy') {
-      mk.style.setProperty('--mk-hue', mk.dataset.hue);        // restore the base hue
-      mk.style.setProperty('--mk-glow', mk.dataset.hue + '55');
+      restoreBase(mk);
       continue;
     }
     const cls = STATE_CLASS[info.state];
@@ -154,17 +155,47 @@ function paintDrift(drift) {
   if (!list.length) { driftNote.hidden = true; return; }
   $('drift-count').textContent = String(list.length);
   $('drift-list').innerHTML = list.map((n) => `<span class="drift-item">${esc(n)}</span>`).join('');
+  const arriving = driftNote.hidden;
   driftNote.hidden = false;
+  if (arriving) wakeDrift();     // only on arrival: every poll lands here
 }
+/* It says its piece and goes (owner, 2026-11-01): fully clear by six seconds, and
+   back when the view returns to the middle of the map (world.js updateShades).
+   `.resting` is separate from `hidden`, which the poll keeps setting. It waits
+   under the pointer and while the list is open, and `mouseleave` restarts it. */
+let driftTimer = null;
+function wakeDrift() {
+  if (!driftNote || driftNote.hidden) return;
+  driftNote.classList.remove('resting');
+  clearTimeout(driftTimer);
+  driftTimer = setTimeout(() => {
+    if (!driftNote.matches(':hover') && !driftNote.classList.contains('open')) {
+      driftNote.classList.add('resting');
+    }
+  }, CFG.DRIFT_REST_MS);
+}
+A.wakeDrift = wakeDrift;
+driftNote?.addEventListener('mouseleave', wakeDrift);
 driftNote?.addEventListener('click', () => {
   const l = $('drift-list');
   l.hidden = !l.hidden;
   driftNote.classList.toggle('open', !l.hidden);
+  if (l.hidden) wakeDrift();
 });
+
+/** A marker's resting look: its zone hue and glow, no state colour over it. */
+function restoreBase(mk) {
+  mk.style.setProperty('--mk-hue', mk.dataset.hue);
+  mk.style.setProperty('--mk-glow', mk.dataset.hue + '55');
+}
 
 /** Wipe all live state — the map returns to its static self. */
 function goStatic(note) {
-  for (const mk of markersEl().children) mk.classList.remove(...ALL_STATE_CLASSES);
+  for (const mk of markersEl().children) {
+    mk.classList.remove(...ALL_STATE_CLASSES, CAUSED_CLASS);
+    mk.title = '';
+    restoreBase(mk);   // the inline state hue goes too, not just the class
+  }
   A.signalsFeed = null;
   A.paintServiceHealth?.();   // clear service dots too
   A.paintRoutes?.();          // roads back to their resting VLAN colours

@@ -45,8 +45,8 @@ def test_the_map_tool_cluster_is_not_inside_the_band():
     nothing, and it fails in a way no unit test would otherwise catch:
     `#scenes-list` carries `backdrop-filter`, which makes it the containing
     block for `position: fixed` descendants (so the cluster is positioned
-    against the band rather than the viewport), and it carries `overflow-x:
-    auto` for the one-row scroll, which then clips the cluster away entirely.
+    against the band rather than the viewport), and its labels carry `overflow-x:
+    auto` for the one-row scroll, which would clip the cluster away entirely.
     Neither `fixed` nor `absolute` escapes that combination.
 
     This test exists because the first version of this feature did exactly
@@ -92,10 +92,10 @@ def test_the_gear_is_in_the_band_and_in_flow():
     assert "margin-left: auto" in tail.group(0), (
         "the auto margin that pins the band's tail must sit on the tail, "
         "not on ☰ — two auto margins split the slack and park ⚙ mid-band")
-    # the band scrolls once its labels outgrow it: without sticky the gear and ☰
-    # scroll off the right edge, which is not pinned
-    assert "position: sticky" in tail.group(0) and "right: 0" in tail.group(0), (
-        "the tail must stick to the band's edge, or a narrow window scrolls it away")
+    # the labels scroll in their own strip, so the gear and ☰ are never in it
+    assert 'id="band-tail"' not in re.search(
+        r'id="band-labels".*?</div>', band, re.S).group(0), (
+        "the tail must sit beside the labels' strip, or a narrow window scrolls it away")
     assert band.index('id="band-tail"') < band.index('id="menu-tools"') < band.index('id="btn-menu"')
     menu = re.search(r"#scenes-list \.ci-menu \{.*?\}", css, re.S)
     assert menu and "margin-left: auto" not in menu.group(0)
@@ -118,7 +118,8 @@ def test_the_band_still_has_the_properties_that_make_that_trap_real():
     band = re.search(r"^#scenes-list \{.*?\}", css, re.S | re.M)   # the base rule, not a scheme override
     assert band, "#scenes-list rule is gone"
     assert "backdrop-filter" in band.group(0)
-    assert "overflow-x: auto" in band.group(0)
+    labels = re.search(r"^\.band-labels \{.*?\}", css, re.S | re.M)
+    assert labels and "overflow-x: auto" in labels.group(0)
 
 
 # ── What lives where ─────────────────────────────────────────────────────────
@@ -131,15 +132,15 @@ def test_the_index_button_lives_in_the_band():
 def test_the_column_is_zoom_plus_the_network_glyph():
     """The column is + − and, since 2026-09-02, the network glyph
     PERMANENTLY under −. Anything else coming back here means `#card.card-left`'s
-    clearance is wrong — see MUST TRACK in atlas.css (374px for three)."""
+    clearance is wrong — see MUST TRACK in atlas.css (282px for three)."""
     html = _read(INDEX)
     m = re.search(r'<div class="zoom-stack">.*?</div>', html, re.S)
     assert m, "the zoom stack is gone"
     ids = re.findall(r'id="(btn-[\w-]+)"', m.group(0))
     assert ids == ["btn-zoom-in", "btn-zoom-out", "btn-net"], ids
     css = _read(CSS)
-    assert re.search(r"#card\.card-left \{[^}]*--card-clear: 374px", css), (
-        "three buttons in the column ⇒ the left-hand card clears 374px")
+    assert re.search(r"#card\.card-left \{[^}]*--card-clear: 282px", css), (
+        "three buttons in the column ⇒ the left-hand card clears 282px")
 
 
 @pytest.mark.parametrize("button", ["btn-sky", "btn-depths", "btn-decoys"])
@@ -150,28 +151,21 @@ def test_every_map_tool_is_in_the_cluster(button):
     assert f'id="{button}"' in cluster.group(0), button
 
 
-def test_the_cluster_is_two_rows_of_two():
-    """Ops's ask, and the ORDER is the grouping: the top row is what you lay
-    over the surface (☁ sky, ◈ roads), the bottom row is where you go and who
-    is watching while you are there (☾ descent, 👁 the decoy watch).
-
-    Reading order in the markup IS the reading order on screen — the cluster is
-    a 2-column grid, so nothing else decides which button lands where.
-    """
+def test_the_cluster_is_one_column_beside_the_zoom_column():
+    """The owner's ask: top to bottom, sky, depths, tripwires, just right of
+    the zoom column. Markup order IS the order on screen."""
     html = _read(INDEX)
     cluster = re.search(r'<span class="atlas-tools".*?</span>\s*$', html, re.S | re.M)
     assert cluster, "the cluster's markup could not be found"
     order = re.findall(r'id="(btn-[\w-]+)"', cluster.group(0))
-    # ◈ left the cluster for the zoom column 2026-09-02; the grid
-    # stays two columns, so it now reads ☁ ☾ over 👁
     assert order == ["btn-sky", "btn-depths", "btn-decoys"], order
 
     css = _read(CSS)
     rule = re.search(r"^\.atlas-tools \{.*?\}", css, re.S | re.M)
     assert rule, ".atlas-tools rule is gone"
-    assert "grid-template-columns: repeat(2, auto)" in rule.group(0), (
-        "the cluster is not a 2-column grid — a flex row reflows the moment a "
-        "button is added or removed, and the two rows quietly become one")
+    assert "flex-direction: column" in rule.group(0)
+    # zoom column: left 24 + 42 wide + its 10px gap
+    assert "left: 76px" in rule.group(0)
 
 
 def test_the_cluster_no_longer_carries_a_pin_button():
@@ -227,17 +221,14 @@ def test_the_path_no_longer_buries_the_scene_band():
 
 # ── The behaviour that has no other home ─────────────────────────────────────
 
-def test_the_atlas_button_only_pins_the_tools_when_no_scene_is_open():
-    """THE ATLAS does the job that is AVAILABLE: leave the scene if one is up,
-    otherwise pin the map tools it reveals on hover (2026-08-15 — it used to
-    take the Index, which is ☰'s job at the other end of the band). Losing the
-    guard would strand you in a scene with no way back except click-again."""
+def test_the_atlas_button_goes_home():
+    """THE ATLAS closes whatever is up and centres the whole map, every time. Its
+    old second job, pinning the map tools, is what made them hide until hovered."""
     js = _read(UI)
-    assert "A.sceneOpen" in js
-    assert re.search(r"scene === 'atlas' && !A\.sceneOpen", js), (
-        "THE ATLAS's click no longer checks whether a scene is open")
-    assert re.search(r"!A\.sceneOpen\) \{ A\.toggleToolsPin\(\)", js), (
-        "THE ATLAS's spare gesture is not the tools pin any more")
+    click = re.search(r"if \(btn\.dataset\.scene === 'atlas'\) \{.*?return;\n    \}", js, re.S)
+    assert click, "THE ATLAS's click has lost its own branch"
+    assert "closeAllScenes()" in click.group(0), "a scene would strand you with no way back"
+    assert "A.home(true)" in click.group(0), "THE ATLAS no longer centres the map"
 
 
 def test_settings_left_the_drawer():
@@ -332,14 +323,159 @@ def test_settings_sections_default_closed_except_account():
         "falsy and a truthiness test would re-close it")
 
 
-def test_the_pin_state_survives_a_reload():
-    """A pin that forgets is a pin you set every visit. The storage KEY is
-    asserted, not just the mechanism: the gesture moved from a button to THE
-    ATLAS's click, and reusing `atlas.toolsPinned` is what carries an existing
-    preference across that change instead of silently resetting it."""
-    js = _read(UI)
-    assert "atlas.toolsPinned" in js
-    assert "localStorage" in js
+def test_hovering_the_atlas_drops_the_map_tools():
+    """The owner's ask. Touch has no hover, and these buttons are the door to the
+    sky, so the column stays out there."""
+    js, css = _read(UI), _read(CSS)
+    assert "hoverReveal($('scene-home'), $('atlas-tools'))" in js
+    assert re.search(r"@media \(hover: hover\) \{\s*"
+                     r"\.atlas-tools:not\(\.peek\) \.chrome:not\(\.ci-decoys\.lit\) \{\s*opacity: 0;", css)
+    assert "atlas-tools.pinned" not in css and "toggleToolsPin" not in js
+
+
+def test_the_card_arrives_from_the_edge_it_lands_on():
+    """The owner's bug: the first card of a visit started hidden on the right and
+    `right` animated while it was hidden, so it crossed the screen as it arrived.
+    The card starts on its default side, and only a card that is up may slide."""
+    css = _read(CSS)
+    hidden = re.search(r"^#card \{.*?^\}", css, re.S | re.M).group(0)
+    assert not re.search(r"transition:[^;]*\bright\b", hidden)
+    shown = re.search(r"^#card\.visible \{.*?^\}", css, re.S | re.M).group(0)
+    assert re.search(r"transition:[^;]*\bright 380ms", shown)
+    assert '<article id="card" class="card-left"' in _read(INDEX)
+    # a place that splits frames its ring after the card opens: side first
+    js = _read(WEB / "static" / "js" / "world.js")
+    assert js.index("if (willSplit) A.setCardSide") < js.index("A.openCard(n);", js.index("function focusNode"))
+
+
+def test_the_band_s_right_hand_buttons_sit_bare_on_it():
+    """The owner's ask: no background of their own."""
+    css = _read(CSS)
+    tail = re.search(r"^#scenes-list \.band-tail \{.*?^\}", css, re.S | re.M).group(0)
+    assert "background" not in tail.replace("backdrop", "")
+    assert "#scenes-list .chrome { background: transparent; border-color: transparent; backdrop-filter: none; }" in css
+
+
+def test_every_label_wears_the_buttons_hover_ring():
+    """The owner's ask. The border is always there and transparent, so the ring
+    fades in on the buttons' 250ms and the band does not shift when it lands."""
+    css = _read(CSS)
+    scene = re.search(r"^\.scene \{.*?^\}", css, re.S | re.M).group(0)
+    assert "border: 1px solid transparent" in scene and "border-color 250ms" in scene
+    assert ".scene:hover { color: var(--text); border-color: var(--gilt); }" in css
+
+
+def test_the_band_says_when_there_is_more_and_cannot_overlap():
+    """The owner's ask: at a narrow window the labels ran under the buttons, and
+    nothing said how to reach the rest."""
+    html, css, js = _read(INDEX), _read(CSS), _read(UI)
+    band = _band(html)
+    assert band.index('id="band-prev"') < band.index('id="band-labels"') < band.index('id="band-next"')
+    assert "#scenes-list.over .band-arrow { display: block; }" in css
+    assert "$('scenes-list').classList.toggle('over', room > 1)" in js
+    assert "labels.addEventListener('wheel'" in js
+    assert re.search(r"scrollIntoView\(\{ block: 'nearest', inline: 'nearest' \}\)", js)
+
+
+def test_every_section_sits_on_the_dark_dim_in_the_light_scheme():
+    """The owner's ask: Topology was the only one, and every section should match."""
+    css = _read(CSS)
+    dim = re.search(r'#accounts, #trust, #settings\) \{\s*background: rgba\(13, 11, 7, 0\.82\)', css)
+    assert dim, "the light scheme's sections are not on Topology's dim"
+    assert "background: rgba(13,11,7,0.82); backdrop-filter: blur(6px);" in css
+
+
+def test_the_addresses_grid_reads_in_the_light_scheme():
+    """The owner's ask: a charted cell was a pale ring on a pale grid."""
+    css = _read(CSS)
+    assert ':root[data-scheme="light"] .ldg-cell.lit {' in css
+    # the navy is the light scheme's --text (#0f172a), not a literal of its own
+    assert "color-mix(in srgb, var(--c-hue) 45%, var(--text))" in css
+
+
+def test_a_journey_lands_on_its_section():
+    """The section fits the window below the band, and the camera frames it there,
+    or a tall chart hides its own heading under the band."""
+    css = _read(CSS)
+    assert "calc(100vh - 330px)" in css
+    assert css.count("width: min(1560px, calc(100vw - 168px))") == 2, "the zoom column would sit on the charts"
+    assert css.index(".scene {") < css.index("@media (max-width: 1100px) {"), (
+        "the tightening must follow the base rule, or the base rule wins")
+    world = _read(WEB / "static" / "js" / "world.js")
+    assert "A.cam.y = A.landOn('abyss');" in world and "A.cam.y = A.landOn('chronicle');" in world
+
+
+def test_sky_and_depths_undo_the_camera_s_fit():
+    """The owner's ask: inside the stage they shrank with the map, half size at
+    1024px. The floor and the ceiling have to measure the same scaled height."""
+    css = _read(CSS)
+    assert css.count("scale(calc(1 / var(--fit, 1)))") == 2
+    js = _read(WEB / "static" / "js" / "camera.js")
+    assert "abyss.offsetHeight + CFG.VOID_FOOT_PX) / fit" in js
+    assert "skyNorth = Math.max(CFG.SKY_NORTH" in js
+
+
+def test_the_drift_note_fades_and_returns_to_the_middle_of_the_map():
+    """The owner's ask: fully clear by six seconds, back on returning to the middle.
+    `paintDrift` runs on every poll, so only an arrival may wake it, or it would
+    never stay gone."""
+    signals = _read(WEB / "static" / "js" / "signals.js")
+    paint = re.search(r"function paintDrift.*?^}", signals, re.S | re.M).group(0)
+    assert "if (arriving) wakeDrift();" in paint
+    assert "DRIFT_REST_MS: 5000" in _read(WEB / "static" / "js" / "config.js")
+    css = _read(CSS)
+    assert "transition: border-radius 200ms, opacity 1s ease;" in css
+    assert "#drift-note.resting { opacity: 0; pointer-events: none; }" in css
+    world = _read(WEB / "static" / "js" / "world.js")
+    shades = re.search(r"function updateShades.*?^}", world, re.S | re.M).group(0)
+    assert "if (onCentre) A.wakeDrift?.();" in shades
+
+
+def test_a_lit_layer_stays_out_of_the_closed_column():
+    """Hidden per button and never by the column, so the tripwires can say they
+    are on. Sky and Depths are places, not layers, and go with the rest."""
+    rule = re.search(r"^\.atlas-tools \{.*?\}", _read(CSS), re.S | re.M).group(0)
+    assert "opacity" not in rule
+
+
+def test_the_sky_lights_as_the_depths_do_in_reverse():
+    """The owner's ask: scrolling into the sky lights its button, from the camera
+    so S and the button do too, in the theme's colours: biolume in the Depths,
+    dark ink with the accent in the sky."""
+    world = _read(WEB / "static" / "js" / "world.js")
+    shades = re.search(r"function updateShades.*?^}", world, re.S | re.M).group(0)
+    assert "$('btn-sky').classList.toggle('lit', inSky)" in shades
+    assert "CFG.SKY_RELEASE" in shades and "CFG.SKY_ENGAGE" in shades
+    css = _read(CSS)
+    depths = re.search(r":root \.chrome\.ci-depths\.lit \{.*?\}", css, re.S).group(0)
+    sky = re.search(r":root \.chrome\.ci-sky\.lit \{.*?\}", css, re.S).group(0)
+    assert "background: var(--depth);" in depths and "color: var(--card-ink);" in depths
+    assert "background: var(--card-ink);" in sky and "color: var(--gilt-bright);" in sky
+    assert ':root[data-scheme="light"] .chrome.ci-sky.lit { background: var(--gilt); color: var(--on-gilt); }' in css
+    assert "#btn-depths.lit" not in css, "an id rule would outrank the fill"
+    # the light scheme's `.chrome.lit` carries the same weight: order decides
+    assert css.index(':root[data-scheme="light"] .chrome.lit') < css.index(":root .chrome.ci-sky.lit")
+
+
+def test_the_depths_do_not_announce_themselves():
+    """The owner's ask: nothing pops up on the way down or back up."""
+    js = _read(WEB / "static" / "js" / "world.js")
+    body = re.search(r"function toggleDepths.*?^}", js, re.S | re.M)
+    assert body and "showToast" not in body.group(0)
+
+
+def test_the_world_ends_at_the_abyss_s_foot():
+    """A fixed depth left a black spacer under a short section. The floor is
+    measured, so it cannot drift from the section again."""
+    js = _read(WEB / "static" / "js" / "camera.js")
+    assert "sectionWatch.observe($('abyss'))" in js
+    assert "voidDepth: CFG.VOID_DEPTH" not in js
+
+
+def test_the_depths_zone_draws_no_name_on_the_black():
+    js = _read(WEB / "static" / "js" / "world.js")
+    assert "z.hide_label || z.id === 'depths'" in js
+    assert "zone-label.depths-kin" not in _read(CSS)
 
 
 def test_the_menu_lamp_cannot_overflow_the_band_it_sits_in():

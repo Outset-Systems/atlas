@@ -12,7 +12,7 @@
    puts you back where you were. The LENS draws one region map at a time with
    a camera of its own, held on screen by `clampLens`. */
 
-import { A, CFG, REDUCED, $, esc, canAdminWrite } from './config.js';
+import { A, CFG, REDUCED, $, esc, canAdminWrite, zoneById, FALLBACK_HUE, DRAG_END } from './config.js';
 import * as M from './region-model.js';
 
 const stage = $('stage');
@@ -55,8 +55,6 @@ let level = null;               // the region shown in the lens, or null (main m
 let busy = false;               // a transition is running
 let leaveArmedAt = 0;
 const disarmed = new Set();     // left recently: no auto-open until it is mostly out of view
-
-A.regionOpen = () => Boolean(level);
 
 /* ── the maps list (bundled vs uploaded) ─────────────────────────────────── */
 async function loadMaps() {
@@ -230,7 +228,7 @@ function buildLensMarkers(r) {
     mk.dataset.kind = n.kind || 'vm';
     mk.style.left = p.x + '%';
     mk.style.top = p.y + '%';
-    const hue = n.hue || A.DATA.zones?.find((z) => z.id === n.zone)?.hue || '#C9A554';
+    const hue = n.hue || zoneById(n.zone)?.hue || FALLBACK_HUE;
     mk.style.setProperty('--mk-hue', hue);
     mk.style.setProperty('--mk-glow', hue + '55');
     mk.innerHTML = `<div class="mk-dot"><div class="mk-ring"></div><div class="mk-core"></div></div>` +
@@ -451,8 +449,6 @@ function leaveOne() {
   if (!level) return;
   leaveTo(level.parent || null);
 }
-A.leaveRegion = leaveOne;
-
 /* ── input inside the lens ──────────────────────────────────────────────── */
 /* Leaving by zooming out takes TWO gestures: reaching the floor arms it,
    and only a fresh zoom-out after a pause leaves. A trackpad flick sends a
@@ -642,7 +638,7 @@ function pinDrag(e, mk, n) {
   const up = async () => {
     mk.classList.remove('dragging');
     mk.removeEventListener('pointermove', move);
-    mk.removeEventListener('pointerup', up);
+    for (const t of DRAG_END) mk.removeEventListener(t, up);
     if (!last) return;
     const r = level;
     const pin = { x: Math.round(last.x * 10) / 10, y: Math.round(last.y * 10) / 10 };
@@ -660,7 +656,7 @@ function pinDrag(e, mk, n) {
     }
   };
   mk.addEventListener('pointermove', move);
-  mk.addEventListener('pointerup', up);
+  for (const t of DRAG_END) mk.addEventListener(t, up);   // cancel and lost capture end it too
 }
 
 /* ── deep links: #region=<id> ─────────────────────────────────────────────

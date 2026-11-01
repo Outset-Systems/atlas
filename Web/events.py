@@ -155,23 +155,31 @@ def record(feed, label_for=None):
     return fresh
 
 
-def listing(limit=100, visible=None, unacked_only=False, since_id=None):
+def listing(limit=100, visible=None, unacked_only=False, visible_services=None):
     """The annals, newest first.
 
     `visible` is the set of node ids the viewer is cleared to see. Events are
     derived from the map, so they inherit its redaction: a node hidden behind
     `require_group` must not surface in the history either. `None` means no
     gate applies (an admin, or standalone).
+
+    `visible_services` is the same gate for service events, whose target is
+    a monitor name rather than a node id (`redaction.visible_monitors`). A
+    service row names its monitor, and a monitor charted on a hidden place —
+    or on a hidden link of a visible one — is exactly what the node gate was
+    there to keep out of the history.
     """
     store = _STORE.load()
     out = []
     for event in reversed(store["events"]):
         if unacked_only and event.get("ack"):
             continue
-        if since_id is not None and event.get("id", 0) <= since_id:
-            continue
-        if visible is not None and event.get("kind") == "node" \
+        kind = event.get("kind")
+        if visible is not None and kind == "node" \
                 and event.get("target") not in visible:
+            continue
+        if visible_services is not None and kind == "service" \
+                and event.get("target") not in visible_services:
             continue
         out.append(event)
         if len(out) >= limit:
@@ -179,16 +187,20 @@ def listing(limit=100, visible=None, unacked_only=False, since_id=None):
     return out
 
 
-def counts(visible=None):
-    """Totals for the chrome: how much is unacknowledged, how busy it's been."""
-    events = listing(limit=KEEP, visible=visible)
+def _counts(rows):
+    """The chrome's totals over an already-filtered page of events."""
     day_ago = iso_utc(time.time() - 86400)
     return {
-        "total": len(events),
-        "unacked": sum(1 for e in events if not e.get("ack")
+        "total": len(rows),
+        "unacked": sum(1 for e in rows if not e.get("ack")
                        and e.get("gravity") in ("grave", "warn")),
-        "last_24h": sum(1 for e in events if e.get("at", "") >= day_ago),
+        "last_24h": sum(1 for e in rows if e.get("at", "") >= day_ago),
     }
+
+
+def counts(visible=None, visible_services=None):
+    """Totals for the chrome: how much is unacknowledged, how busy it's been."""
+    return _counts(listing(limit=KEEP, visible=visible, visible_services=visible_services))
 
 
 def acknowledge(event_id, actor, note=""):

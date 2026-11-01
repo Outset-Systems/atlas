@@ -90,7 +90,7 @@ function build() {
                   - (daysUntil(z.members[0].expires) ?? 1e9));
 
   listEl.innerHTML = ordered.map(({ head, sub, members: group }) => {
-    return `<div class="ldg-block" style="--z-hue:#C9A554">
+    return `<div class="ldg-block" style="--z-hue:var(--gilt)">
       <div class="ldg-zhead">
         <span class="ldg-zname">${head}</span>
         <span class="ldg-zsub">${sub}</span>

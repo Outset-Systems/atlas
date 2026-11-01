@@ -83,12 +83,6 @@ def admin_required(view):
     return guarded
 
 
-#: Who MUST hold a second factor — `atlas_auth.mfa_policy_applies`, the one
-#: implementation. (The copy that lived here until v1.41.0 lacked the `admins`
-#: branch, so the surveyor fence was never enforced on the live path.)
-_mfa_policy_applies = atlas_auth.mfa_policy_applies
-
-
 def _enroll_pending_user():
     import accounts
     if not session.get("_mfa_enroll"):
@@ -106,6 +100,46 @@ def _mfa_subject():
     if acc:
         return acc["username"]
     return _enroll_pending_user()
+
+
+def _reauth_refusal(acc, data):
+    """The proof a signed-in session owes before it touches its second factor
+    (2026-11-01). A session cookie alone must not be enough to swap the
+    owner's authenticator or switch it off — `/password` has always demanded
+    the current password for the same reason, and this is the same check:
+
+      current  the account's password, always. A local account is checked
+               against the store; a directory account is re-bound the way
+               login binds it.
+      code     a fresh code from the LIVE factor, when one is enabled. It is
+               consumed, so the same code cannot then open a login.
+
+    Returns a (response, status) refusal or None. Shapes, not surprises: a
+    missing field is a 400 with a plain `error`, a wrong one a 401/403 that
+    also counts against the throttle."""
+    import accounts
+    import ldap_backend
+    username = acc["username"]
+    ip = atlas_auth.client_ip()
+    if acc.get("mfa_enabled"):
+        code = str(data.get("code") or "").strip()
+        if not code:
+            return jsonify({"ok": False, "error":
+                            "A current authenticator code is required."}), 400
+        if not accounts.verify_mfa_code(username, code):
+            accounts.record_failure(username, ip)
+            return jsonify({"ok": False, "error": "Incorrect code."}), 403
+    current = data.get("current") or ""
+    if not current:
+        return jsonify({"ok": False, "error": "Current password is required."}), 400
+    if acc.get("source") == "local":
+        ok = bool(accounts.verify_password(username, current))
+    else:
+        ok, _info = ldap_backend.authenticate(username, current)
+    if not ok:
+        accounts.record_failure(username, ip)
+        return jsonify({"ok": False, "error": "Current password is wrong."}), 401
+    return None
 
 
 def _try_backends(username, password):
@@ -164,7 +198,9 @@ def api_login():
         session["_mfa_user"] = acc["username"]
         session["_mfa_started"] = time.time()
         return jsonify({"ok": True, "mfa_required": True})
-    if _mfa_policy_applies(acc):
+    # the ONE policy implementation — the copy that lived here until v1.41.0
+    # lacked the `admins` branch, so the surveyor fence was never enforced
+    if atlas_auth.mfa_policy_applies(acc):
         atlas_auth.establish_session(acc)
         session["_mfa_enroll"] = 1
         accounts.audit("login_ok", acc["username"], ip, source + " (enrollment forced)")
@@ -243,7 +279,22 @@ def api_mfa_setup():
     username = _mfa_subject()
     if not username:
         return jsonify({"ok": False, "error": "Sign in first."}), 401
-    secret, uri, qr_svg = accounts.start_mfa_enrollment(username)
+    ip = atlas_auth.client_ip()
+    if accounts.throttled(username, ip):
+        return jsonify({"ok": False, "error": "Too many attempts. Try again later."}), 429
+    acc = atlas_auth.current_account()
+    if acc:
+        # a full session proves itself; the forced-enrollment state is not
+        # one (`_enroll_pending_user`) and was minted by the password login a
+        # moment ago, which is the proof
+        refusal = _reauth_refusal(acc, request.get_json(silent=True) or {})
+        if refusal:
+            return refusal
+    try:
+        secret, uri, qr_svg = accounts.start_mfa_enrollment(
+            username, reauthenticated=bool(acc))
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 403
     return jsonify({"ok": True, "secret": secret, "uri": uri, "qr_svg": qr_svg})
 
 
@@ -278,9 +329,15 @@ def api_mfa_confirm():
 def api_mfa_disable():
     import accounts
     acc = atlas_auth.current_account()
-    if _mfa_policy_applies(acc):
+    if atlas_auth.mfa_policy_applies(acc):
         return jsonify({"ok": False, "error":
                         "MFA is required on this instance (ATLAS_MFA_REQUIRED)."}), 403
+    ip = atlas_auth.client_ip()
+    if accounts.throttled(acc["username"], ip):
+        return jsonify({"ok": False, "error": "Too many attempts. Try again later."}), 429
+    refusal = _reauth_refusal(acc, request.get_json(silent=True) or {})
+    if refusal:
+        return refusal
     accounts.disable_mfa(acc["username"])
     fresh = accounts.get_user(acc["username"])
     atlas_auth.establish_session(fresh)  # keep THIS session; others just died

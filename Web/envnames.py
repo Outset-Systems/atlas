@@ -17,8 +17,19 @@ each new name to its old one and supplies the old defaults (the suite's header
 and group names). That file is private to the original deployment and never
 ships in the public image or repository, so a fresh install knows only the
 neutral names and neutral defaults below.
+
+`secret(name)` is the one reader for a value that may arrive as a docker
+secret: `NAME`, else the contents of the file `NAME_FILE` names. Every module
+that takes a token or a key reads it through here (settings.beat_token,
+tripwires.secret, signals._read_secret, integrations._env, metrics._token,
+app's session key, the bootstrap admin password; hub_auth.auth keeps its own
+because its secret is not optional). `crypto_at_rest` keeps its stricter reader on purpose — a
+master key that cannot be read must stop the app, not fall back to "".
 """
+import logging
 import os
+
+log = logging.getLogger("atlas.settings")
 
 try:  # the original deployment's old names; absent from public builds
     from legacy_names import DEFAULTS as _LEGACY_DEFAULTS
@@ -71,3 +82,26 @@ def is_set(name):
     """True when the deployment names `name` under either spelling."""
     old = _OLD_NAMES.get(name)
     return name in os.environ or bool(old and old in os.environ)
+
+
+def secret(name, default=""):
+    """A secret from the environment: `name`'s value, else the contents of the
+    file `name + "_FILE"` names (the docker-secret convention), stripped.
+    `default` when neither is set, or when the named file cannot be read —
+    which is logged, because a secret silently reading as "" looks like
+    "unset" and sends someone to the wrong place. Old names are honoured
+    for both spellings, as `env()` does. The value itself is never logged."""
+    value = (env(name) or "").strip()
+    if value:
+        return value
+    path = (env(name + "_FILE") or "").strip()
+    if not path:
+        return default
+    try:
+        with open(path, encoding="utf-8") as fh:
+            value = fh.read().strip()
+    except OSError as e:
+        log.warning("could not read %s_FILE (%s): %s", name, path, e)
+        return default
+    log.debug("%s read from %s", name, path)
+    return value or default

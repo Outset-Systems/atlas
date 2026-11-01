@@ -25,6 +25,7 @@
                                 apart. */
   --gilt: #d79921;           /* neutral yellow — THE accent */
   --gilt-bright: #fabd2f;    /* bright yellow — cores, hover */
+  --gilt-deep: #e0b95f;      /* a filled gilt control under the pointer (the GO buttons) */
   --text: #ebdbb2;           /* fg1 */
   --text-dim: #a89984;       /* fg4 / gray */
   --discover: #427b58;       /* faded green CTA */
@@ -113,6 +114,7 @@
   --tone-warn: #b45309;
   --tone-down: #b91c1c;
   --tone-info: #0369a1;
+  --gilt-deep: #1e3a8a;
   --shade-rgb: 15, 23, 42;
   --shade-k: 0.3;
   --hair: rgba(15, 23, 42, 0.16);
@@ -133,10 +135,11 @@
 :root[data-scheme="light"] #embed-max-close { background: rgba(214, 218, 224, 0.62); }
 :root[data-scheme="light"] .chrome.lit { background: var(--gilt); }
 :root[data-scheme="light"] #scenes-list { background: rgba(214, 218, 224, 0.42); }
-:root[data-scheme="light"] #scenes-list .chrome { background: rgba(214, 218, 224, 0.3); }
-:root[data-scheme="light"] #scenes-list .band-tail { background: rgba(214, 218, 224, 0.5); }
+/* pale glass over the Depths' black turns muddy, and the navy on it goes with it */
+:root[data-scheme="light"] body.depths #scenes-list { background: rgba(214, 218, 224, 0.94); }
+:root[data-scheme="light"] body.depths .chrome:not(.lit) { background: rgba(214, 218, 224, 0.9); }
 :root[data-scheme="light"] body.scene-open #scenes-list {
-  background: rgba(214, 218, 224, 0.68);
+  background: rgba(214, 218, 224, 0.94);
   box-shadow: 0 12px 34px rgba(15, 23, 42, 0.22);
 }
 :root[data-scheme="light"] .scene { text-shadow: none; }
@@ -149,15 +152,15 @@
 
 /* THE GLASS (2026-10-31, the owner: "a more transparent theme with a blue accent
    instead of orange", then "more gray/slate and about 30% more transparent").
-   A muted grey-slate at 0.46 over a pale scrim (2026-10-31: "more of a muted
-   background colour and more transparent"). What counts is how much map reaches
-   the eye, (1 - glass) × (1 - scrim): 36% here, 31% before. A heavier scrim
-   would pass the contrast test and show less map. These numbers are not a taste:
-   tests/test_scheme_css.py composites glass over scrim over black, the worst
-   thing behind a panel, and every text token must still clear AA there. */
+   A muted grey-slate at 0.46 over a pale scrim until 2026-11-01, when the owner
+   asked for every section to sit on Topology's dark dim. Glass that thin over a
+   dark dim reads as muddy grey, which is what made Topology hard to read, so the
+   panels went nearly solid. These numbers are not a taste: tests/test_scheme_css.py
+   composites glass over scrim over black, the worst thing behind a panel, and every
+   text token must still clear AA there. */
 :root[data-scheme="light"] :is(.ldg-panel, .trb-panel, .rel-panel, .pth-panel, .pal-panel,
                                .gl-panel, .dsk-panel, .wiz-panel) {
-  background: rgba(214, 218, 224, 0.46);
+  background: rgba(214, 218, 224, 0.94);
   color: var(--text);   /* the page's cream is inherited as a colour, not a token */
   -webkit-backdrop-filter: blur(22px) saturate(1.5);
   backdrop-filter: blur(22px) saturate(1.5);
@@ -175,7 +178,9 @@
 :root[data-scheme="light"] .scene-home .scene.active { background: rgba(var(--gilt-rgb), 0.12); }
 :root[data-scheme="light"] :is(#ledger, #calendar, #seals, #stones, #tribute, #reliquary,
                                #accounts, #trust, #settings) {
-  background: rgba(205, 209, 215, 0.34);
+  background: rgba(13, 11, 7, 0.82);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -206,6 +211,9 @@ body::after {
 #veil .veil-tri span { background: linear-gradient(180deg, #E4C878, var(--gilt)); }
 #veil .veil-rule path { stroke: var(--gilt); }
 #veil.lifted { opacity: 0; visibility: hidden; pointer-events: none; }
+/* the boot that failed: the veil stays down and says why (atlas.js boot().catch) */
+.veil-fail .veil-title { font-size: 1.2rem; letter-spacing: 0.2em; }
+.veil-fail p { margin-top: 14px; color: var(--text-dim); font-family: 'Alegreya Sans', sans-serif; }
 .veil-inner { text-align: center; }
 .veil-tri {
   display: grid; grid-template-columns: repeat(2, 30px); justify-content: center;
@@ -239,7 +247,10 @@ body::after {
 /* the sky is a light realm, so the backdrop behind everything is light — scrolling
    high above the clouds shows this, not black. (The map fills the middle and the
    #void covers the Depths, so this only ever shows up in the high sky.) */
-#viewport { position: fixed; inset: 0; overflow: hidden; cursor: grab; background: #f8f3df; }
+#viewport {
+  position: fixed; inset: 0; overflow: hidden; cursor: grab; background: #f8f3df;
+  transition: transform 700ms var(--glide);   /* THE TILT (body.tilted, further down) rides this */
+}
 #viewport.dragging { cursor: grabbing; }
 #stage {
   position: absolute; top: 0; left: 0;
@@ -253,7 +264,7 @@ body::after {
   filter: saturate(0.94) contrast(1.03) brightness(0.96);
   transition: filter 900ms ease;
 }
-#overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+#overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; z-index: 4; }
 
 /* ── The void below the table — scroll south into the Depths ── */
 #void-fade {
@@ -270,9 +281,10 @@ body::after {
    void between the table's south edge and the Abyss) with a lit, breathing
    underworld instead of flat black ── */
 #depths-realm {
-  /* dips up onto the table (top:90%) so its fog overlaps the south seam the way
-     the cloud-bank overlaps the north seam — no hard edge when descending */
-  position: absolute; left: -30%; width: 160%; top: 90%; height: 92%;
+  /* starts at the foot of the black band under the table (owner, 2026-11-01), so
+     The edge and internet pins sit on plain black. The glow's first stops fade in
+     from transparent, so the fog has no top edge. */
+  position: absolute; left: -30%; width: 160%; top: 110%; height: 92%;
   z-index: 4; pointer-events: none; overflow: hidden;
 }
 .depths-glow {
@@ -371,9 +383,14 @@ body::after {
 
 /* ── The Chronicle — live watchings, high above the clouds on a clean backdrop ── */
 #chronicle {
+  /* Sky and Depths draw at true size at any window (owner, 2026-11-01). They sit
+     inside the camera's stage, so a narrower window used to shrink them with the
+     map: charts at half size at 1024px. `--fit` is the camera's fit scale, undone
+     here. camera.js measures both sections and moves `top` and the scroll limits. */
   position: absolute; z-index: 6;
-  top: -48%; left: 50%; transform: translateX(-50%);
-  width: min(1560px, 96vw); text-align: center;
+  top: -48%; left: 50%; transform: translateX(-50%) scale(calc(1 / var(--fit, 1)));
+  transform-origin: top center;
+  width: min(1560px, calc(100vw - 168px)); text-align: center;   /* clears the zoom column */
   padding: 24px 24px 16px; border-radius: 14px;
   background: linear-gradient(180deg, rgba(246,239,224,0.16), rgba(236,229,212,0.05));
 }
@@ -392,9 +409,11 @@ body::after {
 }
 .chron-stage { display: flex; transition: transform 600ms var(--glide); }
 /* default (full-dashboard) window — large so the charts read */
-.chron-slide { flex: 0 0 100%; display: flex; flex-direction: column; height: min(860px, 90vh); text-decoration: none; }
+/* 330px is the band plus the section's heading, dots, buttons and the colophon's
+   strip, so all of it fits the window below the band */
+.chron-slide { flex: 0 0 100%; display: flex; flex-direction: column; height: clamp(320px, calc(100vh - 330px), 860px); text-decoration: none; }
 /* single-panel (one graph per card) — a generous window for the one graph */
-.chron-slide.solo { height: min(640px, 76vh); }
+.chron-slide.solo { height: clamp(320px, calc(100vh - 330px), 640px); }
 .chron-slide-head {
   display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
   padding: 9px 14px; background: rgba(0,0,0,0.32); border-bottom: 1px solid var(--ink-line);
@@ -451,7 +470,7 @@ body::after {
   letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-dim);
   margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.chron-cell .chron-frame { position: relative; inset: auto; height: auto; flex: 1; min-height: 0; }
+.chron-cell .chron-frame, .chron-cell .chron-native { position: relative; inset: auto; height: auto; flex: 1; min-height: 0; }
 .chron-scrying {
   position: absolute; inset: 0; display: flex; gap: 7px;
   align-items: center; justify-content: center;
@@ -507,7 +526,7 @@ body::after {
    tooltip and the button itself is the link: click opens the watching (in the
    glass where it can be framed). Was click-to-reveal + a second click on a
    link inside the popup — two clicks to read a report. 2026-08-04. */
-.chron-buttons { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 14px; }
+.chron-buttons, .abyss-buttons { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 14px; }
 .chron-btn-wrap { position: relative; }
 .chron-btn {
   display: inline-block; text-decoration: none;   /* it is an <a> now, not a <button> */
@@ -528,12 +547,10 @@ body::after {
   background: color-mix(in srgb, var(--surface-2) 92%, transparent);
   border: 1px solid var(--ink-line); box-shadow: 0 14px 40px rgba(0,0,0,0.5);
   backdrop-filter: blur(6px);
-}
-/* hover/focus-within, not a JS `hidden` flag — keyboard tabbing to the button
-   reveals the same blurb the mouse gets. `visibility` (not display:none) so the
-   fade can run, and pointer-events:none so the tooltip can never eat the click
-   meant for the button underneath it. */
-.chron-fly-pop {
+  /* hidden until hover/focus-within, not a JS `hidden` flag — keyboard tabbing
+     to the button reveals the same blurb the mouse gets. `visibility` (not
+     display:none) so the fade can run, and pointer-events:none so the tooltip
+     can never eat the click meant for the button underneath it. */
   opacity: 0; visibility: hidden; pointer-events: none;
   transition: opacity 140ms ease, visibility 140ms;
 }
@@ -615,11 +632,13 @@ body::after {
 /* ── The Abyss watches — security & cloud reports far below the Depths ── */
 #abyss {
   position: absolute; z-index: 6;
-  /* the Abyss + its 'THE DEPTHS' label (at 120%) cluster just below the table,
-     the fog filling the short gap the way the clouds fill the sky's seam.
+  /* the black band runs from the table's edge (100%) to here: the room the edge
+     and internet pins are charted in. camera.js ends the world at this section's
+     foot, so moving it moves the floor; CFG.DEPTHS_ENGAGE tracks it.
      Same inner padding as #chronicle so the internal spacing still matches. */
-  top: 126%; left: 50%; transform: translateX(-50%);
-  width: min(1560px, 96vw); text-align: center; pointer-events: auto;
+  top: 114%; left: 50%; transform: translateX(-50%) scale(calc(1 / var(--fit, 1)));
+  transform-origin: top center;
+  width: min(1560px, calc(100vw - 168px)); text-align: center; pointer-events: auto;
   padding: 24px 24px 16px; border-radius: 14px;
 }
 .abyss-head {
@@ -631,7 +650,6 @@ body::after {
   font-family: 'IM Fell English', 'Alegreya Sans', serif; font-style: italic; font-size: 15px;
   color: #5E8A80; margin: 6px 0 18px;
 }
-.abyss-buttons { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 14px; }
 #abyss .chron-btn {
   background: rgba(var(--depth-rgb), 0.06); border-color: rgba(var(--depth-rgb), 0.32); color: #8FE6D2;
 }
@@ -655,7 +673,7 @@ body.depths #abyss .abyss-head { text-shadow: 0 0 30px rgba(var(--depth-rgb), 0.
    rendered exactly this for narrow windows since it shipped. This makes it
    unconditional rather than inventing a new arrangement. */
 .aw-duo { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 12px; padding: 12px; }
-.aw-duo .chron-frame { position: relative; inset: auto; height: auto; flex: 1.4; min-width: 0; }
+.aw-duo .chron-frame, .aw-duo .chron-native { position: relative; inset: auto; height: auto; flex: 1.4; min-width: 0; }
 .aw-side { flex: 1; min-width: 0; display: flex; flex-direction: column; text-align: left; min-height: 0; }
 .aw-head {
   font-family: 'Cinzel', serif; font-weight: 400; font-size: 13px;
@@ -672,11 +690,11 @@ body.depths #abyss .abyss-head { text-shadow: 0 0 30px rgba(var(--depth-rgb), 0.
   background: rgba(4,12,11,0.55);
 }
 .aw-glyph { color: var(--depth); font-size: 0.95rem; }
-#aw-input {
+.aw-input {
   flex: 1; min-width: 0; background: transparent; border: none; outline: none;
   font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: #B8F5E8;
 }
-#aw-input::placeholder { color: #4E7A70; }
+.aw-input::placeholder { color: #4E7A70; }
 .aw-go {
   background: rgba(var(--depth-rgb), 0.06); border: 1px solid rgba(var(--depth-rgb), 0.32);
   color: #8FE6D2; border-radius: 3px; cursor: pointer; padding: 5px 12px 4px;
@@ -738,17 +756,14 @@ body.depths #vignette {
   background: radial-gradient(ellipse 68% 62% at 50% 48%, transparent 42%, rgba(2, 4, 4, 0.82) 100%);
 }
 body.depths .zone-label, body.depths .mk { opacity: 0.28; transition: opacity 800ms ease; }
-/* down in the dark the kin markers wake fully; the headline only stirs —
-   at ~68px a full-opacity title would stop being atmosphere (see its rule) */
+/* down in the dark the kin markers wake fully */
 body.depths .mk.depths-kin { opacity: 1; }
-body.depths .zone-label.depths-kin { opacity: 0.45; }
 body.depths .mk.depths-kin .mk-core {
   background: var(--depth);
   box-shadow: 0 0 12px var(--depth), 0 0 34px rgba(var(--depth-rgb), 0.65);
 }
 body.depths .mk.depths-kin .mk-ring { border-color: var(--depth); }
 body.depths #colophon { color: #3E5A52; }
-#btn-depths.lit { border-color: var(--depth); color: var(--depth); box-shadow: 0 0 18px rgba(var(--depth-rgb), 0.3); }
 .zone-label, .mk { transition: opacity 800ms ease; }
 
 /* fog + vignette (screen-space, not on stage) */
@@ -797,8 +812,6 @@ body.depths #colophon { color: #3E5A52; }
    with its data line pinned back to a whisper instead of scaling along. The
    #zone-labels layer already stacks beneath #markers (z 7 < 8) and takes no
    pointer events — the word is scenery the depths markers glow in front of. */
-.zone-label.depths-kin { opacity: 0.3; letter-spacing: 0.55em; }
-.zone-label.depths-kin small { font-size: 9px; }
 
 /* ── Markers ────────────────────────────────────────── */
 #markers { position: absolute; inset: 0; z-index: 8; pointer-events: none; }
@@ -875,6 +888,7 @@ body.depths #colophon { color: #3E5A52; }
 /* selected chrome (2026-07-11): a toggled-on tool is unmistakable — filled gilt,
    grown, and it trades the idle glow for a slow proud pulse */
 .chrome.lit {
+  --lit-rgb: var(--gilt-rgb);
   border-color: var(--gilt);
   color: var(--abyss);
   background: var(--gilt);
@@ -882,12 +896,20 @@ body.depths #colophon { color: #3E5A52; }
   animation: chrome-pulse 2.6s ease-in-out infinite;
 }
 @keyframes chrome-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(var(--gilt-rgb), 0.45), 0 0 22px rgba(var(--gilt-rgb), 0.35); }
-  50%      { box-shadow: 0 0 0 9px rgba(var(--gilt-rgb), 0), 0 0 22px rgba(var(--gilt-rgb), 0.35); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(var(--lit-rgb), 0.45), 0 0 22px rgba(var(--lit-rgb), 0.35); }
+  50%      { box-shadow: 0 0 0 9px rgba(var(--lit-rgb), 0), 0 0 22px rgba(var(--lit-rgb), 0.35); }
 }
 @media (prefers-reduced-motion: reduce) { .chrome.lit { animation: none; transform: none; } }
-.ci-depths.lit { border-color: var(--depth); color: var(--depth); box-shadow: 0 0 18px rgba(var(--depth-rgb), 0.3); }
-.ci-sky.lit { border-color: var(--gilt); color: var(--gilt-bright); box-shadow: 0 0 18px rgba(var(--gilt-rgb), 0.35); }
+/* the two journeys light in reverse (owner, 2026-11-01), in the theme's own colours:
+   the Depths' biolume with dark ink against the black, dark ink with the accent
+   against the bright sky. `--card-ink` is the one dark that stays dark in the light
+   scheme, whose `--abyss` is pale. `:root` ties these with the light scheme's
+   `.chrome.lit`, and being later in the file wins. */
+:root .chrome.ci-depths.lit {
+  --lit-rgb: var(--depth-rgb); border-color: var(--depth); background: var(--depth); color: var(--card-ink);
+}
+:root .chrome.ci-sky.lit { border-color: var(--gilt); background: var(--card-ink); color: var(--gilt-bright); }
+:root[data-scheme="light"] .chrome.ci-sky.lit { background: var(--gilt); color: var(--on-gilt); }
 .ci-menu { top: 18px; right: 18px; }
 /* ☰ wears the scene lamp now that ◆ is gone — with the drawer shut it is the
    only sign that a scene is standing open over the map (2026-08-10) */
@@ -942,7 +964,7 @@ a.sp-btn { text-decoration: none; text-align: center; display: block; }
 .sp-btn-warn { color: #d79b8a; border-color: rgba(192, 107, 98, 0.5); }
 .sp-btn-warn:hover { background: rgba(192, 107, 98, 0.18); }
 .sp-btn-go { color: var(--abyss); background: var(--gilt); border-color: var(--gilt); font-weight: 700; }
-.sp-btn-go:hover { background: #e0b95f; }
+.sp-btn-go:hover { background: var(--gilt-deep); }
 /* diagnostics: source health. Cinzel micro-caps subhead, mono for the data —
    the design notes pairing. Semantic hues reused, no new colours. */
 .sp-sub {
@@ -1148,7 +1170,7 @@ a.sp-btn { text-decoration: none; text-align: center; display: block; }
    calls the cursor's aim approximate. Ambient animations pause under tilt
    with the same discipline the Depths learned (2026-07-12): large composited
    layers repainting under a 3D transform read as flicker. */
-#viewport { transition: transform 700ms var(--glide); }
+/* (#viewport's transition sits on its base rule, by the stage) */
 body.tilted #viewport {
   transform: perspective(1300px) rotateX(26deg);
   transform-origin: 50% 58%;
@@ -1190,26 +1212,14 @@ body.editing-map .mk .mk-ring { animation: none; }
    top-RIGHT, sharing that corner with ⚙; zoom is the one pair reached for
    constantly, so it sits under the home button where the map tools gather.
    `left: 24px` is the same alignment `.atlas-tools` uses (18 inset + 1 border
-   + 6 pad, +1 to centre the 42px circle). The cluster owns the crown's
-   clearance now; zoom sits 92px below it (cluster 84 + 8 gap).
+   + 6 pad, +1 to centre the 42px circle). It takes the crown's clearance; the
+   map tools drop beside it, not above it (owner, 2026-11-01).
    ⚠ THREE buttons since 2026-09-02 (the owner: the network glyph lives here
    permanently, under −, instead of in the hover cluster — it is reached for
    as often as zoom is), 42px, 10px gaps ⇒ 3×42 + 2×10 = 146px: this column
-   runs (--crown-clear + 92) → its foot at 302px. `#card.card-left`'s
-   clearance MUST TRACK that. When the cluster is not hovered, the space above
-   zoom is deliberately empty — the accepted cost of putting zoom below a
-   hover-revealed cluster. */
+   runs from --crown-clear → its foot at 210px. `#card.card-left`'s clearance
+   MUST TRACK that. */
 .zoom-stack { position: fixed; left: 24px; right: auto; top: var(--crown-clear); bottom: auto; z-index: 963; display: flex; flex-direction: column; gap: 10px; transition: opacity 250ms, transform 220ms var(--glide); }
-/* 2026-08-23 (user directive): the pair RESTS right under THE ATLAS, and slides
-   DOWN to clear the tool cluster only while that cluster is out. The cluster is
-   2×38 + 8 = 84px tall, so the pair drops 92px (84 + an 8px gap) to sit under
-   its foot, then rises back when it hides. Driven off the cluster's own
-   `.peek`/`.pinned` state (one source of truth: ui.js hoverReveal) via :has(),
-   so there is no second hover to wire. `--card-clear` (322, `.card-left`) still
-   tracks the SLID-DOWN foot (crown-clear 64 + 92 + column 94 = 250), which is
-   the worst case, so it is unchanged. */
-body:has(#atlas-tools.peek) .zoom-stack,
-body:has(#atlas-tools.pinned) .zoom-stack { transform: translateY(92px); }
 .zoom-stack .chrome { position: static; }
 /* The open Index docks right and would lie over the column anyway — hide it
    outright so half-covered buttons can't take half-meant clicks. ☰ itself
@@ -1266,7 +1276,7 @@ body.decoys-on .mk.has-stone .mk-eye:hover { transform: translate(-50%, -50%) sc
 body.decoys-on .mk.has-stone.active .mk-eye { width: 56px; height: 56px; }
 body.decoys-on .mk.has-stone.active .mk-eye:hover { transform: translate(-50%, -50%) scale(1.1); }
 .mk-eye[data-voice="silent"]   { opacity: 0.85; }
-.mk-eye[data-voice="unheard"]  { color: #8A8069; opacity: 0.8; }
+.mk-eye[data-voice="unheard"]  { color: var(--text-dim); opacity: 0.8; }
 .mk-eye[data-voice="stirred"]  { color: var(--sem-warn); }
 .mk-eye[data-voice="speaking"] { color: var(--sem-down); animation: eye-cry 1.6s ease-in-out infinite; }
 @keyframes eye-cry {
@@ -1318,11 +1328,26 @@ body.decoys-on .mk.has-stone .mk-label { opacity: 1; transform: translateX(-50%)
   background: rgba(13,11,7,0.45);
   border: 1px solid rgba(var(--gilt-rgb), 0.18);
   backdrop-filter: blur(12px) saturate(1.1);
-  overflow-x: auto; overflow-y: visible;   /* visible: the cluster hangs BELOW */
-  scrollbar-width: none;                   /* the row is the affordance */
   transition: opacity 600ms, background 200ms, border-color 200ms;
 }
-#scenes-list::-webkit-scrollbar { display: none; }
+/* The labels scroll in their own strip (owner, 2026-11-01): when the band itself
+   scrolled, they ran under the buttons at its end, and nothing said there were more.
+   ‹ › show only while something is out of reach (`.over`, ui.js). */
+.band-labels {
+  flex: 1 1 auto; min-width: 0;
+  display: flex; align-items: center; gap: 4px;
+  overflow-x: auto; scrollbar-width: none;
+}
+.band-labels::-webkit-scrollbar { display: none; }
+.band-arrow {
+  display: none; flex: none; width: 22px; height: 30px;
+  background: transparent; border: 1px solid transparent; border-radius: 2px;
+  color: var(--gilt); font-size: 1.05rem; line-height: 1; cursor: pointer;
+  transition: background 200ms, border-color 250ms;
+}
+#scenes-list.over .band-arrow { display: block; }
+.band-arrow:hover:not(:disabled) { background: rgba(var(--gilt-rgb), 0.12); border-color: var(--gilt); }
+.band-arrow:disabled { opacity: 0.25; cursor: default; }
 
 /* ☰ ends the band. The auto margin that pushes it there sits on the ⚙ cluster
    just before it (below) — and it drops the 42px circle for the band's own
@@ -1347,16 +1372,11 @@ body.decoys-on .mk.has-stone .mk-label { opacity: 1; transform: translateX(-50%)
    you have to hover to find is one you forget exists, and on a touch screen it
    was never there at all. */
 #scenes-list .band-tail {
-  /* the band scrolls when the labels outgrow it, so the tail sticks to its right
-     edge: being in flow alone would pin these to the END OF THE LABELS, off-screen
-     on a laptop. Sticky, never fixed or absolute (the trap above). Its own fill and
-     blur are what let a scrolled label pass behind it instead of through it. */
-  position: sticky; right: 0; z-index: 2;
+  /* beside the labels' strip, which is what keeps it on screen; never fixed or
+     absolute (the trap above). These sit bare on the band (owner, 2026-11-01). */
   margin-left: auto; flex: none;
   display: inline-flex; align-items: center;
   padding-left: 6px; border-radius: 3px;
-  background: rgba(13,11,7,0.45);
-  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
 }
 #scenes-list .menu-tools {
   flex: none;
@@ -1364,7 +1384,9 @@ body.decoys-on .mk.has-stone .mk-label { opacity: 1; transform: translateX(-50%)
   width: 68px; overflow: hidden;   /* two × (30 button + 4 gap): the scheme and the gear */
 }
 #scenes-list .chrome .ci-glyph { width: 16px; height: 16px; }   /* the band's 30px circles */
-#scenes-list .chrome { background: rgba(13,11,7,0.28); }        /* on the band's own fill: don't double it */
+/* the band is their fill; `.chrome`'s own blur would still draw a disc on it */
+#scenes-list .chrome { background: transparent; border-color: transparent; backdrop-filter: none; }
+#scenes-list .chrome:hover { border-color: var(--gilt); }
 #scenes-list .menu-tools .chrome {
   position: static; flex: none; margin-right: 4px;
   width: 30px; height: 30px; font-size: 0.95rem;
@@ -1396,7 +1418,7 @@ body.decoys-on .mk.has-stone .mk-label { opacity: 1; transform: translateX(-50%)
    So the in-band lamp keeps the gilt border and bright glyph and drops the
    fill, the growth and the pulse. It cannot overflow, so it cannot be cut. */
 #scenes-list .ci-menu.lit {
-  background: rgba(13,11,7,0.28);           /* the in-band chrome's fill, unchanged */
+  background: rgba(13,11,7,0.28);           /* the lamp keeps a faint fill the bare buttons lack */
   border-color: rgba(var(--gilt-rgb), 0.7);
   color: var(--gilt-bright);
   transform: none;
@@ -1435,38 +1457,32 @@ body.decoys-on .mk.has-stone .mk-label { opacity: 1; transform: translateX(-50%)
    `position: fixed` descendants — so a nested cluster is positioned against
    the BAND, not the viewport — and it carries `overflow-x: auto` for the
    one-row scroll, which then clips that cluster away entirely. Neither
-   `fixed` nor `absolute` escapes it. So the cluster is a sibling of the band,
-   and the hover that reveals it is wired in ui.js rather than `:hover`,
-   because the two elements are no longer relatives. */
+   `fixed` nor `absolute` escapes it. So the cluster is a sibling of the band. */
 .scene-home { position: relative; display: inline-flex; flex: none; }
 
 .atlas-tools {
-  /* left aligns under THE ATLAS: 18 inset + 1 border + 6 pad. top is the
-     crown's own clearance (2026-08-15) — it was 62px hand-baked, 6px below a
-     band whose height nothing else knew; see `--crown-b` in `:root`.
-     Two rows of two (Link): a 2×2 block hangs off one button as one object,
-     where a row of five read as a strip that happened to start there. The
-     grid is explicit rather than wrapped — a `flex-wrap` cluster reflows to
-     one row the moment a button is added or removed, which is how a layout
-     that was asked for becomes a layout that drifts. */
-  /* 2026-08-23: the cluster TAKES the crown's clearance and the ZOOM column
-     moves below it (user directive, reversing 2026-08-18's zoom-on-top). The
-     cluster is 2×38 + 8 gap = 84px tall; the zoom column starts 8px under its
-     foot — see `.zoom-stack`. */
-  position: fixed; top: var(--crown-clear); left: 24px;
+  /* One column just right of the zoom column (owner, 2026-11-01): `.zoom-stack`
+     sits at left 24 and is 42 wide, so 24 + 42 + 10, its own gap. top is the
+     crown's own clearance; see `--crown-b` in `:root`. */
+  position: fixed; top: var(--crown-clear); left: 76px;
   z-index: 962;                             /* just over the band it hangs from */
-  display: grid; grid-template-columns: repeat(2, auto); gap: 8px;
-  justify-items: start;
-  opacity: 0; pointer-events: none;
-  transform: translateY(-6px);
-  transition: opacity 180ms, transform 180ms;
+  display: flex; flex-direction: column; gap: 8px;
+  pointer-events: none;                     /* the map goes on under the gaps */
 }
-.atlas-tools.peek, .atlas-tools.pinned {
-  opacity: 1; pointer-events: auto; transform: none;
+/* Each button hides for itself, not the column, because the tripwires are a
+   layer you switched on, and a lit one stays in its slot to say so. Sky and Depths
+   are places, and you can see you are there (owner, 2026-11-01), so they go with
+   the rest. A touch screen cannot hover and this column is the door to the sky, so
+   all stay. */
+@media (hover: hover) {
+  .atlas-tools:not(.peek) .chrome:not(.ci-decoys.lit) {
+    opacity: 0; pointer-events: none; transform: translateY(-6px);
+  }
 }
 /* the circles are the same chrome as everywhere else, just smaller and static */
 .atlas-tools .chrome {
-  position: static; width: 38px; height: 38px; flex: none;
+  position: static; width: 38px; height: 38px; flex: none; pointer-events: auto;
+  transition: border-color 250ms, box-shadow 250ms, opacity 180ms, transform 180ms;
 }
 
 /* A scene is up: the tools have nothing to act on, so they do not appear at
@@ -1489,15 +1505,20 @@ body.scene-open #scenes-list {
   box-shadow: 0 12px 34px rgba(0,0,0,0.55);
 }
 .scene {
-  background: transparent; border: none; cursor: pointer;
+  background: transparent; border: 1px solid transparent; cursor: pointer;
   font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.66rem;
   letter-spacing: 0.22em; color: var(--text-dim);
-  padding: 9px 12px 8px; border-radius: 2px; text-align: center; white-space: nowrap;
+  padding: 8px 11px 7px; border-radius: 2px; text-align: center; white-space: nowrap;
   text-shadow: 0 2px 8px rgba(0,0,0,0.9), 0 0 14px rgba(0,0,0,0.6);
-  transition: color 200ms, background 200ms;
+  /* the ring the band's buttons wear on hover, on the same 250ms (owner, 2026-11-01) */
+  transition: color 200ms, background 200ms, border-color 250ms;
 }
-.scene:hover { color: var(--text); }
-.scene.active { color: var(--gilt); background: rgba(13,11,7,0.45); }
+/* tighter before anything has to scroll */
+@media (max-width: 1100px) {
+  .scene { padding: 8px 5px 7px; letter-spacing: 0.1em; }
+}
+.scene:hover { color: var(--text); border-color: var(--gilt); }
+.scene.active { color: var(--gilt); background: rgba(13,11,7,0.45); border-color: rgba(var(--gilt-rgb), 0.7); }
 /* (`.chron-fly` + its .t/.n lived here — the old scene-band flyout rows. The
    watchings' buttons are `.chron-btn` with a `.chron-fly-pop` tooltip; nothing
    has emitted `chron-fly` since. Removed 2026-08-21.) */
@@ -1525,7 +1546,7 @@ body.scene-open #scenes-list {
 }
 
 /* ── Network layer (routes) ─────────────────────────── */
-#overlay { z-index: 4; }
+/* (#overlay's z-index: 4 sits on its base rule, by the stage) */
 /* VLAN territories — revealed with the network layer */
 #territories { pointer-events: none; }
 .territory {
@@ -1560,10 +1581,10 @@ body.constellation #overlay .territory-tag { opacity: 0.12; }
 .route-edge { stroke-width: 1.8; }
 #overlay.net-on path.route-wan, #overlay.net-on path.route-edge { opacity: 0.7; }
 /* the private mesh — a hidden way: green, finely dotted, softer than the roads */
-.route-mesh { stroke-width: 1.8; opacity: 0; stroke: #7A9B6E; stroke-dasharray: 1.5 5; }
+.route-mesh { stroke-width: 1.8; opacity: 0; stroke: var(--tone-up); stroke-dasharray: 1.5 5; }
 #overlay.net-on path.route-mesh { opacity: 0.6; }
 /* the telemetry plane — logs + metrics flowing home to the monitoring host: faint teal threads */
-.route-telemetry { stroke-width: 1.4; opacity: 0; stroke: #83a598; stroke-dasharray: 1 6; }
+.route-telemetry { stroke-width: 1.4; opacity: 0; stroke: var(--sem-info); stroke-dasharray: 1 6; }
 #overlay.net-on path.route-telemetry { opacity: 0.42; }
 /* a planned place — charted but not yet built: dashed ring, dimmed, no breath */
 .mk.mk-planned .mk-dot { opacity: 0.6; }
@@ -1649,7 +1670,8 @@ body.scene-open #index-drawer { z-index: 986; }
 }
 .drawer-title { font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.72rem; letter-spacing: 0.3em; color: var(--gilt); }
 .card-close {
-  background: none; border: none; font-size: 1.3rem;   /* colour: the card-ink rule below */
+  position: absolute; top: 6px; right: 8px; color: var(--card-ink-soft);
+  background: none; border: none; font-size: 1.3rem;
   cursor: pointer; line-height: 1; padding: 4px 8px; transition: color 150ms;
 }
 .card-close:hover { color: var(--gilt); }
@@ -1666,7 +1688,6 @@ body.scene-open #index-drawer { z-index: 986; }
 }
 .dtab:hover { color: var(--text); }
 .dtab.active { color: var(--gilt); background: rgba(var(--gilt-rgb), 0.08); border-color: rgba(var(--gilt-rgb), 0.2); }
-#index-list, #services-list { padding: 10px 12px 24px; }
 /* EVERY drawer section scrolls, not just the two lists (2026-08-12).
    SETTINGS grew the account block and THE DIRECTORY's eight-field form and now
    runs past the bottom on a short window, and the drawer itself is
@@ -1679,6 +1700,7 @@ body.scene-open #index-drawer { z-index: 986; }
 /* (`#settings-panel` scrolled by this rule too until 2026-09-04; it carries
    its own now, in the SETTINGS scene's seat above.) */
 #index-list, #services-list {
+  padding: 10px 12px 24px;
   overflow-y: auto; min-height: 0;
   scrollbar-width: thin; scrollbar-color: var(--ink-line) transparent;
 }
@@ -1727,7 +1749,7 @@ body.scene-open #index-drawer { z-index: 986; }
   color: var(--text); transition: background 150ms, border-color 150ms;
 }
 .idx-item:hover { background: rgba(var(--gilt-rgb), 0.06); border-color: rgba(var(--gilt-rgb), 0.18); }
-.idx-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.idx-dot, .pal-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
 .idx-name { font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.7rem; letter-spacing: 0.18em; }
 .idx-role { font-size: 0.78rem; color: var(--text-dim); margin-left: auto; text-align: right; max-width: 45%; }
 
@@ -1785,15 +1807,19 @@ body.scene-open #index-drawer { z-index: 986; }
      to the BOTTOM, not to either side — rises from below instead. Every case
      is "from the edge it lands on"; none of them is a special case of it.
 
-     ⚑ The start point is only correct because `A.setCardSide` flushes style
-     when it flips a HIDDEN card — see card.js. Without that, a card reopening
-     on the other side transitions from where it was last painted, i.e. the
-     previous card's edge. */
+     ⚑ `right` animates only while the card is up (`#card.visible` below), and
+     that is what makes the start point correct. With it here a hidden card that
+     changed sides slid across the whole screen as it arrived, which is how the
+     first click of every visit came in from the right (2026-11-01). */
   opacity: 0; transform: var(--card-in, translateX(34px) scale(0.985));
   pointer-events: none;
-  transition: opacity 300ms var(--glide), transform 380ms var(--glide), right 380ms var(--glide);
+  transition: opacity 300ms var(--glide), transform 380ms var(--glide);
 }
-#card.card-left { --card-in: translateX(-34px) scale(0.985); }
+#card.card-left {
+  --card-in: translateX(-34px) scale(0.985);
+  right: calc(100vw - (var(--card-w) + var(--card-edge)));   /* right edge (card-w + edge = 344) from left ⇒ left edge at --card-edge (24) */
+  --card-clear: 282px;
+}
 /* the body scrolls when a place has a lot; the pinned portrait/close don't.
    they need a higher z than the scroll body (a later sibling) or the body
    paints over them and the ✕ stops taking clicks. */
@@ -1801,9 +1827,15 @@ body.scene-open #index-drawer { z-index: 986; }
    `overflow: visible` so the pinned portrait/⊖/–/× can sit outside it — which
    means a scroll body taller than its card does not get clipped, it SPILLS,
    so the two limits must be the one value, per side. */
-.card-inner { max-height: calc(100vh - var(--card-clear, 174px)); overflow-y: auto; overflow-x: hidden; }
+.card-inner {
+  max-height: calc(100vh - var(--card-clear, 174px)); overflow-y: auto; overflow-x: hidden;
+  padding: 20px 20px 20px; position: relative;
+}
 #card .card-portrait, #card .card-close { z-index: 3; }
-#card.visible { opacity: 1; transform: none; pointer-events: auto; }
+#card.visible {
+  opacity: 1; transform: none; pointer-events: auto;
+  transition: opacity 300ms var(--glide), transform 380ms var(--glide), right 380ms var(--glide);
+}
 /* When the Index opens, only a card the Index would actually cover moves (Link).
    The Index always docks right, so a RIGHT-hand card (right: 24px — its right
    edge sits 24px from the screen edge, inside the 320px drawer) is under it and
@@ -1840,9 +1872,8 @@ body.drawer-open .pth-panel { right: calc(5vw + var(--drawer-clear)); }
    visible bug, not the edge case. MUST TRACK `.zoom-stack`. */
 /* 2026-09-02: the zoom column grew a third button (the network glyph, the owner),
    so its foot moved 52px down: 64 + 92 + 3×42 + 2×10 = 302 ⇒ 60 + 302 + 12 = 374. */
-#card.card-left { right: calc(100vw - (var(--card-w) + var(--card-edge))); --card-clear: 374px; }   /* right edge (card-w + edge = 344) from left ⇒ left edge at --card-edge (24) */
+
 .card-bar { height: 3px; border-radius: 4px 4px 0 0; background: linear-gradient(90deg, var(--card-hue, var(--gilt)) 0%, rgba(var(--gilt-rgb), 0.12) 90%); }
-.card-inner { padding: 20px 20px 20px; position: relative; }
 .card-portrait {
   width: 54px; height: 54px; border-radius: 50%;
   background: radial-gradient(circle at 35% 30%, var(--card-hue, #4E6E82), #1B2418 78%);
@@ -1853,7 +1884,6 @@ body.drawer-open .pth-panel { right: calc(5vw + var(--drawer-clear)); }
   font-size: 1.5rem; line-height: 1;   /* emoji emblem, not a letter */
 }
 .portrait-logo { width: 27px; height: 27px; display: block; }
-.card-close { position: absolute; top: 6px; right: 8px; color: var(--card-ink-soft); }
 /* minimize button — sits just left of the × (2026-07-20) */
 .card-min {
   position: absolute; top: 6px; right: 34px; color: var(--card-ink-soft);
@@ -1892,7 +1922,7 @@ body.drawer-open .pth-panel { right: calc(5vw + var(--drawer-clear)); }
 /* live vitals — CPU + RAM gauges on the node-exporter host cards */
 .card-vitals { margin-top: 12px; }
 .card-vitals[hidden] { display: none; }
-.cv-head {
+.cv-head, .rel-ports-head {
   font-family: 'Cinzel', serif; font-size: 0.54rem; letter-spacing: 0.14em;
   text-transform: uppercase; color: var(--card-ink-soft); margin-bottom: 6px;
 }
@@ -2124,9 +2154,11 @@ body.drawer-open .pth-panel { right: calc(5vw + var(--drawer-clear)); }
   border: 1px solid rgba(var(--gilt-rgb),0.45); border-radius: 20px; padding: 7px 16px;
   cursor: pointer; backdrop-filter: blur(6px); box-shadow: 0 8px 24px rgba(0,0,0,0.22);
   font-family: 'Alegreya Sans', sans-serif; max-width: min(560px, 82vw);
-  transition: border-radius 200ms;
+  transition: border-radius 200ms, opacity 1s ease;
 }
 #drift-note[hidden] { display: none; }
+/* faded out by signals.js; pointer-events, so a clear note cannot eat a map click */
+#drift-note.resting { opacity: 0; pointer-events: none; }
 #drift-note.open { border-radius: 12px; }
 .drift-head { font-size: 0.82rem; letter-spacing: 0.01em; color: #8a5a1e; white-space: nowrap; }
 .drift-list { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; padding-top: 2px; }
@@ -2221,7 +2253,6 @@ body.drawer-open .pth-panel { right: calc(5vw + var(--drawer-clear)); }
   transition: background 120ms, border-color 120ms;
 }
 .pal-row.active { background: rgba(var(--gilt-rgb), 0.09); border-color: rgba(var(--gilt-rgb), 0.22); }
-.pal-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
 .pal-kind { color: var(--text-dim); font-size: 0.8rem; width: 12px; text-align: center; flex-shrink: 0; }
 .pal-label {
   font-family: 'Cinzel', serif; font-weight: 600; font-size: 0.8rem;
@@ -2519,7 +2550,7 @@ body.pre #scenes-list { opacity: 0; pointer-events: none; }
   #index-drawer { width: 86vw; }
   /* The band tightens BEFORE it scrolls — it can no longer wrap at all, so
      this is what keeps the whole row reachable without dragging it. */
-  .scene { padding: 7px 8px 6px; letter-spacing: 0.14em; font-size: 0.6rem; }
+  .scene { padding: 6px 7px 5px; letter-spacing: 0.14em; font-size: 0.6rem; }
   #scenes-list { padding: 2px 4px; }
   /* (the band no longer shortens for the drawer at any width — the drawer
      hangs BELOW it now, so the override that undid that shortening here is
@@ -2869,7 +2900,7 @@ body.pre #scenes-list { opacity: 0; pointer-events: none; }
 /* the day is one column of rows, not the wrapping ledger of blocks .ldg-list
    draws elsewhere — a row that wrapped would leave the clock behind */
 #calendar .ldg-list, #cal-list { flex-direction: column; flex-wrap: nowrap; gap: 26px; }
-#calendar .ldg-list { padding: 18px 22px 24px; }
+#calendar .ldg-list { padding: 18px 22px 24px; --cal-gut: 18px; --cal-name: 236px; --cal-meta: 176px; --cal-gap: 14px; }
 #cal-list { display: flex; }
 
 .cal-ruler, .cal-row {
@@ -2877,7 +2908,7 @@ body.pre #scenes-list { opacity: 0; pointer-events: none; }
   grid-template-columns: var(--cal-gut) var(--cal-name) 1fr var(--cal-meta);
   gap: 0 var(--cal-gap);
 }
-#calendar .ldg-list { --cal-gut: 18px; --cal-name: 236px; --cal-meta: 176px; --cal-gap: 14px; }
+
 #cal-list:empty { display: none; }
 
 /* the axis rides the top of the scroll — twenty-eight rows is more than one
@@ -3110,7 +3141,7 @@ body.pre #scenes-list { opacity: 0; pointer-events: none; }
   background: repeating-linear-gradient(90deg, rgba(var(--gilt-rgb), 0.07) 0 2px, rgba(0,0,0,0.14) 2px 7px);
 }
 .rel-dev.grabbing { cursor: grabbing; z-index: 5; transition: none; filter: drop-shadow(0 8px 18px rgba(0,0,0,0.7)); }
-.rel-dev.blocked { box-shadow: 0 0 0 2px #FB4934; }
+.rel-dev.blocked { box-shadow: 0 0 0 2px var(--sem-down); }
 
 /* faceplate ink — engraved gilt-on-slate */
 .fp-panel { fill: #23241e; stroke: rgba(var(--gilt-rgb), 0.35); stroke-width: 1; }
@@ -3229,10 +3260,7 @@ body.pre #scenes-list { opacity: 0; pointer-events: none; }
    reuse .ldg-port's language; these rules add the button affordance and the
    answer box a clicked port opens. The pane is parchment, so ink tokens. */
 .rel-ports { margin-top: 12px; }
-.rel-ports-head {
-  font-family: 'Cinzel', serif; font-size: 0.54rem; letter-spacing: 0.14em;
-  text-transform: uppercase; color: var(--card-ink-soft); margin-bottom: 6px;
-}
+/* (.rel-ports-head is styled with .cv-head, by the card's vitals) */
 .rel-ports .ldg-ports { display: flex; flex-wrap: wrap; gap: 4px; }
 button.rel-port { background: transparent; cursor: pointer; }
 button.rel-port:hover { background: color-mix(in srgb, var(--p-hue, var(--gilt)) 14%, transparent); }
@@ -3294,7 +3322,7 @@ body.constellation .card-split .cs-on { display: inline; }
    Satellites are ordinary markers at two-thirds scale with a mono label, so the
    ring reads as "smaller things belonging to the big thing" without inventing a
    second visual language. The host keeps its own dot at the centre. */
-.mk.mk-sat { width: 96px; height: 76px; z-index: 9; }
+.mk.mk-sat { width: 96px; height: 76px; z-index: 9; animation: con-arrive 320ms cubic-bezier(0.2, 1.2, 0.4, 1) backwards; }
 /* 10px, not the original 8: with the split open the satellites ARE the
    subject, so they carry a step more presence (dot + label contrast below)
    while the host's dot steps back — see the .mk.active rule after this block */
@@ -3323,7 +3351,7 @@ body.constellation .card-split .cs-on { display: inline; }
 }
 /* the whole ring arrives, rather than seventeen dots popping in at once */
 @keyframes con-arrive { from { opacity: 0; transform: translate(-50%,-50%) scale(0.6); } }
-.mk.mk-sat { animation: con-arrive 320ms cubic-bezier(0.2, 1.2, 0.4, 1) backwards; }
+
 
 /* the spokes to each service, and each service's own charted reach */
 #constellation { pointer-events: none; }
@@ -3488,7 +3516,7 @@ body.constellation .mk.active .mk-dot { opacity: 0.35; }
   font-family: 'Cinzel', serif; font-weight: 600; font-size: 0.72rem;
   letter-spacing: 0.06em; color: var(--text); min-width: 0; overflow-wrap: anywhere;
 }
-.seal-host {
+.seal-host, .acc-src {
   display: block; font-family: 'Alegreya Sans', sans-serif; font-style: normal;
   font-size: 0.68rem; letter-spacing: 0.04em; color: var(--text-dim); opacity: 0.75;
 }
@@ -3550,10 +3578,7 @@ body.constellation .mk.active .mk-dot { opacity: 0.35; }
 }
 /* a login is a literal string on a host — mono, like every other piece of hard
    data in this app; the Cinzel treatment `.seal-name` gets is for proper nouns */
-.acc-src {
-  display: block; font-family: 'Alegreya Sans', sans-serif; font-style: normal;
-  font-size: 0.68rem; letter-spacing: 0.04em; color: var(--text-dim); opacity: 0.75;
-}
+/* (.acc-src is styled with .seal-host, in THE SEALS) */
 .acc-mid { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .acc-sudo {
   font-family: 'Cinzel', serif; font-weight: 700;
@@ -3620,8 +3645,6 @@ body.constellation .mk.active .mk-dot { opacity: 0.35; }
 /* the regions centre their text (the slide heads, the captions); a figure's
    own text sets its alignment back */
 .chron-native, .chart-twin { text-align: left; }
-.chron-cell .chron-native { position: relative; inset: auto; height: auto; flex: 1; min-height: 0; }
-.aw-duo .chron-native { position: relative; inset: auto; height: auto; flex: 1.4; min-width: 0; }
 /* a native pane never sleeps — nothing here swallows the wheel, so the frame
    hint and the click-to-wake step do not apply */
 .chron-pane.native::after { content: none; }
@@ -3763,7 +3786,7 @@ body.constellation .mk.active .mk-dot { opacity: 0.35; }
 }
 .gs-host { color: var(--text); }
 .gs-zone { letter-spacing: 0.1em; }
-.gs-trips, .gs-spoke, .gs-reason { color: var(--text-dim); }
+.gs-trips, .gs-spoke { color: var(--text-dim); }
 .gs-flag { color: var(--sem-warn); }
 
 /* Silent is the ordinary state and the one we hope for — it reads as
@@ -4071,11 +4094,21 @@ button.rl-crumb:focus-visible { outline: 2px solid var(--gilt-bright); outline-o
    cell, THE TRIBUTE's reserved stripes. Everything else flips through the
    tokens on the panel containers (top of this file). Rack devices stay dark
    metal in both schemes (the design notes, THE ARMORY rule 10). */
-:root[data-scheme="light"] .sp-btn-warn { color: #b91c1c; border-color: rgba(185, 28, 28, 0.45); }
-:root[data-scheme="light"] .sp-btn-warn:hover { background: rgba(185, 28, 28, 0.1); }
-:root[data-scheme="light"] .sp-btn-go:hover { background: #1e3a8a; }
-:root[data-scheme="light"] .ldg-cell { background: rgba(15, 23, 42, 0.07); }
-:root[data-scheme="light"] .ldg-cell.edge { background: rgba(15, 23, 42, 0.16); }
+:root[data-scheme="light"] .sp-btn-warn { color: var(--sem-down); border-color: rgba(var(--down-rgb), 0.45); }
+:root[data-scheme="light"] .sp-btn-warn:hover { background: rgba(var(--down-rgb), 0.1); }
+:root[data-scheme="light"] .sp-btn-go:hover { background: var(--gilt-deep); }
+/* Free cells are a visible grid, and a charted one is solid: the realm's hues are
+   pale for the dark scheme, so they take the same navy the host addresses do. */
+:root[data-scheme="light"] .ldg-cell { background: rgba(15, 23, 42, 0.13); }
+:root[data-scheme="light"] .ldg-cell.edge { background: rgba(15, 23, 42, 0.34); }
+:root[data-scheme="light"] .ldg-cell.lit {
+  background: color-mix(in srgb, var(--c-hue) 45%, var(--text));
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.3);
+}
+/* a line passes behind a label instead of through it */
+:root[data-scheme="light"] :is(.pth-name, .pth-ip) {
+  background: rgba(202, 206, 212, 0.92); padding: 0 4px; border-radius: 2px;
+}
 :root[data-scheme="light"] .trb-seg.reserve {
   background: repeating-linear-gradient(45deg, #d5c4a1, #d5c4a1 4px, #ebdbb2 4px, #ebdbb2 8px);
 }
@@ -4083,9 +4116,9 @@ button.rl-crumb:focus-visible { outline: 2px solid var(--gilt-bright); outline-o
 /* Dataset hues (a zone's, a port's) were chosen against the night palette; as
    TEXT on a light panel the pale ones vanish. Mixed 40/60 toward ink they keep
    their family and clear AA on cream; strokes and dots keep the pure hue. */
-:root[data-scheme="light"] .idx-zone { color: color-mix(in srgb, var(--zone-hue, var(--text-dim)) 40%, #0f172a); }
-:root[data-scheme="light"] .ldg-host-ip { color: color-mix(in srgb, var(--z-hue, var(--gilt)) 40%, #0f172a); }
-:root[data-scheme="light"] .ldg-port { color: color-mix(in srgb, var(--p-hue, var(--gilt)) 40%, #0f172a); }
+:root[data-scheme="light"] .idx-zone { color: color-mix(in srgb, var(--zone-hue, var(--text-dim)) 40%, var(--text)); }
+:root[data-scheme="light"] .ldg-host-ip { color: color-mix(in srgb, var(--z-hue, var(--gilt)) 40%, var(--text)); }
+:root[data-scheme="light"] .ldg-port { color: color-mix(in srgb, var(--p-hue, var(--gilt)) 40%, var(--text)); }
 
 /* ── KEYBOARD FOCUS on the panels (v1.52.0, accessibility pass) ─────────────
    One visible ring for every control a panel holds, in the panel's own gilt,

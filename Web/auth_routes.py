@@ -19,6 +19,7 @@ from flask import Blueprint, redirect, render_template, request
 
 import accounts
 import atlas_auth
+import envnames
 
 log = logging.getLogger("atlas.auth.routes")
 
@@ -49,11 +50,7 @@ def ensure_bootstrap_admin():
     if accounts.count_active_admins() > 0:
         return
     username = (os.environ.get("ATLAS_BOOTSTRAP_ADMIN_USER") or "").strip().lower()
-    password = (os.environ.get("ATLAS_BOOTSTRAP_ADMIN_PASSWORD") or "").strip()
-    path = (os.environ.get("ATLAS_BOOTSTRAP_ADMIN_PASSWORD_FILE") or "").strip()
-    if not password and path and os.path.isfile(path):
-        with open(path, encoding="utf-8") as f:
-            password = f.read().strip()
+    password = envnames.secret("ATLAS_BOOTSTRAP_ADMIN_PASSWORD")
     # A password with no user name means the admin the docs name: compose
     # always passed `admin`, so only a bare `docker run -e …PASSWORD=…`
     # created nobody, silently (the fresh-clone test, 2026-10-18).

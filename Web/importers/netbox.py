@@ -17,7 +17,6 @@ case. Rows missing from the sync are status='retired' (dump hides them),
 resurrected if they return. All network fetching happens before any write.
 """
 
-import ipaddress
 from datetime import datetime, timezone
 
 from sqlalchemy import select
@@ -27,7 +26,7 @@ from store.layout import auto_layout
 from store.models import Node, Site, Zone
 
 from . import review
-from .common import UNCHARTED_SLUG, slugify
+from .common import UNCHARTED_SLUG, slugify, subnet_index, zone_for_ip
 from .common import ensure_uncharted as _ensure_uncharted
 # The HTTP half lives in netbox_client so the relay can import it without the
 # DB stack; re-exported here so `from importers.netbox import ...` still works.
@@ -153,7 +152,6 @@ def sync(session, snapshot, site_slug, role_map=None):
 
     # subnet per VLAN (first prefix wins), used for new zones and ip→zone lookup
     vlan_subnet = {}
-    networks = []  # (network, zone_slug), longest prefix first at lookup time
     for p in snapshot.get("prefixes", []):
         vid = ((p.get("vlan") or {}).get("vid"))
         if vid is not None:
@@ -183,24 +181,9 @@ def sync(session, snapshot, site_slug, role_map=None):
         ensure_zone(v.get("vid"), v.get("name"))
     session.flush()
 
-    for z in by_slug.values():
-        if z.subnet:
-            try:
-                networks.append((ipaddress.ip_network(z.subnet, strict=False), z.slug))
-            except ValueError:
-                pass
-    networks.sort(key=lambda t: t[0].prefixlen, reverse=True)
-
-    def zone_for_ip(ip):
-        if ip:
-            try:
-                addr = ipaddress.ip_address(ip)
-            except ValueError:
-                return None
-            for net, slug in networks:
-                if addr in net:
-                    return slug
-        return None
+    # after the flush, so the zones just made for this snapshot's VLANs are in
+    # the index too; the same index csv_import and nmap place by
+    nets = subnet_index(session, site)
 
     def ensure_uncharted():
         if UNCHARTED_SLUG not in by_slug:
@@ -221,7 +204,7 @@ def sync(session, snapshot, site_slug, role_map=None):
     def upsert(ref, name, kind, ip, hw, role_name, scroll):
         nonlocal node_sort
         seen.add(ref)
-        zone_slug = zone_for_ip(ip) or ensure_uncharted().slug
+        zone_slug = zone_for_ip(nets, ip) or ensure_uncharted().slug
         adopted = False
         n = existing.get(ref)
         if n is None:

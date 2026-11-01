@@ -109,6 +109,7 @@ document.getElementById('f-mfa').addEventListener('submit', function (e) {
 function startEnroll() {
   post('/api/v2/auth/mfa/setup').then(function (r) {
     if (!r.body.ok) return fail(r.body.error || 'Could not begin enrollment.');
+    /* markup on purpose: the SVG is drawn by this app's own server (auth/mfa) */
     document.getElementById('qr').innerHTML = r.body.qr_svg;
     document.getElementById('secret').textContent = r.body.secret;
     show('enroll');

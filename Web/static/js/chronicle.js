@@ -143,13 +143,13 @@ function slideHTML(c, i) {
     ? `<div class="aw-side">` +
       `<div class="aw-head">THE NAMING DEEP</div>` +
       `<div class="aw-sub">ask who holds one of those names — whois, from below</div>` +
-      `<form class="aw-form" id="aw-form">` +
+      `<form class="aw-form">` +
         `<span class="aw-glyph" aria-hidden="true">☍</span>` +
-        `<input id="aw-input" type="text" autocomplete="off" spellcheck="false"` +
+        `<input class="aw-input" type="text" autocomplete="off" spellcheck="false"` +
         ` placeholder="203.0.113.7 · example.net" aria-label="Whois — a domain or IP address">` +
-        `<button class="aw-go" id="aw-go" type="submit">ASK</button>` +
+        `<button class="aw-go" type="submit">ASK</button>` +
       `</form>` +
-      `<pre class="aw-out" id="aw-out" hidden></pre>` +
+      `<pre class="aw-out" hidden></pre>` +
       `</div>`
     : '';
   // One watching's pane: the Atlas's own figure when the catalogue knows the
@@ -316,8 +316,10 @@ function makeCarousel(p) {
     const ip = e.target.closest('.chart-ip');
     if (ip) {
       e.preventDefault(); e.stopPropagation();
-      const input = $('aw-input');
-      if (input) { input.value = ip.dataset.ip || ''; input.focus(); $('aw-form')?.requestSubmit?.(); }
+      // the deep on the SAME slide, by class: another watching may carry one too
+      const slide = ip.closest('.aw-duo, .chron-slide') || document;
+      const input = slide.querySelector('.aw-input') || document.querySelector('.aw-input');
+      if (input) { input.value = ip.dataset.ip || ''; input.focus(); input.closest('.aw-form')?.requestSubmit?.(); }
       return;
     }
     if (pane && pane.classList.contains('native')) {
@@ -575,8 +577,8 @@ function groupPanes(embeds) {
 
 /* An http embed inside an https Atlas is mixed content — the browser blocks
    the iframe SILENTLY, so over the TLS door an unguarded slide
-   would sit at "scrying…" forever. The glass (glass.js isMixed) and the card
-   vitals (the `location.protocol === 'http:'` gate below) already know this;
+   would sit at "scrying…" forever. The glass (glass.js) already knew this
+   through the shared `isMixed` (config.js, one spelling since 2026-08-21);
    the carousels were the one surface that didn't. A mixed watching takes the
    path a `broken` one takes — a button, whose click the glass routes to a
    real tab. Grafana growing TLS someday makes this guard a no-op. */

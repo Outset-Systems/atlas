@@ -82,10 +82,10 @@ function buildWidget(field, value) {
     const wrap = el('div', 'dsk-color');
     const swatch = el('input', 'dsk-swatch');
     swatch.type = 'color';
-    swatch.value = /^#[0-9a-f]{6}$/i.test(value || '') ? value : '#c9a554';
+    swatch.value = /^#[0-9a-f]{6}$/i.test(value || '') ? value : '#c49a52';   // the design notes's gold zone hue
     const text = el('input', 'dsk-input dsk-color-text');
     text.type = 'text';
-    text.placeholder = '#C9A554';
+    text.placeholder = '#C49A52';
     text.value = value ?? '';
     swatch.addEventListener('input', () => { text.value = swatch.value.toUpperCase(); });
     text.addEventListener('input', () => {

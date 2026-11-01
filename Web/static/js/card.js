@@ -4,7 +4,7 @@
    referenced none of ui.js's other locals and everything outside reaches it
    through `A`, so nothing else moved. Registered in atlas.js right after ui.js. */
 
-import { A, CFG, $, esc, host, glassAttrs, zoneById } from './config.js';
+import { A, CFG, $, esc, host, glassAttrs, zoneById, nodeById, FALLBACK_HUE } from './config.js';
 import { calendarPointerHTML } from './calendar.js';
 
 const card = $('card');
@@ -67,7 +67,7 @@ function setPortrait(n) {
 A.openCard = function openCard(n) {
   setCardMinimized(false);   // a fresh selection always opens expanded
   const zone = zoneById(n.zone);
-  const hue = zone ? zone.hue : '#C9A554';
+  const hue = zone ? zone.hue : FALLBACK_HUE;
   card.style.setProperty('--card-hue', hue);
   setPortrait(n);
   $('card-epi').textContent = zone
@@ -98,9 +98,8 @@ A.openCard = function openCard(n) {
   // thing you act on (see Web/dependencies.py).
   const info = A.signalsFeed?.nodes?.[n.id];
   if (info?.cause) {
-    const causeNode = A.DATA.nodes.find((x) => x.id === info.cause);
-    const viaNode = info.via && info.via !== info.cause
-      ? A.DATA.nodes.find((x) => x.id === info.via) : null;
+    const causeNode = nodeById(info.cause);
+    const viaNode = info.via && info.via !== info.cause ? nodeById(info.via) : null;
     rows.push(`<span class="card-caused">${info.planned ? 'closed for work' : 'unreachable'} ` +
       `behind <strong>${esc(causeNode ? causeNode.name : info.cause)}</strong>` +
       (viaNode ? ` (via ${esc(viaNode.name)})` : '') + '</span>');
@@ -372,7 +371,8 @@ A.showServiceDetail = showServiceDetail;
    from the wrong side, and only on the first frame after a flip, which is
    precisely the kind of bug that gets called "sometimes it does it backwards".
    Reading `offsetWidth` forces the recalc so the hidden card is sitting behind
-   its new edge before `.visible` lands.
+   its new edge before `.visible` lands. A hidden card has no `right` transition
+   (atlas.css), so that recalc snaps it there rather than starting the slide.
 
    Only when it is HIDDEN: flipping a card that is already up is the `right`
    transition sliding it across the screen (2026-08-01), and a forced reflow

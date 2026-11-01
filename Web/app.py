@@ -44,6 +44,7 @@ from api import status as api_status  # noqa: E402
 from api import v2 as api_v2  # noqa: E402
 import dataset  # noqa: E402
 import embeddable  # noqa: E402
+import envnames  # noqa: E402
 import ingest  # noqa: E402
 import labdata  # noqa: E402
 import overlays as overlays_mod  # noqa: E402
@@ -96,15 +97,12 @@ if settings.LOG_LEVELS_REJECTED:
 # imported them; nothing did (2026-08-21 survey, repo-wide grep).
 from validation import validate as _validate  # noqa: E402,F401
 
-APP_KEY = settings.APP_KEY
-APP_NAME = settings.APP_NAME
-APP_VERSION = settings.APP_VERSION
-ACCENT_COLOR = settings.ACCENT_COLOR
-PORT = settings.PORT
-DATA_PATH = settings.DATA_PATH
-DEFAULT_DATA_PATH = settings.DEFAULT_DATA_PATH
+# The one settings alias the tests still read (`atlas_app.DATA_BACKEND` in
+# test_store / test_api_v2_sites_scoping). Eight siblings — APP_KEY, APP_NAME,
+# APP_VERSION, ACCENT_COLOR, PORT, DATA_PATH, DEFAULT_DATA_PATH, SITE_SLUG —
+# had no reader anywhere (2026-11-01 repo-wide grep) and are gone; read
+# `settings.<NAME>` directly.
 DATA_BACKEND = settings.DATA_BACKEND
-SITE_SLUG = settings.SITE_SLUG
 # (EMBED_HOSTS alias removed 2026-09-03: the glass knobs are live via
 #  settings.embed_hosts(); a boot-time copy here would be the one that disagrees)
 
@@ -186,12 +184,7 @@ def _configure_sessions(app):
     is the explicit opt-out for plain-http LAN testing, where a browser would
     otherwise silently drop the cookie.
     """
-    key = (os.environ.get("ATLAS_SECRET_KEY") or "").strip()
-    if not key:
-        path = (os.environ.get("ATLAS_SECRET_KEY_FILE") or "").strip()
-        if path and os.path.isfile(path):
-            with open(path, encoding="utf-8") as f:
-                key = f.read().strip()
+    key = envnames.secret("ATLAS_SECRET_KEY")
     if not key:
         key = _generated_session_key(
             os.path.join(settings.DATA_DIR, "secrets", "session.key"))
@@ -407,7 +400,12 @@ def create_app():
         resp.headers.setdefault(
             "Content-Security-Policy",
             "default-src 'self'; style-src 'self' 'unsafe-inline'; "
-            "img-src 'self' data:; frame-src "
+            "img-src 'self' data:; "
+            # three directives `default-src` does not govern (the 2026-11-01
+            # review): no <base> rewriting, forms post only to this origin,
+            # and no plugins
+            "base-uri 'none'; form-action 'self'; object-src 'none'; "
+            "frame-src "
             + (_frame_src() if authed else "'self'"),
         )
         return resp

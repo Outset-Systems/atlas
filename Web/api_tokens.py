@@ -194,8 +194,8 @@ def _allow(tid):
 
 
 def _bearer():
-    header = request.headers.get("Authorization", "")
-    return header[7:].strip() if header[:7].lower() == "bearer " else ""
+    import security
+    return security.bearer_token(request)
 
 
 def _refuse(status, reason):
