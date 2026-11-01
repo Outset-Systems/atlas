@@ -22,8 +22,9 @@ How to read the tables:
 - Boolean variables are on when set to `1` unless the row says otherwise.
 
 Most values are read once when the app starts, so changing an environment
-variable needs a container restart (`docker compose up -d` after editing the
-compose file). Values changed on the Settings screen apply without a restart.
+variable needs a new container (`docker compose -f compose.public.yaml up -d`
+after editing `.env`). Values changed on the Settings screen apply without a
+restart.
 
 ## Core
 
@@ -49,7 +50,7 @@ beside `ATLAS_DATA` and rarely need changing.
 |---|---|---|---|---|
 | `ATLAS_DATA` | `/data/lab-data.json` | The dataset file (file backend). Its directory is the data directory every other default below is relative to, including the accounts store and the key files. | no | no |
 | `ATLAS_DATA_BACKEND` | `file` | `file` keeps the dataset as one JSON file. `db` keeps the same dataset in a SQL database through SQLAlchemy (needed for multiple sites and the relay ingest). | no | no |
-| `ATLAS_DB_URL` | `sqlite:////data/atlas.db` | SQLAlchemy URL for the `db` backend and for `cli.py`. A URL that carries a password is shown masked on the Settings screen. | treat as secret if it holds a password (no `_FILE` variant) | no |
+| `ATLAS_DB_URL` | `sqlite:////data/atlas.db` | SQLAlchemy URL for the `db` backend and for `cli.py`'s dataset and importer commands, which work on this database only. A URL that carries a password is shown masked on the Settings screen. | treat as secret if it holds a password (no `_FILE` variant) | no |
 | `ATLAS_SITE` | `default` | Which site the `db` backend serves, and which site the `relay` signals source reads. | no | no |
 | `ATLAS_FALLBACK` | `empty` | What an instance with no dataset shows. `empty`: an empty map that invites you to start charting. `bundled`: the dataset baked into the image (the public image bundles an invented demo lab, plus a demo status feed that colours it while no source is configured and the instance is unseeded). The first save writes your own copy to `ATLAS_DATA` and silences the demo feed. | no | no |
 | `ATLAS_POSITIONS` | `<data dir>/positions.json` | Hand-placed marker positions, stored over the dataset. | no | no |
@@ -175,19 +176,19 @@ misconfigured only removes its markers; the map still draws.
 | `ATLAS_LLM_LOG_TAG` | `llm` | The prefix of the `<tag> ok` / `<tag> FALLBACK` log lines those charts count. | no | no |
 | `ATLAS_ANNALS_POLL` | `60` | Seconds between background polls that keep the event history and the scheduled-job checks current while nobody has the map open. `0` disables; values under 15 fall back to 60. | no | no |
 | `NETBOX_TOKEN` | (unset) | NetBox API token, for `python cli.py import-netbox` only. The web app never reads it. | yes, `NETBOX_TOKEN_FILE` | no |
-| `ATLAS_PROXMOX_URL` | (unset) | Proxmox VE base URL, for Settings → Connections. Can also be saved there. |
-| `ATLAS_PROXMOX_TOKEN` | (unset) | Proxmox API token, `user@pam!name=secret`, with the PVEAuditor role. Encrypted when saved in the app. Or `ATLAS_PROXMOX_TOKEN_FILE`. |
-| `ATLAS_PROXMOX_INSECURE` | (unset) | `1` skips the certificate check, for Proxmox's default self-signed certificate. |
-| `ATLAS_PORTAINER_URL` | (unset) | Portainer base URL, for Settings → Connections. |
-| `ATLAS_PORTAINER_KEY` | (unset) | Portainer access token. It has its owner's rights, so make it from a read-only user. Or `ATLAS_PORTAINER_KEY_FILE`. |
-| `ATLAS_PORTAINER_INSECURE` | (unset) | `1` skips the certificate check. |
-| `ATLAS_KOMODO_URL` | (unset) | Komodo Core base URL, for Settings → Connections. |
-| `ATLAS_KOMODO_KEY` | (unset) | Komodo API key, from a user with read access only. Or `ATLAS_KOMODO_KEY_FILE`. |
-| `ATLAS_KOMODO_SECRET` | (unset) | The secret that goes with `ATLAS_KOMODO_KEY`. Or `ATLAS_KOMODO_SECRET_FILE`. |
-| `ATLAS_KOMODO_INSECURE` | (unset) | `1` skips the certificate check. |
-| `ATLAS_NETBOX_URL` | (unset) | NetBox base URL, for Settings → Connections. |
-| `ATLAS_NETBOX_API_TOKEN` | (unset) | NetBox API token with Write enabled off, for the connection test and review. Separate from `NETBOX_TOKEN`, which is the CLI import's. Or `ATLAS_NETBOX_API_TOKEN_FILE`. |
-| `ATLAS_NETBOX_INSECURE` | (unset) | `1` skips the certificate check. |
+| `ATLAS_PROXMOX_URL` | (unset) | Proxmox VE base URL, for Settings → Connections. Can also be saved there. | no | yes (Connections) |
+| `ATLAS_PROXMOX_TOKEN` | (unset) | Proxmox API token, `user@pam!name=secret`, with the PVEAuditor role. Encrypted when saved in the app. Or `ATLAS_PROXMOX_TOKEN_FILE`. | yes | yes (Connections) |
+| `ATLAS_PROXMOX_INSECURE` | (unset) | `1` skips the certificate check, for Proxmox's default self-signed certificate. | no | yes (Connections) |
+| `ATLAS_PORTAINER_URL` | (unset) | Portainer base URL, for Settings → Connections. | no | yes (Connections) |
+| `ATLAS_PORTAINER_KEY` | (unset) | Portainer access token. It has its owner's rights, so make it from a read-only user. Or `ATLAS_PORTAINER_KEY_FILE`. | yes | yes (Connections) |
+| `ATLAS_PORTAINER_INSECURE` | (unset) | `1` skips the certificate check. | no | yes (Connections) |
+| `ATLAS_KOMODO_URL` | (unset) | Komodo Core base URL, for Settings → Connections. | no | yes (Connections) |
+| `ATLAS_KOMODO_KEY` | (unset) | Komodo API key, from a user with read access only. Or `ATLAS_KOMODO_KEY_FILE`. | yes | yes (Connections) |
+| `ATLAS_KOMODO_SECRET` | (unset) | The secret that goes with `ATLAS_KOMODO_KEY`. Or `ATLAS_KOMODO_SECRET_FILE`. | yes | yes (Connections) |
+| `ATLAS_KOMODO_INSECURE` | (unset) | `1` skips the certificate check. | no | yes (Connections) |
+| `ATLAS_NETBOX_URL` | (unset) | NetBox base URL, for Settings → Connections. | no | yes (Connections) |
+| `ATLAS_NETBOX_API_TOKEN` | (unset) | NetBox API token with Write enabled off, for the connection test and review. Separate from `NETBOX_TOKEN`, which is the CLI import's. Or `ATLAS_NETBOX_API_TOKEN_FILE`. | yes | yes (Connections) |
+| `ATLAS_NETBOX_INSECURE` | (unset) | `1` skips the certificate check. | no | yes (Connections) |
 
 A stored credential goes only to the address it was saved with. To point a system at a new
 address, in Settings → Connections or Sources, type its credential again: a blank secret box
@@ -238,6 +239,7 @@ Security Policy, which the app builds from these settings.
 | `ATLAS_EMBED_HOSTS` | (empty) | Extra origins the map may frame, space separated, for example `https://grafana.home.example`. | no | yes (Realm) |
 | `ATLAS_EMBED_SERVICES` | `1` | `1` also allows framing the origins your dataset already links to. `0` limits framing to `ATLAS_EMBED_HOSTS`, and every service button opens a new tab. | no | yes (Realm) |
 | `ATLAS_EMBED_PROBE` | `1` | `1` asks a service whether it allows framing before offering the pane. `0` skips the check and falls back to a tab when the pane stays blank. | no | yes (Realm) |
+| `ATLAS_WHOIS` | `1` | `1` lets a viewer ask public whois servers from the Chronicle, 20 questions a minute per client on each worker. `0` removes the pane and refuses the route. Set it to `0` on an Atlas strangers can reach. | no | yes (Realm) |
 
 The policy that lists dataset origins is only sent to signed-in viewers in
 `accounts` and `hybrid` modes; the sign-in page gets `frame-src 'self'`.
@@ -252,6 +254,9 @@ The policy that lists dataset origins is only sent to signed-in viewers in
 | `ATLAS_BEATS_DIR` | `<data dir>/beats` | Drop directory: a job that cannot reach the app reports by creating a file named after its key here (`touch /data/beats/<key>`). The app picks the file up and deletes it. | no | no |
 
 ## Tripwires
+
+[The install guide](install.md#turn-on-tripwires) has the steps to turn this on.
+The rest of this section is the reference.
 
 Tripwires are honeypots and canary tokens charted in the dataset's `stones`
 section. Trips reach the map from the decoy feed above, or from any tool
@@ -276,8 +281,9 @@ the sign-in gate and its credential is the whole boundary:
 
 Bodies over 64 KB get 413, more than 60 requests a minute per credential 429.
 Copy-paste configuration for each sender (the OpenCanary logger handler, the
-Canarytokens webhook URL, the generic shape) comes from the admin-only
-`GET /api/v2/tripwires/setup`; secrets are never in it.
+Canarytokens webhook URL, the generic shape) is under SET UP in the Tripwires
+scene, read from the admin-only `GET /api/v2/tripwires/setup`; secrets are never
+in it.
 
 | Variable | Default | What it does | Secret | Settings screen |
 |---|---|---|---|---|

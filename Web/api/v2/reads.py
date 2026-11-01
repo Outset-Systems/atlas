@@ -63,6 +63,9 @@ def maps_list():
     art = {entry.get("name"): entry
            for entry in (meta.get("map_art") or []) if isinstance(entry, dict)}
     default = meta.get("map_image") or mapart.DEFAULT
+    # Art the dataset's own regions zoom into. It stays listed, because the map
+    # needs its address, and `zoom` keeps it out of the choice of backdrops.
+    zoomed = {r.get("map") for r in data.get("regions") or [] if isinstance(r, dict)}
     out = []
     for image in mapart.available():
         name = image["name"]
@@ -79,6 +82,7 @@ def maps_list():
             "theme": theme if isinstance(theme, dict) else None,
             # the zoom regions drawn on THIS picture, when it brings its own
             "regions": sidecar.get("regions") or [],
+            "zoom": name in zoomed and name != default,
         })
     resp = make_response(jsonify({"maps": out}))
     resp.headers["Cache-Control"] = "private, no-cache"

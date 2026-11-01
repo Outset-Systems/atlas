@@ -67,6 +67,7 @@ GROUPS = {
         "ATLAS_EMBED_HOSTS",
         "ATLAS_EMBED_SERVICES",
         "ATLAS_EMBED_PROBE",
+        "ATLAS_WHOIS",
     ),
     # CONNECTIONS (connections.py): other systems the Atlas can be pointed at. The
     # NetBox key is not NETBOX_TOKEN on purpose: that one is the CLI import's, and
@@ -80,7 +81,7 @@ GROUPS = {
 }
 ALLOWED = GROUPS["sources"] + GROUPS["realm"] + GROUPS["glass"] + GROUPS["connections"]
 #: '', '1' or '0' only — anything else is refused by the API layer.
-BOOLS = ("ATLAS_EMBED_SERVICES", "ATLAS_EMBED_PROBE", "ATLAS_PROXMOX_INSECURE",
+BOOLS = ("ATLAS_EMBED_SERVICES", "ATLAS_EMBED_PROBE", "ATLAS_WHOIS", "ATLAS_PROXMOX_INSECURE",
          "ATLAS_PORTAINER_INSECURE", "ATLAS_KOMODO_INSECURE", "ATLAS_NETBOX_INSECURE")
 
 

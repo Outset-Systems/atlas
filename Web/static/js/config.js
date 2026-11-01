@@ -109,6 +109,7 @@ export const CFG = {
   // standalone differ in kind, and the account surface draws per mode rather
   // than assuming one. Empty mode = the server told us nothing; draw nothing.
   AUTH: { mode: '', user: '', admin: false, mfa: false },
+  WHOIS: true,   // the server says when this Atlas does not offer it
   HUB_URL: '',
   // THE THEME (v1.48.0): the words and emblems that name one lab — themes/*.json,
   // chosen by ATLAS_THEME on the server. Empty here = the plain theme's own wording
@@ -128,6 +129,7 @@ export const themeText = (key, fallback = '') => CFG.THEME.text?.[key] || fallba
     if (given.hubUrl) CFG.HUB_URL = String(given.hubUrl).replace(/\/+$/, '');
     if (given.scrollRoot) CFG.SCROLL_ROOT = String(given.scrollRoot);
     if (given.auth) Object.assign(CFG.AUTH, given.auth);
+    if (given.whois === false) CFG.WHOIS = false;
     if (given.theme && typeof given.theme === 'object') Object.assign(CFG.THEME, given.theme);
   } catch {
     // a malformed block must not stop the map from drawing

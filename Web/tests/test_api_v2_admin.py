@@ -111,17 +111,19 @@ def test_discovery_surface(client):
     assert r.status_code == 400 and "unknown action" in r.get_json()["error"]
     r = client.post(f"{ADMIN}/discovery/decide", headers=WRITE, json={"keys": []})
     assert r.status_code == 400
-    # as-nodes computes, never writes — and so skips the write gate
-    r = client.post(f"{ADMIN}/discovery/as-nodes", json={"keys": []})
+    # as-nodes computes, never writes, and answers only as a write would
+    assert client.post(f"{ADMIN}/discovery/as-nodes", json={"keys": []}).status_code == 403
+    r = client.post(f"{ADMIN}/discovery/as-nodes", headers=WRITE, json={"keys": []})
     assert r.status_code == 200 and r.get_json() == {"nodes": []}
 
 
 def test_import_csv(client):
-    r = client.post(f"{ADMIN}/import/csv", json={"csv": "name,ip\nNEWPLACE,10.9.9.9\n"})
+    r = client.post(f"{ADMIN}/import/csv", headers=WRITE,
+                    json={"csv": "name,ip\nNEWPLACE,10.9.9.9\n"})
     assert r.status_code == 200
     body = r.get_json()
     assert body["count"] == 1 and body["nodes"][0]["name"] == "NEWPLACE"
-    r = client.post(f"{ADMIN}/import/csv", json={"csv": ""})
+    r = client.post(f"{ADMIN}/import/csv", headers=WRITE, json={"csv": ""})
     assert r.status_code == 400
 
 

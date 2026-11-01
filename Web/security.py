@@ -113,5 +113,14 @@ def actor():
 
 
 def is_admin():
-    """True when the caller may see and use the editing surfaces."""
-    return sees_everything(viewer_groups())
+    """True when the caller may see and use the editing surfaces.
+
+    A look-only standalone Atlas has no admin. Nobody signs in, so `groups` is
+    None for every visitor, and with writes refused no editor is served to need
+    these surfaces. Standalone with writes on keeps them: that is what
+    ATLAS_ALLOW_INSECURE acknowledges.
+    """
+    groups = viewer_groups()
+    if groups is None and settings.READ_ONLY:
+        return False
+    return sees_everything(groups)

@@ -267,7 +267,7 @@ def test_the_viewer_gallery_lists_every_render_with_a_fetchable_url(arena):
     assert r.headers["Cache-Control"] == "private, no-cache"
     assert "Cookie" in r.headers.get("Vary", "")
     maps = r.get_json()["maps"]
-    assert set(maps[0]) == {"name", "label", "url", "default", "theme", "regions"}
+    assert set(maps[0]) == {"name", "label", "url", "default", "theme", "regions", "zoom"}
     bundled = next(m for m in maps if m["name"] == mapart.DEFAULT)
     # the default is whichever render the dataset names, else the bundled one
     import json
@@ -386,3 +386,14 @@ def test_the_maps_list_carries_a_styles_regions(arena, tmp_path):
     assert isle["label"] == "The Isle"
     assert [r["id"] for r in isle["regions"]] == ["cove"]
     assert next(m for m in maps if m["name"] == "cove.png" or m["default"])["regions"] == []
+
+
+def test_the_datasets_own_region_art_is_marked_as_zoom(arena, tmp_path):
+    """The map needs its address, the style list must not offer it."""
+    _style_files(None, tmp_path, COVE)
+    client = arena.app.test_client()
+    data = client.get("/api/v2/lab-data").get_json()
+    region_art = {r["map"] for r in data.get("regions") or []}
+    maps = client.get("/api/v2/maps").get_json()["maps"]
+    assert {m["name"] for m in maps if m["zoom"]} == region_art & {m["name"] for m in maps}
+    assert not next(m for m in maps if m["name"] == "isle.png")["zoom"]

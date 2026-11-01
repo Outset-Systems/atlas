@@ -332,7 +332,7 @@
 }
 #first-survey:hover { border-color: var(--gilt); background: rgba(28,24,16,0.92); }
 /* the demo is a map to look at: the invite sits under the chrome, top right */
-#first-survey.fs-demo { left: auto; right: 24px; top: 76px; transform: none; padding: 14px 22px; gap: 4px; }
+#first-survey.fs-demo { left: auto; right: 24px; top: 76px; transform: none; padding: 14px 22px; gap: 4px; cursor: default; }
 .fs-head { font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.8rem; letter-spacing: 0.3em; color: var(--gilt); }
 .fs-sub { font-family: 'IM Fell English', serif; font-style: italic; font-size: 0.95rem; color: var(--text-dim); }
 body.pre #first-survey { display: none; }

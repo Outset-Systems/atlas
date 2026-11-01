@@ -330,6 +330,7 @@ const REALM_FIELDS = [
   ['ATLAS_EMBED_HOSTS', 'Embedding: extra sites the map may show', 'https://host:port https://other'],
   ['ATLAS_EMBED_SERVICES', 'Embedding: show the map\u2019s own services (1 on, 0 off)', '1'],
   ['ATLAS_EMBED_PROBE', 'Embedding: check a service allows it first (1 on, 0 off)', '1'],
+  ['ATLAS_WHOIS', 'Whois: let viewers ask public registries (1 on, 0 off)', '1'],
 ];
 
 /* integrations.json as the server shows it to an admin; null when the viewer

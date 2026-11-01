@@ -70,6 +70,30 @@ def test_whois_refuses_bad_queries(client):
         assert r.get_json() == {"error": "ask about a domain or an IP address"}
 
 
+def test_whois_can_be_switched_off(tmp_path):
+    data = tmp_path / "lab-data.json"
+    shutil.copy(BUNDLED, data)
+    client = fresh_app(ATLAS_DATA=str(data), ATLAS_WHOIS="0").app.test_client()
+    r = client.get("/api/v2/whois", query_string={"q": "example.com"})
+    assert r.status_code == 403
+    assert r.get_json() == {"error": "whois is switched off on this Atlas"}
+    assert b'"whois": false' in client.get("/").data.replace(b'"whois":false', b'"whois": false')
+
+
+def test_whois_answers_a_person_and_stops_a_relay(client, monkeypatch):
+    from api.v2 import probes
+    probes.whois_limiter.reset()
+    monkeypatch.setattr(probes.whois, "endpoint", lambda server: [("192.0.2.1", 43)])
+    monkeypatch.setattr(probes.whois, "ask", lambda targets, q: "% nothing\n")
+    ask = lambda: client.get("/api/v2/whois", query_string={"q": "example.com"})
+    assert [ask().status_code for _ in range(probes.WHOIS_PER_MINUTE)] == (
+        [200] * probes.WHOIS_PER_MINUTE)
+    refused = ask()
+    assert refused.status_code == 429
+    assert refused.headers["Retry-After"] == "60"
+    probes.whois_limiter.reset()
+
+
 def test_whois_502s_when_the_root_will_not_answer(client, monkeypatch):
     import whois
     monkeypatch.setattr(whois, "endpoint", lambda server: None)

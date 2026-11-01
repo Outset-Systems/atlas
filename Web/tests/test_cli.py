@@ -88,3 +88,9 @@ def test_import_netbox_reports_an_unreadable_token_file_instead_of_crashing():
                 os.environ.pop(k, None)
             else:
                 os.environ[k] = v
+
+
+def test_a_db_command_on_a_database_with_no_tables_says_what_to_do(tmp_path, capsys):
+    url = f"sqlite:///{(tmp_path / 'empty.db').as_posix()}"
+    assert cli.main(["--db", url, "sites"]) == 2
+    assert "db backend" in capsys.readouterr().err

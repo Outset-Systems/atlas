@@ -363,6 +363,9 @@ def discovery_decide():
 
 @admin_bp.route("/discovery/as-nodes", methods=["POST"])
 def discovery_as_nodes():
+    refusal = write_refusal()
+    if refusal:
+        return refusal
     body = request.get_json(silent=True) or {}
     keys = set(body.get("keys") or [])
     ctx = atlas()
@@ -445,6 +448,9 @@ def event_ack(event_id):
 # ── Bulk import ──────────────────────────────────────────────────────────────
 @admin_bp.route("/import/csv", methods=["POST"])
 def import_csv():
+    refusal = write_refusal()
+    if refusal:
+        return refusal
     body = request.get_json(silent=True) or {}
     text = body.get("csv") or ""
     if not isinstance(text, str) or not text.strip():

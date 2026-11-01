@@ -139,7 +139,8 @@ function slideHTML(c, i) {
   // that names the busiest client IPs and the tool that asks who holds one,
   // side by side. The form's behaviour is delegated document-wide in
   // whois.js, so this re-renderable HTML carries no listeners of its own.
-  const whoisPane = c.whois
+  const asksWhois = c.whois && CFG.WHOIS;
+  const whoisPane = asksWhois
     ? `<div class="aw-side">` +
       `<div class="aw-head">THE NAMING DEEP</div>` +
       `<div class="aw-sub">ask who holds one of those names — whois, from below</div>` +
@@ -167,7 +168,7 @@ function slideHTML(c, i) {
     ? `<div class="chron-grid">` + c.panels.map((p) =>
         `<div class="chron-cell"><div class="chron-cell-cap">${esc(p.title)}</div>${paneHTML(p)}</div>`
       ).join('') + `</div>`
-    : c.whois
+    : asksWhois
       ? `<div class="aw-duo">` + paneHTML(c) + whoisPane + `</div>`
       : paneHTML(c);
   return `<div class="chron-slide${c.solo ? ' solo' : ''}" data-i="${i}">` +

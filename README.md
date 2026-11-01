@@ -22,9 +22,10 @@ colours it with live health from Prometheus, Loki and Uptime Kuma.
 - **Tripwires.** Chart your honeypots (OpenCanary, a fake share) and canary
   tokens (a document, a URL, a cloud key), and the Atlas lights the one that
   is touched. Trips arrive through one signed webhook that OpenCanary,
-  Canarytokens or any script can call, and say so out loud when a source stops
-  answering. Admins only: where bait sits stays secret. The Atlas never plants
-  bait itself.
+  Canarytokens or any script can call, and the scene says so out loud when a
+  feed stops answering or a webhook has never been reached. Admins only: where
+  bait sits stays secret. The Atlas never plants bait itself
+  ([turn it on](docs/install.md#turn-on-tripwires)).
 - **Views for the details:** an IP address view built on real CIDR maths, rack
   elevations in 2D and 3D, the network topology from the internet inwards,
   certificate expiry, a calendar of scheduled jobs that notices when one did
@@ -36,7 +37,8 @@ colours it with live health from Prometheus, Loki and Uptime Kuma.
   Fill the map from a CSV device list, an nmap sweep or your router's DHCP
   leases (ISC, dnsmasq, Kea, Windows Server); each device arrives with a
   suggested type from its maker or its name, for you to check. The Atlas never
-  scans the network itself. NetBox and nmap importers on the command line too.
+  scans the network itself. On the `db` backend, NetBox and nmap importers on
+  the command line too.
   Every change is validated, recorded and can be undone.
 - **Real sign-in.** Local accounts with TOTP, optional LDAPS directory
   sign-in, or single sign-on behind a reverse proxy that signs each request.

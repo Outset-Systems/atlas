@@ -108,9 +108,18 @@ this pass:
   theme file other than the public one, and fails when an exclusion entry
   no longer matches anything.
 
-Known and accepted, unchanged by this pass:
+Added the same day, for an Atlas that strangers can reach:
 
-- `GET /api/v2/whois` is a whois relay with no rate limit in `standalone`
-  mode. Run that mode on loopback or a trusted network only.
-- There is no global request-body size cap or request rate limit; put the
-  app behind a reverse proxy that provides them.
+- `GET /api/v2/whois` allows 20 questions a minute per client on each worker,
+  and `ATLAS_WHOIS=0` turns it off.
+- Every request body is capped just above the largest map image.
+- A read-only `standalone` instance has no admin, since nobody signs in there,
+  so it refuses `/api/v2/admin/*` and the trust map. Its tripwire reads stay
+  open because that mode already shows every visitor the whole map.
+- `/admin/import/csv` and `/admin/discovery/as-nodes` go through the write
+  gate like every other write.
+
+Known and accepted:
+
+- There is no request rate limit apart from sign-in, ingest and whois; put the
+  app behind a reverse proxy that provides one.

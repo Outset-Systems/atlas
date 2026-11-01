@@ -289,7 +289,7 @@ SECTIONS = {
               help="Map position, 0–100% down. Past 100 puts it in the void below."),
             f("role", "text", required=True,
               help="What it does, in a phrase. The part before `·` becomes its epigraph."),
-            f("lore", "longtext", required=True, help="The in-world flavour line on its card."),
+            f("lore", "longtext", label="Notes", help="A line about it, shown on its card."),
             f("ip", "ip", label="IP",
               help="Its address, or `—` for none. A whole prefix is allowed for a "
                    "place that *is* a network (Tailscale's 100.64.0.0/10)."),

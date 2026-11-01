@@ -1108,3 +1108,23 @@ def test_the_sign_in_ledger_is_admin_only_and_clamps_its_limit(realm):
     assert len(admin.get("/api/v2/auth/audit?limit=0").get_json()["events"]) == 1      # clamped up
     assert len(admin.get("/api/v2/auth/audit?limit=abc").get_json()["events"]) == len(events)
     assert len(admin.get("/api/v2/auth/audit?limit=99999").get_json()["events"]) <= 500
+
+
+def test_a_named_user_with_no_password_says_so_too(tmp_path, monkeypatch, caplog):
+    """The compose file always names a user, so a blank password arrives here."""
+    fresh_app(
+        ATLAS_AUTH_MODE="accounts",
+        ATLAS_DATA=str(_dataset(tmp_path)),
+        ATLAS_ACCOUNTS_DB=str(tmp_path / "nopass.db"),
+        ATLAS_SECRET_KEY="k", ATLAS_INSECURE_COOKIES="1",
+        ATLAS_DATA_BACKEND="file",
+    )
+    import accounts
+    import auth_routes
+    monkeypatch.setenv("ATLAS_BOOTSTRAP_ADMIN_USER", "admin")
+    monkeypatch.setenv("ATLAS_BOOTSTRAP_ADMIN_PASSWORD", "")
+    monkeypatch.delenv("ATLAS_BOOTSTRAP_ADMIN_PASSWORD_FILE", raising=False)
+    with caplog.at_level("WARNING", logger="atlas.auth.routes"):
+        auth_routes.ensure_bootstrap_admin()
+    assert accounts.count_active_admins() == 0
+    assert any("no admin account exists" in r.getMessage() for r in caplog.records)

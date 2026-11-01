@@ -89,15 +89,17 @@ function addSettingsEntry() {
 function offerFirstSurvey() {
   if (document.body.dataset.seeded === '1') return;
   const demo = document.body.dataset.demo === '1';
-  const invite = document.createElement('button');
+  // Charting on the demo keeps its invented places, so the demo points at the
+  // way to a blank map rather than opening the wizard on top of them.
+  const invite = document.createElement(demo ? 'div' : 'button');
   invite.id = 'first-survey';
   if (demo) invite.classList.add('fs-demo');
   invite.innerHTML = demo
     ? '<span class="fs-head">YOU ARE LOOKING AT THE DEMO LAB</span>' +
-      '<span class="fs-sub">chart your own ›</span>'
+      '<span class="fs-sub">to chart your own, set ATLAS_FALLBACK=empty in .env and run up -d</span>'
     : '<span class="fs-head">THIS ATLAS IS UNCHARTED</span>' +
       '<span class="fs-sub">start guided setup ›</span>';
-  invite.addEventListener('click', () => openWizard());
+  if (!demo) invite.addEventListener('click', () => openWizard());
   document.body.append(invite);
 }
 

@@ -27,6 +27,14 @@ test('listening: nothing configured is "unset", not "all quiet"', () => {
   assert.equal(listening(undefined).verdict, 'unset');
 });
 
+test('listening: a webhook nothing has reached is waiting, never all quiet', () => {
+  const alone = listening({ decoys: { contact: 'off' }, webhook: { contact: 'waiting' } });
+  assert.equal(alone.verdict, 'waiting');
+  const beside = listening({ decoys: { contact: 'ok' }, webhook: { contact: 'waiting' } });
+  assert.equal(beside.verdict, 'ok');
+  assert.equal(beside.waiting, true);
+});
+
 test('listening: one lost source makes the verdict lost and names it', () => {
   const l = listening({ decoys: { contact: 'lost' }, webhook: { contact: 'ok' } });
   assert.equal(l.verdict, 'lost'); assert.deepEqual(l.lost, ['decoys']); assert.deepEqual(l.on, ['webhook']);

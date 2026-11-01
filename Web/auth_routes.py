@@ -43,6 +43,17 @@ def login_page():
                            next=_safe_next(request.args.get("next", "/")))
 
 
+def _say_nobody_can_sign_in():
+    import settings
+    if settings.auth_mode() == "accounts":
+        # Nobody can sign in, and nothing else says why.
+        log.warning("no admin account exists, so nobody can sign in. Set "
+                    "ATLAS_ADMIN_PASSWORD in .env and run `up -d` again (without "
+                    "the compose file: ATLAS_BOOTSTRAP_ADMIN_PASSWORD or _PASSWORD_FILE, "
+                    "user name ATLAS_BOOTSTRAP_ADMIN_USER, default admin), or run "
+                    "`python cli.py user-add <name> --admin`.")
+
+
 def ensure_bootstrap_admin():
     """First-run only: while the instance has NO active admin, the bootstrap
     envs may create (or promote) one. The moment an admin exists this is
@@ -57,13 +68,7 @@ def ensure_bootstrap_admin():
     if password and not username:
         username = "admin"
     if not username:
-        import settings
-        if settings.auth_mode() == "accounts":
-            # Nobody can sign in, and nothing else says why.
-            log.warning("no admin account exists, so nobody can sign in. Set "
-                        "ATLAS_BOOTSTRAP_ADMIN_PASSWORD (or _PASSWORD_FILE; user "
-                        "name ATLAS_BOOTSTRAP_ADMIN_USER, default admin) and "
-                        "restart, or run `python cli.py user-add <name> --admin`.")
+        _say_nobody_can_sign_in()
         return
     existing = accounts.get_user(username)
     if existing:
@@ -72,6 +77,8 @@ def ensure_bootstrap_admin():
         accounts.audit("bootstrap_admin", username, detail="promoted existing account")
         return
     if not password:
+        # The compose file always names a user, so a blank password lands here.
+        _say_nobody_can_sign_in()
         return
     try:
         accounts.create_local_user(username, password, is_admin=True)

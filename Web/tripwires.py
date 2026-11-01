@@ -35,7 +35,7 @@ import os
 import re
 import time
 from datetime import date, datetime, timezone
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlsplit
 
 import envnames
 import events
@@ -522,10 +522,14 @@ def _webhook_source():
           for name, row in state.items()}
     on = enabled()
     has_secret = bool(secret())
-    return {"configured": on, "contact": "ok" if on else "off",
+    last_heard = _latest(*[r["last_heard"] for r in by.values()])
+    # A webhook only ever hears, so "ok" has to mean something arrived once.
+    # Before that it is waiting: a sender may have the wrong address entirely.
+    contact = "off" if not on else "ok" if last_heard else "waiting"
+    return {"configured": on, "contact": contact,
             "auth": {"signature": on and has_secret, "key": on and has_secret,
                      "token": on and settings.DATA_BACKEND == "db"},
-            "last_heard": _latest(*[r["last_heard"] for r in by.values()]),
+            "last_heard": last_heard,
             "last_trip": _latest(*[r["last_trip"] for r in by.values()]),
             "by": by}
 
@@ -597,6 +601,17 @@ def overview(data, feed, now=None):
 
 
 # ── setup helpers: what to paste where ───────────────────────────────────────
+def _is_loopback(url):
+    """True when `url` names this machine, which a sender elsewhere cannot use."""
+    host = (urlsplit(url).hostname or "").lower()
+    if host == "localhost" or host.endswith(".localhost"):
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
 def setup(base_url):
     """Copy-paste configuration for each sender. Never a secret: the key is
     `YOUR-WEBHOOK-KEY` with the command that prints it."""
@@ -617,12 +632,14 @@ def setup(base_url):
     return {
         "enabled": enabled(),
         "url": url,
+        "loopback": _is_loopback(url),
         "backend": settings.DATA_BACKEND,
         "site": settings.SITE_SLUG,
         "secret_set": bool(secret()),
-        "enable": ["ATLAS_TRIPWIRES_WEBHOOK=1",
-                   "ATLAS_TRIPWIRES_SECRET_FILE=/run/secrets/atlas_tripwires"],
+        "enable": ["ATLAS_TRIPWIRES_WEBHOOK=1", "ATLAS_TRIPWIRES_SECRET=YOUR-SECRET"],
         "key_command": "python cli.py tripwires-key",
+        # the install guide's way into the container, for the words around these
+        "compose_exec": "docker compose -f compose.public.yaml exec atlas",
         "token_command": (f"python cli.py token-issue --site {settings.SITE_SLUG} "
                           "--scopes tripwires --label opencanary") if db else None,
         "auth": [

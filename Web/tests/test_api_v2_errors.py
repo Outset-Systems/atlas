@@ -66,3 +66,18 @@ def test_non_ascii_beat_token_is_403_not_500(broken):
         r = broken.post("/api/v2/rites/x/beat", headers={"X-Atlas-Beat": token}, json={})
         assert r.status_code == 403, token
         assert r.get_json() == {"error": "bad or missing beat token"}
+
+
+def test_a_body_over_the_cap_is_refused_in_words(tmp_path):
+    import shutil
+    import mapart
+    data = tmp_path / "lab-data.json"
+    shutil.copy(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                             "default-lab-data.json"), data)
+    app = fresh_app(ATLAS_DATA=str(data), ATLAS_READONLY="0").app
+    assert app.config["MAX_CONTENT_LENGTH"] > mapart.MAX_BYTES, "a map image must still fit"
+    app.config["MAX_CONTENT_LENGTH"] = 16
+    r = app.test_client().post("/api/v2/admin/import/csv", headers={"X-Atlas-Write": "1"},
+                               json={"csv": "name,ip\nsomewhere,10.9.9.9\n"})
+    assert r.status_code == 413
+    assert r.get_json() == {"error": "that request is too large"}

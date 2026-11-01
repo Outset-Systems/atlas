@@ -348,6 +348,14 @@ def embed_probe():
     import integrations
     return integrations.flag("ATLAS_EMBED_PROBE", default=True)
 
+
+# ATLAS_WHOIS           Let a viewer ask public whois servers from the Chronicle
+#                       ("1"/"0", default on). Off for an Atlas strangers can
+#                       reach, because each question goes out from this host.
+def whois_enabled():
+    import integrations
+    return integrations.flag("ATLAS_WHOIS", default=True)
+
 # (GRAFANA_URL — `ATLAS_GRAFANA` — lived here until v1.36.0. Grafana was
 # decommissioned 2026-09-03: the card vitals and the watchings both draw from
 # Prometheus/Loki themselves, and nothing in this app points at it any more.)
@@ -437,6 +445,8 @@ def client_config():
         "auth": auth_config(),
         # THE THEME (v1.48.0): the words and emblems that name one lab
         "theme": _theme.client(),
+        # whether the Chronicle offers its whois pane
+        "whois": whois_enabled(),
     }
     # (`grafana`, `grafanaToken`, `grafanaTokenTtl` rode here until v1.36.0 —
     # the §20c embed token went with Grafana, 2026-09-03.)

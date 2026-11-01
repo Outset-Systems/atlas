@@ -112,15 +112,27 @@ def test_the_layout_writes_are_guarded_too(client):
 
 # ── read-only posture ───────────────────────────────────────────────────────
 
-def test_a_read_only_instance_refuses_every_write_but_still_reads(readonly_client):
-    assert readonly_client.get("/api/v2/admin/context").get_json()["writable"] is False
+def test_a_read_only_instance_refuses_every_write(readonly_client):
     for path, payload in (("/api/v2/admin/ops", {"ops": [an_op()]}),
+                          ("/api/v2/admin/import/csv", {"csv": "name,ip\nx,10.9.9.9\n"}),
+                          ("/api/v2/admin/discovery/as-nodes", {"keys": ["x"]}),
                           ("/api/v2/positions", {}),
                           ("/api/v2/rack", {})):
         r = readonly_client.post(path, headers=WRITE, json=payload)
         assert r.status_code == 403, path
-        assert "read-only" in r.get_json()["error"]
-    assert readonly_client.get("/api/v2/admin/dataset").status_code == 200
+        assert r.get_json()["error"] in ("this Atlas is read-only", "admins only"), path
+
+
+def test_a_look_only_standalone_atlas_keeps_its_admin_reads_to_itself(readonly_client):
+    """Nobody signs in here, so "admin" would mean every visitor."""
+    for path in ("context", "dataset", "revisions", "integrations", "tokens", "auth"):
+        r = readonly_client.get(f"/api/v2/admin/{path}")
+        assert r.status_code == 403, path
+        assert r.get_json() == {"error": "admins only"}
+    assert readonly_client.get("/api/v2/trust").status_code == 403
+    # these only repeat the map, which this mode shows everyone, and the scene needs them
+    for path in ("/api/v2/lab-data", "/api/v2/tripwires", "/api/v2/tripwires/setup"):
+        assert readonly_client.get(path).status_code == 200, path
 
 
 # ── writing ─────────────────────────────────────────────────────────────────
@@ -305,7 +317,6 @@ def test_standalone_defaults_to_read_only(tmp_path):
     c = app.app.test_client()
     r = c.post("/api/v2/admin/ops", headers=WRITE, json={"ops": [an_op()]})
     assert r.status_code == 403, "an unauthenticated standalone instance must not accept writes"
-    assert "read-only" in r.get_json()["error"]
     assert 'data-editable="0"' in c.get("/").get_data(as_text=True)
 
     # ...and the acknowledgement flag opts back in, for loopback dev

@@ -3832,7 +3832,7 @@ body.constellation .mk.active .mk-dot { opacity: 0.35; }
 .gs-sources { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 6px; }
 .gs-src { font-family: 'JetBrains Mono', monospace; font-size: 0.74rem; color: var(--text-dim); }
 .gs-src b { font-weight: 600; color: var(--text); }
-.gs-src-lost { color: var(--sem-warn); }
+.gs-src-lost, .gs-src-waiting { color: var(--sem-warn); }
 .gs-family { padding-top: 6px; }
 .gs-family + .gs-family { border-top: 1px solid var(--ink-line); margin-top: 6px; }
 .gs-family-head {

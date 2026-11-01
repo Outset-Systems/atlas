@@ -34,7 +34,7 @@ import logging
 import os
 import sys
 
-from flask import Flask
+from flask import Flask, jsonify
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -47,6 +47,7 @@ import embeddable  # noqa: E402
 import envnames  # noqa: E402
 import ingest  # noqa: E402
 import labdata  # noqa: E402
+import mapart  # noqa: E402
 import overlays as overlays_mod  # noqa: E402
 import settings  # noqa: E402
 import theme  # noqa: E402
@@ -241,6 +242,14 @@ def create_app():
     # being forwarded anyway. Pinned by test_client_ip.py.
     from werkzeug.middleware.proxy_fix import ProxyFix
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=0, x_proto=1)
+    # The largest thing anyone sends here is a map render. Routes with smaller
+    # bodies keep their own smaller caps; this one stops the rest being read.
+    app.config["MAX_CONTENT_LENGTH"] = mapart.MAX_BYTES + 1024 * 1024
+
+    @app.errorhandler(413)
+    def _too_large(_error):
+        return jsonify({"error": "that request is too large"}), 413
+
     app.config["APP_NAME"] = settings.APP_NAME
     app.config["APP_VERSION"] = settings.APP_VERSION
     app.config["ACCENT_COLOR"] = settings.ACCENT_COLOR

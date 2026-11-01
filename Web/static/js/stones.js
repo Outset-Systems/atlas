@@ -111,14 +111,14 @@ function rowHTML(t) {
 function sourceLine(name, s) {
   if (!s) return '';
   const label = name === 'decoys' ? themeText('decoy_source', 'Decoy feed') : 'Webhook';
-  const state = s.contact === 'ok' ? 'answering' : s.contact === 'lost' ? 'CONTACT LOST' : 'off';
+  const state = { ok: 'answering', lost: 'CONTACT LOST', waiting: 'on, never heard from' }[s.contact] || 'off';
   const heard = s.last_heard ? ` · heard ${esc(ago(s.last_heard) || '')}` : '';
   const trip = s.last_trip ? ` · last trip ${esc(ago(s.last_trip) || '')}` : '';
   return `<span class="gs-src gs-src-${esc(s.contact || 'off')}"><b>${esc(label)}</b> ${state}${heard}${trip}</span>`;
 }
 
 function headHTML(rows, sources, counts) {
-  const { verdict, lost } = listening(sources);
+  const { verdict, lost, waiting } = listening(sources);
   const lit = rows.filter((r) => r.voice === 'speaking').length;
   const srcs = `<span class="gs-sources">${sourceLine('decoys', sources.decoys)}${sourceLine('webhook', sources.webhook)}</span>`;
   if (verdict === 'unset') {
@@ -129,7 +129,18 @@ function headHTML(rows, sources, counts) {
         SET UP below says how to connect OpenCanary, Canarytokens or any script.</span>
       ${srcs}</div>`;
   }
+  if (verdict === 'waiting') {
+    return `<div class="gs-head gs-head-dark">
+      <span class="gs-verdict">WAITING FOR A FIRST SIGNAL</span>
+      <span class="gs-verdict-sub">The webhook is on, but nothing has reached it yet, so the map
+        cannot know whether a tripwire has been touched. Send the test under ANY SCRIPT in
+        SET UP below: when it lands, this line changes.</span>
+      ${srcs}</div>`;
+  }
   const extras = [];
+  if (waiting) {
+    extras.push(`<span class="gs-warn">the webhook has not heard from a sender yet</span>`);
+  }
   if (verdict === 'lost') {
     extras.push(`<span class="gs-warn">CONTACT LOST with ${lost.map((n) => n === 'decoys'
       ? esc(themeText('decoy_source', 'the decoy feed')) : 'the webhook').join(' and ')}: silence
@@ -180,13 +191,21 @@ function setupHTML() {
   if (!s) return '<div class="ldg-note">reading the setup…</div>';
   const parts = [];
   if (!s.enabled) {
-    parts.push(`<p class="gs-setup-p">The webhook is <b>off</b>. Turn it on with these settings
-      (a secret of at least 16 characters in the file), then restart the Atlas:</p>`);
+    parts.push(`<p class="gs-setup-p">The webhook is <b>off</b>. Add these two lines to the
+      container's environment, with a random secret of at least 16 characters
+      (<code>openssl rand -hex 24</code> prints one). If you installed from the guide, that means
+      <code>.env</code>, then <code>docker compose -f compose.public.yaml up -d</code>:</p>`);
     parts.push(codeBlock(s.enable.join('\n'), 'environment'));
   }
   parts.push(`<p class="gs-setup-p">Every sender posts to one address. Its key is derived from
-    the secret; print it on the server with <code>${esc(s.key_command)}</code>${s.token_command
-      ? `, or mint a site token with <code>${esc(s.token_command)}</code>` : ''}.</p>`);
+    the secret; print it inside the container with <code>${esc(s.key_command)}</code>${s.token_command
+      ? `, or mint a site token with <code>${esc(s.token_command)}</code>` : ''}. From the guide's
+    install, put <code>${esc(s.compose_exec)}</code> in front.</p>`);
+  if (s.loopback) {
+    parts.push(`<p class="gs-setup-p"><b>This address only works on this machine.</b> It is the
+      one your browser used, so a sender elsewhere would be calling itself. Open the Atlas through
+      your reverse proxy and come back here, and the blocks below will carry the right address.</p>`);
+  }
   parts.push(codeBlock(s.url, 'webhook URL'));
   parts.push(`<div class="gs-family-head">OPENCANARY</div>`);
   parts.push(codeBlock(s.opencanary.config, 'opencanary.conf — logger'));
@@ -274,7 +293,7 @@ function paint() {
   const at = listEl.scrollTop;
   listEl.innerHTML = unmatchedHTML(ov?.unmatched) + (groups
     || `<div class="ldg-note">no ${esc(plural().toLowerCase())} charted yet — add a honeypot or a
-        canary token in the map editor; DATA.md says what one may safely be called.</div>`)
+        canary token in the map editor.</div>`)
     + setupBlock(Boolean(ov));
   listEl.scrollTop = at;
   wire();

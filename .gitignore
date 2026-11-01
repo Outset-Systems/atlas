@@ -8,6 +8,8 @@ Data/
 *.key
 secrets/
 .env
+atlas_admin_password.txt
+admin_password.txt
 
 # Python and test scratch
 __pycache__/

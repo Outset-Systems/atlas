@@ -25,7 +25,9 @@ export function familyOf(t) {
 /** Per-source contact → the head's verdict.
     'unset'  nothing is configured to listen at all;
     'lost'   a configured source is not answering (named in `lost`);
-    'ok'     every configured source is answering. */
+    'ok'     every configured source is answering;
+    'waiting' the only source is a webhook nothing has reached yet.
+    `waiting` also says so beside a source that does answer. */
 export function listening(sources) {
   const d = sources?.decoys || {};
   const w = sources?.webhook || {};
@@ -33,8 +35,9 @@ export function listening(sources) {
   const lost = [];
   if (d.contact && d.contact !== 'off') (d.contact === 'ok' ? on : lost).push('decoys');
   if (w.contact === 'ok') on.push('webhook');
-  if (!on.length && !lost.length) return { verdict: 'unset', on, lost };
-  return { verdict: lost.length ? 'lost' : 'ok', on, lost };
+  const waiting = w.contact === 'waiting';
+  if (!on.length && !lost.length) return { verdict: waiting ? 'waiting' : 'unset', on, lost, waiting };
+  return { verdict: lost.length ? 'lost' : 'ok', on, lost, waiting };
 }
 
 /** The legacy (feed-only) sources object as the same shape: lets the head

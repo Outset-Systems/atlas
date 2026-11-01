@@ -41,6 +41,21 @@ def admin_required(view):
     return guarded
 
 
+def whole_map_required(view):
+    """403 anyone who may not see the whole map.
+
+    `admin_required` but for a look-only standalone Atlas, which has no admin
+    and already shows every visitor the whole map, tripwires included. A read
+    that only repeats the map stays open there, so its scene still works.
+    """
+    @wraps(view)
+    def guarded(*args, **kwargs):
+        if not security.sees_everything(security.viewer_groups()):
+            return jsonify({"error": "admins only"}), 403
+        return view(*args, **kwargs)
+    return guarded
+
+
 def write_required(view):
     """Refuse a write for every reason `security.write_refusal()` would —
     read-only instance, cross-site fetch, missing `X-Atlas-Write`, not an

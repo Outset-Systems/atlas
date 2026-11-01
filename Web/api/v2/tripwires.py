@@ -27,7 +27,7 @@ from context import atlas
 from redaction import vary_on_viewer
 
 from . import bp
-from .auth import admin_required
+from .auth import whole_map_required
 
 log = logging.getLogger("atlas.api.v2")
 
@@ -92,7 +92,7 @@ def _private(payload):
 
 
 @bp.route("/tripwires")
-@admin_required
+@whole_map_required
 def tripwires_read():
     """The scene's one read. Builds the feed the way the signals route does
     (`build_feed` — so a fresh build still writes THE ANNALS) and reads the
@@ -112,6 +112,6 @@ def tripwires_read():
 
 
 @bp.route("/tripwires/setup")
-@admin_required
+@whole_map_required
 def tripwires_setup():
     return _private(tripwires.setup(request.url_root))

@@ -95,7 +95,8 @@ async function buildTable() {
   let maps = [];
   try {
     const r = await fetch('api/v2/maps', { cache: 'no-store' });
-    if (r.ok) maps = (await r.json()).maps || [];
+    // region art is zoomed into, not chosen, unless this browser already chose it
+    if (r.ok) maps = ((await r.json()).maps || []).filter((m) => !m.zoom || m.name === stored()?.name);
   } catch { /* the rows below say so */ }
   if (!maps.length) {
     holder.innerHTML = '<div class="sp-hint">No map images found. Using the default background.</div>';

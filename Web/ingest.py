@@ -53,6 +53,10 @@ def announce(url_prefix):
         "`python cli.py token-issue`, revoke with `python cli.py token-revoke`.", url_prefix)
 
 
+#: Clients a limiter holds before it sweeps out the ones it has stopped hearing.
+MAX_TRACKED = 4096
+
+
 class _RateLimiter:
     """Fixed-window-ish sliding limiter, per worker process (same trade-off as
     the signals cache: no Redis, and a few extra allowed requests across
@@ -66,6 +70,8 @@ class _RateLimiter:
     def hit(self, key):
         now = time.monotonic()
         with self._lock:
+            if len(self._hits) >= MAX_TRACKED:      # a public route meets many clients
+                self._forget(now)
             q = self._hits[key]
             while q and now - q[0] > self.window:
                 q.popleft()
@@ -73,6 +79,10 @@ class _RateLimiter:
                 return False
             q.append(now)
             return True
+
+    def _forget(self, now):
+        for key in [k for k, q in self._hits.items() if not q or now - q[-1] > self.window]:
+            del self._hits[key]
 
     def reset(self):
         with self._lock:

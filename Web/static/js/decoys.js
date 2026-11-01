@@ -42,8 +42,9 @@ const EYE_SVG =
 function watchByNode() {
   const ov = A.tripwires || null;
   const rows = roster({ overview: ov, charted: A.DATA?.stones || [], live: A.signalsFeed?.stones || {} });
-  const lost = listening(ov?.sources || legacySources(A.signalsSources)).verdict !== 'ok';
-  return { ...watchModel(rows, lost), lost };
+  const { verdict } = listening(ov?.sources || legacySources(A.signalsSources));
+  const lost = verdict !== 'ok';
+  return { ...watchModel(rows, lost), lost, waiting: verdict === 'waiting' };
 }
 
 /** (Re)paint the eye badges. Runs on toggle, on every signals poll, and after
@@ -101,9 +102,11 @@ A.toggleDecoys = function toggleDecoys(force) {
   A.loadTripwires?.().then((ov) => { if (ov && on) paint(); });
   // say what the layer is showing the moment it opens — the same three
   // verdicts the scene's head gives, in one line
-  const { nodes, unplaced, speaking, total, lost } = watchByNode();
+  const { nodes, unplaced, speaking, total, lost, waiting } = watchByNode();
   if (!total) {
     A.showToast?.(`No ${themeText('stones', 'decoys').toLowerCase()} are known — none charted, and ${themeText('decoy_source', 'the decoy feed')} names none.`);
+  } else if (waiting) {
+    A.showToast?.('The webhook has not heard from a sender yet. The eyes are drawn from the chart, not the wire.');
   } else if (lost) {
     A.showToast?.('CONTACT LOST — the watch is not answering. The eyes are drawn from the chart, not the wire.');
   } else if (speaking) {

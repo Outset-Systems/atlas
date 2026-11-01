@@ -470,10 +470,10 @@ def test_an_old_trip_is_not_lit(realm, monkeypatch):
 
 def test_contact_per_source(realm, monkeypatch):
     """The decoy feed: ok / lost / off from the feed's own `sources`. The
-    webhook: ok when it can be used, off when it cannot."""
+    webhook: off when it cannot be used, waiting until something reaches it."""
     view = realm.client.get("/api/v2/tripwires").get_json()["sources"]
     assert view["decoys"]["contact"] == "off" and view["decoys"]["path"] == "/api/stones"
-    assert view["webhook"]["contact"] == "ok"
+    assert view["webhook"]["contact"] == "waiting"
     assert view["webhook"]["auth"] == {"signature": True, "key": True, "token": False}
 
     import requests
@@ -528,6 +528,9 @@ def test_the_setup_helper_never_carries_a_secret(realm):
     assert json.loads(body["opencanary"]["config"])["logger"]["kwargs"]["handlers"]["Webhook"] == handler
     assert body["canarytokens"]["webhook_url"] == body["url"] + "?key=" + tripwires.KEY_PLACEHOLDER
     assert body["key_command"] == "python cli.py tripwires-key"
+    assert body["key_command"] and body["compose_exec"].endswith("exec atlas")
+    placeholder = next(line for line in body["enable"] if "SECRET=" in line).split("=", 1)[1]
+    assert len(placeholder) < tripwires.SECRET_MIN, "a pasted placeholder must not work"
     assert body["token_command"] is None                         # file backend
     assert {a["scheme"] for a in body["auth"]} == {"bearer", "query", "signature"}
     assert body["decoys"]["path"] == "/api/stones"
@@ -657,3 +660,21 @@ def test_env_coverage_passes():
     for name in ("ATLAS_TRIPWIRES_WEBHOOK", "ATLAS_TRIPWIRES_SECRET",
                  "ATLAS_TRIPWIRES_SECRET_FILE", "ATLAS_TRIPWIRES_STATE", "ATLAS_DECOYS_PATH"):
         assert f"`{name}`" in doc
+
+
+@pytest.mark.parametrize("url, loopback", [
+    ("http://localhost:5006/", True), ("http://127.0.0.1:5006/", True),
+    ("http://[::1]:5006/", True), ("https://atlas.home.example/", False),
+    ("http://10.0.0.5:5006/", False),
+])
+def test_setup_warns_when_its_address_only_works_here(realm, url, loopback):
+    assert tripwires.setup(url)["loopback"] is loopback
+
+
+def test_a_limiter_forgets_clients_it_has_stopped_hearing(monkeypatch):
+    import ingest
+    monkeypatch.setattr(ingest, "MAX_TRACKED", 3)
+    limiter = ingest._RateLimiter(limit=5, window=-1.0)   # every client already stale
+    for client in "abcdef":
+        limiter.hit(client)
+    assert len(limiter._hits) <= 3

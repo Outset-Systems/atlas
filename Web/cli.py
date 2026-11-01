@@ -503,7 +503,16 @@ def main(argv=None):
     args = ap.parse_args(argv)
     if args.db:
         os.environ["ATLAS_DB_URL"] = args.db  # before any store engine is built
-    return args.fn(args)
+    try:
+        return args.fn(args)
+    except Exception as e:      # noqa: BLE001 — by name, so file mode never imports sqlalchemy
+        if type(e).__name__ != "OperationalError" or "no such table" not in str(e):
+            raise
+        print("error: this database has no tables yet. On the db backend, run `alembic "
+              "upgrade head` first. A default install uses the file backend, where this "
+              "command does not apply: fill the map from the editor instead. See "
+              "ATLAS_DATA_BACKEND in docs/configuration.md.", file=sys.stderr)
+        return 2
 
 
 if __name__ == "__main__":

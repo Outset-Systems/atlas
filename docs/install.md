@@ -7,8 +7,9 @@
 > minute end to end on a fast connection). Earlier the same day they also ran
 > on an existing Docker host, including the short-password case. Not yet
 > tried: a full virtual machine with Docker running as a system service, and
-> Docker Desktop on macOS or Windows. If a step does not work as written,
-> please open an issue.
+> Docker Desktop on macOS or Windows. The SSH tunnel and tripwires sections
+> came after that run. If a step does not work as written, please open an
+> issue.
 
 The Atlas runs as one container with one volume. The compose file in the
 repository root, `compose.public.yaml`, starts it in **accounts** mode (real
@@ -16,8 +17,9 @@ sign-in), bound to `127.0.0.1` only, with its data in a named Docker volume.
 
 ## Requirements
 
-- Docker Engine with the Compose v2 plugin (`docker compose version` should
-  work). Docker Desktop on macOS or Windows is fine.
+- Docker Engine with Compose 2.24 or newer (`docker compose version` shows
+  it). Docker Desktop should work too, though it is untested; see the status
+  note above.
 - `git`, to clone the repository.
 - About 1 GB of free disk for the image build, and a few hundred MB of RAM.
   The image is based on `python:3.12-slim` and builds on `amd64` and `arm64`.
@@ -42,8 +44,9 @@ A shorter one is refused: the app still starts, but without an admin, and
 `docker compose -f compose.public.yaml logs atlas` says why. Fix the line
 and run the `up -d` command again: the admin is created on that start,
 because none exists yet. Or create the admin by hand as shown under
-[First sign-in](#first-sign-in). No `openssl`? Write the line by hand:
-`ATLAS_ADMIN_PASSWORD=...`.
+[First sign-in](#first-sign-in). No `openssl`, or on PowerShell? Write the
+line by hand: `ATLAS_ADMIN_PASSWORD=...`. Avoid `$`, `#` and spaces in a
+hand-written value, or put the value in single quotes.
 
 Prefer to see every setting? Copy `.env.example` to `.env` instead and fill
 in `ATLAS_ADMIN_PASSWORD`; the file explains each line. Port 5006 already in
@@ -54,14 +57,16 @@ The first `up` builds the image, which takes a few minutes. Check it is
 running:
 
 ```sh
-docker compose -f compose.public.yaml ps        # STATUS should say "healthy"
+docker compose -f compose.public.yaml ps        # STATUS says "healthy" within a minute
 curl -s http://localhost:5006/api/v2/health
 ```
 
 ### Variables the compose file reads
 
-Set these in `.env` (or your shell) before `up`. They are compose settings;
-the app's own variables are in [configuration.md](configuration.md).
+Set these in `.env` (or your shell) before `up`. They are compose settings.
+Everything else in [configuration.md](configuration.md) can go in `.env` too,
+because the file reaches the app whole. `up -d` applies a change; `restart`
+does not.
 
 | Variable | Default | Meaning |
 |---|---|---|
@@ -76,15 +81,30 @@ the app's own variables are in [configuration.md](configuration.md).
 
 ## First sign-in
 
+**Docker on a server, not your desktop?** Sign-in needs `localhost` or TLS, so
+reach the loopback port over SSH, then use the same address below:
+
+```sh
+ssh -L 5006:127.0.0.1:5006 you@your-server
+```
+
+For a quick test across a trusted LAN instead, set both `ATLAS_PUBLISH=5006`
+and `ATLAS_INSECURE_COOKIES=1` in `.env`, then `up -d`. The first alone gives a
+sign-in page that loops. For anything lasting, use a
+[reverse proxy](#put-it-behind-a-reverse-proxy).
+
 1. Open <http://localhost:5006>. You get the sign-in page.
 2. Sign in as `admin` (or your `ATLAS_ADMIN_USER`) with the password from
    `.env`.
 3. Open **Settings** (the gear button). Your account section has a
    "Change password" form; the Users section adds more people.
-4. The map starts empty and offers a guided first setup: name your lab, add a
-   network segment, then add its places by hand or from a pasted CSV device
-   list. After that, the editor in Settings changes anything on the map, and
-   every change is recorded and can be undone.
+4. The map starts empty and offers a guided first setup: name your lab, choose
+   how to start (a scan file, your router's leases, a CSV device list, or by
+   hand), confirm the networks, then the devices. After that, every change is
+   recorded and can be undone.
+5. To add a place later: **Settings → Edit the map → Open the map editor**
+   (or press `E`), then **+ new place**. Id, name, kind, realm, position and
+   role are required; the rest can wait.
 
 **Turn on TOTP for admins.** Add `ATLAS_MFA_REQUIRED=admins` (or `all`) to
 `.env` and run `docker compose -f compose.public.yaml up -d` again. At
@@ -111,8 +131,33 @@ The same tool lists, changes and removes accounts: `user-list`,
 `10.77.x.x`), with live-looking health from a demo status feed in the image
 (used only while no other source is configured). The first change you save
 turns that demo into your own copy and silences the demo feed, so
-switch back to `empty` before you start charting your own lab, or delete the
-volume (see [Uninstall](#uninstall)) to start over.
+switch back to `empty` before you start charting your own lab. To start over
+instead, delete the volume (see [Uninstall](#uninstall)). That deletes the admin
+too, so keep `ATLAS_ADMIN_PASSWORD` in `.env` for the next `up`.
+
+## Turn on tripwires
+
+Tripwires light a marker when a honeypot or canary token is touched. Trips reach
+the Atlas through a webhook, which is off until it has a secret:
+
+```sh
+printf 'ATLAS_TRIPWIRES_WEBHOOK=1\nATLAS_TRIPWIRES_SECRET=%s\n' "$(openssl rand -hex 24)" >> .env
+docker compose -f compose.public.yaml up -d
+docker compose -f compose.public.yaml exec atlas python cli.py tripwires-key
+```
+
+The last line prints the webhook key that senders use. Now open the Tripwires
+scene, where **SET UP** gives the block to paste for OpenCanary, the URL for
+Canarytokens, and a `curl` line for any script.
+
+- **A sender must be able to reach the Atlas.** The blocks use the address your
+  browser used, so open the Atlas through your
+  [reverse proxy](#put-it-behind-a-reverse-proxy) first. `localhost` only works
+  on this machine, and SET UP warns you when that is what it shows.
+- **Test it.** Run the `curl` line once. Until something arrives, the scene says
+  it is waiting for a first signal. Afterwards a quiet scene means nothing has
+  been touched. The test shows up as an unmatched trip, which you can
+  acknowledge.
 
 ## Put it behind a reverse proxy
 
@@ -126,8 +171,9 @@ Serve the Atlas at the root of its own host name (for example
 
 ### Caddy
 
-Caddy gets a certificate automatically and sets the forwarding headers for
-you:
+Caddy gets a certificate automatically for a public name, and sets the
+forwarding headers for you. For a name only your LAN can resolve, add
+`tls internal` inside the block and trust Caddy's root certificate:
 
 ```caddyfile
 atlas.home.example {
@@ -198,6 +244,7 @@ whole volume. The files that matter:
 | `positions.json`, `rack.json` | Hand-placed marker positions and rack layout. |
 | `revisions/` | Snapshots of the dataset after every change. |
 | `events.json`, `heartbeats.json`, `maintenance.json`, `observed.json` | Event history, job heartbeats, maintenance windows, discovery results. |
+| `tripwires.json`, `api-tokens.json`, `beats/` | When each tripwire sender was last heard, API tokens, job drop files. |
 | `maps/`, `reports/` | Uploaded map images and generated reports. |
 | `accounts.db` | Users, password hashes, encrypted TOTP secrets, sign-in audit. |
 | `auth-config.json`, `integrations.json` | Settings saved from the Settings screen (secrets encrypted). |
@@ -239,7 +286,10 @@ The app runs as user id 1000, hence the `chown`.
 
 1. Back up (above).
 2. Read the release notes for the version you are moving to.
-3. Pull and rebuild:
+3. Check `docker compose version` says 2.24 or newer. If you edited
+   `compose.public.yaml`, move those settings to `.env` first: `git pull`
+   stops at a file you changed.
+4. Pull and rebuild:
 
    ```sh
    git pull
@@ -262,6 +312,7 @@ took in step 1.
 docker compose -f compose.public.yaml down        # stop and remove the container, keep the data
 docker compose -f compose.public.yaml down -v     # also delete the data volume (cannot be undone)
 docker image rm atlas:local                       # remove the built image
+docker builder prune                              # optional: remove the build cache
 ```
 
 Then delete the cloned directory, including `.env`.
@@ -271,9 +322,10 @@ Then delete the cloned directory, including `.env`.
 The image needs only a volume at `/data` and the environment variables you
 choose. It asks for sign-in by default (`ATLAS_AUTH_MODE=accounts`), so give
 the first admin a password, or nobody can sign in. The same setup with
-`docker run`:
+`docker run`, reading that password from a file you create first:
 
 ```sh
+printf '%s' "$(openssl rand -base64 24)" > admin_password.txt
 docker build --target public -t atlas:local .
 docker volume create atlas-data
 docker run -d --name atlas --restart unless-stopped \

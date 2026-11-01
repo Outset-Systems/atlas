@@ -1,21 +1,20 @@
 """Alembic environment for the Atlas DB backbone.
 
-ATLAS_DB_URL (the app's own setting) takes precedence over alembic.ini, so
-deployments run `alembic upgrade head` with no ini edits.
+The URL is the app's own (`store.db_url()`), so deployments run
+`alembic upgrade head` with no ini edits.
 """
-
-import os
 
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
+from store import db_url
 from store.models import Base
 
 config = context.config
 
-url = os.environ.get("ATLAS_DB_URL")
-if url:
-    config.set_main_option("sqlalchemy.url", url)
+# The app's own answer, so a migration lands in the database the app reads.
+# `%` is escaped for the config parser a URL passes through.
+config.set_main_option("sqlalchemy.url", db_url().replace("%", "%%"))
 
 target_metadata = Base.metadata
 

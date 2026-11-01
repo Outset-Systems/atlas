@@ -16,15 +16,23 @@ import re
 
 from flask import jsonify, make_response, request
 
+import atlas_auth
 import embeddable
 import settings
 import whois
 from context import atlas
+from ingest import _RateLimiter
 from redaction import redact_for_groups
 
 from . import bp
 
 log = logging.getLogger("atlas.api.v2")
+
+#: Questions one client may ask a minute. A person reads the answers; anything
+#: faster is using this host as a relay. The socket engine stays stdlib only,
+#: so the limit lives with the route.
+WHOIS_PER_MINUTE = 20
+whois_limiter = _RateLimiter(limit=WHOIS_PER_MINUTE, window=60.0)
 
 
 @bp.route("/embeddable")
@@ -79,6 +87,8 @@ def whois_lookup():
     whois answer is still an answer. Only a name nobody would speak to at all
     is an error.
     """
+    if not settings.whois_enabled():
+        return jsonify({"error": "whois is switched off on this Atlas"}), 403
     q = (request.args.get("q") or "").strip().lower().rstrip(".")
     # hostname/IP characters only (":" for IPv6) — this string goes onto a
     # socket to servers we chose, and it should never be able to smuggle a
@@ -87,6 +97,10 @@ def whois_lookup():
             or not re.match(r"^[a-z0-9._:-]+$", q)
             or not re.search(r"[a-z0-9]", q)):
         return jsonify({"error": "ask about a domain or an IP address"}), 400
+    if not whois_limiter.hit(atlas_auth.client_ip()):
+        resp = jsonify({"error": "too many questions, try again in a minute"})
+        resp.headers["Retry-After"] = "60"
+        return resp, 429
 
     servers, texts = [], []
     server, seen = whois.ROOT, set()
