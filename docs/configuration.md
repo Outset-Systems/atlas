@@ -369,6 +369,22 @@ A style brings its regions in a file beside the image, written by you and never 
 ```
 
 `x`, `y`, `w` and `h` are percent of the parent map, the same units the map editor uses. `label` is
-the name in the style list. `auto` opens the region when you zoom into it. An image a region names
+the name in the style list, and the map takes that name while the style is chosen. `auto` opens the region when you zoom into it. An image a region names
 is left out of the style list, because you reach it by zooming in. A file that cannot be read costs
 the style its zoom, never the map.
+
+A style can also arrange the map to suit its picture. `places` moves markers, by place id, and
+`zones` moves the network names, by network id, in percent of the map. A region takes `places` too,
+in percent of the region's own picture, for where a place sits once you zoom in:
+
+```json
+{
+  "label": "The Island",
+  "places": {"router": {"x": 42, "y": 61}, "nas": {"x": 30, "y": 48}},
+  "zones": {"servers": {"x": 36, "y": 40}}
+}
+```
+
+This changes the picture only, never your data. A place the file does not name stays where it is,
+and a place it does name cannot be dragged while that style is chosen, because the drag would save
+to the map's own spot.

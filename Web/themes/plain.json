@@ -5,7 +5,7 @@
   "veil_sigil": "",
   "maps": ["plain.webp"],
   "guest_maps": [],
-  "map_labels": {},
+  "map_labels": {"demo-lab.webp": "The Archipelago", "plain.webp": "The Still Water"},
   "sky_island": false,
   "text": {
     "rack_location": "Home lab",

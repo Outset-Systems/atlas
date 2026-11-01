@@ -18,11 +18,13 @@ function buildZoneLabels() {
   for (const z of A.DATA.zones) {
     // some VLANs keep their territory but drop the map text. The Depths never
     // draw theirs: the section below the map carries the name in its own heading.
-    if (z.hide_label || z.id === 'depths') continue;
+    // A style that places a zone means it to be read there, so it names it.
+    const at = A.styleZones?.[z.id];
+    if (!at && (z.hide_label || z.id === 'depths')) continue;
     const el = document.createElement('div');
     el.className = 'zone-label';
-    el.style.left = z.label_x + '%';
-    el.style.top = z.label_y + '%';
+    el.style.left = (at ? at.x : z.label_x) + '%';
+    el.style.top = (at ? at.y : z.label_y) + '%';
     el.style.color = z.hue;
     el.style.fontSize = CFG.ZONE_LABEL_PX + 'px';
     el.innerHTML = `${esc(z.name)}<small>vlan ${esc(z.vlan)} · ${esc(z.subnet)}</small>`;
@@ -1045,10 +1047,17 @@ const POS_KEY = 'atlas-pos-overrides';
 function posOverrides() {
   try { return JSON.parse(localStorage.getItem(POS_KEY) || '{}'); } catch { return {}; }
 }
+/* Where a place stands: its own spot (`_home`, with any saved drag), unless the
+   chosen map style puts it somewhere on that picture. `_home` is what lets a
+   viewer step back off a style, and it never leaves this browser: the editor
+   works from its own read of the dataset. */
 function applyOverrides() {
   const o = posOverrides();
   for (const n of A.DATA.nodes) {
-    if (o[n.id]) { n.x = o[n.id].x; n.y = o[n.id].y; }
+    const home = o[n.id] || n._home || n;
+    n._home = { x: home.x, y: home.y };
+    const at = A.stylePlaces?.[n.id] || n._home;
+    n.x = at.x; n.y = at.y;
   }
 }
 A.editMode = false;
@@ -1139,7 +1148,8 @@ function buildMarkers() {
     });
     // edit-mode drag
     mk.addEventListener('pointerdown', (e) => {
-      if (!A.editMode) return;
+      // on a style that places it, this is not the spot a drag would save
+      if (!A.editMode || A.stylePlaces?.[n.id]) return;
       e.stopPropagation(); e.preventDefault();
       mk.setPointerCapture(e.pointerId);
       mk.classList.add('dragging');

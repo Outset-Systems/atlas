@@ -45,12 +45,47 @@ const stored = () => {
 /** The art this browser chose, or null for the realm's own. regions.js asks:
     a region is a rectangle on one picture, so it follows the picture. */
 export const chosenStyle = () => stored()?.name || null;
+/** The chosen art's name, or null on the realm's own: the map calls itself this. */
+export const styleName = () => stored()?.label || null;
 const store = (v) => {
   try {
     if (v) localStorage.setItem(WALLPAPER_KEY, JSON.stringify(v));
     else localStorage.removeItem(WALLPAPER_KEY);
   } catch { /* private mode */ }
 };
+
+/* What a style changes beyond the picture. A place sits where it does on one
+   picture, so a style may move the markers and the network names, and the map
+   takes the style's name. world.js reads A.stylePlaces and A.styleZones. */
+const veilTitle = document.querySelector('.veil-title');
+const realmName = { tab: document.title, veil: veilTitle?.textContent || '' };
+
+function wear(style) {
+  A.stylePlaces = Object.keys(style?.places || {}).length ? style.places : null;
+  A.styleZones = style?.zones || null;
+  document.body.classList.toggle('on-style', Boolean(style));   // the realm's own scenery stays home
+  const label = style?.label;
+  document.title = label ? `${label} Atlas` : realmName.tab;
+  if (veilTitle) veilTitle.textContent = label ? label.toUpperCase() : realmName.veil;
+}
+
+const styleOf = (m) => ({
+  name: m.name, url: m.url, theme: m.theme || null,
+  label: m.label || null, places: m.places || {}, zones: m.zones || {},
+});
+
+/** The maps list answered: this browser's stored copy of its style may be old
+    (or from before styles carried this). Repaint only if it really moved. */
+export function refreshStyle(m) {
+  const had = stored();
+  if (!m || !had || m.name !== had.name) return;
+  const now = styleOf(m);
+  if (JSON.stringify([had.label, had.places, had.zones]) ===
+      JSON.stringify([now.label, now.places, now.zones])) return;
+  store({ ...had, ...now });
+  wear(now);
+  A.buildWorld?.();
+}
 
 function applyTheme(theme) {
   const root = document.documentElement;
@@ -66,6 +101,7 @@ function applyTheme(theme) {
 const mapBase = $('map-base');
 (function applyEarly() {
   const pick = stored();
+  wear(pick);
   if (!mapBase || !pick?.url) { if (pick?.theme) applyTheme(pick.theme); return; }
   mapBase.dataset.realmSrc = mapBase.src;      // the realm's own choice, kept for fallback
   mapBase.src = pick.url;
@@ -76,6 +112,7 @@ const mapBase = $('map-base');
     // beats a world sized to nothing — guarded so it can never loop.
     store(null);
     applyTheme(null);
+    wear(null);
     mapBase.src = mapBase.dataset.realmSrc;
     if (A.MAPW && !mapBase.naturalWidth) {
       try {
@@ -189,13 +226,15 @@ function pick(m) {
   // choosing the realm's default = clearing the override, so a later Desk
   // change of the default follows this browser too
   if (m.default) { store(null); applyTheme(null); }
-  else { store({ name: m.name, url: m.url, theme: m.theme || null }); applyTheme(m.theme || null); }
+  else { store(styleOf(m)); applyTheme(m.theme || null); }
+  wear(stored());
   const target = m.default ? (mapBase.dataset.realmSrc || m.url) : m.url;
   if (mapBase && mapBase.src !== new URL(target, location.href).href) {
     mapBase.addEventListener('load', () => {
       // same canvas → live redress; a different-sized render changes the whole
       // coordinate space, and one honest reload is the correct re-boot for that
       if (mapBase.naturalWidth === A.MAPW && mapBase.naturalHeight === A.MAPH) {
+        A.buildWorld?.();
         A.onStyleChange?.();
         A.showToast?.('The table is redressed.');
       } else {

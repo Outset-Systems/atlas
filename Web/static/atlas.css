@@ -268,9 +268,10 @@ body::after {
 
 /* ── The void below the table — scroll south into the Depths ── */
 #void-fade {
-  position: absolute; left: -2%; width: 104%; top: 74%; height: 26.5%;
+  /* only the last few percent: the map reads to its foot (owner, 2026-11-01) */
+  position: absolute; left: -2%; width: 104%; top: 93%; height: 7.5%;
   pointer-events: none; z-index: 3;
-  background: linear-gradient(180deg, transparent, rgba(4,3,2,0.92) 40%, #030202 70%);
+  background: linear-gradient(180deg, transparent, rgba(4,3,2,0.72) 62%, #030202 100%);
 }
 #void {
   position: absolute; left: -30%; width: 160%; top: 99.8%; height: 102%;
@@ -329,7 +330,7 @@ body::after {
 
 /* ── The Upper Deck — a lighter dawn above the north edge (tall enough to light
    the Chronicle high above the clouds) ── */
-#sky-realm { position: absolute; left: -30%; width: 160%; top: -56%; height: 60%; z-index: 6; pointer-events: none; }
+#sky-realm { position: absolute; left: -30%; width: 160%; top: -58.5%; height: 60%; z-index: 6; pointer-events: none; }
 /* the sky itself: a soft luminous wash, much lighter than the abyss */
 /* a clean, light backdrop above the clouds — no map art up here, just sky, so the
    Chronicle reads on a bright field. Fades to transparent low down where the clouds
@@ -345,7 +346,9 @@ body::after {
 /* the cloud band blankets the sand→sky seam AND dips a little onto the map: tall
    enough that its dense middle sits over the seam while the bottom overlaps the
    render (the clean light .sky-glow owns the space above it) */
-.cloud-bank { position: absolute; left: -12%; right: -12%; bottom: -16%; height: 66%; }
+/* the bank's foot rests about 6% down the map, under the title bar at the home
+   view, so the map reads to its head (owner, 2026-11-01) and the seam stays soft */
+.cloud-bank { position: absolute; left: -12%; right: -12%; bottom: -7%; height: 66%; }
 /* an opaque warm haze band straddles the seam and fully hides the hard PNG edge;
    the fractal clouds ride on top for texture. Taller + denser than before so no
    sand→sky cut shows while scrolling up; fades both ways so it never reads as a line. */
@@ -570,6 +573,8 @@ body::after {
    (☁ and the wheel both still rise). z-index stays 5 — it never meets the
    seam-hiding cloud bank on screen, which lives entirely above the map's top
    edge while this floats over the table's northern quarter. */
+/* belongs to the realm's own picture, so another map style goes without */
+body.on-style #sky-island, body.on-style #sky-shadow, body.on-style #star-hide { display: none; }
 #sky-island {
   position: absolute; pointer-events: none; z-index: 5;
   filter: drop-shadow(0 24px 18px rgba(5, 4, 2, 0.38));

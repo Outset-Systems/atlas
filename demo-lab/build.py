@@ -421,7 +421,7 @@ KUMA = {"Gateway": "gateway", "Core Switch": "core-switch", "Hypervisor": "hyper
 
 def dataset():
     return {
-        "meta": {"title": "Home Lab Atlas", "surveyed": "2026-10-18",
+        "meta": {"title": "The Archipelago Atlas", "surveyed": "2026-10-18",
                  "art": "demo-lab render (build.py), label-free",
                  "map_image": "demo-lab.webp",
                  "tribute": {"total_gb": 128, "host_reserve_gb": 8, "cpu_cores": 16, "cpu_threads": 32}},

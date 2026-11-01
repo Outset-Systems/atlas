@@ -267,7 +267,7 @@ def test_the_viewer_gallery_lists_every_render_with_a_fetchable_url(arena):
     assert r.headers["Cache-Control"] == "private, no-cache"
     assert "Cookie" in r.headers.get("Vary", "")
     maps = r.get_json()["maps"]
-    assert set(maps[0]) == {"name", "label", "url", "default", "theme", "regions", "zoom"}
+    assert set(maps[0]) == {"name", "label", "url", "default", "theme", "regions", "places", "zones", "zoom"}
     bundled = next(m for m in maps if m["name"] == mapart.DEFAULT)
     # the default is whichever render the dataset names, else the bundled one
     import json
@@ -346,7 +346,7 @@ def test_a_style_names_itself_and_brings_its_regions(art, tmp_path):
     assert style["label"] == "The Isle"
     assert style["regions"] == [{"id": "cove", "name": "The Cove", "map": "cove.png",
                                  "url": "map-art/cove.png", "x": 10, "y": 20, "w": 30, "h": 40,
-                                 "auto": True}]
+                                 "auto": True, "places": {"x": {"x": 1, "y": 2}}}]
 
 
 def test_region_art_and_sidecars_are_not_offered_as_backdrops(art, tmp_path):
@@ -397,3 +397,29 @@ def test_the_datasets_own_region_art_is_marked_as_zoom(arena, tmp_path):
     maps = client.get("/api/v2/maps").get_json()["maps"]
     assert {m["name"] for m in maps if m["zoom"]} == region_art & {m["name"] for m in maps}
     assert not next(m for m in maps if m["name"] == "isle.png")["zoom"]
+
+
+def test_a_style_places_the_map_and_bad_points_drop_alone(art, tmp_path):
+    import json
+    _style_files(art, tmp_path, json.dumps({
+        "places": {"router": {"x": 42, "y": 61}, "../up": {"x": 1, "y": 1}, "bad": {"x": "1", "y": 1},
+                   "far": {"x": 500, "y": 1}, "nan": {"x": float("nan"), "y": 1}},
+        "zones": {"servers": {"x": 36, "y": 40}, "gone": 7}}))
+    style = art.style("isle.png")
+    assert style["places"] == {"router": {"x": 42, "y": 61}}
+    assert style["zones"] == {"servers": {"x": 36, "y": 40}}
+
+
+def test_the_maps_list_names_only_places_this_viewer_can_see(arena, tmp_path, monkeypatch):
+    import json
+    from api.v2 import reads
+    _style_files(None, tmp_path, json.dumps({
+        "places": {"shown": {"x": 1, "y": 1}, "hidden": {"x": 2, "y": 2}},
+        "regions": [{"id": "cove", "name": "Cove", "map": "cove.png", "x": 1, "y": 1, "w": 1, "h": 1,
+                     "places": {"shown": {"x": 3, "y": 3}, "hidden": {"x": 4, "y": 4}}}]}))
+    monkeypatch.setattr(reads, "redact_for_groups",
+                        lambda data: ({"nodes": [{"id": "shown"}]}, "key"))
+    maps = arena.app.test_client().get("/api/v2/maps").get_json()["maps"]
+    isle = next(m for m in maps if m["name"] == "isle.png")
+    assert list(isle["places"]) == ["shown"]
+    assert list(isle["regions"][0]["places"]) == ["shown"]

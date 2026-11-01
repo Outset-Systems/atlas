@@ -14,7 +14,7 @@
 
 import { A, CFG, REDUCED, $, esc, canAdminWrite, zoneById, FALLBACK_HUE, DRAG_END } from './config.js';
 import * as M from './region-model.js';
-import { chosenStyle } from './table.js';
+import { chosenStyle, refreshStyle, styleName } from './table.js';
 
 const stage = $('stage');
 const framesEl = $('region-frames');
@@ -53,7 +53,7 @@ const onOtherStyle = () => {
 const regions = () => (onOtherStyle() ? styleRegions.get(chosenStyle()) || [] : datasetRegions());
 const regionById = (id) => regions().find((r) => r.id === id);
 const nodes = () => A.DATA?.nodes || [];
-const baseTitle = () => String(A.DATA?.meta?.title || 'The map').replace(/ Atlas$/, '');
+const baseTitle = () => styleName() || String(A.DATA?.meta?.title || 'The map').replace(/ Atlas$/, '');
 const mapUrl = (name) => {
   // bundled art lives in static/map, uploads behind /map-art — the maps list
   // says which; until it answers, try bundled first and fall back on error
@@ -79,7 +79,11 @@ async function loadMaps() {
     styleRegions = new Map(maps.map((m) => [m.name, m.regions || []]));
     // region art is not in the gallery, so the list carries its address here
     for (const art of [...styleRegions.values()].flat()) A.MAPS_BY_NAME[art.map] ??= art;
-    if (chosenStyle()) { A.onStyleChange(); followHash(); }   // a link may have asked before this answered
+    if (chosenStyle()) {
+      refreshStyle(maps.find((m) => m.name === chosenStyle()));
+      A.onStyleChange();
+      followHash();              // a link may have asked before this answered
+    }
   } catch { /* the bundled guess still works */ }
 }
 

@@ -27,6 +27,7 @@ raster format the browser will only ever decode as an image.
 
 import json
 import logging
+import math
 import mimetypes
 import os
 import re
@@ -53,9 +54,13 @@ BUNDLED_DIR = os.path.join(settings.HERE, "static", "map")
 #: style and give it zoom regions of its own, because a region is a rectangle
 #: on one particular picture: the dataset's regions fit the realm's own art and
 #: mean nothing on another. Region art named here is reached by zooming in, so
-#: the gallery does not offer it as a backdrop.
+#: the gallery does not offer it as a backdrop. `places` and `zones` move the
+#: markers and the network names on this picture, for the same reason.
 STYLE_SUFFIX = ".style.json"
 MAX_STYLE_REGIONS = 32
+MAX_STYLE_POINTS = 512
+#: The range a dragged dot may take: the table, plus the sky and the black band.
+STYLE_POINT_RANGE = (-40, 140)
 _REGION_ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 
 #: The most a base render may weigh. A 2048×2048 PNG is ~4 MB; this leaves
@@ -153,6 +158,22 @@ def url_of(name, bundled):
     return f"static/map/{name}" if bundled else f"map-art/{name}"
 
 
+def _style_points(raw):
+    """{id: {x, y}} from a sidecar's `places` or `zones`, well-formed entries only."""
+    if not isinstance(raw, dict):
+        return {}
+    low, high = STYLE_POINT_RANGE
+    points = {}
+    for key, at in list(raw.items())[:MAX_STYLE_POINTS]:
+        if not _REGION_ID.match(str(key)) or not isinstance(at, dict):
+            continue
+        x, y = at.get("x"), at.get("y")
+        if all(isinstance(v, (int, float)) and not isinstance(v, bool)
+               and math.isfinite(v) and low <= v <= high for v in (x, y)):
+            points[key] = {"x": x, "y": y}
+    return points
+
+
 def _style_region(raw):
     """One sidecar region in the dataset's shape plus its `url`, or None."""
     if not isinstance(raw, dict) or not _REGION_ID.match(str(raw.get("id") or "")):
@@ -168,6 +189,9 @@ def _style_region(raw):
                   url=url_of(filename, bundled), auto=raw.get("auto") is True)
     if raw.get("parent"):
         region["parent"] = str(raw["parent"])
+    pins = _style_points(raw.get("places"))
+    if pins:
+        region["places"] = pins
     return region
 
 
@@ -195,7 +219,9 @@ def style(name):
         regions = [r for r in map(_style_region, found[:MAX_STYLE_REGIONS]) if r]
         if len(regions) != len(found):
             log.warning("map style %s: kept %d of %d regions", filename, len(regions), len(found))
-        return {"label": str(raw.get("label") or "").strip(), "regions": regions}
+        return {"label": str(raw.get("label") or "").strip(), "regions": regions,
+                "places": _style_points(raw.get("places")),
+                "zones": _style_points(raw.get("zones"))}
     return {}
 
 

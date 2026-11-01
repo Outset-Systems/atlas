@@ -62,7 +62,7 @@ def _realm_title():
 
 
 def _veil_title(title):
-    """The veil's short form: "Home Lab Atlas" -> "HOME LAB", the way it
+    """The veil's short form: "The Archipelago Atlas" -> "THE ARCHIPELAGO", the way it
     has always read; a realm not named "... Atlas" is shown whole."""
     short = title[:-len(" Atlas")] if title.endswith(" Atlas") else title
     return (short or title).upper()

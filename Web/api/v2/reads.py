@@ -66,6 +66,10 @@ def maps_list():
     # Art the dataset's own regions zoom into. It stays listed, because the map
     # needs its address, and `zoom` keeps it out of the choice of backdrops.
     zoomed = {r.get("map") for r in data.get("regions") or [] if isinstance(r, dict)}
+    # A sidecar names places by id, and an id can be charted where this viewer
+    # may not look. Only what this viewer can see leaves here.
+    seen = {node.get("id") for node in (redact_for_groups(data)[0].get("nodes") or [])}
+    mine = lambda points: {k: v for k, v in (points or {}).items() if k in seen}  # noqa: E731
     out = []
     for image in mapart.available():
         name = image["name"]
@@ -81,7 +85,10 @@ def maps_list():
             "default": name == default,
             "theme": theme if isinstance(theme, dict) else None,
             # the zoom regions drawn on THIS picture, when it brings its own
-            "regions": sidecar.get("regions") or [],
+            "regions": [{**r, **({"places": mine(r["places"])} if "places" in r else {})}
+                        for r in sidecar.get("regions") or []],
+            "places": mine(sidecar.get("places")),
+            "zones": sidecar.get("zones") or {},
             "zoom": name in zoomed and name != default,
         })
     resp = make_response(jsonify({"maps": out}))
