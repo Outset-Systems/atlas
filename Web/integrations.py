@@ -68,10 +68,20 @@ GROUPS = {
         "ATLAS_EMBED_SERVICES",
         "ATLAS_EMBED_PROBE",
     ),
+    # CONNECTIONS (connections.py): other systems the Atlas can be pointed at. The
+    # NetBox key is not NETBOX_TOKEN on purpose: that one is the CLI import's, and
+    # the docs promise the web app never reads it.
+    "connections": (
+        "ATLAS_PROXMOX_URL", "ATLAS_PROXMOX_TOKEN", "ATLAS_PROXMOX_INSECURE",
+        "ATLAS_PORTAINER_URL", "ATLAS_PORTAINER_KEY", "ATLAS_PORTAINER_INSECURE",
+        "ATLAS_KOMODO_URL", "ATLAS_KOMODO_KEY", "ATLAS_KOMODO_SECRET", "ATLAS_KOMODO_INSECURE",
+        "ATLAS_NETBOX_URL", "ATLAS_NETBOX_API_TOKEN", "ATLAS_NETBOX_INSECURE",
+    ),
 }
-ALLOWED = GROUPS["sources"] + GROUPS["realm"] + GROUPS["glass"]
+ALLOWED = GROUPS["sources"] + GROUPS["realm"] + GROUPS["glass"] + GROUPS["connections"]
 #: '', '1' or '0' only — anything else is refused by the API layer.
-BOOLS = ("ATLAS_EMBED_SERVICES", "ATLAS_EMBED_PROBE")
+BOOLS = ("ATLAS_EMBED_SERVICES", "ATLAS_EMBED_PROBE", "ATLAS_PROXMOX_INSECURE",
+         "ATLAS_PORTAINER_INSECURE", "ATLAS_KOMODO_INSECURE", "ATLAS_NETBOX_INSECURE")
 
 
 def flag(name, default=True):
@@ -82,9 +92,19 @@ def flag(name, default=True):
         return default
     return raw == "1"
 #: Stored encrypted, never returned by `describe()`.
-SECRETS = ("ATLAS_KUMA_API_KEY", "ATLAS_DECOYS_KEY", "ATLAS_BEAT_TOKEN")
+SECRETS = ("ATLAS_KUMA_API_KEY", "ATLAS_DECOYS_KEY", "ATLAS_BEAT_TOKEN", "ATLAS_PROXMOX_TOKEN",
+           "ATLAS_PORTAINER_KEY", "ATLAS_KOMODO_KEY", "ATLAS_KOMODO_SECRET", "ATLAS_NETBOX_API_TOKEN")
+#: Which secrets are sent to which URL. A stored secret goes only to the address it
+#: was saved with: see `moves_secret`.
+SECRET_HOMES = {"ATLAS_KUMA_URL": ("ATLAS_KUMA_API_KEY",),
+                "ATLAS_DECOYS_URL": ("ATLAS_DECOYS_KEY",),
+                "ATLAS_PROXMOX_URL": ("ATLAS_PROXMOX_TOKEN",),
+                "ATLAS_PORTAINER_URL": ("ATLAS_PORTAINER_KEY",),
+                "ATLAS_KOMODO_URL": ("ATLAS_KOMODO_KEY", "ATLAS_KOMODO_SECRET"),
+                "ATLAS_NETBOX_URL": ("ATLAS_NETBOX_API_TOKEN",)}
 #: Must parse as http(s) URLs with a host when set.
-URLS = ("ATLAS_PROM_URL", "ATLAS_LOKI_URL", "ATLAS_KUMA_URL", "ATLAS_DECOYS_URL", "HUB_URL")
+URLS = ("ATLAS_PROM_URL", "ATLAS_LOKI_URL", "ATLAS_KUMA_URL", "ATLAS_DECOYS_URL", "HUB_URL",
+        "ATLAS_PROXMOX_URL", "ATLAS_PORTAINER_URL", "ATLAS_KOMODO_URL", "ATLAS_NETBOX_URL")
 #: The signals sources the hub knows how to build (signals.build_hub_from_env).
 SOURCES = ("kuma", "prometheus", "deception", "relay", "static")
 #: Which source needs which URL in force before it can be enabled.
@@ -201,6 +221,31 @@ def get(name, default=""):
     if name not in ALLOWED:
         return default
     return _stored(name) or _env(name) or default
+
+
+def moves_secret(url_key, proposed, saving=False):
+    """True if `proposed` would send a stored secret to a new address.
+
+    A blank secret means "keep the stored one", so without this an admin could type
+    their own host as the URL, leave the secret blank, and receive it. That would
+    make the write-only secret box readable to anyone who can reach this form.
+    The address it already goes to, in the settings file or the deployment's, is
+    fine, and so is a secret typed afresh.
+
+    "Typed" is read exactly as the routes read a value, or `0` or `[]` would pass
+    here and still mean the stored one there. `None` is only a clearing when
+    `saving`: a test reads it as blank. Even then it clears the settings file and
+    not the deployment's value, which would go on to the new address.
+    """
+    url = str(proposed.get(url_key) or "").strip().rstrip("/")
+    if not url or url in (get(url_key).rstrip("/"), _env(url_key).rstrip("/")):
+        return False
+    for name in SECRET_HOMES.get(url_key, ()):
+        typed = str(proposed.get(name) or "").strip()
+        cleared = saving and name in proposed and proposed[name] is None and not _env(name)
+        if not typed and not cleared and get(name):
+            return True
+    return False
 
 
 def effective():

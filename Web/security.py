@@ -86,6 +86,10 @@ def actor():
     Standalone mode has no identity to report, and saying so plainly beats
     recording every edit as an anonymous "local".
     """
+    import api_tokens
+    token = api_tokens.current()
+    if token:
+        return f"token:{token['name']}"
     import atlas_auth
     # hybrid resolves through atlas_auth too — it knows both identity sources
     # and, unlike the hub_auth helpers below, never falls back to a

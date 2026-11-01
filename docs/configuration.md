@@ -176,6 +176,57 @@ misconfigured only removes its markers; the map still draws.
 | `ATLAS_LLM_LOG_TAG` | `llm` | The prefix of the `<tag> ok` / `<tag> FALLBACK` log lines those charts count. | no | no |
 | `ATLAS_ANNALS_POLL` | `60` | Seconds between background polls that keep the event history and the scheduled-job checks current while nobody has the map open. `0` disables; values under 15 fall back to 60. | no | no |
 | `NETBOX_TOKEN` | (unset) | NetBox API token, for `python cli.py import-netbox` only. The web app never reads it. | yes, `NETBOX_TOKEN_FILE` | no |
+| `ATLAS_PROXMOX_URL` | (unset) | Proxmox VE base URL, for Settings → Connections. Can also be saved there. |
+| `ATLAS_PROXMOX_TOKEN` | (unset) | Proxmox API token, `user@pam!name=secret`, with the PVEAuditor role. Encrypted when saved in the app. Or `ATLAS_PROXMOX_TOKEN_FILE`. |
+| `ATLAS_PROXMOX_INSECURE` | (unset) | `1` skips the certificate check, for Proxmox's default self-signed certificate. |
+| `ATLAS_PORTAINER_URL` | (unset) | Portainer base URL, for Settings → Connections. |
+| `ATLAS_PORTAINER_KEY` | (unset) | Portainer access token. It has its owner's rights, so make it from a read-only user. Or `ATLAS_PORTAINER_KEY_FILE`. |
+| `ATLAS_PORTAINER_INSECURE` | (unset) | `1` skips the certificate check. |
+| `ATLAS_KOMODO_URL` | (unset) | Komodo Core base URL, for Settings → Connections. |
+| `ATLAS_KOMODO_KEY` | (unset) | Komodo API key, from a user with read access only. Or `ATLAS_KOMODO_KEY_FILE`. |
+| `ATLAS_KOMODO_SECRET` | (unset) | The secret that goes with `ATLAS_KOMODO_KEY`. Or `ATLAS_KOMODO_SECRET_FILE`. |
+| `ATLAS_KOMODO_INSECURE` | (unset) | `1` skips the certificate check. |
+| `ATLAS_NETBOX_URL` | (unset) | NetBox base URL, for Settings → Connections. |
+| `ATLAS_NETBOX_API_TOKEN` | (unset) | NetBox API token with Write enabled off, for the connection test and review. Separate from `NETBOX_TOKEN`, which is the CLI import's. Or `ATLAS_NETBOX_API_TOKEN_FILE`. |
+| `ATLAS_NETBOX_INSECURE` | (unset) | `1` skips the certificate check. |
+
+A stored credential goes only to the address it was saved with. To point a system at a new
+address, in Settings → Connections or Sources, type its credential again: a blank secret box
+means "keep the stored one", so a test or a save that changes the URL and leaves it blank is
+refused. This keeps a saved secret write-only, even from an admin.
+
+### Reviewing what a system knows
+
+Each system in Settings → Connections has a **Review** button. It reads what the system
+knows with the saved settings, so save first, and lists it beside what the map already has.
+Nothing reaches the map until you tick it and press **Add to the map**. It runs when
+you press it and never in the background, so the map does not change under you.
+
+| System | Places | Other |
+|---|---|---|
+| Proxmox VE | nodes, virtual machines, containers | a guest's host is set as its `parent` |
+| Portainer | environments | stacks, as services on their environment |
+| Komodo | servers | stacks, as services on their server |
+| NetBox | devices, virtual machines | VLANs, as realms, with the subnet of their first prefix |
+
+- **Already on the map** means the same record was imported before, or the address matches,
+  or the name matches. Those rows cannot be ticked. A tick only adds: an import never
+  changes or removes what is already charted.
+- **Same name, different address** is listed with a warning. Tick it to add a second place.
+- **A stack needs a host**, so ticking one ticks its host, unless the host is already charted.
+  Its link opens the stack in Portainer or Komodo, because neither says where a stack answers.
+- **Ignore** hides a row from later reviews. Ignored rows stay listed at the foot of the review,
+  where you can bring them back. The list is the same one The Survey uses.
+- **A guest's address** is best effort. Proxmox lists no addresses for guests, so a running
+  container is asked directly, and a virtual machine needs the QEMU guest agent and a role
+  that may read it. A guest that does not say lands with no address.
+- A place whose address falls in no realm's subnet lands in the realm you choose, or in
+  Uncharted, which is created if the map has not got it.
+
+An import is one entry in the change log, with the note `imported from <system>`, and can be
+undone there or with the **Undo** beside the result. The Undo refuses if the map has changed
+since, because undoing restores the whole map as it was. The system is read again at import, so
+what lands is what it says at that moment, and an import of more than 500 changes is refused.
 
 ## Embedding (the viewing glass)
 
@@ -270,3 +321,23 @@ variables of its own. The web app does not read them.
 |---|---|---|---|
 | `ATLAS_RELAY_TOKEN` | (unset) | The per-site ingest token, if it is not in the relay's TOML config. | yes |
 | `ATLAS_WEB_DIR` | (unset) | Where to find a checkout of `Web/` when the relay imports shared code from it. | no |
+
+## API tokens and MCP
+
+Settings → Connections issues tokens for scripts, local models and coding harnesses
+(admins only). A token is shown once and stored as a hash. It is read-only, it sees what
+a signed-in viewer with no groups sees, and it reaches only `lab-data`, `maps`, `signals`,
+`rites` and `events` under `/api/v2`, plus the MCP endpoint:
+
+```
+POST /api/v2/mcp        Authorization: Bearer <token>
+```
+
+The endpoint speaks MCP over HTTP, both the 2026-07-28 revision and the earlier
+`initialize` handshake, and offers five read-only tools: `atlas_overview`, `atlas_search`,
+`atlas_place`, `atlas_health` and `atlas_events`. Settings shows the setup for each client.
+A cloud tool sends what it reads to its model's vendor, so a token handed to one takes
+this map off your network.
+
+If a proxy puts its own sign-in in front of the Atlas, point the tool at the Atlas directly:
+that proxy's login cannot be answered with a token.

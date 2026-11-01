@@ -5,11 +5,18 @@ customer LAN with nothing but the standard library and `requests`, then pushes
 the snapshot to the server, which owns the mapping half (netbox.py).
 """
 
+from urllib.parse import urlsplit
+
 USER_AGENT = "atlas-netbox/1.0"
 
 
 class NetBoxError(RuntimeError):
-    pass
+    """`status` is the HTTP answer when there was one, so a caller can tell a
+    refused token from a server that never answered."""
+
+    def __init__(self, message, status=None):
+        super().__init__(message)
+        self.status = status
 
 
 class NetBoxClient:
@@ -23,18 +30,23 @@ class NetBoxClient:
 
     def _get(self, path, params=None):
         import requests
+        scheme = "Bearer" if self.token.startswith("nbt_") else "Token"
         try:
             r = requests.get(
                 self.base + path,
                 params=params or {},
-                headers={"Authorization": f"Token {self.token}", "User-Agent": USER_AGENT},
+                # v2 tokens (nbt_...) are bearer tokens; the older kind says `Token`
+                headers={"Authorization": f"{scheme} {self.token}", "User-Agent": USER_AGENT},
                 timeout=self.timeout,
                 verify=self.verify,
+                # never followed: a redirect would carry the token to wherever it points
+                allow_redirects=False,
             )
         except requests.RequestException as e:
             raise NetBoxError(f"GET {path}: {e}") from e
         if r.status_code != 200:
-            raise NetBoxError(f"GET {path}: HTTP {r.status_code} — {r.text[:200]}")
+            raise NetBoxError(f"GET {path}: HTTP {r.status_code} — {r.text[:200]}",
+                              status=r.status_code)
         try:
             return r.json()
         except ValueError as e:
@@ -51,8 +63,15 @@ class NetBoxClient:
             nxt = page.get("next")
             if not nxt:
                 return
-            # follow the absolute next-URL (already carries the query string)
-            page = self._get(nxt[len(self.base):] if nxt.startswith(self.base) else nxt)
+            # the next-URL carries the query string. Behind a proxy NetBox can name
+            # itself differently, so only the path of a foreign one is kept: the
+            # token goes to the host it was configured for and no other.
+            if nxt.startswith(self.base):
+                nxt = nxt[len(self.base):]
+            else:
+                parts = urlsplit(nxt)
+                nxt = f"{parts.path}?{parts.query}"
+            page = self._get(nxt)
 
 
 def fetch_snapshot(client, netbox_site=None):

@@ -165,6 +165,20 @@ def test_probed_right(client, monkeypatch):
                                                           "ATLAS_DECOYS_KEY": "stone-key"}})
     assert r.get_json()["ok"] and "3 decoys" in r.get_json()["detail"]
 
+    # a stored key never goes to a typed address, and saving cannot move it either
+    r = client.post("/api/v2/admin/integrations/test", headers=WRITE,
+                    json={"kind": "kuma", "settings": {"ATLAS_KUMA_URL": "http://evil.example"}})
+    assert r.status_code == 400 and "saved address" in r.get_json()["error"]
+    from api.v2 import admin as adm
+    for blank in (None, "", 0, False, []):
+        r = client.post("/api/v2/admin/integrations/test", headers=WRITE, json={
+            "kind": "kuma", "settings": {"ATLAS_KUMA_URL": "http://evil.example", "ATLAS_KUMA_API_KEY": blank}})
+        assert r.status_code == 400 and "saved address" in r.get_json()["error"]
+    adm._probe_log.clear()   # those five were the limiter's to count, not the rest of this test's
+    r = client.post("/api/v2/admin/integrations", headers=WRITE,
+                    json={"settings": {"ATLAS_KUMA_URL": "http://evil.example", "ATLAS_KUMA_API_KEY": ""}})
+    assert r.status_code == 422 and integrations.get("ATLAS_KUMA_URL") == "http://k:3001"
+
     # a source that will not answer is a finding, not a 500
     r = client.post("/api/v2/admin/integrations/test", headers=WRITE,
                     json={"kind": "loki", "settings": {"ATLAS_LOKI_URL": "http://nowhere:3100"}})

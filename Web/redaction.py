@@ -58,12 +58,18 @@ def viewer_groups():
     signing), which is precisely the override this function exists to refuse.
     Once signing is in force, only the signature counts.
 
+    An API token (api_tokens.py) is an empty set, not None: it sees what a viewer
+    with no groups sees, in every mode, whoever issued it.
+
     Accounts mode (real sign-in, atlas_auth.py) resolves clearance from the
     session's account instead: assigned groups for local users, the cached
     directory groups for ldap users, with the admin flag standing in for
     ADMIN_GROUP so this module's checks work unchanged. Signed out = empty
     set = no clearance, never None.
     """
+    import api_tokens
+    if api_tokens.current():
+        return set()
     import atlas_auth
     # accounts AND hybrid both resolve clearance from atlas_auth: a session's
     # account, or (hybrid) the Hub's SIGNED claims. ⚠ This must stay ahead of

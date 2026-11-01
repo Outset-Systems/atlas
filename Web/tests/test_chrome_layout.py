@@ -87,21 +87,25 @@ def test_the_gear_is_in_the_band_and_in_flow():
     assert "position:" not in rule.group(0), (
         "the in-band cluster is positioned — inside #scenes-list that is the "
         "backdrop-filter/overflow trap the first test in this file describes")
-    assert "margin-left: auto" in rule.group(0), (
-        "the auto margin that pins the band's tail must sit on the cluster, "
+    tail = re.search(r"^#scenes-list \.band-tail \{.*?\}", css, re.S | re.M)   # the base rule, not a scheme override
+    assert tail, "the band's tail is gone"
+    assert "margin-left: auto" in tail.group(0), (
+        "the auto margin that pins the band's tail must sit on the tail, "
         "not on ☰ — two auto margins split the slack and park ⚙ mid-band")
+    # the band scrolls once its labels outgrow it: without sticky the gear and ☰
+    # scroll off the right edge, which is not pinned
+    assert "position: sticky" in tail.group(0) and "right: 0" in tail.group(0), (
+        "the tail must stick to the band's edge, or a narrow window scrolls it away")
+    assert band.index('id="band-tail"') < band.index('id="menu-tools"') < band.index('id="btn-menu"')
     menu = re.search(r"#scenes-list \.ci-menu \{.*?\}", css, re.S)
     assert menu and "margin-left: auto" not in menu.group(0)
-    assert re.search(r"#scenes-list \.menu-tools:has\(\.active\)", css), (
-        "the cluster does not stay out while the SETTINGS scene is up")
-    assert "overflow: hidden" in rule.group(0), "the reveal is a clip; without it the button overflows onto ☰"
-    # a hover-revealed control is no control on a touch screen: at the narrow
-    # width the cluster stands out permanently
-    narrow = re.findall(r"@media \(max-width: 720px\) \{(.*?)\n\}", css, re.S)
-    assert narrow, "no ≤720px block at all"
-    # 68px since v1.52.0: two buttons, ☀/☾ (the colour scheme) and ⚙
-    assert any(re.search(r"#scenes-list \.menu-tools \{[^}]*width: 68px[^}]*opacity: 1", b) for b in narrow), (
-        "no ≤720px block stands the gear out permanently")
+    # PINNED since 2026-10-31: a hover-revealed control is no control on a touch
+    # screen, and on a desktop it is one you forget exists. So the cluster is
+    # out at every width, with no hover wiring left behind.
+    # 68px since v1.52.0: two buttons, the colour scheme and the gear
+    assert "width: 68px" in rule.group(0), "the gear is not pinned beside the menu"
+    assert "opacity: 0" not in rule.group(0) and "width: 0" not in rule.group(0)
+    assert "hoverReveal($('btn-menu')" not in _read(UI), "the pinned cluster is still wired to hover"
     assert 'id="btn-scheme"' in band and band.index('id="btn-scheme"') < band.index('id="btn-menu-settings"'), (
         "☀/☾ must sit in the cluster, before ⚙")
 

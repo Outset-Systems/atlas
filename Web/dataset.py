@@ -521,20 +521,24 @@ class DatasetStore:
             entry["revertable"] = os.path.exists(self._snapshot_path(entry.get("id", 0)))
         return out if limit is None else out[:limit]
 
-    def revert(self, revision_id, actor="unknown"):
+    def revert(self, revision_id, actor="unknown", expect=None):
         """Put the map back to how it was before `revision_id`.
 
         Recorded as a revision of its own, so an unwanted revert is itself
         undoable — the history only ever grows forwards. Same lock as `apply`:
-        a revert is a read-modify-write like any other.
+        a revert is a read-modify-write like any other. `expect` refuses it if the
+        map has moved on: an Undo beside one import must not take later edits too.
         """
         try:
             with exclusive(self._lock_path()):
-                return self._revert_locked(revision_id, actor)
+                return self._revert_locked(revision_id, actor, expect)
         except LockTimeout as e:
             raise BusyError(str(e)) from e
 
-    def _revert_locked(self, revision_id, actor):
+    def _revert_locked(self, revision_id, actor, expect=None):
+        if expect and expect != content_stamp(self._load()):
+            raise ConflictError("the map has changed since then — use the change log "
+                                "in the Desk to see what would be undone")
         snapshot = read_json(self._snapshot_path(int(revision_id)))
         if not isinstance(snapshot, dict):
             raise RejectedError(

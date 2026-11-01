@@ -77,4 +77,5 @@ from . import vitals  # noqa: E402,F401  — native card vitals (v1.34.0)
 from . import charts  # noqa: E402,F401  — native watchings (v1.35.0)
 from . import manifest  # noqa: E402,F401  — the app manifest + the shared Calendar's day (step 4)
 from . import trust  # noqa: E402,F401  — THE TRUST view (generated; admin only)
+from . import mcp  # noqa: E402,F401  — the MCP endpoint (API tokens only)
 from . import tripwires  # noqa: E402,F401  — TRIPWIRES: the webhook (nested bp) + admin reads

@@ -18,6 +18,12 @@ UNCHARTED_SLUG = "uncharted"
 # validation, while "—" is the value the catalogue documents for "none".
 UNKNOWN_ZONE_FIELDS = {"vlan": "—", "subnet": "—"}
 
+#: The catch-all realm, below the table. The review step writes it as a dataset
+#: entry through the store; `ensure_uncharted` is the same realm as a row.
+UNCHARTED_ZONE = {"name": "Uncharted", "hue": "#8A8069",
+                  "lore": "Devices whose realm is not yet known.",
+                  "label_x": 50.0, "label_y": 118.0}
+
 
 def slugify(name):
     return re.sub(r"[^a-z0-9]+", "-", str(name or "").lower()).strip("-") or "unnamed"
@@ -57,10 +63,8 @@ def ensure_uncharted(session, site):
     if z is None:
         top = max([x.sort_order for x in
                    session.scalars(select(Zone).where(Zone.site_id == site.id))] + [-1]) + 1
-        z = Zone(site_id=site.id, slug=UNCHARTED_SLUG, name="Uncharted", hue="#8A8069",
-                 lore="Devices whose realm is not yet known.",
-                 label_x=50.0, label_y=118.0, sort_order=top,
-                 extra_json=dict(UNKNOWN_ZONE_FIELDS))
+        z = Zone(site_id=site.id, slug=UNCHARTED_SLUG, sort_order=top,
+                 extra_json=dict(UNKNOWN_ZONE_FIELDS), **UNCHARTED_ZONE)
         session.add(z)
         session.flush()
     return z

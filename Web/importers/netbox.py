@@ -26,6 +26,7 @@ from store.labdata import get_site
 from store.layout import auto_layout
 from store.models import Node, Site, Zone
 
+from . import review
 from .common import UNCHARTED_SLUG, slugify
 from .common import ensure_uncharted as _ensure_uncharted
 # The HTTP half lives in netbox_client so the relay can import it without the
@@ -95,6 +96,43 @@ def _scroll_of(obj):
     return cf.get("atlas_url") or cf.get("url") or None
 
 
+def _hue_of(vid):
+    return _PALETTE[vid % len(_PALETTE)]
+
+
+def _described(snapshot, role_map):
+    """Every device and VM as (ref, name, kind, ip, hw, role name, scroll). One
+    reading of a snapshot, shared by the sync below and the review step."""
+    for d in snapshot.get("devices", []):
+        role_slug, role_name = _role_of(d)
+        yield (f"device:{d['id']}", d.get("name") or f"device-{d['id']}",
+               role_map.get(role_slug, "physical"), _ip_of(d), _hw_of(d), role_name, _scroll_of(d))
+    for vm in snapshot.get("vms", []):
+        role_slug, role_name = _role_of(vm)
+        yield (f"vm:{vm['id']}", vm.get("name") or f"vm-{vm['id']}",
+               role_map.get(role_slug, "vm"), _ip_of(vm), _hw_of_vm(vm), role_name, _scroll_of(vm))
+
+
+def candidates(snapshot, role_map=None):
+    """A snapshot as review candidates (importers/review.py): VLANs become realms,
+    devices and VMs become places. Where `sync` upserts and retires, a review only
+    ever proposes additions. Returns (rows, notes)."""
+    subnet = {}
+    for p in snapshot.get("prefixes", []):
+        vid = (p.get("vlan") or {}).get("vid")
+        if vid is not None:
+            subnet.setdefault(vid, p.get("prefix"))
+    rows = [review.zone(f"netbox:vlan:{v['vid']}", "VLANs", v.get("name") or f"VLAN {v['vid']}",
+                        v["vid"], subnet.get(v["vid"]), _hue_of(v["vid"]))
+            for v in snapshot.get("vlans", []) if isinstance(v.get("vid"), int)]
+    for ref, name, kind, ip, hw, role, scroll in _described(snapshot, role_map or DEFAULT_ROLE_MAP):
+        group = "Devices" if ref.startswith("device:") else "Virtual machines"
+        rows.append(review.place(f"netbox:{ref}", group, name, kind,
+                                 f"{role} · from NetBox" if role else "from NetBox",
+                                 ip=review.address(ip), hw=hw or "", scroll=scroll))
+    return rows, []
+
+
 def sync(session, snapshot, site_slug, role_map=None):
     """Write a fetched snapshot into `site_slug`. One transaction; returns stats."""
     role_map = role_map or DEFAULT_ROLE_MAP
@@ -130,7 +168,7 @@ def sync(session, snapshot, site_slug, role_map=None):
                 slug = f"vlan-{vid}"
             z = Zone(
                 site_id=site.id, slug=slug, name=name or f"VLAN {vid}", vlan=vid,
-                subnet=vlan_subnet.get(vid), hue=_PALETTE[vid % len(_PALETTE)],
+                subnet=vlan_subnet.get(vid), hue=_hue_of(vid),
                 lore="", sort_order=zone_sort, extra_json={},
             )
             session.add(z)
@@ -225,16 +263,8 @@ def sync(session, snapshot, site_slug, role_map=None):
                 n.zone_slug = zone_slug
         n.last_imported = now
 
-    for d in snapshot.get("devices", []):
-        role_slug, role_name = _role_of(d)
-        upsert(f"device:{d['id']}", d.get("name") or f"device-{d['id']}",
-               role_map.get(role_slug, "physical"), _ip_of(d), _hw_of(d),
-               role_name, _scroll_of(d))
-    for vm in snapshot.get("vms", []):
-        role_slug, role_name = _role_of(vm)
-        upsert(f"vm:{vm['id']}", vm.get("name") or f"vm-{vm['id']}",
-               role_map.get(role_slug, "vm"), _ip_of(vm), _hw_of_vm(vm),
-               role_name, _scroll_of(vm))
+    for described in _described(snapshot, role_map):
+        upsert(*described)
 
     for ref, n in existing.items():
         if ref not in seen and n.status != "retired":

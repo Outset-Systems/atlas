@@ -33,6 +33,7 @@ import { makeScene } from './scene.js';
 let root, listEl, headEl;
 let loaded = null;          // the last good payload; a reopen should not blank
 let failure = null;
+let absent = false;         // this build carries no trust map: normal, not a fault
 
 /* Loudest first. These are the map's existing semantic tokens — no new
    colours (the design notes: reuse the zone hues, gold stays rare). */
@@ -57,6 +58,7 @@ async function load() {
   try {
     const res = await fetch('api/v2/trust', { cache: 'no-store' });
     if (res.status === 403) { failure = 'admins only'; return; }
+    if (res.status === 503) { absent = true; return; }
     const body = await res.json().catch(() => ({}));
     if (!res.ok) { failure = body.error || `the trust map answered ${res.status}`; return; }
     loaded = body; failure = null;
@@ -114,6 +116,18 @@ function appHTML(app, findings) {
 
 function build() {
   if (!listEl) return;
+
+  if (absent && !loaded) {
+    // Not a fault, and not a clean bill of health either: say both. The public
+    // image ships without a map on purpose, so "rebuild the image" sent a
+    // stranger after a generator and config files they do not have.
+    if (headEl) headEl.innerHTML = '<span class="rt-waiting">No trust map on this instance: nothing has been checked here</span>';
+    listEl.innerHTML = `<div class="ldg-note">This page is generated from a deployment's own
+      compose and proxy files when its image is built, and those files stay with that
+      deployment, so a published image carries none. An empty page here does not mean every
+      app is safe; it means no one has looked.</div>`;
+    return;
+  }
 
   if (failure || !loaded) {
     // Loud, not blank. A trust view that fails quietly is worse than none:

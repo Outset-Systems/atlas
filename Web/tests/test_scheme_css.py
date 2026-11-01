@@ -194,12 +194,16 @@ def test_the_toggle_is_in_the_band_and_boots_first():
 
 def test_the_glass_still_reads_with_black_behind_it():
     """Light panels are translucent, so the ground is not a token: composite the
-    panel's fill over black, the worst thing a panel can sit on (2026-10-31)."""
+    glass over the scrim over black, the worst thing a panel can sit on."""
     css = _strip_comments(_read(CSS))
-    m = re.search(r'\.wiz-panel\)\s*\{\s*background: rgba\((\d+), (\d+), (\d+), ([\d.]+)\)', css)
-    assert m, "the glass rule moved, or the panels went opaque again"
-    alpha = float(m.group(4))
-    ground = "#" + "".join(f"{round(int(m.group(i)) * alpha):02x}" for i in (1, 2, 3))
+    rgba = r"background: rgba\((\d+), (\d+), (\d+), ([\d.]+)\)"
+    glass = re.search(r"\.wiz-panel\)\s*\{\s*" + rgba, css)
+    scrim = re.search(r"#trust, #settings\)\s*\{\s*" + rgba, css)
+    assert glass and scrim, "the glass rules moved, or the panels went opaque again"
+    under = [int(scrim.group(i)) * float(scrim.group(4)) for i in (1, 2, 3)]
+    alpha = float(glass.group(4))
+    over = [int(glass.group(i)) * alpha + u * (1 - alpha) for i, u in zip((1, 2, 3), under)]
+    ground = "#" + "".join(f"{round(c):02x}" for c in over)
     p = _scheme("light")
     for fg in ("--text", "--text-dim", "--text-soft", "--gilt"):
         r = _ratio(p[fg], ground)

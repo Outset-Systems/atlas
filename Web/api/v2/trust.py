@@ -46,8 +46,8 @@ def trust():
         # and "the file did not ship" look identical to a reader, and one of
         # them is a clean bill of health.
         log.warning("v2 trust: %s is missing from the image", _PATH)
-        return jsonify({"error": "trust.json was not built into this image; "
-                                 "generate a trust map and rebuild the image"}), 503
+        return jsonify({"error": "this instance has no trust map: nothing has "
+                                 "been checked here"}), 503
     except (OSError, ValueError) as e:
         log.error("v2 trust: %s unreadable: %s", _PATH, e)
         return jsonify({"error": f"trust map unreadable: {e}"}), 500

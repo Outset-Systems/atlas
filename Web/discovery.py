@@ -270,6 +270,12 @@ def _listing_db(site_slug):
     return out
 
 
+def ignored():
+    """Every key a human has said not to chart. One list for the survey and for the
+    connections review, whose keys read `proxmox:qemu/101` and cannot collide."""
+    return set(_STORE.load()["ignored"])
+
+
 def set_ignored(keys, ignored=True):
     """Silence (or un-silence) devices you don't want charted."""
     with _STORE.locked():

@@ -204,7 +204,9 @@
        LEFTWARD out of ☰ on hover (ui.js hoverReveal → `.peek`), and stays out
        while the SETTINGS scene is up, wearing `.active` like any scene
        button. It IS the SETTINGS scene's button: `data-scene` puts it through
-       the same click handler as the labelled scenes. -->
+       the same click handler as the labelled scenes. PINNED since 2026-10-31:
+       the cluster no longer hides until ☰ is hovered. -->
+  <span class="band-tail" id="band-tail">
   <span class="menu-tools" id="menu-tools">
     <!-- ☀/☾ — the colour scheme (v1.52.0, scheme.js). Panels follow it; the
          map stays a night map. scheme.js sets its glyph, title and pressed
@@ -218,6 +220,7 @@
        is the same control in the same corner, minus a second piece of chrome
        for the eye to account for. -->
   <button class="chrome ci-menu" id="btn-menu" title="Menu — the index (M)" aria-label="Menu"><svg class="ci-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 7h15M4.5 12h15M4.5 17h15"/></svg></button>
+  </span>
 </nav>
 
 <!-- The map tools, revealed by hovering THE ATLAS and kept out by CLICKING it.
@@ -607,6 +610,16 @@
       <span class="ldg-sub">whose word each app takes for who you are</span>
       <button class="ldg-close" id="tr-close" title="Close (Esc)">&times;</button>
     </div>
+    <div class="tr-about">
+      <p><b>What this is.</b> Behind a proxy, an app learns who you are from a header
+      the proxy adds, and anyone who can reach the app directly could write that
+      header themselves. So each app keeps a list of the proxies it believes. This
+      page sets those lists side by side.</p>
+      <p><b>What goes wrong.</b> Too open, and anything on the network can claim to be
+      anyone. Too strict, and every visitor looks like the proxy, so one lockout
+      locks out everyone. It shows who an app <i>believes</i>, not who can
+      <i>reach</i> it; the map's roads answer that.</p>
+    </div>
     <div class="rt-head" id="tr-head"></div>
     <div class="ldg-list" id="tr-list"></div>
   </div>
@@ -697,6 +710,7 @@
            Loki), its signals (Uptime-Kuma) and its stones (the decoy feed). Admins in any
            mode; built by account.js from /api/v2/admin/integrations, which is
            itself admins-only. Keys are write-only — the form never sees one. -->
+      <div class="sp-sec" id="sp-connections" data-sec="connections" hidden></div>
       <div class="sp-sec" id="sp-integrations" data-sec="integrations" hidden></div>
       <!-- Diagnostics: which signal sources are actually reporting. The feed already
            carries this; surfacing it answers "why does the map look wrong?" here

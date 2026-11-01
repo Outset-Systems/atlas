@@ -7,6 +7,7 @@
    local. Registered in atlas.js after ui.js. */
 
 import { A, CFG, $, esc, themeText } from './config.js';
+import { renderConnections } from './connections.js';
 
 /* ── Who you are on this instance ─────────────────────────────────────────
    Drawn from CFG.AUTH (settings.auth_config), and deliberately different per
@@ -306,6 +307,7 @@ function renderSignins() { adminSection('sp-signins', 'SIGN-IN HISTORY', 'recent
 function renderSettingsSections() {
   renderAccount();
   renderDirectory();
+  renderConnections();
   renderSources();
   renderRealm();
   renderDeployment();

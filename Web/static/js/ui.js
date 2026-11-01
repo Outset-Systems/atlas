@@ -373,7 +373,6 @@ function hoverReveal(anchor, cluster, delay = 220) {
   });
 }
 hoverReveal($('scene-home'), $('atlas-tools'));
-hoverReveal($('btn-menu'), $('menu-tools'));
 
 /* ── SETTINGS is a scene (2026-09-04) ──────────────────────────────
    It was the drawer's tabless third section, and that shape cost a rule per

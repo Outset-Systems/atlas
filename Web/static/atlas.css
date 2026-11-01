@@ -84,7 +84,7 @@
    scene band, the veil, the announcements, the parchment card — keeps the
    night palette from :root by construction, not by a list of exceptions.
    `data-scheme` on <html> is set by scheme.js (stored choice, else the OS
-   preference). Values since 2026-10-31: cool slate with a blue accent, in place
+   preference). Values since 2026-10-31: slate with a deep blue accent, in place
    of the warm Gruvbox Light and its amber. --gilt keeps its name because every
    rule says `gilt`; here it is a deep blue, picked to clear AA at panel sizes
    even on glass (below). All measured by tests/test_scheme_css.py. */
@@ -92,18 +92,18 @@
                                .pal-panel, .gl-panel, .dsk-panel, .wiz-panel,
                                #scenes-list, .scene-home, .chrome, .rl-crumbs, .rl-locator, .rl-hint,
                                .chron-fly-pop, .chron-arrow, .embed-max-arrow, #embed-max-close) {
-  --abyss: #f8fafc;
-  --surface: #f1f5f9;
-  --surface-2: #e2e8f0;
-  --ink-line: #cbd5e1;
-  --ink-soft: #64748b;
+  --abyss: #d6dae0;
+  --surface: #c5cad2;
+  --surface-2: #cdd2d9;
+  --ink-line: #8e96a3;
+  --ink-soft: #475569;
   --text: #0f172a;
-  --text-dim: #334155;
-  --text-soft: #1e293b;
-  --gilt: #1e40af;
-  --gilt-bright: #2563eb;
-  --gilt-rgb: 30, 64, 175;
-  --on-gilt: #f8fafc;
+  --text-dim: #172033;
+  --text-soft: #172033;
+  --gilt: #111d50;
+  --gilt-bright: #1d4ed8;
+  --gilt-rgb: 17, 29, 80;
+  --on-gilt: #f1f5f9;
   --sem-up: #166534;
   --sem-warn: #b45309;
   --sem-down: #b91c1c;
@@ -115,8 +115,8 @@
   --tone-info: #0369a1;
   --shade-rgb: 15, 23, 42;
   --shade-k: 0.3;
-  --hair: rgba(15, 23, 42, 0.12);
-  --frame-ground: #e2e8f0;
+  --hair: rgba(15, 23, 42, 0.16);
+  --frame-ground: #c5cad2;
   color-scheme: light;
 }
 
@@ -128,40 +128,44 @@
    parchment card and toast (already light in both). */
 /* ⚠ one selector per specificity: `:is()` takes its MOST specific argument's
    weight, so an id in the list would lift the class rules above .chrome.lit */
-:root[data-scheme="light"] .chrome { background: rgba(248, 250, 252, 0.6); }
-:root[data-scheme="light"] :is(.chron-arrow, .embed-max-arrow) { background: rgba(248, 250, 252, 0.82); }
-:root[data-scheme="light"] #embed-max-close { background: rgba(248, 250, 252, 0.82); }
+:root[data-scheme="light"] .chrome { background: rgba(214, 218, 224, 0.42); }
+:root[data-scheme="light"] :is(.chron-arrow, .embed-max-arrow) { background: rgba(214, 218, 224, 0.62); }
+:root[data-scheme="light"] #embed-max-close { background: rgba(214, 218, 224, 0.62); }
 :root[data-scheme="light"] .chrome.lit { background: var(--gilt); }
-:root[data-scheme="light"] #scenes-list { background: rgba(248, 250, 252, 0.6); }
-:root[data-scheme="light"] #scenes-list .chrome { background: rgba(248, 250, 252, 0.42); }
+:root[data-scheme="light"] #scenes-list { background: rgba(214, 218, 224, 0.42); }
+:root[data-scheme="light"] #scenes-list .chrome { background: rgba(214, 218, 224, 0.3); }
+:root[data-scheme="light"] #scenes-list .band-tail { background: rgba(214, 218, 224, 0.5); }
 :root[data-scheme="light"] body.scene-open #scenes-list {
-  background: rgba(248, 250, 252, 0.95);
+  background: rgba(214, 218, 224, 0.68);
   box-shadow: 0 12px 34px rgba(15, 23, 42, 0.22);
 }
 :root[data-scheme="light"] .scene { text-shadow: none; }
 :root[data-scheme="light"] .scene.active { background: rgba(var(--gilt-rgb), 0.12); }
 :root[data-scheme="light"] :is(.rl-crumbs, .rl-hint) {
-  background: rgba(248, 250, 252, 0.92);
+  background: rgba(226, 232, 240, 0.66);
   box-shadow: 0 4px 18px rgba(15, 23, 42, 0.18);
 }
 :root[data-scheme="light"] .chron-fly-pop { box-shadow: 0 14px 40px rgba(15, 23, 42, 0.22); }
 
 /* THE GLASS (2026-10-31, the owner: "a more transparent theme with a blue accent
-   instead of orange"). Light panels are frosted, so the map stays in the room.
-   The scrim thins with them, or the glass would only show a dark sheet. 0.8 is
-   not a taste: tests/test_scheme_css.py composites it over black, the worst
-   thing behind a panel, and --text-dim and --gilt must still clear AA there. */
+   instead of orange", then "more gray/slate and about 30% more transparent").
+   A muted grey-slate at 0.46 over a pale scrim (2026-10-31: "more of a muted
+   background colour and more transparent"). What counts is how much map reaches
+   the eye, (1 - glass) × (1 - scrim): 36% here, 31% before. A heavier scrim
+   would pass the contrast test and show less map. These numbers are not a taste:
+   tests/test_scheme_css.py composites glass over scrim over black, the worst
+   thing behind a panel, and every text token must still clear AA there. */
 :root[data-scheme="light"] :is(.ldg-panel, .trb-panel, .rel-panel, .pth-panel, .pal-panel,
                                .gl-panel, .dsk-panel, .wiz-panel) {
-  background: rgba(248, 250, 252, 0.8);
+  background: rgba(214, 218, 224, 0.46);
   color: var(--text);   /* the page's cream is inherited as a colour, not a token */
   -webkit-backdrop-filter: blur(22px) saturate(1.5);
   backdrop-filter: blur(22px) saturate(1.5);
-  border-color: rgba(255, 255, 255, 0.55);
+  border-color: rgba(214, 218, 224, 0.5);
   box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28);
 }
 :root[data-scheme="light"] :is(#index-drawer) {
-  background: rgba(248, 250, 252, 0.8);
+  background: rgba(214, 218, 224, 0.6);
   color: var(--text);
   -webkit-backdrop-filter: blur(22px) saturate(1.5);
   backdrop-filter: blur(22px) saturate(1.5);
@@ -171,7 +175,7 @@
 :root[data-scheme="light"] .scene-home .scene.active { background: rgba(var(--gilt-rgb), 0.12); }
 :root[data-scheme="light"] :is(#ledger, #calendar, #seals, #stones, #tribute, #reliquary,
                                #accounts, #trust, #settings) {
-  background: rgba(15, 23, 42, 0.24);
+  background: rgba(205, 209, 215, 0.34);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1038,6 +1042,55 @@ a.sp-btn { text-decoration: none; text-align: center; display: block; }
    which layer each value in force came from. Semantic hues reused for the test
    result; no new colours. */
 .dir-row { display: block; margin: 10px 0; }
+/* CONNECTIONS (connections.js): settings rows and tokens only, no new colours */
+.sp-sub-h {
+  margin: 16px 0 6px; font-family: 'Cinzel', serif; font-size: 0.66rem;
+  letter-spacing: 0.18em; color: var(--gilt);
+}
+.con-tokens { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; }
+.con-token { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--hair); }
+.con-token.con-dead .con-name { color: var(--text-dim); text-decoration: line-through; }
+.con-token .sp-btn { margin-left: auto; }
+.con-name { color: var(--text); font-weight: 600; }
+.con-meta { color: var(--text-dim); font-size: 0.84rem; }
+/* ids, because .dir-input (width: 100%) comes later: the row must shrink to fit,
+   or it widens the whole panel and pushes Create out of sight */
+#con-name { flex: 1 1 0; min-width: 0; width: auto; }
+#con-life { flex: 0 0 auto; width: auto; }
+#con-issue { flex: 0 0 auto; }
+.con-fresh { margin: 8px 0; padding: 8px 10px; border: 1px solid rgba(var(--gilt-rgb), 0.55); border-radius: 4px; color: var(--text); }
+.con-code {
+  margin: 4px 0 0; padding: 8px 10px; overflow-x: auto; border-radius: 4px; white-space: pre;
+  background: rgba(var(--shade-rgb), calc(0.35 * var(--shade-k))); color: var(--text);
+  font: 400 0.8rem/1.45 'JetBrains Mono', monospace; user-select: all;
+}
+.con-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 12px; }
+.con-tab {
+  padding: 5px 10px; border: 1px solid var(--ink-line); border-radius: 4px; cursor: pointer;
+  background: transparent; color: var(--text-dim); font: inherit; font-size: 0.86rem;
+}
+.con-tab.on { border-color: rgba(var(--gilt-rgb), 0.7); color: var(--text); }
+.con-lang { margin-top: 8px; color: var(--text-dim); font: 400 0.76rem 'JetBrains Mono', monospace; }
+.con-system { border-bottom: 1px solid var(--hair); padding: 8px 0; }
+.con-system summary { cursor: pointer; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.con-check { display: flex; align-items: center; gap: 8px; margin: 8px 0; color: var(--text); font-size: 0.9rem; }
+/* the review: tick what to add. Same inkpot: gilt stays on the one button that writes */
+.con-review { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--hair); }
+.con-filter { margin-top: 8px; }
+.con-group { margin-top: 14px; }
+.con-group .dir-label { margin-bottom: 2px; }
+.con-all { margin-left: auto; font-family: 'Alegreya Sans', sans-serif; font-size: 0.74rem; letter-spacing: 0; cursor: pointer; }
+.con-row { display: flex; align-items: flex-start; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--hair); }
+.con-row[hidden] { display: none; }
+.con-pick { flex: 0 0 auto; margin-top: 4px; accent-color: var(--gilt); }
+.con-row-text { flex: 1 1 0; min-width: 0; overflow-wrap: anywhere; }
+.con-row .sp-btn { flex: 0 0 auto; }
+.con-row-line { display: block; }
+.con-ip { margin-left: 6px; color: var(--text-dim); font: 400 0.76rem 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; }
+.con-off .con-name { color: var(--text-dim); font-weight: 400; }
+.con-worry { color: var(--sem-warn); }
+.con-ignored { margin-top: 12px; }
+.con-ignored summary { display: list-item; }
 .dir-label {
   display: flex; align-items: baseline; gap: 8px;
   font-family: 'Cinzel', serif; font-size: 0.6rem; letter-spacing: 0.18em;
@@ -1290,17 +1343,26 @@ body.decoys-on .mk.has-stone .mk-label { opacity: 1; transform: translateX(-50%)
    `overflow: hidden` does the reveal, which is also why the in-band ⚙ casts
    no glow (the lamp rule below has the same reason): a shadow outside the box
    would be clipped to a square edge.
-   Out on hover (`.peek`, ui.js hoverReveal off ☰) and while the SETTINGS
-   scene is up (`.active`, the same mark every scene button wears). */
-#scenes-list .menu-tools {
+   PINNED since 2026-10-31 (owner: keep it beside the hamburger): a control
+   you have to hover to find is one you forget exists, and on a touch screen it
+   was never there at all. */
+#scenes-list .band-tail {
+  /* the band scrolls when the labels outgrow it, so the tail sticks to its right
+     edge: being in flow alone would pin these to the END OF THE LABELS, off-screen
+     on a laptop. Sticky, never fixed or absolute (the trap above). Its own fill and
+     blur are what let a scrolled label pass behind it instead of through it. */
+  position: sticky; right: 0; z-index: 2;
   margin-left: auto; flex: none;
   display: inline-flex; align-items: center;
-  width: 0; opacity: 0; overflow: hidden;
-  transform: translateX(6px);
-  transition: width 180ms var(--glide), opacity 180ms, transform 180ms var(--glide);
+  padding-left: 6px; border-radius: 3px;
+  background: rgba(13,11,7,0.45);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
 }
-#scenes-list .menu-tools.peek,
-#scenes-list .menu-tools:has(.active) { width: 68px; opacity: 1; transform: none; }   /* two × (30 button + 4 gap): ☀/☾ and ⚙ */
+#scenes-list .menu-tools {
+  flex: none;
+  display: inline-flex; align-items: center;
+  width: 68px; overflow: hidden;   /* two × (30 button + 4 gap): the scheme and the gear */
+}
 #scenes-list .chrome .ci-glyph { width: 16px; height: 16px; }   /* the band's 30px circles */
 #scenes-list .chrome { background: rgba(13,11,7,0.28); }        /* on the band's own fill: don't double it */
 #scenes-list .menu-tools .chrome {
@@ -2125,7 +2187,7 @@ body.drawer-open .pth-panel { right: calc(5vw + var(--drawer-clear)); }
    blur instead — grey under a cream panel reads as broken, not as focus
    (2026-10-20). Browsers without backdrop-filter keep the plain wash. */
 #palette.open { opacity: 1; pointer-events: auto; backdrop-filter: grayscale(1); -webkit-backdrop-filter: grayscale(1); }
-:root[data-scheme="light"] #palette { background: rgba(248, 250, 252, 0.22); }
+:root[data-scheme="light"] #palette { background: rgba(203, 213, 225, 0.22); }
 :root[data-scheme="light"] #palette.open { backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
 .pal-panel {
   width: min(560px, 92vw);
@@ -2463,11 +2525,6 @@ body.pre #scenes-list { opacity: 0; pointer-events: none; }
      hangs BELOW it now, so the override that undid that shortening here is
      gone with the rule it was undoing) */
   .atlas-tools { gap: 6px; }
-  /* (⚙ needs no re-measuring here since 2026-09-04: it is a 30px item IN the
-     band, the same height as ☰ at every width.) It STANDS OUT here rather than
-     waiting for a hover: a hover-revealed control is no control at all on a
-     touch screen, and this is the width where the screen is one. */
-  #scenes-list .menu-tools { width: 68px; opacity: 1; transform: none; }   /* ☀/☾ and ⚙, standing out */
   .atlas-tools .chrome { width: 34px; height: 34px; }
 }
 
@@ -3399,6 +3456,14 @@ body.constellation .mk.active .mk-dot { opacity: 0.35; }
    THE DECOYS, ACCOUNTS and THE TRUST still write their one-line verdict
    into an .rt-head with .rt-alarm / .rt-calm / .rt-waiting spans — so since
    09-07 those heads were unstyled and their alarms never turned red. */
+/* THE TRUST says what it is before it says anything else: the word alone
+   tells a reader nothing, and the empty state is where they meet it first. */
+.tr-about {
+  padding: 12px 22px; border-bottom: 1px solid var(--hair);
+  font-size: 0.92rem; line-height: 1.5; color: var(--text-dim);
+}
+.tr-about p + p { margin-top: 8px; }
+.tr-about b { color: var(--text); font-weight: 600; }
 .rt-head {
   padding: 6px 14px 8px; font-family: 'JetBrains Mono', monospace;
   font-size: 0.72rem; letter-spacing: 0.04em; border-bottom: 1px solid var(--ink-line);

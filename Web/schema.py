@@ -233,6 +233,9 @@ SECTIONS = {
               help="…and 0–100% down."),
             f("hide_label", "bool", label="Hide the label",
               help="Keep the realm, drop its name from the map."),
+            f("origin", "text", label="Imported from",
+              help="The system and record this came from, set by a connection import, "
+                   "e.g. `netbox:vlan:20`. A later review knows it by this."),
         ]),
 
     # REGIONS (v1.49.0): a rectangle on a map that has its
@@ -318,6 +321,9 @@ SECTIONS = {
               help="Who can get into this place, and how far in. Drawn in the "
                    "ACCOUNTS scene. Redacted for anyone not cleared to see "
                    "everything — chart the posture, never a credential."),
+            f("origin", "text", label="Imported from",
+              help="The system and record this came from, set by a connection import, "
+                   "e.g. `proxmox:qemu/101`. A later review knows it by this."),
         ]),
 
     "routes": section(

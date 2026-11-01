@@ -38,6 +38,7 @@ from flask import Flask
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import api_tokens  # noqa: E402
 import atlas_auth  # noqa: E402
 from api import status as api_status  # noqa: E402
 from api import v2 as api_v2  # noqa: E402
@@ -289,9 +290,19 @@ def create_app():
     # request, gate included, so it registers before the gate does.
     import metrics
     app.config["METRICS_ENABLED"] = metrics.init_app(app)
-    app.before_request(atlas_auth.require_atlas_auth(
+    session_gate = atlas_auth.require_atlas_auth(
         exempt_paths=list(api_v2.EXEMPT_PATHS) + [metrics.METRICS_PATH],
-        exempt_prefixes=["/static/", api_v2.INGEST_URL_PREFIX + "/"]))
+        exempt_prefixes=["/static/", api_v2.INGEST_URL_PREFIX + "/"])
+
+    # An API token answers on its own short list of routes and nowhere else
+    # (api_tokens.py); every other request reaches the session gate unchanged.
+    def _gate():
+        refusal = api_tokens.gate()
+        if refusal is not None:
+            return refusal
+        return None if api_tokens.current() else session_gate()
+
+    app.before_request(_gate)
 
     if atlas_auth.sessions_enabled():
         import auth_routes
