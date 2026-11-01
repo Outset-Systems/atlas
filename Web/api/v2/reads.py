@@ -68,14 +68,17 @@ def maps_list():
         name = image["name"]
         entry = art.get(name) or {}
         theme = entry.get("theme")
+        sidecar = mapart.style(name)
         out.append({
             "name": name,
-            "label": entry.get("label") or theme_mod.map_label(name) or name.rsplit(".", 1)[0],
-            # bundled art is served from static/, uploads from /map-art/ —
-            # resolved here so the client never has to know the difference
-            "url": (f"static/map/{name}" if image["bundled"] else f"map-art/{name}"),
+            "label": (entry.get("label") or theme_mod.map_label(name)
+                      or sidecar.get("label") or name.rsplit(".", 1)[0]),
+            # resolved here so the client never has to know bundled from uploaded
+            "url": mapart.url_of(name, image["bundled"]),
             "default": name == default,
             "theme": theme if isinstance(theme, dict) else None,
+            # the zoom regions drawn on THIS picture, when it brings its own
+            "regions": sidecar.get("regions") or [],
         })
     resp = make_response(jsonify({"maps": out}))
     resp.headers["Cache-Control"] = "private, no-cache"

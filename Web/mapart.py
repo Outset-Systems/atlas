@@ -25,6 +25,7 @@ refused outright and everything else must begin with the magic number for a
 raster format the browser will only ever decode as an image.
 """
 
+import json
 import logging
 import mimetypes
 import os
@@ -46,6 +47,16 @@ mimetypes.add_type("image/webp", ".webp")
 
 #: Art shipped inside the container image.
 BUNDLED_DIR = os.path.join(settings.HERE, "static", "map")
+
+#: A map style's sidecar: `<art>.style.json` beside `<art>.webp`, written by the
+#: operator and never uploaded (`save` only takes pictures). It may name the
+#: style and give it zoom regions of its own, because a region is a rectangle
+#: on one particular picture: the dataset's regions fit the realm's own art and
+#: mean nothing on another. Region art named here is reached by zooming in, so
+#: the gallery does not offer it as a backdrop.
+STYLE_SUFFIX = ".style.json"
+MAX_STYLE_REGIONS = 32
+_REGION_ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 
 #: The most a base render may weigh. A 2048×2048 PNG is ~4 MB; this leaves
 #: room for a big photographic backdrop without letting the volume fill.
@@ -136,10 +147,74 @@ def resolve(name):
     return None, False
 
 
+def url_of(name, bundled):
+    """Where the browser fetches a render: bundled art is served from static/,
+    uploads from /map-art/."""
+    return f"static/map/{name}" if bundled else f"map-art/{name}"
+
+
+def _style_region(raw):
+    """One sidecar region in the dataset's shape plus its `url`, or None."""
+    if not isinstance(raw, dict) or not _REGION_ID.match(str(raw.get("id") or "")):
+        return None
+    name = str(raw.get("name") or "").strip()
+    art, bundled = resolve(str(raw.get("map") or ""))
+    rect = [raw.get(key) for key in ("x", "y", "w", "h")]
+    if not name or not art or not all(
+            isinstance(v, (int, float)) and not isinstance(v, bool) for v in rect):
+        return None
+    filename = os.path.basename(art)
+    region = dict(zip(("x", "y", "w", "h"), rect), id=raw["id"], name=name, map=filename,
+                  url=url_of(filename, bundled), auto=raw.get("auto") is True)
+    if raw.get("parent"):
+        region["parent"] = str(raw["parent"])
+    return region
+
+
+def style(name):
+    """What the sidecar beside render `name` says, as {label, regions}; an
+    empty answer when there is no sidecar or it cannot be read. A broken
+    sidecar costs a style its zoom, never the map."""
+    safe = safe_name(name)
+    if not safe:
+        return {}
+    filename = safe.rsplit(".", 1)[0] + STYLE_SUFFIX
+    for directory in (BUNDLED_DIR, settings.MAPS_DIR):
+        path = os.path.join(directory, filename)
+        if not os.path.isfile(path):
+            continue
+        try:
+            with open(path, encoding="utf-8") as handle:
+                raw = json.load(handle)
+            if not isinstance(raw, dict):
+                raise ValueError("not an object")
+        except (OSError, ValueError) as e:
+            log.warning("map style %s is unreadable: %s", filename, e)
+            return {}
+        found = raw.get("regions") if isinstance(raw.get("regions"), list) else []
+        regions = [r for r in map(_style_region, found[:MAX_STYLE_REGIONS]) if r]
+        if len(regions) != len(found):
+            log.warning("map style %s: kept %d of %d regions", filename, len(regions), len(found))
+        return {"label": str(raw.get("label") or "").strip(), "regions": regions}
+    return {}
+
+
+def _region_art(directory):
+    """The art a directory's sidecars zoom into: reachable, not a backdrop."""
+    try:
+        names = os.listdir(directory)
+    except OSError:
+        return set()
+    return {region["map"]
+            for name in names if name.endswith(STYLE_SUFFIX)
+            for region in style(name[:-len(STYLE_SUFFIX)] + ".webp").get("regions", [])}
+
+
 def available():
     """Every base render this Atlas could be pointed at, bundled first."""
     out = []
     foreign = _theme.foreign_maps()       # another theme's set: kept, not offered
+    zoomed = _region_art(BUNDLED_DIR) | _region_art(settings.MAPS_DIR)
     for directory, bundled in ((BUNDLED_DIR, True), (settings.MAPS_DIR, False)):
         try:
             names = sorted(os.listdir(directory))
@@ -148,6 +223,8 @@ def available():
         for name in names:
             path = os.path.join(directory, name)
             if not safe_name(name) or not os.path.isfile(path):
+                continue
+            if name.endswith(STYLE_SUFFIX) or name in zoomed:
                 continue
             if bundled and name in foreign:
                 continue

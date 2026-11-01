@@ -81,7 +81,7 @@ def test_maps_lists_the_renders(standalone):
     r = standalone.app.test_client().get("/api/v2/maps")
     _assert_private_read(r)
     maps = r.get_json()["maps"]
-    assert maps and set(maps[0]) == {"name", "label", "url", "default", "theme"}
+    assert maps and set(maps[0]) == {"name", "label", "url", "default", "theme", "regions"}
     assert sum(1 for m in maps if m["default"]) == 1
 
 

@@ -42,6 +42,9 @@ const VALUE_OK = /^[#a-zA-Z0-9(),.\s%-]{1,64}$/;
 const stored = () => {
   try { return JSON.parse(localStorage.getItem(WALLPAPER_KEY) || 'null'); } catch { return null; }
 };
+/** The art this browser chose, or null for the realm's own. regions.js asks:
+    a region is a rectangle on one picture, so it follows the picture. */
+export const chosenStyle = () => stored()?.name || null;
 const store = (v) => {
   try {
     if (v) localStorage.setItem(WALLPAPER_KEY, JSON.stringify(v));
@@ -192,6 +195,7 @@ function pick(m) {
       // same canvas → live redress; a different-sized render changes the whole
       // coordinate space, and one honest reload is the correct re-boot for that
       if (mapBase.naturalWidth === A.MAPW && mapBase.naturalHeight === A.MAPH) {
+        A.onStyleChange?.();
         A.showToast?.('The table is redressed.');
       } else {
         location.reload();

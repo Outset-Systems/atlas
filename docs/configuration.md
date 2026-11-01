@@ -59,7 +59,7 @@ beside `ATLAS_DATA` and rarely need changing.
 | `ATLAS_EVENTS` | `<data dir>/events.json` | The event history (faults, recoveries, acknowledgements). | no | no |
 | `ATLAS_REPORTS` | `<data dir>/reports` | Directory of generated reports the app serves. | no | no |
 | `ATLAS_MAINTENANCE` | `<data dir>/maintenance.json` | Planned maintenance windows. | no | no |
-| `ATLAS_MAPS` | `<data dir>/maps` | Uploaded map images. Images bundled in the image win over uploads with the same name. | no | no |
+| `ATLAS_MAPS` | `<data dir>/maps` | Uploaded map images. Images bundled in the image win over uploads with the same name. A `<image>.style.json` beside an image can name that map style and give it zoom regions, see below. | no | no |
 | `ATLAS_ACCOUNTS_DB` | `<data dir>/accounts.db` | The SQLite accounts store (`accounts` and `hybrid` modes): users, password hashes, encrypted TOTP secrets, the sign-in audit log. | no | no |
 | `ATLAS_AUTH_CONFIG` | `<data dir>/auth-config.json` | Where Directory settings saved on the Settings screen are stored. | no | no |
 | `ATLAS_INTEGRATIONS` | `<data dir>/integrations.json` | Where Sources and Realm settings saved on the Settings screen are stored. Secrets in it are encrypted with the master key. | no | no |
@@ -340,3 +340,29 @@ this map off your network.
 
 If a proxy puts its own sign-in in front of the Atlas, point the tool at the Atlas directly:
 that proxy's login cannot be answered with a token.
+
+## Map styles with their own zoom
+
+A region is a rectangle on one picture, so regions follow the art. The regions in your dataset
+belong to the map's own default image. When a viewer picks another style from Settings, the map
+shows that style's regions instead, or none.
+
+A style brings its regions in a file beside the image, written by you and never uploaded. For
+`island.webp`, that is `island.style.json`:
+
+```json
+{
+  "label": "The Island",
+  "regions": [
+    {"id": "harbour", "name": "The Harbour", "map": "harbour.webp",
+     "x": 40, "y": 55, "w": 20, "h": 15, "auto": true},
+    {"id": "docks", "name": "The Docks", "map": "docks.webp", "parent": "harbour",
+     "x": 10, "y": 30, "w": 50, "h": 40, "auto": true}
+  ]
+}
+```
+
+`x`, `y`, `w` and `h` are percent of the parent map, the same units the map editor uses. `label` is
+the name in the style list. `auto` opens the region when you zoom into it. An image a region names
+is left out of the style list, because you reach it by zooming in. A file that cannot be read costs
+the style its zoom, never the map.

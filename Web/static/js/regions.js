@@ -14,6 +14,7 @@
 
 import { A, CFG, REDUCED, $, esc, canAdminWrite, zoneById, FALLBACK_HUE, DRAG_END } from './config.js';
 import * as M from './region-model.js';
+import { chosenStyle } from './table.js';
 
 const stage = $('stage');
 const framesEl = $('region-frames');
@@ -38,7 +39,18 @@ const PAD = 28;                 // breathing room round a fitted map, px
 const LABEL_ALL_AT_MOST = 5;    // up to this many places, every name shows at any zoom
 const LABEL_ZOOM = 1.6;         // …beyond it, names show once zoomed this far past the fit
 
-const regions = () => (Array.isArray(A.DATA?.regions) ? A.DATA.regions : []);
+/* A region is a rectangle on one picture, so regions follow the art. The
+   dataset's fit the realm's own map. Any other style brings its own from its
+   sidecar (mapart.py), or has none: the demo's "Server room" drawn across a
+   different continent was the bug this answers. */
+const datasetRegions = () => (Array.isArray(A.DATA?.regions) ? A.DATA.regions : []);
+let styleRegions = new Map();   // art name to its own regions, from the maps list
+let realmArt = null;            // the art the dataset's regions were drawn on
+const onOtherStyle = () => {
+  const art = chosenStyle();
+  return Boolean(art) && art !== realmArt;
+};
+const regions = () => (onOtherStyle() ? styleRegions.get(chosenStyle()) || [] : datasetRegions());
 const regionById = (id) => regions().find((r) => r.id === id);
 const nodes = () => A.DATA?.nodes || [];
 const baseTitle = () => String(A.DATA?.meta?.title || 'The map').replace(/ Atlas$/, '');
@@ -61,7 +73,13 @@ async function loadMaps() {
   try {
     const r = await fetch('api/v2/maps', { cache: 'no-cache' });
     if (!r.ok) return;
-    A.MAPS_BY_NAME = Object.fromEntries((await r.json()).maps.map((m) => [m.name, m]));
+    const { maps } = await r.json();
+    A.MAPS_BY_NAME = Object.fromEntries(maps.map((m) => [m.name, m]));
+    realmArt = maps.find((m) => m.default)?.name || null;
+    styleRegions = new Map(maps.map((m) => [m.name, m.regions || []]));
+    // region art is not in the gallery, so the list carries its address here
+    for (const art of [...styleRegions.values()].flat()) A.MAPS_BY_NAME[art.map] ??= art;
+    if (chosenStyle()) { A.onStyleChange(); followHash(); }   // a link may have asked before this answered
   } catch { /* the bundled guess still works */ }
 }
 
@@ -620,7 +638,7 @@ A.zoomAt = (sx, sy, factor) => (level ? lensZoom(innerWidth / 2, innerHeight / 2
 
 /* ── pinning a place on a region map (edit mode, admins) ─────────────────── */
 function pinDrag(e, mk, n) {
-  if (!A.editMode || !canAdminWrite() || !level) return;
+  if (!A.editMode || !canAdminWrite() || !level || onOtherStyle()) return;   // not the dataset's region
   e.stopPropagation(); e.preventDefault();
   mk.setPointerCapture(e.pointerId);
   mk.classList.add('dragging');
@@ -756,6 +774,12 @@ A.buildWorld = function buildWorldWithRegions() {
     level = still;
     buildLensMarkers(still); buildLensFrames(still); buildCrumbs(still); buildLocator(still);
   }
+};
+
+/* The viewer changed the picture without a reload: another picture, other regions. */
+A.onStyleChange = () => {
+  if (level) closeLens();
+  buildFrames();
 };
 
 addEventListener('resize', () => { if (level) { const k = lensCam.k; fitLens(false); if (k > lensCam.min) { lensCam.k = k; applyLens(false); } } });

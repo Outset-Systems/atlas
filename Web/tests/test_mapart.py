@@ -267,7 +267,7 @@ def test_the_viewer_gallery_lists_every_render_with_a_fetchable_url(arena):
     assert r.headers["Cache-Control"] == "private, no-cache"
     assert "Cookie" in r.headers.get("Vary", "")
     maps = r.get_json()["maps"]
-    assert set(maps[0]) == {"name", "label", "url", "default", "theme"}
+    assert set(maps[0]) == {"name", "label", "url", "default", "theme", "regions"}
     bundled = next(m for m in maps if m["name"] == mapart.DEFAULT)
     # the default is whichever render the dataset names, else the bundled one
     import json
@@ -322,3 +322,67 @@ def test_the_viewer_gallery_carries_the_charted_theme_and_default(arena):
     assert maps["night.png"]["theme"] == {"--parchment": "#111"}
     assert maps[mapart.DEFAULT]["default"] is False
     assert maps[mapart.DEFAULT]["theme"] is None        # a non-object theme degrades to none
+
+
+# ── Styles that bring their own zoom ─────────────────────────────────────────
+PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 32
+
+
+def _style_files(art, tmp_path, sidecar):
+    maps = tmp_path / "maps"
+    maps.mkdir(exist_ok=True)
+    for name in ("isle.png", "cove.png"):
+        (maps / name).write_bytes(PNG)
+    (maps / "isle.style.json").write_text(sidecar, encoding="utf-8")
+
+
+COVE = ('{"label": "The Isle", "regions": [{"id": "cove", "name": "The Cove", "map": "cove.png",'
+        ' "x": 10, "y": 20, "w": 30, "h": 40, "auto": true, "places": {"x": {"x": 1, "y": 2}}}]}')
+
+
+def test_a_style_names_itself_and_brings_its_regions(art, tmp_path):
+    _style_files(art, tmp_path, COVE)
+    style = art.style("isle.png")
+    assert style["label"] == "The Isle"
+    assert style["regions"] == [{"id": "cove", "name": "The Cove", "map": "cove.png",
+                                 "url": "map-art/cove.png", "x": 10, "y": 20, "w": 30, "h": 40,
+                                 "auto": True}]
+
+
+def test_region_art_and_sidecars_are_not_offered_as_backdrops(art, tmp_path):
+    _style_files(art, tmp_path, COVE)
+    names = {image["name"] for image in art.available()}
+    assert "isle.png" in names
+    assert not names & {"cove.png", "isle.style.json"}
+    assert art.resolve("cove.png")[0], "the zoom still has to reach it"
+
+
+@pytest.mark.parametrize("sidecar", ["{not json", "[]"])
+def test_a_broken_sidecar_costs_the_zoom_never_the_map(art, tmp_path, sidecar):
+    _style_files(art, tmp_path, sidecar)
+    assert art.style("isle.png") == {}
+    assert "isle.png" in {image["name"] for image in art.available()}
+
+
+@pytest.mark.parametrize("region", [
+    {"id": "x", "name": "X", "map": "../secret.png", "x": 1, "y": 1, "w": 1, "h": 1},
+    {"id": "x", "name": "X", "map": "gone.png", "x": 1, "y": 1, "w": 1, "h": 1},
+    {"id": "x", "name": "X", "map": "cove.png", "x": "1", "y": 1, "w": 1, "h": 1},
+    {"id": "../x", "name": "X", "map": "cove.png", "x": 1, "y": 1, "w": 1, "h": 1},
+    {"id": "x", "name": "", "map": "cove.png", "x": 1, "y": 1, "w": 1, "h": 1},
+    "not a region",
+])
+def test_a_bad_region_is_dropped_alone(art, tmp_path, region):
+    import json
+    _style_files(art, tmp_path, json.dumps({"regions": [region]}))
+    assert art.style("isle.png")["regions"] == []
+
+
+def test_the_maps_list_carries_a_styles_regions(arena, tmp_path):
+    (tmp_path / "maps").mkdir(exist_ok=True)
+    _style_files(None, tmp_path, COVE)
+    maps = arena.app.test_client().get("/api/v2/maps").get_json()["maps"]
+    isle = next(m for m in maps if m["name"] == "isle.png")
+    assert isle["label"] == "The Isle"
+    assert [r["id"] for r in isle["regions"]] == ["cove"]
+    assert next(m for m in maps if m["name"] == "cove.png" or m["default"])["regions"] == []
