@@ -228,14 +228,16 @@ def _base_for(source: str) -> str:
     return _prom_url() if source == "prom" else _loki_url()
 
 
-def _index_entry(key, spec):
+def _index_entry(key, spec, demo=None):
+    """One catalogue line. `demo` is the demo's chart keys while its invented
+    figures are on (demofigures.py): then they, not a source, say what is drawn."""
     uid, panel = spec["grafana"]
     return {
         "key": key, "title": spec["title"], "kind": spec["kind"],
         "unit": spec["unit"], "source": spec["source"], "window": spec["window"],
         "grafana": {"uid": uid, "panel": panel},
         "max_window": _cap_for(spec),
-        "available": bool(_base_for(spec["source"])),
+        "available": key in demo if demo is not None else bool(_base_for(spec["source"])),
     }
 
 
@@ -424,7 +426,27 @@ def _cap_for(spec):
 # ── routes ──────────────────────────────────────────────────────────────────
 @bp.route("/charts")
 def charts_index():
-    return jsonify({"charts": [_index_entry(k, s) for k, s in CATALOGUE.items()]})
+    import demofigures
+    demo = demofigures.chart_keys() if demofigures.enabled() else None
+    return jsonify({"charts": [_index_entry(k, s, demo) for k, s in CATALOGUE.items()]})
+
+
+def _demo_chart(key, spec):
+    """A watching answered from the demo's invented figures. Never a source."""
+    import demofigures
+    window, err = _window_arg(spec)
+    if err:
+        return jsonify({"error": err}), 400
+    window_s, step_s = WINDOWS[window]
+    end = int(time.time())
+    part = demofigures.chart(key, end - window_s, end, step_s)
+    if part is None:
+        return jsonify({"error": "the demo has no figures for this watching"}), 404
+    if spec["kind"] == "table" and "rows" in part:
+        part["rows"] = part["rows"][:spec.get("limit", 10)]
+    return jsonify(_for_viewer({"key": key, "kind": spec["kind"], "unit": spec["unit"],
+                                "title": spec["title"], "window": window, "step": step_s,
+                                "start": end - window_s, "end": end, "demo": True, **part}))
 
 
 @bp.route("/charts/<key>")
@@ -432,6 +454,9 @@ def chart(key):
     spec = CATALOGUE.get(key)
     if spec is None:
         return jsonify({"error": "no such watching"}), 404
+    import demofigures
+    if demofigures.enabled():
+        return _demo_chart(key, spec)
     base = _base_for(spec["source"])
     if not base:
         var = "ATLAS_PROM_URL" if spec["source"] == "prom" else "ATLAS_LOKI_URL"

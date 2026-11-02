@@ -119,8 +119,14 @@ def write_json_atomic(path, obj, indent=2, keep_backup=True, newline=True):
         # link:link -> 644 link:docker-admins the first time the Desk wrote to
         # it. The file's ownership is deliberate (the deployment notes) and a writer has
         # no business changing it.
+        # copymode, NOT copystat (2026-11-02): copystat carries the old file's
+        # mtime too, so every save kept the time of the first one, and every
+        # reader that reloads on a new mtime (labdata, integrations and the
+        # signals hub that watches it, auth_config) went on serving what it had.
+        # In one worker the writer busts its own cache; the other worker, and a
+        # saved signals source, never saw the change until a restart.
         try:
-            shutil.copystat(path, tmp)
+            shutil.copymode(path, tmp)
         except OSError as e:
             log.warning("could not carry %s's permissions onto the new file: %s", path, e)
         if keep_backup:

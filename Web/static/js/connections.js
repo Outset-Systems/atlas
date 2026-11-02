@@ -157,6 +157,8 @@ function rowState(r, zones) {
   if (r.note) return esc(r.note);
   if (r.type === 'zone') return say('a new realm');
   if (r.type === 'service') return 'a service on its host';
+  if (r.type === 'port') return 'a port on its device';
+  if (r.type === 'route') return 'a link between them';
   const zone = zones.find((z) => z.id === r.zone);
   return zone ? `lands in ${esc(zone.name)}` : say('no realm yet');
 }
@@ -227,17 +229,25 @@ function syncTicks(box, view) {
 
 const pickBox = (box, key) => box.querySelector(`[data-pick="${CSS.escape(key)}"]`);
 
-/** A service stands on its host, so ticking one ticks the host and unticking the
-    host unticks what stood on it. A guest can land without its host. */
+/* What stands on a host: a service or a port on it, a link with it at either end.
+   A guest and a monitor do not: a guest can land without its host, and a monitor
+   is tied to a place already on the map. */
+const STANDS = new Set(['service', 'port', 'route']);
+const standsOn = (r, key) => STANDS.has(r.type) && (r.parent === key || r.peer === key);
+
+/** Ticking a service, a port or a link ticks what it stands on, and unticking a
+    host unticks what stood on it. */
 function followTick(box, view, key, checked) {
   const row = view.rows.find((r) => r.key === key);
-  if (checked && row.type === 'service') {
-    const host = pickBox(box, row.parent);
-    if (host && !host.disabled) host.checked = true;
+  if (checked && STANDS.has(row.type)) {
+    for (const end of [row.parent, row.peer]) {
+      const host = end && pickBox(box, end);
+      if (host && !host.disabled) host.checked = true;
+    }
   }
   if (!checked) {
     for (const r of view.rows) {
-      if (r.type === 'service' && r.parent === key) {
+      if (standsOn(r, key)) {
         const child = pickBox(box, r.key);
         if (child) child.checked = false;
       }
@@ -249,9 +259,9 @@ function ignoreLocally(view, key, ignoring) {
   const row = view.rows.find((r) => r.key === key);
   if (ignoring) { row.was = row.status; row.status = 'ignored'; } else { row.status = row.was || 'new'; }
   for (const r of view.rows) {
-    if (r.type === 'service' && r.parent === key && r.status !== 'charted') {
+    if (standsOn(r, key) && r.status !== 'charted') {
       r.blocked = ignoring;
-      r.note = ignoring ? `Its host, ${row.name}, is ignored.` : '';
+      r.note = ignoring ? `${row.name} is ignored.` : '';
     }
   }
 }

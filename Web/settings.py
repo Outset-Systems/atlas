@@ -45,7 +45,7 @@ APP_NAME = _theme.T["app_name"]
 # a public door (atlas.example.com) and again for the hosted edition, where
 # one login page fronts many realms and must not leak which one you asked for.
 APP_BRAND = os.environ.get("ATLAS_BRAND", "").strip() or "The Atlas"
-APP_VERSION = "0.1.0-rc3"
+APP_VERSION = "0.1.0-rc4"
 ACCENT_COLOR = "#C9A554"
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -235,6 +235,9 @@ DEFAULT_STYLE = os.environ.get("ATLAS_DEFAULT_STYLE", "").strip()
 #: An INVENTED trust map to show every visitor. /api/v2/trust is admin-only
 #: because a real one says where to aim a forged header; never point this at one.
 DEMO_TRUST = os.environ.get("ATLAS_DEMO_TRUST", "").strip()
+#: ATLAS_DEMO_FIGURES=1 draws the bundled demo's invented charts and card vitals
+#: instead of asking Prometheus, and only while the bundled dataset is shown:
+#: demofigures.enabled() reads it, with the rest of its conditions.
 #: Where a look-only demo's "get Atlas" link goes. https:// only.
 _DEMO_LINK = os.environ.get("ATLAS_DEMO_LINK", "").strip()
 DEMO_LINK = _DEMO_LINK if _DEMO_LINK.startswith("https://") and " " not in _DEMO_LINK else ""

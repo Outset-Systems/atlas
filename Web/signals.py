@@ -151,10 +151,11 @@ class KumaAdapter(_Adapter):
 
     name = "kuma"
 
-    def __init__(self, url, api_key, monitor_map=None):
+    def __init__(self, url, api_key, monitor_map=None, verify=True):
         self.url = url.rstrip("/")
         self.api_key = api_key
         self.monitor_map = monitor_map or {}
+        self.verify = verify
 
     def _fetch(self):
         import requests  # local import: optional dep, never at module load
@@ -165,6 +166,7 @@ class KumaAdapter(_Adapter):
             self.url + "/metrics",
             auth=("", self.api_key) if self.api_key else None,
             timeout=_TIMEOUT,
+            verify=self.verify,
         )
         resp.raise_for_status()
         return _parse_kuma_metrics(resp.text, self.monitor_map)
@@ -389,6 +391,19 @@ def _worse(a, b):
     return b if _STATE_RANK.get(b, 0) > _STATE_RANK.get(a, 0) else a
 
 
+def monitor_map(data):
+    """{monitor name: place id} from a dataset: each place's own `monitors` (what a
+    connection review ties), then `signals.kuma`, which wins where both name a
+    monitor because a hand-kept line is the more deliberate of the two."""
+    out = {}
+    for node in data.get("nodes", []) or []:
+        for name in node.get("monitors") or []:
+            if isinstance(name, str) and name:
+                out.setdefault(name, node.get("id"))
+    out.update((data.get("signals") or {}).get("kuma") or {})
+    return out
+
+
 def _parse_kuma_metrics(text, monitor_map):
     """Turn Kuma's Prometheus-format /metrics into node + service states.
 
@@ -587,7 +602,8 @@ def make_adapters():
         elif name == "kuma":
             url = integrations.get("ATLAS_KUMA_URL")
             if url:
-                adapters.append(KumaAdapter(url, _read_secret("ATLAS_KUMA_API_KEY")))
+                adapters.append(KumaAdapter(url, _read_secret("ATLAS_KUMA_API_KEY"),
+                                            verify=not integrations.flag("ATLAS_KUMA_INSECURE", False)))
             else:
                 log.warning("kuma source requested but ATLAS_KUMA_URL unset — skipping")
         elif name == "relay":

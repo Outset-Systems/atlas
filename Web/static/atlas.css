@@ -885,7 +885,7 @@ body.depths #colophon { color: #3E5A52; }
   cursor: pointer; backdrop-filter: blur(8px);
   transition: border-color 250ms, box-shadow 250ms, opacity 600ms;
 }
-.chrome:hover { border-color: var(--gilt); box-shadow: 0 0 18px rgba(var(--gilt-rgb), 0.25); }
+.chrome:hover { border-color: var(--gilt); }   /* its glow is THE HOVER GLOW, at the end of this file */
 /* left column: network + the agent + theme (compass now lives in the zoom stack) */
 .ci-net { top: 18px; left: 18px; }
 .ci-glyph { width: 20px; height: 20px; display: block; }
@@ -1395,7 +1395,7 @@ body.decoys-on .mk.has-stone .mk-label { opacity: 1; transform: translateX(-50%)
 #scenes-list .chrome .ci-glyph { width: 16px; height: 16px; }   /* the band's 30px circles */
 /* the band is their fill; `.chrome`'s own blur would still draw a disc on it */
 #scenes-list .chrome { background: transparent; border-color: transparent; backdrop-filter: none; }
-#scenes-list .chrome:hover { color: var(--gilt); border-color: transparent; box-shadow: 0 0 14px rgba(var(--gilt-rgb), 0.45); }
+#scenes-list .chrome:hover { color: var(--gilt); border-color: transparent; box-shadow: 0 0 14px rgba(var(--gilt-rgb), var(--hover-glow-a)); }   /* ☰: the pattern every hover follows */
 #scenes-list .menu-tools .chrome {
   position: static; flex: none; margin-right: 4px;
   width: 30px; height: 30px; font-size: 0.95rem;
@@ -4160,3 +4160,50 @@ body.style-bright #overlay.net-on path.route { stroke-width: 4.5; }
 body.style-bright #overlay.net-on path.route-wan,
 body.style-bright #overlay.net-on path.route-edge { opacity: 0.9; }
 body.style-bright #overlay.net-on .territory { fill-opacity: 0.16; stroke-opacity: 0.85; }
+
+/* ── THE HOVER GLOW (owner, 2026-11-02) ──────────────────────────────────
+   Every control with a hover state answers it the way ☰ does in the band: a
+   soft, round gilt glow around its own shape. One token, one rule, so a new
+   button joins by adding its selector here rather than inventing a shadow.
+   Keyboard focus gets the same answer, since it is the same question.
+   Each control keeps its own ink, border and fill changes; only the glow is
+   shared. Things ON the map (markers, realms, rack faceplates, the cells of
+   the ledger) are not controls and keep their own light. Two controls stay
+   dark on purpose: ⚙ and ☀ in the band's `.menu-tools`, whose `overflow:
+   hidden` would cut a glow to a square edge (`#scenes-list .ci-gear:hover`
+   above says so, and outranks this list: keep the list free of ids).
+   A row or chip with square corners would glow square, so each one here gets
+   at least the radius scale's smallest step. "If everything glows, nothing
+   does" (the design notes) still holds: this light is only ever under the pointer. */
+/* Only the strength is a token. The colour is `--gilt-rgb` read where the glow
+   is drawn, because the light scheme sets its deep-blue gilt on the panels, not
+   on :root: a glow worked out on :root would be the night's gold everywhere. */
+:root { --hover-glow-a: 0.45; }
+:root[data-scheme="light"] { --hover-glow-a: 0.32; }   /* a shade softer on pale glass */
+
+/* list rows and chips that were square */
+:is(.scroll-row, .trb-row, .ldg-host, .pth-node, .dsk-nav, .ann-filter, .rel-seg, .rel-tool,
+    .rel-legend-item, .dtab, .sp-sec > .sp-sub) { border-radius: 4px; }
+
+:is(
+  /* buttons */
+  .chrome, .sp-btn, .chron-btn, .chron-arrow, .chron-open, .chron-fs, .chron-info, .aw-go,
+  .band-arrow, .card-close, .card-min, .card-out, .card-link, .card-split, .csv-open,
+  .csv-metrics, .csv-back, .idx-seek, .idx-search-clear, .embed-max-arrow,
+  .ldg-close, .trb-close, .rel-close, .rel-map-btn, .rel-tool, .gl-tool, .gl-refuse-go,
+  .cal-arrow, .cal-today, .gs-ack, .gs-copy, .gs-setup-toggle, .gs-add, .svc-pin, .rl-locator,
+  button.rl-crumb, .acct-emb, .dsk-btn, .dsk-icon, .scene-edit, .ann-ack-btn,
+  .oc-btn, .oc-actions button, .oc-caret,
+  /* tabs */
+  .scene, .dtab, .con-tab, .rg-tab, .rel-seg, .ann-filter, .dsk-nav, .sp-sec > .sp-sub,
+  /* chips */
+  .rel-legend-item, button.rel-port, .wiz-choice, .dsk-mapart-tile, .chart-ip,
+  /* list rows */
+  .svc-row, .idx-item, .scroll-row, .trb-row, .ldg-host, .pth-node, .spm-row, .rel-rear-item
+):is(:hover, :focus-visible):not(:disabled) {
+  box-shadow: 0 0 14px rgba(var(--gilt-rgb), var(--hover-glow-a));
+}
+/* apart, so two ids cannot lift the whole list over the band's own no-glow rules */
+#embed-max-close:is(:hover, :focus-visible), #first-survey:is(:hover, :focus-visible) {
+  box-shadow: 0 0 14px rgba(var(--gilt-rgb), var(--hover-glow-a));
+}

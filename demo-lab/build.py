@@ -75,11 +75,11 @@ GUESTS = ["dc", "monitor", "downloads", "internal-host", "media", "edge", "app-h
 
 # ── places ────────────────────────────────────────────────────────────────────
 NODES = [
-    {"id": "gateway", "name": "GATEWAY", "kind": "network", "zone": "sky", "shape": "diamond",
+    {"id": "gateway", "name": "GATEWAY", "kind": "network", "zone": "sky", "shape": "diamond", "spark": True,
      "x": 50.0, "y": 52.0, "ip": net(1, 1),
      "role": "Router + firewall",
      "lore": "Every VLAN meets here, and every rule about who may talk to whom lives here.",
-     "hw": "OPNsense 26.1 · N100 · 6× 2.5GbE",
+     "hw": "OPNsense 26.1 · N100 · 4 cores · 16 GB · 6× 2.5GbE",
      "links": [link("OPNsense", f"https://{net(1, 1)}",
                     "Interfaces, firewall rules, DHCP and the VPN.", kuma="Gateway")],
      "reaches": ["core-switch", "hypervisor", "nas", "edge", "the-wild"],
@@ -97,7 +97,7 @@ NODES = [
      "x": 50.0, "y": 26.0, "ip": net(33, 5),
      "role": "Hypervisor · eight guests",
      "lore": "The one machine that runs the rest. Patch it last and reboot it carefully.",
-     "hw": "Proxmox VE 9 · Ryzen 9 7950X · 128 GB · 2× 2 TB NVMe",
+     "hw": "Proxmox VE 9 · Ryzen 9 7950X · 16 cores · 128 GB · 2× 2 TB NVMe",
      "children": GUESTS,
      "links": [link("Proxmox", f"https://{net(33, 5)}:8006",
                     "Guests, storage, snapshots and the backup jobs.", kuma="Hypervisor")],
@@ -110,12 +110,12 @@ NODES = [
      "x": 66.0, "y": 20.0, "ip": net(33, 10),
      "role": "Storage · 48 TB",
      "lore": "Every byte the house cannot afford to lose, snapshotted hourly and copied off-site nightly.",
-     "hw": "TrueNAS SCALE · 4× 12 TB RAIDZ1 · 64 GB ECC",
+     "hw": "TrueNAS SCALE · Xeon E-2334 · 4 cores · 64 GB ECC · 4× 12 TB RAIDZ1",
      "links": [link("TrueNAS", f"https://{net(33, 10)}", "Pools, shares and snapshots.", kuma="NAS")],
      "reaches": ["gateway", "the-wild"],
      "accounts": [acct("admin", sudo="password", groups=["builtin_administrators"], note="Web UI admin."),
                   acct("media", source="service", note="Read-only share for the media server.")]},
-    {"id": "dc", "name": "DIRECTORY", "kind": "vm", "zone": "sky", "parent": "hypervisor",
+    {"id": "dc", "name": "DIRECTORY", "kind": "vm", "zone": "sky", "parent": "hypervisor", "spark": True,
      "x": 40.0, "y": 18.0, "ip": net(33, 11),
      "role": "Directory + DNS + internal CA",
      "lore": "Every account and every internal name starts here.",
@@ -137,7 +137,7 @@ NODES = [
      "reaches": ["gateway", "hypervisor", "nas", "edge"],
      "accounts": [acct("admin", source="domain", sudo="password", groups=["sudo", "docker"]),
                   acct("ops-agent", source="agent", sudo="none", groups=["docker"], note="Reads metrics only.")]},
-    {"id": "downloads", "name": "DOWNLOADS", "kind": "vm", "zone": "sky", "parent": "hypervisor",
+    {"id": "downloads", "name": "DOWNLOADS", "kind": "vm", "zone": "sky", "parent": "hypervisor", "spark": True,
      "x": 58.0, "y": 34.0, "ip": net(33, 21),
      "role": "Downloads + automation",
      "lore": "Fetches what the media library asks for, behind its own VPN tunnel.",
@@ -157,7 +157,7 @@ NODES = [
                link("Atlas", f"https://atlas.{DOMAIN}", "This map.", container="atlas",
                     require_group=ADMIN_GROUP)],
      "reaches": ["gateway", "nas", "monitor"]},
-    {"id": "media", "name": "MEDIA", "kind": "vm", "zone": "dmz", "parent": "hypervisor",
+    {"id": "media", "name": "MEDIA", "kind": "vm", "zone": "dmz", "parent": "hypervisor", "spark": True,
      "x": 30.0, "y": 66.0, "ip": net(90, 30),
      "role": "Media server",
      "lore": "Films and shows for the house, read from the NAS.",
@@ -191,26 +191,26 @@ NODES = [
      "lore": "A clean guest kept ready for experiments. Off unless someone is trying something.",
      "hw": "Debian 13 · 2 vCPU · 4 GB",
      "links": []},
-    {"id": "gpu-box", "name": "GPU BOX", "kind": "physical", "zone": "workstation-vlan",
+    {"id": "gpu-box", "name": "GPU BOX", "kind": "physical", "zone": "workstation-vlan", "spark": True,
      "x": 16.0, "y": 32.0, "ip": net(10, 40),
      "role": "Local AI models",
      "lore": "One graphics card, several language models, and the house's power bill.",
-     "hw": "Ryzen 7 · RTX 4070 · 64 GB · Ollama",
+     "hw": "Ryzen 7 7700 · 8 cores · RTX 4070 · 64 GB · Ollama",
      "links": [link("Ollama", f"http://{net(10, 40)}:11434", "Local models for the apps that ask.",
                     kuma="GPU Box")],
      "reaches": ["gateway"]},
-    {"id": "workstation", "name": "WORKSTATION", "kind": "physical", "zone": "workstation-vlan",
+    {"id": "workstation", "name": "WORKSTATION", "kind": "physical", "zone": "workstation-vlan", "spark": True,
      "x": 22.0, "y": 42.0, "ip": net(10, 21),
      "role": "Admin workstation",
      "lore": "Where the map is edited from. The only client allowed onto the management VLAN.",
-     "hw": "Windows 11 · Ryzen 7 · 32 GB",
+     "hw": "Windows 11 · Ryzen 7 5800X · 8 cores · 32 GB",
      "links": [],
      "reaches": ["gateway", "core-switch"]},
-    {"id": "camera-hub", "name": "CAMERA HUB", "kind": "physical", "zone": "lookout",
+    {"id": "camera-hub", "name": "CAMERA HUB", "kind": "physical", "zone": "lookout", "spark": True,
      "x": 84.0, "y": 64.0, "ip": net(66, 5),
      "role": "Home automation + cameras",
      "lore": "Every sensor, camera and switch in the house, walled off from everything else.",
-     "hw": "Raspberry Pi 5 · 8 GB · Home Assistant OS",
+     "hw": "Raspberry Pi 5 · 4 cores · 8 GB · Home Assistant OS",
      "links": [link("Home Assistant", f"http://{net(66, 5)}:8123", "Sensors, cameras and automations.",
                     kuma="Home Assistant")],
      "reaches": ["gateway"]},
@@ -450,6 +450,195 @@ def signals():
             "metrics": {"watchfires_up": len(services) - 1, "watchfires_total": len(services)}}
 
 
+# ── figures: the demo's charts and card vitals (Web/demofigures.py) ───────────
+# Invented, like everything here, and only drawn by an instance started with
+# ATLAS_DEMO_FIGURES=1 (hosted/compose.demo.yaml). Each series covers whole
+# weeks from a Monday 00:00 UTC; the server lays the last one over this week.
+# The lab keeps its evenings five hours behind UTC.
+CHART_STEP = 3 * 3600
+CHART_WEEKS = 5
+VITALS_WEEKS = 2
+UTC_OFFSET = -5
+
+
+def _clock(i, step):
+    """(local hour 0-24, weekday 0=Mon … 6=Sun, day number) for seed index i."""
+    hours = i * step / 3600 + UTC_OFFSET
+    day = int(hours // 24)
+    return hours % 24, day % 7, day
+
+
+def _wave(h, peak, width=3.5):
+    """0..1, highest at local hour `peak`, wrapping round midnight."""
+    import math
+    d = min(abs(h - peak), 24 - abs(h - peak))
+    return math.exp(-(d / width) ** 2)
+
+
+def _curve(rng, count, step, fn, noise=0.06, digits=2):
+    out = []
+    for i in range(count):
+        h, wd, day = _clock(i, step)
+        v = fn(h, wd, day, i) * (1 + rng.gauss(0, noise))
+        out.append(round(max(0.0, v), digits))
+    return out
+
+
+def _weekend(wd):
+    return wd >= 5
+
+
+def figures():
+    """The demo's invented charts (`charts`, one per watching key in CHRONICLE and
+    ABYSS) and card vitals (`vitals`, per place). Seeded, so a rebuild is the same."""
+    import random
+    rng = random.Random(77)
+    n = CHART_WEEKS * 7 * 24 * 3600 // CHART_STEP
+    gb, mb = 1024 ** 3, 1024 ** 2
+
+    def series(spec):
+        return [{"name": name, "values": _curve(rng, n, CHART_STEP, fn, **kw)} for name, fn, kw in spec]
+
+    def counts(spec):
+        return {"per_step": True, "series": series([(a, f, {"digits": 0, **kw}) for a, f, kw in spec])}
+
+    def whole(spec):
+        return {"series": series([(a, f, {"digits": 0, **kw}) for a, f, kw in spec])}
+
+    def calls_ok(h, wd, d, i):
+        return 4 + 52 * _wave(h, 14, 4) * (0.35 if _weekend(wd) else 1)
+
+    def traffic(base):
+        return lambda h, wd, d, i: base * (0.45 + 0.9 * _wave(h, 20, 5))
+
+    def pending(off):
+        # creeps up all week, and Sunday's patching takes it back to nothing
+        return lambda h, wd, d, i: float(int((wd * 24 + h) / 168 * (9 + off) + off % 3)) if wd < 6 or h < 4 else 0.0
+
+    charts = {
+        "containers.cpu": {"series": series([
+            ("jellyfin", lambda h, wd, d, i: 3 + 38 * _wave(h, 21, 2.5) * (1.4 if _weekend(wd) else 1), {"noise": 0.25}),
+            ("ollama", lambda h, wd, d, i: 1 + (46 * _wave(h, 14, 3) if not _weekend(wd) else 9 * _wave(h, 16)), {"noise": 0.4}),
+            ("downloader", lambda h, wd, d, i: 4 + 22 * _wave(h, 2, 2.5), {"noise": 0.3}),
+            ("postgres", lambda h, wd, d, i: 2.5 + 4 * _wave(h, 13, 5), {}),
+            ("prometheus", lambda h, wd, d, i: 4.2 + 0.6 * _wave(h, 0, 1), {"noise": 0.08}),
+            ("home-assistant", lambda h, wd, d, i: 2.8 + 1.2 * _wave(h, 19, 4), {}),
+            ("caddy", lambda h, wd, d, i: 0.8 + 1.6 * _wave(h, 20, 4), {"noise": 0.15}),
+            ("crowdsec", lambda h, wd, d, i: 1.1 + 0.5 * _wave(h, 4, 3), {})])},
+        "containers.mem": whole([
+            ("ollama", lambda h, wd, d, i: 5.6 * gb if _wave(h, 14, 4) > 0.3 and not _weekend(wd) else 0.4 * gb, {"noise": 0.02}),
+            ("jellyfin", lambda h, wd, d, i: 1.1 * gb + 0.5 * gb * _wave(h, 21, 3), {"noise": 0.03}),
+            ("prometheus", lambda h, wd, d, i: 0.7 * gb + 0.25 * gb * ((i % 56) / 56), {"noise": 0.01}),
+            ("postgres", lambda h, wd, d, i: 620 * mb, {"noise": 0.02}),
+            ("home-assistant", lambda h, wd, d, i: 480 * mb + 30 * mb * (d % 7) / 7, {"noise": 0.01}),
+            ("downloader", lambda h, wd, d, i: 310 * mb + 120 * mb * _wave(h, 2), {"noise": 0.03}),
+            ("crowdsec", lambda h, wd, d, i: 160 * mb, {"noise": 0.02}),
+            ("caddy", lambda h, wd, d, i: 64 * mb, {"noise": 0.04})]),
+        "llm.calls": counts([
+            ("ok", calls_ok, {"noise": 0.2}),
+            ("fallback", lambda h, wd, d, i: 1.4 * _wave(h, 14, 3) + (6 if d % 9 == 4 and 10 < h < 13 else 0), {"noise": 0.5})]),
+        "llm.apps": counts([
+            ("notes-assistant", lambda h, wd, d, i: 0.55 * calls_ok(h, wd, d, i), {"noise": 0.2}),
+            ("paperwork", lambda h, wd, d, i: 0.3 * calls_ok(h, wd, d, i), {"noise": 0.3}),
+            ("home-assistant", lambda h, wd, d, i: 2 + 3 * _wave(h, 7, 2), {"noise": 0.3})]),
+        "patch.pending": whole([(host, pending(k), {"noise": 0})
+                                for k, host in enumerate(["hypervisor", "nas", "monitor", "internal-host",
+                                                          "edge", "app-host"])]),
+        "edge.bans": whole([
+            ("crowdsec", lambda h, wd, d, i: 46 + 22 * _wave(h, 4, 5), {"noise": 0.08}),
+            ("cscli", lambda h, wd, d, i: 2.0, {"noise": 0})]),
+        "edge.detections": counts([
+            ("crowdsecurity/http-probing", lambda h, wd, d, i: 9 + 8 * _wave(h, 3, 4), {"noise": 0.4}),
+            ("crowdsecurity/ssh-slow-bf", lambda h, wd, d, i: 4 + 5 * _wave(h, 6, 5), {"noise": 0.5}),
+            ("crowdsecurity/http-sensitive-files", lambda h, wd, d, i: 2 + 2 * _wave(h, 1, 4), {"noise": 0.6}),
+            ("crowdsecurity/http-bad-user-agent", lambda h, wd, d, i: 1.5, {"noise": 0.8})]),
+        "hosts.net": whole([
+            ("MEDIA", lambda h, wd, d, i: 4e6 + 52e6 * _wave(h, 21, 2.5) * (1.3 if _weekend(wd) else 1), {"noise": 0.2}),
+            ("NAS", lambda h, wd, d, i: 9e6 + 310e6 * _wave(h, 2.5, 0.9), {"noise": 0.15}),
+            ("EDGE", traffic(6e6), {"noise": 0.15}),
+            ("APP HOST", traffic(3.5e6), {"noise": 0.15}),
+            ("HYPERVISOR", lambda h, wd, d, i: 2e6 + 1.2e6 * _wave(h, 2.5, 1), {"noise": 0.1}),
+            ("MONITOR", lambda h, wd, d, i: 1.1e6, {"noise": 0.05})]),
+        "edge.status": counts([
+            ("2xx/3xx", lambda h, wd, d, i: 260 + 900 * _wave(h, 20, 4), {"noise": 0.12}),
+            ("4xx", lambda h, wd, d, i: 70 + 40 * _wave(h, 3, 5), {"noise": 0.2}),
+            ("5xx", lambda h, wd, d, i: 1.2 + (14 if d % 11 == 6 and 19 < h < 22 else 0), {"noise": 0.6})]),
+        "edge.routers": counts([
+            ("media", lambda h, wd, d, i: 90 + 520 * _wave(h, 21, 2.5), {"noise": 0.15}),
+            ("cloud", lambda h, wd, d, i: 60 + 210 * _wave(h, 13, 5), {"noise": 0.15}),
+            ("photos", lambda h, wd, d, i: 20 + 140 * _wave(h, 19, 3) * (1.6 if _weekend(wd) else 1), {"noise": 0.2}),
+            ("status", lambda h, wd, d, i: 36, {"noise": 0.05}),
+            ("auth", lambda h, wd, d, i: 12 + 40 * _wave(h, 9, 3), {"noise": 0.2})]),
+        "edge.ssh_denied": counts([
+            ("edge", lambda h, wd, d, i: 60 + 130 * _wave(h, 4, 5), {"noise": 0.35}),
+            ("app-host", lambda h, wd, d, i: 2.0, {"noise": 0.8})]),
+        "edge.ssh_granted": counts([
+            ("hypervisor", lambda h, wd, d, i: 1.6 * _wave(h, 20, 2) * (0.3 if _weekend(wd) else 1), {"noise": 0.5}),
+            ("edge", lambda h, wd, d, i: 0.6 * _wave(h, 21, 1.5), {"noise": 0.6})]),
+        "edge.scenarios": whole([
+            ("crowdsecurity/http-probing", lambda h, wd, d, i: 24 + 9 * _wave(h, 4, 5), {"noise": 0.08}),
+            ("crowdsecurity/ssh-slow-bf", lambda h, wd, d, i: 15 + 6 * _wave(h, 6, 5), {"noise": 0.1}),
+            ("crowdsecurity/http-sensitive-files", lambda h, wd, d, i: 6, {"noise": 0.15}),
+            ("crowdsecurity/http-bad-user-agent", lambda h, wd, d, i: 3, {"noise": 0.2})]),
+        "edge.active_bans": whole([("bans", lambda h, wd, d, i: 48 + 22 * _wave(h, 4, 5), {"noise": 0.08})]),
+        "edge.alerts": whole([("edge", lambda h, wd, d, i: 9 + 6 * _wave(h, 4, 4), {"noise": 0.2})]),
+        "edge.bouncer": {"series": series([("req/min", lambda h, wd, d, i: 18 + 40 * _wave(h, 20, 4), {"noise": 0.1, "digits": 1})])},
+        "edge.parsed": {"series": series([("lines/s", lambda h, wd, d, i: 1.8 + 5.5 * _wave(h, 20, 4), {"noise": 0.1})])},
+        # RFC 5737 documentation ranges: addresses that belong to nobody
+        "edge.top_clients": {"rows": [{"name": ip, "labels": {"ip": ip}, "value": v} for ip, v in [
+            ("203.0.113.42", 18422), ("198.51.100.7", 9310), ("203.0.113.199", 6120),
+            ("192.0.2.88", 4877), ("198.51.100.160", 3402), ("203.0.113.12", 2950),
+            ("192.0.2.230", 1804), ("198.51.100.33", 1260), ("203.0.113.71", 988), ("192.0.2.5", 640)]]},
+        "edge.top_probes": {"rows": [{"name": f"{st} {path}", "labels": {"status": st, "path": path}, "value": v}
+                                     for st, path, v in [
+            ("404", "/wp-login.php", 412), ("404", "/.env", 377), ("404", "/xmlrpc.php", 240),
+            ("403", "/admin", 198), ("404", "/.git/config", 166), ("404", "/phpmyadmin/", 131),
+            ("404", "/actuator/health", 97), ("403", "/cgi-bin/luci", 72), ("404", "/owa/", 51),
+            ("404", "/vendor/phpunit/phpunit/src/Util/PHP/eval-stdin.php", 38)]]},
+    }
+
+    hours = VITALS_WEEKS * 7 * 24
+
+    def week(cpu_fn, ram_fn, cpu_noise=0.12, ram_noise=0.01):
+        return {"cpu": _curve(rng, hours, 3600, cpu_fn, noise=cpu_noise, digits=1),
+                "ram": _curve(rng, hours, 3600, ram_fn, noise=ram_noise, digits=1)}
+
+    def flat(base, k=0.0, peak=14):
+        return lambda h, wd, d, i: base + k * _wave(h, peak)
+
+    vitals = {
+        "gateway": week(flat(6, 9, 20), flat(34, 2, 20)),
+        "hypervisor": week(flat(17, 16, 15), flat(63, 5, 15)),
+        "nas": week(lambda h, wd, d, i: 5 + 30 * _wave(h, 2.5, 1) + (25 if wd == 6 and 1 < h < 6 else 0),
+                    flat(71, 3, 3)),
+        "dc": week(flat(2.5, 2, 9), flat(44, 1)),
+        "monitor": week(flat(9, 4, 0), lambda h, wd, d, i: 58 + 6 * ((i % 24) / 24)),
+        "downloads": week(flat(8, 34, 2), flat(47, 9, 2), cpu_noise=0.25),
+        "internal-host": week(flat(11, 14, 13), flat(56, 4, 13)),
+        "media": week(lambda h, wd, d, i: 4 + 48 * _wave(h, 21, 2.5) * (1.3 if _weekend(wd) else 1),
+                      flat(43, 8, 21), cpu_noise=0.25),
+        "edge": week(flat(3, 6, 20), flat(41, 3, 20)),
+        "app-host": week(flat(13, 17, 13), flat(68, 4, 13)),
+        "gpu-box": week(lambda h, wd, d, i: 3 + (55 * _wave(h, 14, 3) if wd < 5 else 6),
+                        lambda h, wd, d, i: 28 + (44 * _wave(h, 14, 4) if wd < 5 else 4),
+                        cpu_noise=0.35, ram_noise=0.04),
+        "workstation": week(lambda h, wd, d, i: 4 + (30 * _wave(h, 13, 4) if wd < 5 else 8 * _wave(h, 20)),
+                            lambda h, wd, d, i: 38 + (20 * _wave(h, 13, 5) if wd < 5 else 3),
+                            cpu_noise=0.3, ram_noise=0.03),
+        "camera-hub": week(flat(17, 6, 19), flat(54, 2, 19)),
+    }
+    return {"_comment": "Invented charts and card vitals for the demo lab, drawn only with "
+                        "ATLAS_DEMO_FIGURES=1. Values only: Web/demofigures.py lays them against the clock.",
+            "step": CHART_STEP, "charts": charts, "vitals": vitals}
+
+
+def write_figures():
+    # compact: 280 values a series, one number a line, would be megabytes
+    with open(os.path.join(SEED, "figures.demo.json"), "w", encoding="utf-8", newline="\n") as f:
+        json.dump(figures(), f, ensure_ascii=False, separators=(",", ":"))
+        f.write("\n")
+
+
 def _hex(h):
     return [int(h[i:i + 2], 16) for i in (1, 3, 5)]
 
@@ -646,6 +835,7 @@ def main():
     with open(os.path.join(SEED, "signals.demo.json"), "w", encoding="utf-8", newline="\n") as f:
         json.dump(signals(), f, ensure_ascii=False, indent=2)
         f.write("\n")
+    write_figures()
     draw_map(os.path.join(SEED, "maps", "demo-lab.webp"))
     for r in REGIONS:
         render_region(r, os.path.join(SEED, "maps", r["map"]))

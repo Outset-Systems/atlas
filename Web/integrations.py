@@ -77,12 +77,17 @@ GROUPS = {
         "ATLAS_PORTAINER_URL", "ATLAS_PORTAINER_KEY", "ATLAS_PORTAINER_INSECURE",
         "ATLAS_KOMODO_URL", "ATLAS_KOMODO_KEY", "ATLAS_KOMODO_SECRET", "ATLAS_KOMODO_INSECURE",
         "ATLAS_NETBOX_URL", "ATLAS_NETBOX_API_TOKEN", "ATLAS_NETBOX_INSECURE",
+        # UniFi takes an API key or a local user, and a site; Kuma's address and key
+        # are THE SOURCES' own, and only its certificate tick is new here.
+        "ATLAS_UNIFI_URL", "ATLAS_UNIFI_SITE", "ATLAS_UNIFI_API_KEY", "ATLAS_UNIFI_USERNAME",
+        "ATLAS_UNIFI_PASSWORD", "ATLAS_UNIFI_INSECURE", "ATLAS_KUMA_INSECURE",
     ),
 }
 ALLOWED = GROUPS["sources"] + GROUPS["realm"] + GROUPS["glass"] + GROUPS["connections"]
 #: '', '1' or '0' only — anything else is refused by the API layer.
 BOOLS = ("ATLAS_EMBED_SERVICES", "ATLAS_EMBED_PROBE", "ATLAS_WHOIS", "ATLAS_PROXMOX_INSECURE",
-         "ATLAS_PORTAINER_INSECURE", "ATLAS_KOMODO_INSECURE", "ATLAS_NETBOX_INSECURE")
+         "ATLAS_PORTAINER_INSECURE", "ATLAS_KOMODO_INSECURE", "ATLAS_NETBOX_INSECURE",
+         "ATLAS_UNIFI_INSECURE", "ATLAS_KUMA_INSECURE")
 
 
 def flag(name, default=True):
@@ -96,7 +101,8 @@ def flag(name, default=True):
 
 #: Stored encrypted, never returned by `describe()`.
 SECRETS = ("ATLAS_KUMA_API_KEY", "ATLAS_DECOYS_KEY", "ATLAS_BEAT_TOKEN", "ATLAS_PROXMOX_TOKEN",
-           "ATLAS_PORTAINER_KEY", "ATLAS_KOMODO_KEY", "ATLAS_KOMODO_SECRET", "ATLAS_NETBOX_API_TOKEN")
+           "ATLAS_PORTAINER_KEY", "ATLAS_KOMODO_KEY", "ATLAS_KOMODO_SECRET", "ATLAS_NETBOX_API_TOKEN",
+           "ATLAS_UNIFI_API_KEY", "ATLAS_UNIFI_USERNAME", "ATLAS_UNIFI_PASSWORD")
 #: Which secrets are sent to which URL. A stored secret goes only to the address it
 #: was saved with: see `moves_secret`.
 SECRET_HOMES = {"ATLAS_KUMA_URL": ("ATLAS_KUMA_API_KEY",),
@@ -104,10 +110,12 @@ SECRET_HOMES = {"ATLAS_KUMA_URL": ("ATLAS_KUMA_API_KEY",),
                 "ATLAS_PROXMOX_URL": ("ATLAS_PROXMOX_TOKEN",),
                 "ATLAS_PORTAINER_URL": ("ATLAS_PORTAINER_KEY",),
                 "ATLAS_KOMODO_URL": ("ATLAS_KOMODO_KEY", "ATLAS_KOMODO_SECRET"),
-                "ATLAS_NETBOX_URL": ("ATLAS_NETBOX_API_TOKEN",)}
+                "ATLAS_NETBOX_URL": ("ATLAS_NETBOX_API_TOKEN",),
+                "ATLAS_UNIFI_URL": ("ATLAS_UNIFI_API_KEY", "ATLAS_UNIFI_USERNAME", "ATLAS_UNIFI_PASSWORD")}
 #: Must parse as http(s) URLs with a host when set.
 URLS = ("ATLAS_PROM_URL", "ATLAS_LOKI_URL", "ATLAS_KUMA_URL", "ATLAS_DECOYS_URL", "HUB_URL",
-        "ATLAS_PROXMOX_URL", "ATLAS_PORTAINER_URL", "ATLAS_KOMODO_URL", "ATLAS_NETBOX_URL")
+        "ATLAS_PROXMOX_URL", "ATLAS_PORTAINER_URL", "ATLAS_KOMODO_URL", "ATLAS_NETBOX_URL",
+        "ATLAS_UNIFI_URL")
 #: The signals sources the hub knows how to build (signals.build_hub_from_env).
 SOURCES = ("kuma", "prometheus", "deception", "relay", "static")
 #: Which source needs which URL in force before it can be enabled.
@@ -128,6 +136,12 @@ def valid_decoys_path(value):
     v = str(value or "")
     return (0 < len(v) <= 200 and v.startswith("/") and not v.startswith("//")
             and not any(c.isspace() or c in "?#\\" for c in v))
+
+
+def valid_unifi_site(value):
+    """A UniFi site is one path segment: the short name, never a path."""
+    from importers.unifi import SITE_OK
+    return bool(SITE_OK.match(str(value or "")))
 
 
 def decoys_path():

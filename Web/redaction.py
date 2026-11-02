@@ -272,7 +272,8 @@ def visible_monitors(data, groups):
             if cleared(link, groups) and link.get("kuma"):
                 out.add(link["kuma"])
     hidden = hidden_node_ids(data, groups)
-    for monitor, node_id in ((data.get("signals") or {}).get("kuma") or {}).items():
+    import signals
+    for monitor, node_id in signals.monitor_map(data).items():
         if node_id not in hidden:
             out.add(monitor)
     return out

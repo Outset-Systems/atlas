@@ -318,6 +318,10 @@ SECTIONS = {
               help="Hide this place from anyone whose Hub groups don't include it."),
             f("links", "objects", of=LINK_FIELDS, label="Services",
               help="Everything hosted here. Each becomes a card button and an Index row."),
+            f("monitors", "strings", label="Kuma monitors",
+              help="The Uptime Kuma monitors that light this marker, by their exact name. "
+                   "The worst of them wins. A connection review fills this in; "
+                   "`signals.kuma` still works beside it."),
             f("accounts", "objects", of=ACCOUNT_FIELDS, label="Accounts",
               help="Who can get into this place, and how far in. Drawn in the "
                    "ACCOUNTS scene. Redacted for anyone not cleared to see "

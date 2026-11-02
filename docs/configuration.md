@@ -189,6 +189,13 @@ misconfigured only removes its markers; the map still draws.
 | `ATLAS_NETBOX_URL` | (unset) | NetBox base URL, for Settings → Connections. | no | yes (Connections) |
 | `ATLAS_NETBOX_API_TOKEN` | (unset) | NetBox API token with Write enabled off, for the connection test and review. Separate from `NETBOX_TOKEN`, which is the CLI import's. Or `ATLAS_NETBOX_API_TOKEN_FILE`. | yes | yes (Connections) |
 | `ATLAS_NETBOX_INSECURE` | (unset) | `1` skips the certificate check. | no | yes (Connections) |
+| `ATLAS_UNIFI_URL` | (unset) | UniFi Network controller URL, for Settings → Connections: a console on 443, UniFi OS Server on 11443, the older Network Application on 8443. | no | yes (Connections) |
+| `ATLAS_UNIFI_SITE` | `default` | The site's short name, from the controller's own address (`/manage/site/<name>`), not its display name. | no | yes (Connections) |
+| `ATLAS_UNIFI_API_KEY` | (unset) | A UniFi OS API key made by a View Only admin. Sent as `X-API-KEY`. Or `ATLAS_UNIFI_API_KEY_FILE`. | yes | yes (Connections, stored encrypted) |
+| `ATLAS_UNIFI_USERNAME` | (unset) | Instead of a key: a local controller account with the View Only role and no MFA. Works on every controller. Write-only like the password. Or `ATLAS_UNIFI_USERNAME_FILE`. | yes | yes (Connections, stored encrypted) |
+| `ATLAS_UNIFI_PASSWORD` | (unset) | That account's password. Or `ATLAS_UNIFI_PASSWORD_FILE`. | yes | yes (Connections, stored encrypted) |
+| `ATLAS_UNIFI_INSECURE` | (unset) | `1` skips the certificate check, for the controller's default self-signed certificate. | no | yes (Connections) |
+| `ATLAS_KUMA_INSECURE` | (unset) | `1` skips the certificate check when asking Kuma, for both the live markers and the Connections review. | no | yes (Connections) |
 
 A stored credential goes only to the address it was saved with. To point a system at a new
 address, in Settings → Connections or Sources, type its credential again: a blank secret box
@@ -242,6 +249,7 @@ Security Policy, which the app builds from these settings.
 | `ATLAS_DEFAULT_STYLE` | (unset) | A map style, by filename, that a browser wears until its viewer picks another. A public demo uses it. If the file is gone the map falls back to its own art. | no | no |
 | `ATLAS_DEMO_TRUST` | (unset) | Path to an **invented** trust map to show every visitor, for a public demo. The trust map is admin-only because a real one says where to aim a forged header, so never point this at one. | no | no |
 | `ATLAS_DEMO_LINK` | (unset) | On a look-only demo, where its "get Atlas" link goes. `https://` only. | no | no |
+| `ATLAS_DEMO_FIGURES` | (unset) | `1` draws the bundled demo lab's **invented** charts in the Sky and the Depths and a CPU and RAM week on its cards, and never asks Prometheus or Loki. Only while the image's bundled dataset is shown (`ATLAS_FALLBACK=bundled`, no dataset of its own on disk). | no | no |
 | `ATLAS_WHOIS` | `1` | `1` lets a viewer ask public whois servers from the Chronicle, 20 questions a minute per client on each worker. `0` removes the pane and refuses the route. Set it to `0` on an Atlas strangers can reach. | no | yes (Realm) |
 
 The policy that lists dataset origins is only sent to signed-in viewers in

@@ -37,7 +37,8 @@ def _apply_kuma_map(ctx):
         data, _, _ = ctx.dataset()
     except (OSError, ValueError):
         return
-    monitor_map = (data.get("signals") or {}).get("kuma") or {}
+    import signals
+    monitor_map = signals.monitor_map(data)
     ip_map = {n["ip"]: n["id"] for n in data.get("nodes", [])
               if n.get("ip") and n["ip"] != "—"}
     for adapter in getattr(ctx.signals, "adapters", []):

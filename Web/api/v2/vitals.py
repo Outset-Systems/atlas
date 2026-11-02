@@ -95,8 +95,10 @@ def _series(result):
 
 @bp.route("/vitals/<node_id>")
 def vitals(node_id):
+    import demofigures
+    demo = demofigures.enabled()
     base = _prom_url()
-    if not base:
+    if not base and not demo:
         return jsonify({"error": "vitals are not configured "
                                  "(ATLAS_PROM_URL unset)"}), 404
 
@@ -117,6 +119,14 @@ def vitals(node_id):
         return jsonify({"error": "no such place"}), 404
 
     now = time.time()
+    if demo:
+        # the demo's invented week (demofigures.py), and never Prometheus
+        week = demofigures.vitals(node_id, int(now))
+        if not week:
+            return jsonify({"error": "the demo has no vitals for this place"}), 404
+        return jsonify({"window": "7d", "step": _STEP_S, **week, "demo": True,
+                        "now": {"cpu": week["cpu"][-1][1] if week["cpu"] else None,
+                                "ram": week["ram"][-1][1] if week["ram"] else None}})
     with _cache_lock:
         hit = _cache.get(node_id)
         if hit and hit[0] > now:

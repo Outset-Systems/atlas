@@ -933,6 +933,10 @@ def integrations_save():
     if decoys_path and not integrations.valid_decoys_path(decoys_path):
         return jsonify({"error": "ATLAS_DECOYS_PATH must be an absolute path on the decoy "
                                  "feed, like /api/stones — no scheme, host, query or spaces."}), 422
+    site = str(proposed.get("ATLAS_UNIFI_SITE", "") or "").strip()
+    if site and not integrations.valid_unifi_site(site):
+        return jsonify({"error": "ATLAS_UNIFI_SITE is the site's short name from the controller's "
+                                 "address, like default: letters, digits, - and _ only."}), 422
     for key in integrations.BOOLS:
         if key in proposed and str(proposed.get(key) or "").strip() not in ("", "0", "1"):
             return jsonify({"error": f"{key} must be 1, 0, or blank (the deployment's value)."}), 422
@@ -1027,9 +1031,9 @@ def connections_test():
         return jsonify({"ok": False, "error": "That is not an http(s) URL with a host."}), 400
     if integrations.moves_secret(connections.field(key, "url")[0], typed):
         return jsonify({"ok": False, "error": _secret_stays_home()}), 400
-    creds = [value(name) for name in connections.field(key, "secret")]
-    name = connections.field(key, "insecure")[0]
-    insecure = str(typed[name] if name in typed else integrations.get(name)).strip() == "1"
+    creds = connections.credentials(key, value)
+    insecure = connections.insecure(
+        key, lambda name: typed[name] if name in typed else integrations.get(name))
     ok, detail = connections.probe(key, url, creds, insecure)
     log.info("v2: connection test %s by %s: ok=%s", key, actor(), ok)
     return jsonify({"ok": ok, "detail": detail if ok else "", "error": "" if ok else detail})
@@ -1041,9 +1045,8 @@ def _survey(key):
     import connections
     import integrations
     url = integrations.get(connections.field(key, "url")[0])
-    creds = [integrations.get(name) for name in connections.field(key, "secret")]
-    insecure = str(integrations.get(connections.field(key, "insecure")[0])).strip() == "1"
-    return connections.survey(key, url, creds, insecure)
+    creds = connections.credentials(key, integrations.get)
+    return connections.survey(key, url, creds, connections.insecure(key, integrations.get))
 
 
 def _review_key(body):

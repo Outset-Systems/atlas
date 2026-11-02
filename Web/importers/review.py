@@ -9,18 +9,27 @@ import lands in the change log and can be undone like any edit.
 Nothing here talks to a network or writes anything. The fetching is in
 `connections.py`; the only writer is the store.
 
-A candidate is a dict, built by `place`, `service` or `zone`:
+A candidate is a dict, built by `place`, `service`, `zone`, `port`, `route` or
+`monitor`:
 
     key     "proxmox:qemu/101", stable across fetches. Ticks and the ignore list
             use it, and it is stamped on what it becomes as `origin`.
-    type    place | service | zone
+    type    place | service | zone | port | route | monitor
     group   the heading it is listed under
     name, ip, detail     what the review row shows
-    parent  the key of its host: a guest's node, a stack's server
+    parent  the key of its host: a guest's node, a stack's server, a port's switch,
+            one end of a route
+    peer    a route's other end
 
 A service has nowhere to stand of its own: it becomes a row in its host's `links`,
-so it needs a host that is on the map or ticked with it. A guest does not: it lands
-without a `parent` when its host is not charted.
+so it needs a host that is on the map or ticked with it. So does a port (a row in
+`interfaces`), and a route needs both its ends. A guest does not: it lands without
+a `parent` when its host is not charted.
+
+A monitor (Uptime Kuma) is a tie, not a thing: which place it lights. It is matched
+to a place on the map by address or name, and lands in that place's `monitors`.
+A place arriving from another system can bring its monitors with it (`watch`), so
+one review charts a switch and wires its health in the same change.
 
 What a remote system says is untrusted text. `clean` and `address` are why a
 stranger's control characters or a hostname in an address field cannot reach the
@@ -89,6 +98,25 @@ def zone(key, group, name, vlan, subnet, hue):
                       detail=f"vlan {vlan}" + (f" · {clean(subnet)}" if subnet else ""))
 
 
+def port(key, group, name, parent, *, kind="rj45", speed="", vlan=None, poe=False, detail=""):
+    return _candidate(key, "port", group, name, parent=parent, kind=kind, speed=clean(speed),
+                      vlan=vlan, poe=bool(poe), detail=clean(detail))
+
+
+def route(key, group, a, b, detail=""):
+    """A link between two places in the same review, by their keys."""
+    return _candidate(key, "route", group, detail or "link", parent=a, peer=b, detail=clean(detail))
+
+
+def monitor(key, name, host, detail=""):
+    return _candidate(key, "monitor", "Monitors", name, host=clean(host), ip=address(host),
+                      detail=clean(detail, 240))
+
+
+#: Rows that stand on another row, so they are read after the rows they stand on.
+_DEPENDENT = ("service", "port", "route", "monitor")
+
+
 def _real_ip(ip):
     return ip if isinstance(ip, str) and ip not in ("", "—") else None
 
@@ -99,12 +127,60 @@ def _names_of(name):
     return {full, slugify(str(name).split(".")[0])}
 
 
+def _watches(host, name, by_ip, by_name):
+    """What a monitor watches: the place at its address, else the place its host
+    name or its own name is. Exact names only: a guessed tie lights the wrong
+    marker, which is worse than lighting none."""
+    ip = _real_ip(address(host))
+    if ip:
+        return by_ip.get(ip)
+    for word in ([*_names_of(host)] if host else []) + [slugify(name)]:
+        if word in by_name:
+            return by_name[word]
+    return None
+
+
+def watch(candidates, monitors):
+    """Give each place in `candidates` the Kuma monitors that watch it, so they
+    land with it. `monitors` is `kuma.parse_metrics` output. Returns how many
+    places gained one."""
+    places = [c for c in candidates if c["type"] == "place"]
+    by_ip = {c["ip"]: c for c in places if _real_ip(c["ip"])}
+    by_name = {}
+    for c in places:
+        for word in _names_of(c["name"]):
+            by_name.setdefault(word, c)
+    for m in monitors:
+        row = _watches(m.get("host"), m.get("name"), by_ip, by_name)
+        if row is not None:
+            row.setdefault("monitors", []).append(m["name"])
+    watched = [row for row in places if row.get("monitors")]
+    for row in watched:
+        row["detail"] = clean(" · ".join(b for b in (row["detail"], f"Kuma: {', '.join(row['monitors'])}")
+                                         if b), 240)
+    return len(watched)
+
+
 class _Map:
     """The dataset, indexed the three ways a candidate can already be on it."""
 
     def __init__(self, data):
         self.nodes = {n.get("id"): n for n in data.get("nodes", []) or []}
         self.zones = data.get("zones", []) or []
+        self.routes = {frozenset((r.get("from"), r.get("to")))
+                       for r in data.get("routes", []) or [] if isinstance(r, dict)}
+        self.ports = {(i.get("device"), str(i.get("name")))
+                      for i in data.get("interfaces", []) or [] if isinstance(i, dict)}
+        # every monitor that already lights something, and what it lights
+        self.tied = {}
+        for n in self.nodes.values():
+            for name in n.get("monitors") or []:
+                self.tied.setdefault(name, n.get("id"))
+            for link in n.get("links") or []:
+                if link.get("kuma"):
+                    self.tied.setdefault(link["kuma"], n.get("id"))
+        for name, node_id in (((data.get("signals") or {}).get("kuma")) or {}).items():
+            self.tied.setdefault(name, node_id)
         self.by_origin, self.by_ip, self.by_name = {}, {}, {}
         for n in self.nodes.values():
             if n.get("origin"):
@@ -138,6 +214,9 @@ class _Map:
                 return z
         return None
 
+    def watched_by(self, row):
+        return _watches(row.get("host"), row["name"], self.by_ip, self.by_name)
+
     def has_service(self, node, row):
         """A link of the same name or address. The address is what a re-import
         matches on: the name may have been edited since."""
@@ -155,7 +234,7 @@ def annotate(candidates, data, ignored=()):
     ignored = set(ignored)
     rows, by_key = [], {}
     # hosts first, so a service can read its host's row whatever the listing order
-    for row in sorted(candidates, key=lambda c: c["type"] == "service"):
+    for row in sorted(candidates, key=lambda c: c["type"] in _DEPENDENT):
         row = {**row, "matched": "", "zone": "", "note": "", "blocked": False}
         by_key[row["key"]] = row
         if row["type"] == "zone":
@@ -168,8 +247,14 @@ def annotate(candidates, data, ignored=()):
                 row["note"] = f"The map has {node.get('name')} at {node.get('ip')}."
             elif row["status"] == NEW:
                 row["zone"] = discovery.zone_for_ip(data, row["ip"]) or ""
-        else:
+        elif row["type"] == "service":
             _annotate_service(row, by_key.get(row["parent"]), chart)
+        elif row["type"] == "port":
+            _annotate_port(row, by_key.get(row["parent"]), chart)
+        elif row["type"] == "route":
+            _annotate_route(row, by_key.get(row["parent"]), by_key.get(row["peer"]), chart)
+        else:
+            _annotate_monitor(row, chart)
         if row["key"] in ignored and row["status"] != CHARTED:
             row["status"] = IGNORED
         rows.append(row)
@@ -184,6 +269,48 @@ def _annotate_service(row, host, chart):
         row.update(blocked=True, note=f"Its host, {host['name']}, is ignored.")
     elif host["status"] == CHARTED and chart.has_service(chart.nodes[host["matched"]], row):
         row.update(status=CHARTED, matched=host["matched"])
+
+
+def _stands_on(row, host, what):
+    """The blocking half every dependent row shares: True when `host` can carry it."""
+    if host is None:
+        row.update(blocked=True, note=f"This Atlas cannot tell which {what} it is on.")
+    elif host["status"] == IGNORED:
+        row.update(blocked=True, note=f"{host['name']} is ignored.")
+    else:
+        return True
+    return False
+
+
+def _annotate_port(row, host, chart):
+    row["status"] = NEW
+    if _stands_on(row, host, "device") and host["status"] == CHARTED \
+            and (host["matched"], row["name"]) in chart.ports:
+        row.update(status=CHARTED, matched=host["matched"])
+
+
+def _annotate_route(row, a, b, chart):
+    row["status"] = NEW
+    if not (_stands_on(row, a, "place") and _stands_on(row, b, "place")):
+        return
+    row["name"] = clean(f"{a['name']} ↔ {b['name']}")
+    if a["status"] == CHARTED and b["status"] == CHARTED:
+        if a["matched"] == b["matched"]:
+            row.update(blocked=True, note="Both ends are the same place on the map.")
+        elif frozenset((a["matched"], b["matched"])) in chart.routes:
+            row.update(status=CHARTED, matched=f"{a['matched']} ↔ {b['matched']}")
+
+
+def _annotate_monitor(row, chart):
+    row["status"] = NEW
+    if row["name"] in chart.tied:
+        row.update(status=CHARTED, matched=chart.tied[row["name"]])
+        return
+    node = chart.watched_by(row)
+    if node is None:
+        row.update(blocked=True, note=f"No place on the map answers to {row.get('host') or 'its address'}.")
+    else:
+        row.update(place=node.get("id"), note=f"watches {node.get('name') or node.get('id')}")
 
 
 def plan(rows, picks, data, *, label, fallback=""):
@@ -209,10 +336,14 @@ def plan(rows, picks, data, *, label, fallback=""):
     zones = [r for r in chosen if r["type"] == "zone"]
     places = [r for r in chosen if r["type"] == "place"]
     services = [r for r in chosen if r["type"] == "service"]
-    for row in services:
-        host = by_key[row["parent"]]
-        if host["status"] != CHARTED and host not in places:
-            problems.append(f"{row['name']} needs {host['name']} on the map, or ticked with it.")
+    ports = [r for r in chosen if r["type"] == "port"]
+    routes = [r for r in chosen if r["type"] == "route"]
+    monitors = [r for r in chosen if r["type"] == "monitor"]
+    for row in services + ports + routes:
+        for end in (row["parent"], row.get("peer")):
+            host = by_key.get(end)
+            if host is not None and host["status"] != CHARTED and host not in places:
+                problems.append(f"{row['name']} needs {host['name']} on the map, or ticked with it.")
     if problems:
         raise PlanError(problems)
 
@@ -231,19 +362,39 @@ def plan(rows, picks, data, *, label, fallback=""):
     drafts = discovery.place_drafts(scratch, drafts)
 
     added, edits = {d["id"]: d for d in drafts}, {}
-    for row in services:
-        host = by_key[row["parent"]]
-        target = ids.get(host["key"]) or host["matched"]
-        link = {"label": row["name"], "url": row["url"], "desc": row["about"], "open_in": "tab"}
+    on_map = {n.get("id"): n for n in data.get("nodes", []) or []}
+
+    def at(key):
+        """The node a row's host is or becomes."""
+        return ids.get(key) or by_key[key]["matched"]
+
+    def append(target, field, item):
+        """Add to a list on a place, whether it lands in this import or is on the map."""
         if target in added:
-            added[target].setdefault("links", []).append(link)
+            added[target].setdefault(field, []).append(item)
         else:
-            node = next(n for n in data.get("nodes", []) if n.get("id") == target)
-            edits.setdefault(target, list(node.get("links") or [])).append(link)
+            body = edits.setdefault(target, {})
+            body.setdefault(field, list(on_map[target].get(field) or [])).append(item)
+
+    for row in services:
+        append(at(row["parent"]), "links",
+               {"label": row["name"], "url": row["url"], "desc": row["about"], "open_in": "tab"})
+    for row in monitors:
+        append(row["place"], "monitors", row["name"])
 
     ops += [{"op": "insert", "section": "nodes", "body": d} for d in drafts]
-    ops += [{"op": "upsert", "section": "nodes", "id": node, "body": {"links": links}}
-            for node, links in edits.items()]
+    ops += [{"op": "upsert", "section": "nodes", "id": node, "body": body}
+            for node, body in edits.items()]
+    for row in ports:
+        body = {"device": at(row["parent"]), "name": row["name"], "kind": row["kind"],
+                "note": f"from {label}"}
+        body.update({k: row[k] for k in ("speed", "vlan") if row.get(k) not in (None, "")})
+        if row.get("poe"):
+            body["poe"] = True
+        ops.append({"op": "insert", "section": "interfaces", "body": body})
+    for row in routes:
+        ops.append({"op": "insert", "section": "routes",
+                    "body": {"from": at(row["parent"]), "to": at(row["peer"]), "kind": "vlan"}})
     if not ops:
         raise PlanError(["Nothing was ticked."])
     return ops
@@ -285,6 +436,8 @@ def _drafts(places, by_key, scratch, label, fallback):
         })
         if row.get("scroll"):
             node["scroll"] = row["scroll"]
+        if row.get("monitors"):
+            node["monitors"] = list(row["monitors"])
         drafts.append(node)
     for row, node in zip(places, drafts):
         host = by_key.get(row["parent"])
