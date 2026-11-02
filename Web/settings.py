@@ -45,7 +45,7 @@ APP_NAME = _theme.T["app_name"]
 # a public door (atlas.example.com) and again for the hosted edition, where
 # one login page fronts many realms and must not leak which one you asked for.
 APP_BRAND = os.environ.get("ATLAS_BRAND", "").strip() or "The Atlas"
-APP_VERSION = "0.1.0-rc1"
+APP_VERSION = "0.1.0-rc2"
 ACCENT_COLOR = "#C9A554"
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -228,6 +228,13 @@ def _read_only():
 
 
 READ_ONLY = _read_only()
+
+# Two settings for a hosted demo. Unset, neither changes anything.
+#: A map style a browser wears until its viewer picks another.
+DEFAULT_STYLE = os.environ.get("ATLAS_DEFAULT_STYLE", "").strip()
+#: An INVENTED trust map to show every visitor. /api/v2/trust is admin-only
+#: because a real one says where to aim a forged header; never point this at one.
+DEMO_TRUST = os.environ.get("ATLAS_DEMO_TRUST", "").strip()
 
 # ── Accounts, sessions, ingest — knobs read once at startup ──────────────────
 # Collected here so /api/admin/settings has one honest source; each was a bare
@@ -447,6 +454,7 @@ def client_config():
         "theme": _theme.client(),
         # whether the Chronicle offers its whois pane
         "whois": whois_enabled(),
+        "demoTrust": bool(DEMO_TRUST),
     }
     # (`grafana`, `grafanaToken`, `grafanaTokenTtl` rode here until v1.36.0 —
     # the §20c embed token went with Grafana, 2026-09-03.)

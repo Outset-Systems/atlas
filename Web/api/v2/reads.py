@@ -52,6 +52,14 @@ def lab_data():
 @bp.route("/maps")
 def maps_list():
     """Every base render this Atlas can be drawn on, with its theme if charted."""
+    resp = make_response(jsonify({"maps": maps_for_viewer()}))
+    resp.headers["Cache-Control"] = "private, no-cache"
+    return vary_on_viewer(resp)
+
+
+def maps_for_viewer():
+    """The list `/maps` serves. views.py takes a default style from it, so a
+    sidecar names the same places on the page as it does here."""
     import mapart
     import theme as theme_mod
     ctx = atlas()
@@ -94,6 +102,4 @@ def maps_list():
             "zones": sidecar.get("zones") or {},
             "zoom": name in zoomed and name != default,
         })
-    resp = make_response(jsonify({"maps": out}))
-    resp.headers["Cache-Control"] = "private, no-cache"
-    return vary_on_viewer(resp)
+    return out

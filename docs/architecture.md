@@ -7,8 +7,9 @@ so you can find where a change belongs. User-facing setup is in
 
 The Atlas is a Flask 3 app served by gunicorn, plus a front end of plain
 JavaScript modules with no build step. It keeps its state in files under
-`/data` (or, optionally, a SQL database) and reads live health from
-Prometheus, Loki, Uptime Kuma and a decoy feed when they are configured.
+`/data` (or, optionally, a SQL database). Marker health comes from Uptime Kuma
+and tripwires from a decoy feed; Prometheus and Loki fill the cards' vitals and
+charts. All of them are read only when they are configured.
 
 A note on the version numbers in comments: the Atlas ran for a year as one
 lab's private tool before this public release, and comments that explain why
@@ -189,14 +190,16 @@ refuses the write whole if it would add problems. It checks the client's
 version to refuse a write made against a stale copy (`ConflictError`), takes
 a file lock (`filelock.py`), writes atomically (`jsonio.write_json_atomic`),
 snapshots the previous document into `revisions/`, and appends the change to a
-journal. `revisions()` and `revert()` are the change log and undo. The ops
+journal. `revisions()` and `revert()` are the change log and undo, and the
+last 50 snapshots are kept. The ops
 engine mutates a plain dict, so file and db backends cannot disagree about
 what an edit means.
 
 **Overlays, `overlays.py`.** `positions.json` (marker positions) and
 `rack.json` (rack slots) are per-deployment layout, kept outside the dataset
 and merged over it at serve time. The overlay wins; when the editor writes a
-place's position it clears the overlay entry so the edit is not undone.
+place's position it clears the overlay entry so the edit is not undone. Overlay
+writes make no revision, so the change log cannot undo them.
 
 **Redaction, `redaction.py`.** Any node or service link with
 `require_group` is visible only to viewers in that group. The dataset is

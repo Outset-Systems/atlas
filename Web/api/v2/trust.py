@@ -36,20 +36,30 @@ _PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
 
 
 @bp.route("/trust")
-@admin_required
 def trust():
+    if settings.DEMO_TRUST:
+        return _served(settings.DEMO_TRUST)
+    return _admin_trust()
+
+
+@admin_required
+def _admin_trust():
+    return _served(_PATH)
+
+
+def _served(path):
     try:
-        with open(_PATH, encoding="utf-8") as fh:
+        with open(path, encoding="utf-8") as fh:
             data = json.load(fh)
     except FileNotFoundError:
         # Never invent an empty-but-fine answer: "nothing trusts anything"
         # and "the file did not ship" look identical to a reader, and one of
         # them is a clean bill of health.
-        log.warning("v2 trust: %s is missing from the image", _PATH)
+        log.warning("v2 trust: %s is missing from the image", path)
         return jsonify({"error": "this instance has no trust map: nothing has "
                                  "been checked here"}), 503
     except (OSError, ValueError) as e:
-        log.error("v2 trust: %s unreadable: %s", _PATH, e)
+        log.error("v2 trust: %s unreadable: %s", path, e)
         return jsonify({"error": f"trust map unreadable: {e}"}), 500
 
     data["version"] = settings.APP_VERSION

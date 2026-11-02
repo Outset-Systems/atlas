@@ -40,8 +40,12 @@ const THEMABLE = [
 ];
 const VALUE_OK = /^[#a-zA-Z0-9(),.\s%-]{1,64}$/;
 
+/* A browser that has chosen nothing wears the instance's default style, if it
+   has one (ATLAS_DEFAULT_STYLE). */
 const stored = () => {
-  try { return JSON.parse(localStorage.getItem(WALLPAPER_KEY) || 'null'); } catch { return null; }
+  try {
+    return JSON.parse(localStorage.getItem(WALLPAPER_KEY) || 'null') || CFG.DEFAULT_STYLE;
+  } catch { return CFG.DEFAULT_STYLE; }
 };
 /** The art this browser chose, or null for the realm's own. regions.js asks:
     a region is a rectangle on one picture, so it follows the picture. */
@@ -231,10 +235,10 @@ function pick(m) {
   A.leaveRegion?.();   // the stage goes back to the realm's picture before it is redressed
   // choosing the realm's default = clearing the override, so a later Desk
   // change of the default follows this browser too
-  if (m.default) { store(null); applyTheme(null); }
+  if (m.default && !CFG.DEFAULT_STYLE) { store(null); applyTheme(null); }
   else { store(styleOf(m)); applyTheme(m.theme || null); }
   wear(stored());
-  const target = m.default ? (mapBase.dataset.realmSrc || m.url) : m.url;
+  const target = m.default && !CFG.DEFAULT_STYLE ? (mapBase.dataset.realmSrc || m.url) : m.url;
   if (mapBase && mapBase.src !== new URL(target, location.href).href) {
     mapBase.addEventListener('load', () => {
       // same canvas → live redress; a different-sized render changes the whole

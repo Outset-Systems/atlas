@@ -101,8 +101,9 @@ sign-in page that loops. For anything lasting, use a
    "Change password" form; the Users section adds more people.
 4. The map starts empty and offers a guided first setup: name your lab, choose
    how to start (a scan file, your router's leases, a CSV device list, or by
-   hand), confirm the networks, then the devices. After that, every change is
-   recorded and can be undone.
+   hand), confirm the networks, then the devices. After that, every change to
+   the map is recorded and the last 50 can be undone. Moved markers and
+   rearranged racks are saved apart, with no undo.
 5. To add a place later: **Settings → Edit the map → Open the map editor**
    (or press `E`), then **+ new place**. Id, name, kind, realm, position and
    role are required; the rest can wait.

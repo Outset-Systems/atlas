@@ -130,6 +130,8 @@ export const themeText = (key, fallback = '') => CFG.THEME.text?.[key] || fallba
     if (given.scrollRoot) CFG.SCROLL_ROOT = String(given.scrollRoot);
     if (given.auth) Object.assign(CFG.AUTH, given.auth);
     if (given.whois === false) CFG.WHOIS = false;
+    CFG.DEMO_TRUST = given.demoTrust === true;
+    CFG.DEFAULT_STYLE = given.defaultStyle || null;
     if (given.theme && typeof given.theme === 'object') Object.assign(CFG.THEME, given.theme);
   } catch {
     // a malformed block must not stop the map from drawing

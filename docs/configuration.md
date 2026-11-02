@@ -164,7 +164,7 @@ misconfigured only removes its markers; the map still draws.
 |---|---|---|---|---|
 | `ATLAS_SIGNALS_SOURCES` | (empty) | Comma-separated list of live sources to poll: `prometheus`, `kuma`, `deception` (the decoy feed), `relay` (pushes stored by the ingest API, `db` backend), `static` (a JSON file). Empty means a static map, except on the bundled demo (`ATLAS_FALLBACK=bundled`, not yet seeded), which reads the image's demo feed and reports it as the `demo` source. | no | yes (Sources) |
 | `ATLAS_SIGNALS_FILE` | `/data/signals.json` | The JSON file the `static` source reads. | no | no |
-| `ATLAS_PROM_URL` | (unset) | Prometheus base URL, for example `http://prometheus:9090`. Feeds host health markers, the card vitals and the built-in charts. | no | yes (Sources) |
+| `ATLAS_PROM_URL` | (unset) | Prometheus base URL, for example `http://prometheus:9090`. Feeds the card vitals, the patch line on a card and the built-in charts. Marker colours come from Kuma, not from here. | no | yes (Sources) |
 | `ATLAS_LOKI_URL` | (unset) | Loki base URL, for example `http://loki:3100`. Feeds the log-derived charts. | no | yes (Sources) |
 | `ATLAS_KUMA_URL` | (unset) | Uptime Kuma base URL, for example `http://uptime-kuma:3001`. The app reads Kuma's `/metrics`. | no | yes (Sources) |
 | `ATLAS_KUMA_API_KEY` | (unset) | A Kuma API key (sent as the HTTP Basic password, as Kuma expects). | yes, `ATLAS_KUMA_API_KEY_FILE` | yes (Sources, stored encrypted) |
@@ -239,6 +239,8 @@ Security Policy, which the app builds from these settings.
 | `ATLAS_EMBED_HOSTS` | (empty) | Extra origins the map may frame, space separated, for example `https://grafana.home.example`. | no | yes (Realm) |
 | `ATLAS_EMBED_SERVICES` | `1` | `1` also allows framing the origins your dataset already links to. `0` limits framing to `ATLAS_EMBED_HOSTS`, and every service button opens a new tab. | no | yes (Realm) |
 | `ATLAS_EMBED_PROBE` | `1` | `1` asks a service whether it allows framing before offering the pane. `0` skips the check and falls back to a tab when the pane stays blank. | no | yes (Realm) |
+| `ATLAS_DEFAULT_STYLE` | (unset) | A map style, by filename, that a browser wears until its viewer picks another. A public demo uses it. If the file is gone the map falls back to its own art. | no | no |
+| `ATLAS_DEMO_TRUST` | (unset) | Path to an **invented** trust map to show every visitor, for a public demo. The trust map is admin-only because a real one says where to aim a forged header, so never point this at one. | no | no |
 | `ATLAS_WHOIS` | `1` | `1` lets a viewer ask public whois servers from the Chronicle, 20 questions a minute per client on each worker. `0` removes the pane and refuses the route. Set it to `0` on an Atlas strangers can reach. | no | yes (Realm) |
 
 The policy that lists dataset origins is only sent to signed-in viewers in

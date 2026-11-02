@@ -33,6 +33,7 @@ def index():
     """
     title = _realm_title()
     seeded = atlas().reader.seeded()
+    style = _default_style()
     return render_template(
         "index.html",
         editable=settings.writes_enabled() and is_admin(),
@@ -40,8 +41,8 @@ def index():
         # an unseeded instance on ATLAS_FALLBACK=bundled is showing the demo,
         # not an empty realm: the first-survey invite says so (first run, W8)
         demo=not seeded and settings.FALLBACK == "bundled",
-        client_config=settings.client_config(),
-        map_image=_map_image(),
+        client_config=_client_config(style),
+        map_image=_map_image(style),
         realm_title=title,
         veil_title=_veil_title(title),
     )
@@ -68,7 +69,23 @@ def _veil_title(title):
     return (short or title).upper()
 
 
-def _map_image():
+def _default_style():
+    """`ATLAS_DEFAULT_STYLE` as this viewer's maps list has it, or None when
+    it is unset or its art is gone. table.js wears it until the viewer picks."""
+    if not settings.DEFAULT_STYLE:
+        return None
+    from api.v2.reads import maps_for_viewer
+    return next((m for m in maps_for_viewer() if m["name"] == settings.DEFAULT_STYLE), None)
+
+
+def _client_config(style):
+    config = settings.client_config()
+    if style:
+        config["defaultStyle"] = style
+    return config
+
+
+def _map_image(style=None):
     """Which base render this map is drawn on.
 
     Resolved server-side so the browser makes one request for the right
@@ -78,6 +95,8 @@ def _map_image():
     or names art that isn't there: an unconfigured backdrop is recoverable, a
     broken <img> on the only screen is not.
     """
+    if style:
+        return style["url"]
     try:
         data, _, _ = atlas().dataset()
         name = (data.get("meta") or {}).get("map_image") or mapart.DEFAULT

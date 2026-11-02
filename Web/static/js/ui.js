@@ -307,7 +307,7 @@ if (canAdminWrite()) $('scene-accounts')?.removeAttribute('hidden');
    sharper: it is the shortest description of where to aim a forged
    header. The endpoint refuses non-admins on its own — this only
    declines to offer a door that would answer 403. */
-if (canAdminWrite()) $('scene-trust')?.removeAttribute('hidden');
+if (canAdminWrite() || CFG.DEMO_TRUST) $('scene-trust')?.removeAttribute('hidden');
 
 document.querySelectorAll('[data-scene]').forEach(btn => {
   btn.addEventListener('click', () => {
