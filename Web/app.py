@@ -53,6 +53,7 @@ import settings  # noqa: E402
 import theme  # noqa: E402
 import views  # noqa: E402
 from context import AtlasContext  # noqa: E402
+from redaction import redact_for_groups  # noqa: E402
 from hub_auth.auth import AUTH_MODE  # noqa: E402
 from signals import build_hub_from_env  # noqa: E402
 
@@ -341,7 +342,7 @@ def create_app():
     # THE GLASS knobs are live since v1.38.2 (integrations.py, group "glass"):
     # the floor and the memo both key on the hosts value in force, so a change
     # made in THE SETTINGS reaches the next response without a restart.
-    _csp_cache = {"stamp": None, "hosts": None, "value": None}
+    _csp_cache = {"stamp": None, "hosts": None, "by_clearance": {}}
 
     def _csp_floor():
         return embeddable.frame_src(None, settings.embed_hosts())
@@ -368,11 +369,13 @@ def create_app():
         try:
             data, stamp, _ = app.extensions["atlas"].dataset()
         except Exception:      # noqa: BLE001 — never fail a response over this
-            return _csp_cache["value"] if _csp_cache["value"] is not None else _csp_floor()
+            return _csp_floor()
+        # Per clearance: the list names the origins of the places in it, so a
+        # viewer's header may hold only the places that viewer can see.
+        seen, clearance = redact_for_groups(data)
         if _csp_cache["stamp"] != stamp or _csp_cache["hosts"] != hosts:
-            _csp_cache["stamp"], _csp_cache["hosts"] = stamp, hosts
-            _csp_cache["value"] = embeddable.frame_src(data, hosts)
-        return _csp_cache["value"]
+            _csp_cache.update(stamp=stamp, hosts=hosts, by_clearance={})
+        return _csp_cache["by_clearance"].setdefault(clearance, embeddable.frame_src(seen, hosts))
 
     @app.after_request
     def _headers(resp):
@@ -398,12 +401,10 @@ def create_app():
         # the same blind spot that let this arc's three decorative-gate bugs
         # through. The login page embeds nothing, so it has no use for the list.
         #
-        # Only withheld where the Atlas actually gates itself. In `hub` and
-        # `standalone` mode there is no anonymous side of an Atlas gate (the Hub
-        # is the gate, and the port is unpublished), so behaviour is unchanged.
+        # Withheld from any caller who has not proved who they are, in hub mode
+        # too: an unpublished port is the operator's promise, not this app's.
         try:
-            gated = atlas_auth.sessions_enabled()
-            authed = (not gated) or bool(atlas_auth.current_user())
+            authed = atlas_auth.has_viewer()
         except Exception:      # noqa: BLE001 — never fail a response over this
             authed = False     # fail CLOSED: the narrow CSP is the safe default
         resp.headers.setdefault(

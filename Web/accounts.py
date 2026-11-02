@@ -367,15 +367,25 @@ def upsert_ldap_user(username, *, display_name="", email="", groups=(), is_admin
     return fresh
 
 
+_DECOY = {}
+
+
+def _decoy_hash():
+    """A hash no password was ever meant to match, made once per process."""
+    if "hash" not in _DECOY:
+        _DECOY["hash"] = generate_password_hash(secrets.token_urlsafe(32))
+    return _DECOY["hash"]
+
+
 def verify_password(username, password):
     """Local-source accounts only; returns the account dict or None. An ldap
     row has no hash and can never pass here — its credential lives in the
     directory, and accepting a local password for it would be a second door."""
     acc = get_user(username)
-    if (not acc or acc["source"] != "local" or not acc["password_hash"]
-            or not check_password_hash(acc["password_hash"], password or "")):
-        return None
-    return acc
+    usable = bool(acc and acc["source"] == "local" and acc["password_hash"])
+    # the hash runs either way: skipping it told a stranger which names exist
+    matches = check_password_hash(acc["password_hash"] if usable else _decoy_hash(), password or "")
+    return acc if usable and matches else None
 
 
 def set_password(username, new_password):

@@ -388,3 +388,6 @@ in percent of the region's own picture, for where a place sits once you zoom in:
 This changes the picture only, never your data. A place the file does not name stays where it is,
 and a place it does name cannot be dragged while that style is chosen, because the drag would save
 to the map's own spot.
+
+`"bright": true` tells the Atlas the picture is a light one. Names then sit on a dark plate, and the
+picture dims while the network layer is up or a place is split into its services.

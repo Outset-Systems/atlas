@@ -655,6 +655,22 @@
            mode (see settings.auth_config). Empty in standalone — no gate, no
            identity, nothing honest to say. -->
       <div class="sp-account sp-sec" id="sp-account" data-sec="account" hidden></div>
+      <!-- THE SEEKING: hand the index search's words to DEGOOG (the realm's own
+           public metasearch) when the map has no answer. Off by default — the
+           index is about the realm; the wider seeking is opt-in. -->
+      <div class="sp-sec" data-sec="seeking">
+        <button class="sp-sub" type="button">WEB SEARCH <span class="sp-sub-plain">· when the map has no answer</span></button>
+        <div class="sp-sec-body">
+          <label class="sp-row">
+            <span>Offer a web search with Degoog</span>
+            <input type="checkbox" id="sp-degoog">
+          </label>
+          <div class="sp-hint">With this on, the map search also offers to send your words to Degoog. Saved in this browser.</div>
+        </div>
+      </div>
+      </div>
+      <div class="sp-group" data-group="map">
+      <div class="sp-group-name">THE MAP</div>
       <!-- THE CARTOGRAPHER'S TABLE (2026-08-15): the viewer's own backdrop and
            the theme that rides it, per browser — the Desk still owns uploads and
            the realm-wide default. Rows built by static/js/table.js from
@@ -672,22 +688,6 @@
           <div class="sp-hint">Shows the map at an angle.</div>
         </div>
       </div>
-      <!-- THE SEEKING: hand the index search's words to DEGOOG (the realm's own
-           public metasearch) when the map has no answer. Off by default — the
-           index is about the realm; the wider seeking is opt-in. -->
-      <div class="sp-sec" data-sec="seeking">
-        <button class="sp-sub" type="button">WEB SEARCH <span class="sp-sub-plain">· when the map has no answer</span></button>
-        <div class="sp-sec-body">
-          <label class="sp-row">
-            <span>Offer a web search with Degoog</span>
-            <input type="checkbox" id="sp-degoog">
-          </label>
-          <div class="sp-hint">With this on, the map search also offers to send your words to Degoog. Saved in this browser.</div>
-        </div>
-      </div>
-      </div>
-      <div class="sp-group" data-group="map">
-      <div class="sp-group-name">THE MAP</div>
       <div class="sp-sec" data-sec="survey">
         <button class="sp-sub" type="button">MOVE PLACES <span class="sp-sub-plain">· drag them on the map</span></button>
         <div class="sp-sec-body">
@@ -758,16 +758,9 @@
      (the deployment notes), so a template can legitimately be newer than the app serving
      it. Without the guard that skew is a 500 on the whole map instead of a
      page that simply has no Grafana configured. -->
-<!-- REGIONS (v1.49.0): the detailed map of one region, over the main map,
-     which waits underneath framing the rectangle you came in through -->
+<!-- REGIONS (v1.49.0): the chrome of a region. Its map goes on the one stage
+     (regions.js), so this holds only the way back. -->
 <section id="region-lens" class="region-lens" hidden aria-label="Detailed map">
-  <div class="rl-viewport">
-    <div class="rl-stage">
-      <img class="rl-map" alt="" draggable="false">
-      <div class="rl-frames"></div>
-      <div class="rl-markers"></div>
-    </div>
-  </div>
   <nav class="rl-crumbs" aria-label="Map levels"></nav>
   <div class="rl-locator" role="button" tabindex="0" title="Back out (Esc)">
     <img alt="" draggable="false"><div class="rl-loc-box"></div>

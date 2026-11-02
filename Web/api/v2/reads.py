@@ -87,6 +87,7 @@ def maps_list():
             # the zoom regions drawn on THIS picture, when it brings its own
             "regions": [{**r, **({"places": mine(r["places"])} if "places" in r else {})}
                         for r in sidecar.get("regions") or []],
+            "bright": sidecar.get("bright") is True,
             "places": mine(sidecar.get("places")),
             "zones": sidecar.get("zones") or {},
             "zoom": name in zoomed and name != default,

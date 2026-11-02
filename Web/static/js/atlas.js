@@ -64,6 +64,17 @@ A.refreshData = async function refreshData() {
   A.repaintSignals?.();
 };
 
+/** The stage takes a picture of this size. A region's map comes through here too. */
+A.sizeWorld = function sizeWorld(src, w, h) {
+  if (src) mapBase.setAttribute('src', src);
+  A.MAPW = w;
+  A.MAPH = h;
+  stage.style.width = w + 'px';
+  stage.style.height = h + 'px';
+  $('overlay').setAttribute('viewBox', `0 0 ${w} ${h}`);
+  A.cam.min = innerWidth / w;
+};
+
 async function boot() {
   document.body.classList.add('pre');
 
@@ -74,11 +85,7 @@ async function boot() {
     mapBase.addEventListener('load', ok, { once: true });
     mapBase.addEventListener('error', ok, { once: true });
   });
-  A.MAPW = mapBase.naturalWidth || 2048;
-  A.MAPH = mapBase.naturalHeight || 2048;
-  stage.style.width = A.MAPW + 'px';
-  stage.style.height = A.MAPH + 'px';
-  $('overlay').setAttribute('viewBox', `0 0 ${A.MAPW} ${A.MAPH}`);
+  A.sizeWorld(null, mapBase.naturalWidth || 2048, mapBase.naturalHeight || 2048);
 
   A.buildWorld();
   A.buildUI();
@@ -99,7 +106,6 @@ async function boot() {
 
   // opening shot: start pushed-in, settle to the full survey as the veil lifts.
   // min zoom keeps the map filling the width — never zoom out past its left/right edges.
-  A.cam.min = innerWidth / A.MAPW;
   if (REDUCED) {
     A.home(false);
   } else {

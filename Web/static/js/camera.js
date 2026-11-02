@@ -47,6 +47,11 @@ let voidDepth = CFG.VOID_DEPTH, skyNorth = CFG.SKY_NORTH;
 function measureWorld() {
   const abyss = $('abyss'), sky = $('chronicle');
   if (!A.MAPH) return;
+  if (A.levelPlaces) {            // a region has edges: no sky above it, no Depths below
+    voidDepth = 0; skyNorth = 0;
+    if (A.apply) { A.clampCam(); A.apply(false); }
+    return;
+  }
   const fit = model.fitScale(view());
   abyss?.style.setProperty('--fit', fit);
   sky?.style.setProperty('--fit', fit);
@@ -266,10 +271,17 @@ viewport.addEventListener('wheel', (e) => {
     zoomAt(e.clientX, e.clientY, zoomFactor);
   } else {
     // all the way out → travel up/down through the sky → table → Depths
+    const y = cam.y;
     cam.y -= e.deltaY * CFG.WHEEL_PAN;
     autoFrameSky();   // rising above the table gently recenters + frames the sky
     clampCam();
     apply(false);
+    // a region has no sky or Depths: at its edge the wheel goes back to meaning
+    // zoom, in to go deeper and out to leave
+    if (A.inRegion?.() && cam.y === y) {
+      if (e.deltaY < 0) zoomAt(e.clientX, e.clientY, zoomFactor);
+      else A.regionFloor();
+    }
   }
 }, { passive: false });
 

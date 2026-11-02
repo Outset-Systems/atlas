@@ -104,7 +104,6 @@ function apply(feed) {
   A.paintServiceHealth();   // K4 — refresh per-service dots
   A.paintConstellationHealth?.();   // a split ring reddens where it stands
   A.paintDecoys?.();       // the decoy feed eyes follow the same poll
-  A.paintRegionLens?.();   // a region's detailed map shows the same health (v1.49.0)
   A.paintRoutes?.();        // amber-in the roads that lead to trouble
   A.refreshStonesScene?.(); // a stone that starts speaking lights up where it
                             // stands, even with the list already open — the

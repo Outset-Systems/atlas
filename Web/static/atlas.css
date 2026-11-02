@@ -257,7 +257,9 @@ body::after {
   transform-origin: 0 0;
   will-change: transform;
 }
-#stage.gliding { transition: transform 1100ms var(--glide); }
+#stage { transition: opacity 200ms ease; }
+#stage.gliding { transition: transform 1100ms var(--glide), opacity 200ms ease; }
+#stage.rg-fading { opacity: 0; }
 #map-base {
   display: block; user-select: none; -webkit-user-drag: none;
   /* the sand-table render carries its own grade; touch it lightly */
@@ -4018,30 +4020,18 @@ body.constellation .mk.active .mk-dot { opacity: 0.35; }
 /* nudged off the frame's corner (out from under the chrome): it floats, so a full outline */
 .rg-frame.rg-nudged .rg-tab { border: 1px solid rgba(var(--gilt-rgb), 0.6); border-radius: 7px; }
 .rg-frame.rg-small .rg-name { display: none; }          /* too small on screen to read: the glyph alone */
-body.region-open #region-frames { visibility: hidden; }  /* the lens covers the map anyway */
 body.region-open #colophon { opacity: 0; }               /* the footer would sit on the detailed map */
+/* A region has edges, not a sky or Depths. Its map sits on the abyss colour. */
+body.region-open #viewport, body.rg-crossing #viewport { background: var(--abyss); }
+body.region-open #sky-realm, body.region-open #chronicle, body.region-open #void-fade,
+body.region-open #void, body.region-open #depths-realm, body.region-open #abyss,
+body.region-open #sky-island, body.region-open #sky-shadow, body.region-open #star-hide,
+body.region-open #btn-sky, body.region-open #btn-depths { display: none; }
 
-.region-lens {
-  position: fixed; inset: 0; z-index: 930; background: var(--abyss);
-  opacity: 0; transition: opacity 420ms var(--glide);
-}
+/* only the way back lives here; the map underneath takes the pointer */
+.region-lens { position: fixed; inset: 0; z-index: 930; pointer-events: none; }
 .region-lens[hidden] { display: none; }
-.region-lens.rl-in { opacity: 1; }
-.rl-viewport { position: absolute; inset: 0; overflow: hidden; cursor: grab; touch-action: none; }
-.rl-viewport.dragging { cursor: grabbing; }
-.rl-stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
-.rl-stage.rl-gliding { transition: transform 440ms var(--glide); }
-.rl-map { display: block; width: 100%; height: 100%; user-select: none; -webkit-user-drag: none;
-  box-shadow: 0 0 60px rgba(0, 0, 0, 0.65); }
-.rl-frames, .rl-markers { position: absolute; inset: 0; pointer-events: none; }
-.rl-frames { z-index: 1; }
-.rl-markers { z-index: 2; }
-.rl-markers .mk { transform: translate(-50%, -50%) scale(calc(1 / var(--rk, 1))); }
-.region-lens.rl-labels .rl-markers .mk .mk-label { opacity: 1; }   /* room to name them all (regions.js) */
-.rl-markers .mk:focus-visible .mk-label { opacity: 1; }
-.rl-markers .mk:focus-visible { outline: none; }
-.rl-markers .mk:focus-visible .mk-core { transform: scale(1.6); box-shadow: 0 0 0 3px var(--gilt-bright); }
-body.editing-map .rl-markers .mk { cursor: move; }
+.rl-crumbs, .rl-locator { pointer-events: auto; }
 
 .rl-crumbs {
   position: fixed; left: 76px; top: var(--crown-clear); z-index: 964;
@@ -4090,7 +4080,7 @@ button.rl-crumb:focus-visible { outline: 2px solid var(--gilt-bright); outline-o
   .rl-hint { bottom: 140px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .region-lens, .rl-stage.rl-gliding, .rl-hint, .rl-locator { transition: none; }
+  #stage, .rl-hint, .rl-locator { transition: none; }
 }
 
 /* ── THE LIGHT SCHEME's one-offs (v1.52.0) ─────────────────────────────────
@@ -4137,3 +4127,24 @@ button.rl-crumb:focus-visible { outline: 2px solid var(--gilt-bright); outline-o
 }
 .idx-search-wrap:focus-within { border-color: var(--gilt); }
 .pal-input-wrap:focus-within { border-bottom-color: var(--gilt); }
+
+/* ── A bright picture (owner, 2026-11-01) ─────────────────────────────────────
+   The Atlas's ink was drawn for a dark sand table. On a light parchment a style
+   marks itself `bright` (its sidecar, mapart.py) and the ink comes to it: names sit
+   on a dark plate, and the art drops back while the network is up, so the picture
+   stays whole the rest of the time. */
+body.style-bright .mk-label {
+  background: rgba(13, 11, 7, 0.78); color: #F4ECD8; padding: 2px 8px; border-radius: 3px;
+  letter-spacing: 0.16em; text-shadow: none;
+}
+body.style-bright .zone-label {
+  background: rgba(13, 11, 7, 0.62); padding: 6px 14px; border-radius: 4px; text-shadow: none;
+}
+body.style-bright .mk-dot { filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.9)); }
+body.style-bright.net-on #map-base,
+body.style-bright.constellation #map-base { filter: brightness(0.42) saturate(0.7); }
+body.style-bright.net-on .mk .mk-label { opacity: 1; }
+body.style-bright #overlay.net-on path.route { stroke-width: 4.5; }
+body.style-bright #overlay.net-on path.route-wan,
+body.style-bright #overlay.net-on path.route-edge { opacity: 0.9; }
+body.style-bright #overlay.net-on .territory { fill-opacity: 0.16; stroke-opacity: 0.85; }

@@ -20,7 +20,7 @@ import heartbeats
 import maintenance
 import tripwires
 from context import atlas
-from redaction import (cleared, hidden_node_ids, sees_everything, vary_on_viewer,
+from redaction import (redact_for_groups, cleared, hidden_node_ids, sees_everything, vary_on_viewer,
                        viewer_groups, visible_monitors)
 
 from . import bp
@@ -133,6 +133,11 @@ def _redact_feed(ctx, feed, groups):
     out["services"] = {name: info for name, info in (feed.get("services") or {}).items()
                        if name in monitors}
     out["maintenance"] = [n for n in (feed.get("maintenance") or []) if n not in hidden]
+    if hidden:
+        out.pop("repairs", None)      # its counts and its next reason span every window
+    if isinstance(out.get("rites"), dict):
+        seen = {heartbeats.key_for(r) for r in redact_for_groups(data)[0].get("rites") or []}
+        out["rites"] = {k: v for k, v in out["rites"].items() if k in seen}
     causes = feed.get("causes")
     if isinstance(causes, dict):
         out["causes"] = {cause: [i for i in ids if i not in hidden]
@@ -236,7 +241,7 @@ def rites_feed():
         return jsonify({"error": f"lab data unreadable: {e}"}), 500
 
     heartbeats.sweep_dropped_files()
-    rites = data.get("rites") or []
+    rites = redact_for_groups(data)[0].get("rites") or []
     status = {row["key"]: row for row in heartbeats.status_for(rites)}
     out = []
     for rite in rites:

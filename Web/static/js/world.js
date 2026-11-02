@@ -15,6 +15,7 @@ const satsEl = $('satellites');
 
 /* ── Zone labels ─────────────────────────────────────── */
 function buildZoneLabels() {
+  if (A.levelPlaces) return;      // zone names are placed on the realm's own map
   for (const z of A.DATA.zones) {
     // some VLANs keep their territory but drop the map text. The Depths never
     // draw theirs: the section below the map carries the name in its own heading.
@@ -1034,6 +1035,7 @@ A.toggleNet = function toggleNet(force) {
     });
   }
   overlay.classList.toggle('net-on', netOn);
+  document.body.classList.toggle('net-on', netOn);
   updateZoneLabelFade();
   // the legend paragraph is gone (2026-07-12) — the territory edge tags
   // and the worded THE NETWORK button carry the explanation now
@@ -1048,18 +1050,25 @@ function posOverrides() {
   try { return JSON.parse(localStorage.getItem(POS_KEY) || '{}'); } catch { return {}; }
 }
 /* Where a place stands: its own spot (`_home`, with any saved drag), unless the
-   chosen map style puts it somewhere on that picture. `_home` is what lets a
-   viewer step back off a style, and it never leaves this browser: the editor
-   works from its own read of the dataset. */
+   chosen map style puts it somewhere on that picture, or a region is on the stage
+   (`A.levelPlaces`), which holds some places at their spots there and draws no
+   others. `_home` and `_realOff` are what let a viewer step back, and neither
+   leaves this browser: the editor works from its own read of the dataset. */
 function applyOverrides() {
   const o = posOverrides();
+  const level = A.levelPlaces;
   for (const n of A.DATA.nodes) {
     const home = o[n.id] || n._home || n;
     n._home = { x: home.x, y: home.y };
-    const at = A.stylePlaces?.[n.id] || n._home;
-    n.x = at.x; n.y = at.y;
+    n._realOff ??= Boolean(n.off_map);
+    const at = level ? level[n.id] : A.stylePlaces?.[n.id];
+    n.off_map = n._realOff || Boolean(level && !at);
+    const to = at || n._home;
+    n.x = to.x; n.y = to.y;
   }
 }
+/** Where a place stands on the top-level map, whatever is on the stage now. */
+A.mainPlace = (n) => A.stylePlaces?.[n.id] || posOverrides()[n.id] || n._home || n;
 A.editMode = false;
 A.setEditMode = function setEditMode(on) {
   A.editMode = !!on;
@@ -1148,6 +1157,7 @@ function buildMarkers() {
     });
     // edit-mode drag
     mk.addEventListener('pointerdown', (e) => {
+      if (A.levelPlaces) { A.pinDrag?.(e, mk, n); return; }   // a pin on this region, not a move
       // on a style that places it, this is not the spot a drag would save
       if (!A.editMode || A.stylePlaces?.[n.id]) return;
       e.stopPropagation(); e.preventDefault();

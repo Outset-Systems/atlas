@@ -49,6 +49,7 @@ import time
 from flask import jsonify, request
 
 from context import atlas
+from redaction import hidden_words, sees_everything, viewer_groups
 
 from . import bp
 
@@ -370,6 +371,29 @@ def _ip_names():
     return out
 
 
+def _for_viewer(payload):
+    """The answer without the series and rows that name a hidden place. Filled
+    after the cache: an answer is cached once, for everyone, so its legend holds
+    every name and each viewer takes away what they may not read."""
+    groups = viewer_groups()
+    if sees_everything(groups):
+        return payload
+    try:
+        data, _, _ = atlas().dataset()
+    except Exception:  # noqa: BLE001 — without the map no legend can be vouched for
+        return {**payload, "series": [], "rows": []}
+    words = hidden_words(data, groups)
+    if words is None:
+        return payload
+    clean = lambda row: not words.search(  # noqa: E731
+        " ".join([str(row.get("name") or ""), *map(str, (row.get("labels") or {}).values())]))
+    out = dict(payload)
+    for part in ("series", "rows"):
+        if part in out:
+            out[part] = [row for row in out[part] if clean(row)]
+    return out
+
+
 def _window_arg(spec):
     raw = (request.args.get("range") or "").strip().lower()
     if raw.startswith("now-"):
@@ -422,7 +446,7 @@ def chart(key):
     with _cache_lock:
         hit = _cache.get((key, window))
         if hit and hit[0] > now:
-            return jsonify(hit[1])
+            return jsonify(_for_viewer(hit[1]))
 
     end = int(now)
     start = end - window_s
@@ -481,4 +505,4 @@ def chart(key):
 
     with _cache_lock:
         _cache[(key, window)] = (now + _CACHE_TTL_S, payload)
-    return jsonify(payload)
+    return jsonify(_for_viewer(payload))

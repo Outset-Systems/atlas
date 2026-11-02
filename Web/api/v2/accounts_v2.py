@@ -192,12 +192,15 @@ def api_login():
                        "inactive" if acc else "bad credentials")
         return jsonify({"ok": False, "error": _GENERIC_FAIL}), 401
 
-    accounts.clear_failures(username)
+    # The failure count survives the password step when a code still has to be
+    # given: wrong codes share it, and clearing it here let a stolen password
+    # try codes forever by signing in again every few guesses.
     if acc.get("mfa_enabled"):
         session.clear()
         session["_mfa_user"] = acc["username"]
         session["_mfa_started"] = time.time()
         return jsonify({"ok": True, "mfa_required": True})
+    accounts.clear_failures(username)
     # the ONE policy implementation — the copy that lived here until v1.41.0
     # lacked the `admins` branch, so the surveyor fence was never enforced
     if atlas_auth.mfa_policy_applies(acc):

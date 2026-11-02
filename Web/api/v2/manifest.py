@@ -30,7 +30,7 @@ import outset_calendar
 import outset_manifest as om
 import settings
 from context import atlas
-from redaction import vary_on_viewer
+from redaction import redact_for_groups, vary_on_viewer
 
 from . import bp
 
@@ -134,7 +134,7 @@ def build(now=None):
     ctx = atlas()
     try:
         data, _, _ = ctx.dataset()
-        rites = data.get("rites") or []
+        rites = redact_for_groups(data)[0].get("rites") or []
     except (OSError, ValueError) as e:
         log.error("manifest: lab-data unreadable: %s", e)
         rites = []
@@ -153,13 +153,9 @@ def build(now=None):
 
 def _is_operator():
     """Any viewer the gate let through to the map sees the rites already; the
-    manifest's schedule is the same rows, so the same rule. In standalone
-    and hub modes the gate itself is the whole answer (no session exists —
-    hub mode's gate has verified the Hub's token before this runs); in the
-    session modes a signed-in account or a verified Hub claim counts."""
-    if atlas_auth.mode() in ("standalone", "hub"):
-        return True
-    return bool(atlas_auth.current_user())
+    manifest's schedule is the same rows, so the same rule. This path is
+    exempt from the gate, so it asks for itself, in hub mode too."""
+    return atlas_auth.has_viewer()
 
 
 def manifest_response():

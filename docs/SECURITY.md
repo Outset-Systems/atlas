@@ -119,6 +119,20 @@ Added the same day, for an Atlas that strangers can reach:
 - `/admin/import/csv` and `/admin/discovery/as-nodes` go through the write
   gate like every other write.
 
+A second review the same day closed these:
+
+- `next` on the sign-in page refuses control characters and backslashes anywhere
+  in the value, because a browser removes tabs and newlines before it reads a URL.
+- A right password no longer resets the failure count while a code is still owed.
+- Sign-in spends the same time on an unknown name as on a known one.
+- In hub mode, a named `ATLAS_HUB_SECRET_FILE` that is missing or empty refuses
+  every request instead of falling back to unsigned headers, and `/api/manifest`
+  shows its schedule only to a verified caller.
+- The `frame-src` header holds only the origins of places this viewer may see,
+  and only for a caller who has proved who they are.
+- Rites, chart legends, event causes, repair summaries and MCP events no longer
+  name a place hidden from the viewer.
+
 Known and accepted:
 
 - There is no request rate limit apart from sign-in, ingest and whois; put the

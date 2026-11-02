@@ -63,6 +63,10 @@ var ROOT = window.location.pathname.replace(/\/auth\/login\/?$/, '');
  * `window.location = '/'` would leave the app entirely and land on the Hub's
  * own root instead of the map you just signed in to see. */
 NEXT = ROOT + NEXT;
+/* The server vets `next`; this says the same thing as the browser will read it. */
+try {
+  if (new URL(NEXT, location.origin).origin !== location.origin) NEXT = ROOT + '/';
+} catch (e) { NEXT = ROOT + '/'; }
 
 function post(path, body) {
   return fetch(ROOT + path, {

@@ -11,6 +11,7 @@ identity and fails closed.
 """
 
 import copy
+import re
 
 from flask import request
 
@@ -237,6 +238,25 @@ def hidden_node_ids(data, groups):
     return {n.get("id") for n in data.get("nodes", []) if not cleared(n, groups)}
 
 
+def _hidden_words(data, groups):
+    """A pattern for the hidden places' names, ids and addresses, or None."""
+    words = set()
+    for n in data.get("nodes", []):
+        if not cleared(n, groups):
+            ip = str(n.get("ip") or "").split("/")[0].strip()
+            words |= {str(w) for w in (n.get("id"), n.get("name"), ip) if w and w != "—"}
+    if not words:
+        return None
+    return re.compile(r"(?<![\w.-])(?:" + "|".join(map(re.escape, sorted(words))) + r")(?![\w-])",
+                      re.IGNORECASE)
+
+
+def hidden_words(data, groups):
+    """`_hidden_words` for callers with free text to check; None for a viewer
+    who sees everything."""
+    return None if sees_everything(groups) else _hidden_words(data, groups)
+
+
 def visible_monitors(data, groups):
     """Kuma monitor names charted on a service this viewer is cleared for.
 
@@ -271,7 +291,13 @@ def redact_for_groups(data):
     # account roster below, and on the same not-`sees_everything` path.
     d.pop("stones", None)
     hidden = hidden_node_ids(d, groups)
+    names = _hidden_words(d, groups)
     d["nodes"] = [n for n in d.get("nodes", []) if cleared(n, groups)]
+    # a rite's `host` is free text, so no node reference covers it: a rite that
+    # names a hidden place in words goes as surely as one that points at it
+    if names and isinstance(d.get("rites"), list):
+        d["rites"] = [r for r in d["rites"] if not (
+            isinstance(r, dict) and names.search(f"{r.get('host') or ''} {r.get('note') or ''}"))]
     for n in d["nodes"]:
         if n.get("links"):
             n["links"] = [l for l in n["links"] if cleared(l, groups)]

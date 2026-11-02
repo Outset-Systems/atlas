@@ -61,36 +61,34 @@ test('storage that throws or is absent never breaks the page', () => {
   assert.equal(writeStored(undefined, 'dark'), false);
 });
 
-test('the cycle: auto → the scheme the system is not showing → the other → auto', () => {
-  // a system that prefers dark: the first click must show light
+test('the switch: always the scheme not on screen, and it never rests on the system', () => {
   assert.equal(nextChoice(null, false), 'light');
-  assert.equal(nextChoice('light', false), 'dark');
-  assert.equal(nextChoice('dark', false), null);
-  // a system that prefers light: the first click must show dark
   assert.equal(nextChoice(null, true), 'dark');
+  assert.equal(nextChoice('light', false), 'dark');
+  assert.equal(nextChoice('dark', false), 'light');
   assert.equal(nextChoice('dark', true), 'light');
-  assert.equal(nextChoice('light', true), null);
-  // junk counts as auto
-  assert.equal(nextChoice('sepia', false), 'light');
+  assert.equal(nextChoice('light', true), 'dark');
+  assert.equal(nextChoice('sepia', false), 'light');   // junk counts as no pick
 });
 
-test('every click in the cycle that leaves auto changes what is drawn', () => {
+test('every click changes what is drawn', () => {
   for (const sys of [true, false]) {
     let choice = null;
-    const seen = [resolveScheme(choice, sys)];
-    for (let i = 0; i < 2; i++) { choice = nextChoice(choice, sys); seen.push(resolveScheme(choice, sys)); }
-    assert.notEqual(seen[0], seen[1], 'the first click flips the panels');
-    assert.notEqual(seen[1], seen[2]);
+    for (let i = 0; i < 4; i++) {
+      const before = resolveScheme(choice, sys);
+      choice = nextChoice(choice, sys);
+      assert.notEqual(resolveScheme(choice, sys), before);
+    }
   }
 });
 
-test('the button: ☾ dark, ☀ light, ◐ while following the system, and says what a click does', () => {
+test('the button: the sun or the moon, and it says what a click does', () => {
   const l = buttonFace('light', false), d = buttonFace('dark', false), a = buttonFace(null, true);
-  assert.equal(l.glyph, '☀'); assert.equal(d.glyph, '☾'); assert.equal(a.glyph, '◐');
-  assert.equal(l.icon, 'sun'); assert.equal(d.icon, 'moon'); assert.equal(a.icon, 'auto');
+  assert.equal(l.glyph, '☀'); assert.equal(d.glyph, '☾'); assert.equal(a.glyph, '☀');
+  assert.equal(l.icon, 'sun'); assert.equal(d.icon, 'moon'); assert.equal(a.icon, 'sun');
   assert.match(l.title, /^Light panels — switch to dark \(T\)$/);
-  assert.match(d.title, /^Dark panels — follow your system \(T\)$/);
-  assert.match(a.title, /^Light panels, following your system — switch to dark \(T\)$/);
+  assert.match(d.title, /^Dark panels — switch to light \(T\)$/);
+  assert.equal(a.title, l.title);
   assert.equal(l.pressed, true); assert.equal(d.pressed, false); assert.equal(a.pressed, true);
 });
 

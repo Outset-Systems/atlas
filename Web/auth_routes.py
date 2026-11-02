@@ -13,6 +13,7 @@ posts to carries its own same-origin proof and throttle.
 
 import logging
 import os
+import re
 import sqlite3
 
 from flask import Blueprint, redirect, render_template, request
@@ -25,14 +26,21 @@ log = logging.getLogger("atlas.auth.routes")
 
 bp = Blueprint("auth", __name__)
 
+#: One slash, not two, then no control character and no backslash at all.
+_SAFE_NEXT = re.compile(r"/(?![/\\])[^\x00-\x1f\x7f\\]*")
+
 
 def _safe_next(raw):
     """Same-origin relative path only — the value becomes a redirect after
-    login, so anything but a plain '/path' is an open-redirect/XSS vector."""
+    login, so anything but a plain '/path' is an open-redirect/XSS vector.
+
+    Refused anywhere in the value, not only at its head: a browser deletes tabs
+    and newlines before it parses a URL, so `/<TAB>/evil.example/` passes a check
+    on the first two characters and lands on `//evil.example/`."""
     raw = (raw or "/").strip()
-    if raw.startswith("/") and not raw.startswith("//") and not raw.startswith("/\\"):
-        return raw
-    return "/"
+    if not _SAFE_NEXT.fullmatch(raw):
+        return "/"
+    return raw
 
 
 @bp.route("/auth/login")

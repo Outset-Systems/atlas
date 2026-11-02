@@ -74,6 +74,10 @@ def _load_auth_secret() -> bytes | None:
 
 
 AUTH_SECRET = _load_auth_secret()
+#: A secret file was named and gave nothing. Unsigned hub mode trusts plain
+#: headers, so it has to be chosen by naming no secret at all, never reached
+#: because a mount went missing.
+SECRET_LOST = AUTH_SECRET is None and bool(envnames.env("ATLAS_HUB_SECRET_FILE"))
 
 
 def _b64d(s: str) -> bytes:
@@ -196,6 +200,9 @@ def require_hub_or_standalone(exempt_paths=None, exempt_prefixes=None):
                 if _claims() is None:
                     return _forbidden(path, f"valid {SIGNED_HEADER} token required")
                 return None
+            if SECRET_LOST:
+                return jsonify({"error": "Server misconfigured",
+                                "reason": "ATLAS_HUB_SECRET_FILE is missing or empty"}), 500
             # Legacy: trust the plaintext header (no secret configured).
             if not request.headers.get("X-Remote-User"):
                 return _forbidden(path, "X-Remote-User header required (hub mode)")
@@ -220,7 +227,7 @@ def get_remote_user() -> str:
         claims = _claims()
         if claims is not None:
             return str(claims.get("u", ""))
-        return request.headers.get("X-Remote-User", "")
+        return "" if SECRET_LOST else request.headers.get("X-Remote-User", "")
     return envnames.env("ATLAS_STANDALONE_USER", "local")
 
 
@@ -234,7 +241,7 @@ def get_remote_groups() -> list:
                 return [str(x).strip() for x in g_claim if str(x).strip()]
             g_claim = str(g_claim)
         else:
-            g_claim = request.headers.get("X-Remote-Groups", "")
+            g_claim = "" if SECRET_LOST else request.headers.get("X-Remote-Groups", "")
         return [g.strip() for g in g_claim.split(",") if g.strip()]
     raw = envnames.env("ATLAS_STANDALONE_GROUPS", "")
     return [g.strip() for g in raw.split(",") if g.strip()]

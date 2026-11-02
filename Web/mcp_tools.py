@@ -14,7 +14,7 @@ import json
 import tripwires
 from api.v2.feeds import _redact_feed, build_feed
 from context import atlas
-from redaction import redact_for_groups, sees_everything, viewer_groups
+from redaction import redact_for_groups, sees_everything, viewer_groups, visible_monitors
 
 #: One answer's ceiling. A model pays for every character of a tool result.
 MAX_CHARS = 20000
@@ -164,8 +164,12 @@ def health(_args):
 
 
 def recent_events(args):
-    visible = {n.get("id") for n in _map().get("nodes") or []}
-    return {"events": tripwires.listing_without_trips(limit=_limit(args), visible=visible)}
+    data = _map()
+    visible = {n.get("id") for n in data.get("nodes") or []}
+    groups = viewer_groups()
+    services = None if sees_everything(groups) else visible_monitors(data, groups)
+    return {"events": tripwires.listing_without_trips(limit=_limit(args), visible=visible,
+                                                      visible_services=services)}
 
 
 _CALLS = {"atlas_overview": overview, "atlas_search": search, "atlas_place": place,

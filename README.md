@@ -31,7 +31,7 @@ colours it with live health from Prometheus, Loki and Uptime Kuma.
   certificate expiry, a calendar of scheduled jobs that notices when one did
   not run, an event history, and detailed maps for a room or a rack that open
   as you zoom in (with links straight to one, `#region=<id>`).
-- **Light or dark panels.** ☀/☾ or `T`, following your system by default;
+- **Light or dark panels.** ☀/☾ or `T`, following your system until you choose;
   the map itself stays a night map.
 - **Edit in the browser.** A guided first setup and forms for every field.
   Fill the map from a CSV device list, an nmap sweep or your router's DHCP

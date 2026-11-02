@@ -64,6 +64,7 @@ function wear(style) {
   A.stylePlaces = Object.keys(style?.places || {}).length ? style.places : null;
   A.styleZones = style?.zones || null;
   document.body.classList.toggle('on-style', Boolean(style));   // the realm's own scenery stays home
+  document.body.classList.toggle('style-bright', style?.bright === true);   // atlas.css: ink for light art
   const label = style?.label;
   document.title = label ? `${label} Atlas` : realmName.tab;
   if (veilTitle) veilTitle.textContent = label ? label.toUpperCase() : realmName.veil;
@@ -71,7 +72,7 @@ function wear(style) {
 
 const styleOf = (m) => ({
   name: m.name, url: m.url, theme: m.theme || null,
-  label: m.label || null, places: m.places || {}, zones: m.zones || {},
+  label: m.label || null, bright: m.bright === true, places: m.places || {}, zones: m.zones || {},
 });
 
 /** The maps list answered: this browser's stored copy of its style may be old
@@ -80,8 +81,8 @@ export function refreshStyle(m) {
   const had = stored();
   if (!m || !had || m.name !== had.name) return;
   const now = styleOf(m);
-  if (JSON.stringify([had.label, had.places, had.zones]) ===
-      JSON.stringify([now.label, now.places, now.zones])) return;
+  if (JSON.stringify([had.label, had.bright, had.places, had.zones]) ===
+      JSON.stringify([now.label, now.bright, now.places, now.zones])) return;
   store({ ...had, ...now });
   wear(now);
   A.buildWorld?.();
@@ -223,6 +224,7 @@ function buildProvisioners(holder) {
 }
 
 function pick(m) {
+  A.leaveRegion?.();   // the stage goes back to the realm's picture before it is redressed
   // choosing the realm's default = clearing the override, so a later Desk
   // change of the default follows this browser too
   if (m.default) { store(null); applyTheme(null); }

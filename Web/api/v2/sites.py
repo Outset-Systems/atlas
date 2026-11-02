@@ -129,6 +129,7 @@ def site_nodes(slug):
         rows = list(session.scalars(q.order_by(Node.sort_order, Node.slug)))
 
         out = []
+        shown = {n.slug for n in rows if cleared(n.extra_json or {}, groups)}
         for n in rows:
             extra = n.extra_json or {}
             if not cleared(extra, groups):
@@ -138,7 +139,7 @@ def site_nodes(slug):
                 "name": n.name,
                 "kind": n.kind,
                 "zone": n.zone_slug,
-                "parent": n.parent_slug,
+                "parent": n.parent_slug if n.parent_slug in shown or sees_everything(groups) else None,
                 "ip": n.ip,
                 "hw": n.hw,
                 "role": n.role,

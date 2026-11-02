@@ -220,6 +220,7 @@ def style(name):
         if len(regions) != len(found):
             log.warning("map style %s: kept %d of %d regions", filename, len(regions), len(found))
         return {"label": str(raw.get("label") or "").strip(), "regions": regions,
+                "bright": raw.get("bright") is True,
                 "places": _style_points(raw.get("places")),
                 "zones": _style_points(raw.get("zones"))}
     return {}

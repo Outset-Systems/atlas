@@ -181,6 +181,9 @@ def listing(limit=100, visible=None, unacked_only=False, visible_services=None):
         if visible_services is not None and kind == "service" \
                 and event.get("target") not in visible_services:
             continue
+        # a visible place can be dark BEHIND a hidden one, which names it
+        if visible is not None and "cause" in event and event["cause"] not in visible:
+            event = {k: v for k, v in event.items() if k != "cause"}
         out.append(event)
         if len(out) >= limit:
             break

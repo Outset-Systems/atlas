@@ -837,19 +837,21 @@ def test_authenticated_csp_still_carries_the_embed_hosts(embed_realm):
         "would show a blank pane")
 
 
-def test_hub_mode_csp_is_untouched(tmp_path):
-    """Where the Hub is the gate there is no anonymous side to withhold from,
-    and the port is unpublished. Behaviour must be byte-identical."""
+def test_hub_mode_gives_the_embed_list_only_to_a_known_caller(tmp_path):
+    """The Hub is the gate, so a request it sent has an identity and gets the
+    list. An unpublished port is the operator's promise, not this app's, so a
+    request that reaches it directly does not (the 2026-11-01 review)."""
     handle = fresh_app(
         ATLAS_AUTH_MODE="hub",
         ATLAS_DATA=str(_dataset(tmp_path)),
         ATLAS_DATA_BACKEND="file",
         ATLAS_EMBED_HOSTS=EMBED_SENTINEL,
     )
-    r = handle.app.test_client().get("/")
+    c = handle.app.test_client()
+    r = c.get("/", headers={"X-Remote-User": "ops", "X-Remote-Groups": "atlas-admins"})
     assert EMBED_SENTINEL in r.headers.get("Content-Security-Policy", ""), (
-        "hub mode lost its embed allowlist — this fix was scoped to the modes "
-        "where the Atlas gates itself")
+        "a caller the Hub sent lost its embed allowlist")
+    assert EMBED_SENTINEL not in c.get("/").headers.get("Content-Security-Policy", "")
 
 
 # ── A name collision must not be distinguishable from a wrong password ──────

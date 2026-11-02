@@ -267,7 +267,7 @@ def test_the_viewer_gallery_lists_every_render_with_a_fetchable_url(arena):
     assert r.headers["Cache-Control"] == "private, no-cache"
     assert "Cookie" in r.headers.get("Vary", "")
     maps = r.get_json()["maps"]
-    assert set(maps[0]) == {"name", "label", "url", "default", "theme", "regions", "places", "zones", "zoom"}
+    assert set(maps[0]) == {"name", "label", "url", "default", "theme", "regions", "bright", "places", "zones", "zoom"}
     bundled = next(m for m in maps if m["name"] == mapart.DEFAULT)
     # the default is whichever render the dataset names, else the bundled one
     import json

@@ -6,11 +6,10 @@
    pick, the operating system's preference decides, and keeps deciding when it
    changes. Unit-tested by tests/test_scheme_model.mjs under plain node.
 
-   THREE CHOICES, TWO SCHEMES (owner, 10-20): "dark", "light" and "auto" (no
-   pick: follow the system). The button cycles them, and the first click
-   always flips what you see: from auto it goes to the scheme the system is
-   NOT showing, then to the other one, then back to auto. Without the third
-   state a single click was a one-way door out of following the system. */
+   TWO WAYS (owner, 2026-11-01): the button is a plain switch between dark and
+   light. A first visit still follows the system until you press it. The third
+   stop that went back to following the system (10-20) is gone: on every other
+   click it looked like nothing had happened. */
 
 export const SCHEMES = ['dark', 'light'];
 export const SCHEME_KEY = 'atlas.scheme';
@@ -29,30 +28,22 @@ export function resolveScheme(stored, prefersLight) {
 
 export const otherScheme = (s) => (s === 'light' ? 'dark' : 'light');
 
-/** The next choice after `choice` ('dark' | 'light' | null = auto), given the
-    system preference. auto → the other scheme → the system's own → auto. */
+/** The next choice after `choice` ('dark' | 'light' | null = no pick yet),
+    given the system preference: always the scheme not on screen. */
 export function nextChoice(choice, prefersLight) {
-  const sys = prefersLight === true ? 'light' : 'dark';
-  const order = [null, otherScheme(sys), sys];
-  const at = order.indexOf(parseStored(choice));
-  return order[(at + 1) % order.length];
+  return otherScheme(resolveScheme(choice, prefersLight));
 }
 
 const WORD = { light: 'Light', dark: 'Dark' };
 
-/** What the round chrome button shows and says. ☾ dark and ☀ light when the
-    viewer picked one; ◐ while following the system. The title says what is
-    in force and what a click does; `pressed` marks the light scheme. */
+/** What the round chrome button shows and says: ☾ dark, ☀ light. The title
+    says what is in force and what a click does; `pressed` marks light. */
 export function buttonFace(choice, prefersLight) {
-  const pick = parseStored(choice);
-  const scheme = resolveScheme(pick, prefersLight);
-  const next = nextChoice(pick, prefersLight);
-  const after = next ? `switch to ${next}` : 'follow your system';
+  const scheme = resolveScheme(choice, prefersLight);
   return {
-    glyph: pick === 'light' ? '☀' : pick === 'dark' ? '☾' : '◐',
-    icon: pick === 'light' ? 'sun' : pick === 'dark' ? 'moon' : 'auto',   // scheme.js draws it
-    title: pick ? `${WORD[pick]} panels — ${after} (T)`
-                : `${WORD[scheme]} panels, following your system — ${after} (T)`,
+    glyph: scheme === 'light' ? '☀' : '☾',
+    icon: scheme === 'light' ? 'sun' : 'moon',   // scheme.js draws it
+    title: `${WORD[scheme]} panels — switch to ${otherScheme(scheme)} (T)`,
     pressed: scheme === 'light',
   };
 }

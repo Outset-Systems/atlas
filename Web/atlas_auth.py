@@ -284,6 +284,18 @@ def current_user() -> str:
     return ""
 
 
+def has_viewer():
+    """Has this request proved who it is? Standalone has no one to prove, and hub
+    mode has no session, so there the Hub's verified identity is the answer. For
+    the paths the gate waves through, where it has not run."""
+    if mode() == "standalone":
+        return True
+    if mode() == "hub":
+        import hub_auth.auth as hub
+        return bool(hub.get_remote_user())
+    return bool(current_user())
+
+
 def current_account():
     return _session_account()
 
