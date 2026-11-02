@@ -17,7 +17,7 @@ PNG = (b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08
 def _these_settings_stay_here():
     """`fresh_app` writes to the environment, and a later suite must not inherit them."""
     yield
-    for key in ("ATLAS_DEMO_TRUST", "ATLAS_DEFAULT_STYLE"):
+    for key in ("ATLAS_DEMO_TRUST", "ATLAS_DEFAULT_STYLE", "ATLAS_DEMO_LINK"):
         os.environ.pop(key, None)
 
 
@@ -50,6 +50,13 @@ def test_a_named_demo_trust_map_is_open_and_nothing_else_is(tmp_path):
     assert r.status_code == 200 and r.get_json()["apps"] == [{"name": "invented"}]
     assert _config(client.get("/").get_data(as_text=True))["demoTrust"] is True
     assert client.get("/api/v2/admin/dataset").status_code == 403
+
+
+def test_the_demo_link_takes_https_only(tmp_path):
+    page = _look_only(tmp_path, ATLAS_DEMO_LINK="https://example.org/atlas/").test_client().get("/")
+    assert _config(page.get_data(as_text=True))["demoLink"] == "https://example.org/atlas/"
+    page = _look_only(tmp_path, ATLAS_DEMO_LINK="javascript:alert(1)").test_client().get("/")
+    assert _config(page.get_data(as_text=True))["demoLink"] == ""
 
 
 def test_a_missing_demo_trust_map_says_so(tmp_path):

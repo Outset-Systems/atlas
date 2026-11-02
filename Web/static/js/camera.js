@@ -142,8 +142,16 @@ function apply(gliding = false) {
 }
 A.apply = apply;
 
+/** Where most places sit on this picture, in % (a style moves them): the
+    median, so a map with a few places across the water opens on the many. */
+function placesMidX() {
+  const xs = (A.DATA?.nodes || []).filter((n) => !n.off_map && Number.isFinite(n.x))
+    .map((n) => n.x).sort((a, z) => a - z);
+  return xs.length ? xs[Math.floor(xs.length / 2)] : undefined;
+}
+
 function home(gliding = true) {
-  adopt(model.homeTarget(view()));
+  adopt(model.homeTarget(view(), placesMidX()));
   apply(gliding);
 }
 A.home = home;

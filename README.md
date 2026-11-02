@@ -1,11 +1,39 @@
 # Atlas
 
-Atlas is a self-hosted map of your homelab. It draws your hosts, services,
-networks, racks, certificates and scheduled jobs on one illustrated map,
-colours it with live health from Uptime Kuma, and adds metrics and logs from
-Prometheus and Loki.
+**A living map of your homelab.** Hosts, services, networks, racks,
+certificates and scheduled jobs on one illustrated map, coloured with live
+health from the monitoring you already run: Uptime Kuma for the markers,
+Prometheus and Loki for the numbers.
 
-![The Atlas showing the bundled demo lab](docs/img/screenshot.png)
+**[Try the live demo](https://atlas.example.com/demo/)** ·
+[Install](docs/install.md) ·
+[Configuration](docs/configuration.md) ·
+[outset.systems/atlas](https://outset.systems/atlas/)
+
+[![Release](https://img.shields.io/github/v/release/Outset-Systems/atlas?include_prereleases&label=release)](https://github.com/Outset-Systems/atlas/releases)
+[![Tests](https://img.shields.io/github/actions/workflow/status/Outset-Systems/atlas/tests.yml?branch=main&label=tests)](https://github.com/Outset-Systems/atlas/actions/workflows/tests.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![Stars](https://img.shields.io/github/stars/Outset-Systems/atlas?style=social)](https://github.com/Outset-Systems/atlas/stargazers)
+
+![A tour of the demo lab: the map, its network, a host's card, and the server room it zooms into](docs/img/tour.gif)
+
+| | | |
+|---|---|---|
+| ![A host's card](docs/img/card.png) **A place's card** | ![Racks](docs/img/racks.png) **Racks, in 2D and 3D** | ![Addresses](docs/img/addresses.png) **Addresses on real CIDR maths** |
+| ![Topology](docs/img/topology.png) **Topology, from the internet in** | ![Calendar](docs/img/calendar.png) **A calendar that notices a missed job** | ![Tripwires](docs/img/tripwires.png) **Tripwires that light up when touched** |
+
+Every name and address in these pictures is invented.
+
+## Why a map
+
+- **A dashboard shows tiles.** Atlas shows where each thing is, what it runs
+  and what it depends on, so "the gateway is down, and nine places behind it"
+  reads as one problem, not ten.
+- **A drawn diagram goes stale.** Atlas's markers change with what your
+  monitoring reports, and it says so when a source stops answering.
+- **A scanner draws whatever it finds.** Atlas never scans your network. You
+  chart it once, by hand or from an nmap sweep, a CSV or your router's DHCP
+  leases, and it stays the way you meant it.
 
 > **Status: v0.1, early.** It works and is in daily use, but this is
 > the first public release: expect rough edges, missing docs and breaking
@@ -34,6 +62,9 @@ Prometheus and Loki.
   as you zoom in (with links straight to one, `#region=<id>`).
 - **Light or dark panels.** ☀/☾ or `T`, following your system until you choose;
   the map itself stays a night map.
+- **Your own map art, and its own words.** Bring any picture as a map style and
+  place your markers on it. The Atlas speaks in lore (rites, realms, annals) or,
+  with one setting, in standard words, and a style can bring words of its own.
 - **Edit in the browser.** A guided first setup and forms for every field.
   Fill the map from a CSV device list, an nmap sweep or your router's DHCP
   leases (ISC, dnsmasq, Kea, Windows Server). A sweep or leases device arrives

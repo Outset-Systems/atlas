@@ -172,6 +172,12 @@ test('home frames the survey, centred', () => {
   assert.equal(atSurveyOrBeyond(out.k, LANDSCAPE), true);
 });
 
+test('a narrow window opens on the places, a wide one on the picture', () => {
+  assert.ok(homeTarget(PORTRAIT, 20).x > homeTarget(PORTRAIT).x);
+  assert.equal(homeTarget(LANDSCAPE, 20).x, homeTarget(LANDSCAPE).x);
+  assert.equal(homeTarget(PORTRAIT, undefined).x, homeTarget(PORTRAIT).x);
+});
+
 test('glideTarget puts the point at the anchor, biased up', () => {
   const v = LANDSCAPE, k = 1;
   const out = glideTarget(50, 50, k, 960, v);

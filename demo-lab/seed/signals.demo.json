@@ -46,8 +46,8 @@
       "uptime_30d": 99.9
     },
     "standby": {
-      "state": "down",
-      "uptime_30d": 12.0
+      "state": "maintenance",
+      "uptime_30d": 97.2
     },
     "gpu-box": {
       "state": "healthy",

@@ -440,7 +440,7 @@ def signals():
     nodes = {n["id"]: {"state": "healthy", "uptime_30d": 99.9}
              for n in NODES if n["ip"] != "—" and not n.get("planned")}
     nodes["downloads"] = {"state": "degraded", "uptime_30d": 98.4}   # a believable board
-    nodes["standby"] = {"state": "down", "uptime_30d": 12.0}
+    nodes["standby"] = {"state": "maintenance", "uptime_30d": 97.2}   # a planned quiet, not an alarm
     nodes["the-wild"] = {"state": "healthy"}
     services = {l["kuma"]: {"state": "healthy"} for n in NODES for l in n["links"] if l.get("kuma")}
     services["Downloads"] = {"state": "degraded"}

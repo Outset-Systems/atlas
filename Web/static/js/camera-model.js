@@ -82,10 +82,14 @@ export function clampCam(cam, v) {
 }
 
 /** Home: the survey, centred both ways. */
-export function homeTarget(v) {
+export function homeTarget(v, focusX) {
   const k = fitScale(v);
-  return clampCam({ x: (v.vw - v.mapW * k) / 2,
-                    y: (v.vh - v.mapH * k) / 2, k }, v);
+  const w = v.mapW * k;
+  // A window narrower than the map at this zoom (a phone) centres on the middle
+  // of where the places are, `focusX` in %: a map whose places sit to one side
+  // otherwise opens on empty sea.
+  const x = Number.isFinite(focusX) && w > v.vw ? v.vw / 2 - (focusX / 100) * w : (v.vw - w) / 2;
+  return clampCam({ x, y: (v.vh - v.mapH * k) / 2, k }, v);
 }
 
 /** Put map point (nx, ny — percentages) just above centre at zoom k. `anchorX`

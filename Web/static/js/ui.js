@@ -309,6 +309,20 @@ if (canAdminWrite()) $('scene-accounts')?.removeAttribute('hidden');
    declines to offer a door that would answer 403. */
 if (canAdminWrite() || CFG.DEMO_TRUST) $('scene-trust')?.removeAttribute('hidden');
 
+/* A look-only demo never loads the editor, which is where the demo's invite
+   lives, so it gets a link out instead (ATLAS_DEMO_LINK). */
+if (document.body.dataset.demo === '1' && !canAdminWrite() && CFG.DEMO_LINK) {
+  const invite = document.createElement('a');
+  invite.id = 'first-survey';
+  invite.className = 'fs-demo fs-link';
+  invite.href = CFG.DEMO_LINK;
+  invite.target = '_blank';
+  invite.rel = 'noopener';
+  invite.innerHTML = '<span class="fs-head">YOU ARE LOOKING AT THE DEMO</span>' +
+    '<span class="fs-sub">get Atlas for your own lab ›</span>';
+  document.body.append(invite);
+}
+
 document.querySelectorAll('[data-scene]').forEach(btn => {
   btn.addEventListener('click', () => {
     /* The scenes live in their own band at the top of the screen now

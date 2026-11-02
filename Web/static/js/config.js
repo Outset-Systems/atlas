@@ -131,6 +131,7 @@ export const themeText = (key, fallback = '') => CFG.THEME.text?.[key] || fallba
     if (given.auth) Object.assign(CFG.AUTH, given.auth);
     if (given.whois === false) CFG.WHOIS = false;
     CFG.DEMO_TRUST = given.demoTrust === true;
+    CFG.DEMO_LINK = typeof given.demoLink === 'string' && given.demoLink.startsWith('https://') ? given.demoLink : '';
     CFG.DEFAULT_STYLE = given.defaultStyle || null;
     if (given.theme && typeof given.theme === 'object') Object.assign(CFG.THEME, given.theme);
   } catch {

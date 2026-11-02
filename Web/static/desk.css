@@ -336,6 +336,8 @@
 .fs-head { font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.8rem; letter-spacing: 0.3em; color: var(--gilt); }
 .fs-sub { font-family: 'IM Fell English', serif; font-style: italic; font-size: 0.95rem; color: var(--text-dim); }
 body.pre #first-survey { display: none; }
+#first-survey.fs-link { cursor: pointer; text-decoration: none; }
+@media (max-width: 640px) { #first-survey.fs-demo { right: 12px; left: 12px; top: auto; bottom: 44px; text-align: center; } }
 
 @media (max-width: 860px) {
   .dsk-main { flex-direction: column; }

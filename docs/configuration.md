@@ -241,6 +241,7 @@ Security Policy, which the app builds from these settings.
 | `ATLAS_EMBED_PROBE` | `1` | `1` asks a service whether it allows framing before offering the pane. `0` skips the check and falls back to a tab when the pane stays blank. | no | yes (Realm) |
 | `ATLAS_DEFAULT_STYLE` | (unset) | A map style, by filename, that a browser wears until its viewer picks another. A public demo uses it. If the file is gone the map falls back to its own art. | no | no |
 | `ATLAS_DEMO_TRUST` | (unset) | Path to an **invented** trust map to show every visitor, for a public demo. The trust map is admin-only because a real one says where to aim a forged header, so never point this at one. | no | no |
+| `ATLAS_DEMO_LINK` | (unset) | On a look-only demo, where its "get Atlas" link goes. `https://` only. | no | no |
 | `ATLAS_WHOIS` | `1` | `1` lets a viewer ask public whois servers from the Chronicle, 20 questions a minute per client on each worker. `0` removes the pane and refuses the route. Set it to `0` on an Atlas strangers can reach. | no | yes (Realm) |
 
 The policy that lists dataset origins is only sent to signed-in viewers in
