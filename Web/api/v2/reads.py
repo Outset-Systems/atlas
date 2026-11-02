@@ -88,6 +88,8 @@ def maps_list():
             "regions": [{**r, **({"places": mine(r["places"])} if "places" in r else {})}
                         for r in sidecar.get("regions") or []],
             "bright": sidecar.get("bright") is True,
+            "words": sidecar.get("words") or {},
+            "tripwire": sidecar.get("tripwire") or "bird",
             "places": mine(sidecar.get("places")),
             "zones": sidecar.get("zones") or {},
             "zoom": name in zoomed and name != default,

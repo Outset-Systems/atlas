@@ -12,6 +12,8 @@
    registries on the viewer's behalf; this module only carries the asking and
    the showing. Same-origin fetch — the CSP's `default-src 'self'` covers it. */
 
+import { say } from './words.js';
+
 const MAX_SHOWN = 20000;   // whois text is unbounded prose; the pane is not
 
 let asking = false;
@@ -25,12 +27,12 @@ async function ask(side, q) {
   asking = true;
   if (go) { go.disabled = true; go.textContent = '…'; }
   out.hidden = false;
-  out.textContent = `asking the deep about ${q}…`;
+  out.textContent = `${say('asking the deep about')} ${q}…`;
   try {
     const r = await fetch('api/v2/whois?q=' + encodeURIComponent(q), { cache: 'no-store' });
     const j = await r.json().catch(() => null);
     if (!r.ok || !j || j.error) {
-      out.textContent = `the deep would not answer: ${j?.error || `it refused (${r.status})`}`;
+      out.textContent = `${say('the deep would not answer')}: ${j?.error || `it refused (${r.status})`}`;
     } else {
       const via = (j.servers || []).join(' › ');
       const text = (j.text || '').trim() || 'the registries had nothing to say about it.';
@@ -38,7 +40,7 @@ async function ask(side, q) {
         (text.length > MAX_SHOWN ? text.slice(0, MAX_SHOWN) + '\n… (trimmed)' : text);
     }
   } catch {
-    out.textContent = 'the deep did not answer — the Atlas could not be reached.';
+    out.textContent = say('the deep did not answer — the Atlas could not be reached.');
   } finally {
     asking = false;
     const goNow = side.isConnected ? go : null;   // the carousel may have re-rendered mid-ask

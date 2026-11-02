@@ -8,7 +8,8 @@
 > on an existing Docker host, including the short-password case. Not yet
 > tried: a full virtual machine with Docker running as a system service, and
 > Docker Desktop on macOS or Windows. The SSH tunnel and tripwires sections
-> came after that run. If a step does not work as written, please open an
+> came after that run, and so did the move to Compose 2.24 or newer, which has
+> been run on an existing Docker host but not yet on a clean one. If a step does not work as written, please open an
 > issue.
 
 The Atlas runs as one container with one volume. The compose file in the

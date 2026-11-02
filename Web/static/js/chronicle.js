@@ -12,6 +12,7 @@
    nothing else in the app touches it except `A.closeMax` from the Escape chain. */
 
 import { A, CFG, $, esc, glassAttrs, isMixed } from './config.js';
+import { say } from './words.js';
 import { drawChart, destroyChart, toggleTwin } from './charts.js';
 
 /* CHRONICLE (sky) + ABYSS (depths) — the realm's live watchings, sourced from the
@@ -96,7 +97,7 @@ async function wakeNatives(slide) {
     } catch (e) {
       if (box.dataset.pending !== stamp || !box.isConnected) return;
       destroyChart(box);
-      box.innerHTML = `<div class="chart-note">the scribe is not answering</div>`;
+      box.innerHTML = `<div class="chart-note">${say('the scribe is not answering')}</div>`;
       box.dataset.at = String(Date.now() - CFG.CHART_STALE_MS + 15000);   // ask again soon, not at once
       console.warn('chronicle: native watching failed', box.dataset.chart, e);
     }
@@ -182,13 +183,13 @@ function slideHTML(c, i) {
       (c.panels ? '' : `<button class="chron-fs" title="Full screen">⛶</button>`) +
       (c.url
         ? `<a class="chron-open" href="${esc(c.url)}" target="_blank" rel="noopener"` +
-          `${glassAttrs(c.title, 'a watching of the lab', c.open_in)}>open ›</a>`
+          `${glassAttrs(c.title, say('a watching of the lab'), c.open_in)}>open ›</a>`
         : '') +
     `</span></div>` +
     (c.about ? `<div class="chron-about" hidden>${esc(c.about)}</div>` : '') +
     `<div class="chron-pane${native ? ' native' : ''}">` +
       `<div class="chron-scrying" aria-hidden="true"><span></span><span></span><span></span>` +
-        `<em>scrying ${esc(c.title.toLowerCase())}…</em></div>` +
+        `<em>${say('scrying')} ${esc(c.title.toLowerCase())}…</em></div>` +
       inner +
     `</div></div>`;
 }
@@ -229,7 +230,7 @@ function buildButtons(items, bwrap) {
     return `<div class="chron-btn-wrap">` +
       `<a class="chron-btn${c.broken ? ' broken' : ''}" href="${esc(c.url)}"` +
         ` target="_blank" rel="noopener"` +
-        `${glassAttrs(c.title, 'a watching of the lab', c.open_in)}>${esc(c.title)}</a>` +
+        `${glassAttrs(c.title, say('a watching of the lab'), c.open_in)}>${esc(c.title)}</a>` +
       (note
         ? `<div class="chron-fly-pop" role="tooltip">` +
           `<div class="cfp-note">${c.broken ? '⚠ ' : ''}${esc(note)}</div></div>`
@@ -483,7 +484,7 @@ async function maxChart(c) {
     await drawChart(box, payload);
   } catch (e) {
     if (!box.isConnected) return;
-    box.innerHTML = `<div class="chart-note">the scribe is not answering</div>`;
+    box.innerHTML = `<div class="chart-note">${say('the scribe is not answering')}</div>`;
     console.warn('chronicle: maximised watching failed', box.dataset.chart, e);
   }
   if (box.isConnected) m.classList.add('scried');

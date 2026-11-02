@@ -23,6 +23,7 @@
    first time a native watching draws: the core map never pays for it. */
 
 import { esc } from './config.js';
+import { say } from './words.js';
 
 let chartLib = null;
 
@@ -289,7 +290,7 @@ export async function drawChart(box, payload) {
   const ink = chartInk(box);
   const canvas = document.createElement('canvas');
   canvas.setAttribute('role', 'img');
-  canvas.setAttribute('aria-label', payload.title || 'a watching of the lab');
+  canvas.setAttribute('aria-label', payload.title || say('a watching of the lab'));
   box.replaceChildren(canvas);
   const { ts, labels, datasets } = frame(payload, ink);
   const chart = new Chart(canvas, {

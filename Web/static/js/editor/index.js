@@ -23,13 +23,13 @@ import { buildWizard, close as closeWizard, openWizard } from './wizard.js';
     `test_calendar_scene.py` pins that every `at` here still resolves. */
 const SCENE_EDITORS = [
   { at: '#reliquary .rel-tools', section: 'rack', title: 'Add, remove or re-describe the rack' },
-  { at: '#tribute .trb-head', section: 'vms', title: 'Add or remove vassals' },
-  { at: '#ledger .ldg-head', section: 'prefixes', title: 'Edit realms, prefixes and addressing' },
+  { at: '#tribute .trb-head', section: 'vms', title: 'Add or remove guests' },
+  { at: '#ledger .ldg-head', section: 'prefixes', title: 'Edit networks, prefixes and addressing' },
   { at: '#path .ldg-head', section: 'routes', title: 'Add or remove routes' },
-  { at: '#calendar .ldg-head', section: 'rites', title: 'Add or remove rites' },
+  { at: '#calendar .ldg-head', section: 'rites', title: 'Add or remove scheduled jobs' },
   { at: '#stones .ldg-head', section: 'stones', title: 'Add a honeypot or a canary token' },
-  { at: '#chronicle .chron-head', section: 'chronicle', title: 'Add or remove watchings' },
-  { at: '#abyss .abyss-head', section: 'abyss', title: 'Add or remove scryings' },
+  { at: '#chronicle .chron-head', section: 'chronicle', title: 'Add or remove charts' },
+  { at: '#abyss .abyss-head', section: 'abyss', title: 'Add or remove reports' },
 ];
 
 const editable = () => document.body.dataset.editable === '1';

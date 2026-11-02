@@ -356,13 +356,15 @@ def test_the_band_s_right_hand_buttons_sit_bare_on_it():
     assert "#scenes-list .chrome { background: transparent; border-color: transparent; backdrop-filter: none; }" in css
 
 
-def test_every_label_wears_the_buttons_hover_ring():
-    """The owner's ask. The border is always there and transparent, so the ring
-    fades in on the buttons' 250ms and the band does not shift when it lands."""
+def test_a_label_glows_on_hover_and_only_the_selected_one_is_outlined():
+    """The owner's ask, 2026-11-01. The border is always there and transparent,
+    so the outline fades in and the band does not shift when it lands."""
     css = _read(CSS)
     scene = re.search(r"^\.scene \{.*?^\}", css, re.S | re.M).group(0)
     assert "border: 1px solid transparent" in scene and "border-color 250ms" in scene
-    assert ".scene:hover { color: var(--text); border-color: var(--gilt); }" in css
+    hover = re.search(r"\.scene:hover,[^{]*\{(.*?)\}", css, re.S).group(1)
+    assert "text-shadow" in hover and "border-color" not in hover
+    assert "border-color: var(--gilt)" in re.search(r"^\.scene\.active \{.*$", css, re.M).group(0)
 
 
 def test_the_band_says_when_there_is_more_and_cannot_overlap():

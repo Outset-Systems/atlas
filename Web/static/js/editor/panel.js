@@ -9,6 +9,7 @@
    handles twelve kinds of thing, it handles one kind of thing twelve times. */
 
 import { A, $, esc } from '../config.js';
+import { say } from '../words.js';
 import Editor, { EditorError } from './store.js';
 import { buildForm, makeEl as el } from './form.js';
 
@@ -24,8 +25,8 @@ const VIRTUAL = {
 /* ── chrome ───────────────────────────────────────────────────────────── */
 
 function setHead(label, lore) {
-  titleEl.textContent = label;
-  subEl.textContent = lore || '';
+  titleEl.textContent = say(label);
+  subEl.textContent = say(lore || '');
 }
 
 function drawSidebar() {
@@ -559,7 +560,7 @@ async function drawSurvey() {
   const boxes = [];
   const table = el('table', 'dsk-table');
   table.innerHTML = '<thead><tr><th class="dsk-th-pick"></th><th>Address</th><th>Name</th>' +
-    '<th>Vendor</th><th>Open ports</th><th>Looks like</th><th>Realm</th><th>State</th>' +
+    '<th>Vendor</th><th>Open ports</th><th>Looks like</th><th>' + say('Realm') + '</th><th>State</th>' +
     '<th class="dsk-th-act"></th></tr></thead>';
   // a first survey is often dozens of strangers: one box takes them all
   const all = el('input', 'dsk-check');
@@ -640,7 +641,7 @@ async function draftReview(keys) {
   drawDrafts(nodes, `${nodes.length} place${nodes.length === 1 ? '' : 's'} from the survey`,
     'A survey can say a thing answered, not what it is: each lands as <code>unknown</code> ' +
     'unless its maker or its own name suggests a type, and then its role line says why. ' +
-    'Check those, give them names and realms now, or later.');
+    say('Check those, give them names and realms now, or later.'));
 }
 
 function drawDrafts(nodes, headline, caveat) {

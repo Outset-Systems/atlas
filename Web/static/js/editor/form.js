@@ -12,6 +12,7 @@
    sprinkling `"hue": ""` through a hand-written dataset. */
 
 import { esc } from '../config.js';
+import { say } from '../words.js';
 import Editor from './store.js';
 
 const el = (tag, cls, html) => {
@@ -297,7 +298,7 @@ function collectSub(field, row) {
 function fieldRow(field, widget) {
   const row = el('label', `dsk-field dsk-field-${field.type}`);
   const label = el('span', 'dsk-label');
-  label.innerHTML = esc(field.label) + (field.required ? '<i class="dsk-req">*</i>' : '');
+  label.innerHTML = esc(say(field.label)) + (field.required ? '<i class="dsk-req">*</i>' : '');
   row.append(label, widget);
   if (field.help) row.append(el('span', 'dsk-help', esc(field.help)));
   return row;

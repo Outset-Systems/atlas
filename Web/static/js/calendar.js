@@ -28,6 +28,7 @@
    calendar-model.js decides what is where; this only paints. */
 
 import { A, $, esc, ago, nodeById } from './config.js';
+import { say } from './words.js';
 import { makeScene } from './scene.js';
 import {
   DAY_MIN, layoutDay, layoutForge, nextTurning, fmtClock, dayName,
@@ -164,7 +165,7 @@ function rowHTML(lane, { nowMin, today }) {
     track = lane.today.map((b) => {
       const cls = ['cal-blk', b.hit ? 'hit' : '', lane.ghost ? 'ghost' : ''].filter(Boolean).join(' ');
       const tip = `${lane.name} · ${fmtClock(b.start)}–${fmtClock(b.end)}Z` +
-        (lane.model ? ` · ${lane.model}` : '') + (b.hit ? ' · MEETS ANOTHER RITE HERE' : '');
+        (lane.model ? ` · ${lane.model}` : '') + (b.hit ? say(' · MEETS ANOTHER RITE HERE') : '');
       return `<i class="${cls}" style="left:${pct(b.start)};width:${pct(b.end - b.start)}" title="${esc(tip)}"></i>`;
     }).join('');
   }
@@ -196,7 +197,7 @@ function groupHTML(group, ctx) {
     : null;
   const drawn = group.lanes.filter((l) => l.today.length || l.every).length;
   const silent = group.lanes.filter((l) => ['missed', 'failed'].includes(l.rite.verdict)).length;
-  let count = `${group.lanes.length} rite${group.lanes.length === 1 ? '' : 's'}`;
+  let count = `${group.lanes.length} ${say(group.lanes.length === 1 ? 'rite' : 'rites')}`;
   if (group.kind !== 'listed') count += ` · ${drawn} on this day`;
   if (group.kind === 'forge') {
     count += group.hits.length
@@ -226,8 +227,8 @@ function groupHTML(group, ctx) {
 
   return `<div class="cal-grp k-${group.kind}">
     <div class="cal-ghead">
-      <span class="cal-gname">${esc(place ? `THE FORGE · ${place}` : group.title)}</span>
-      <span class="cal-gsub">${esc(group.sub)}</span>
+      <span class="cal-gname">${esc(place ? `${say('THE FORGE')} · ${place}` : say(group.title))}</span>
+      <span class="cal-gsub">${esc(say(group.sub))}</span>
       <span class="cal-gcount">${count}</span>
     </div>
     ${group.lanes.map((l) => rowHTML(l, ctx)).join('')}
@@ -248,10 +249,10 @@ export function calendarPointerHTML(node, rites, { now = new Date() } = {}) {
   const line = next
     ? `next · <b>${esc(next.lane.name)}</b> at ${esc(fmtClock(next.start))}Z` +
       `${next.dayOffset ? ` ${esc(dayName(now.getUTCDay() + next.dayOffset))}` : ''} · in ${inWords(next.inMin)}`
-    : `${n} rite${n === 1 ? '' : 's'} ask it, none with a clock`;
-  return `<div class="cv-head">the forge's day · utc</div>` +
+    : `${n} ${say(n === 1 ? 'rite' : 'rites')} ask it, none with a clock`;
+  return `<div class="cv-head">${say('the forge')}'s day · utc</div>` +
     `<span class="cal-next">${line}</span>` +
-    `<button class="card-link card-forge-link" id="btn-card-forge" title="Every rite of the realm on one day — this forge's among them">` +
+    `<button class="card-link card-forge-link" id="btn-card-forge" title="${say("Every rite of the realm on one day — this forge's among them")}">` +
     `THE CALENDAR ›</button>`;
 }
 
@@ -276,14 +277,14 @@ function paint() {
     const bad = RITES.filter((r) => ['missed', 'failed'].includes(r.verdict)).length;
     const waiting = RITES.filter((r) => r.verdict === 'awaited').length;
     const verdict = bad
-      ? `<span class="cal-alarm">${bad} rite${bad > 1 ? 's have' : ' has'} stopped turning</span>`
-      : `<span class="cal-calm">every timed rite is turning</span>${
+      ? `<span class="cal-alarm">${bad} ${say(`${bad > 1 ? 'rites have' : 'rite has'} stopped turning`)}</span>`
+      : `<span class="cal-calm">${say('every timed rite is turning')}</span>${
         waiting ? `<span class="cal-quiet"> · ${waiting} not yet reporting</span>` : ''}`;
     const meetings = view.hits.length
-      ? `<span class="cal-alarm">${view.hits.length} meeting${view.hits.length === 1 ? '' : 's'} at the forge</span>`
+      ? `<span class="cal-alarm">${view.hits.length} meeting${view.hits.length === 1 ? '' : 's'} at ${say('the forge')}</span>`
       : '<span class="cal-quiet">no two want one model at once</span>';
     headEl.innerHTML = `<span class="cal-verdict">${verdict}</span>
-      <span class="cal-count">${view.drawn.length} of ${view.lanes.length} rites fall on this day · ${meetings}</span>
+      <span class="cal-count">${view.drawn.length} of ${view.lanes.length} ${say('rites')} fall on this day · ${meetings}</span>
       <span class="cal-step">
         <button class="cal-arrow" id="cal-prev" title="The day before">‹</button>
         <b id="cal-when">${esc(`${dayName(day.getUTCDay()).toUpperCase()} ${day.toISOString().slice(0, 10)}`)}</b>
@@ -298,11 +299,11 @@ function paint() {
   listEl.innerHTML = view.groups.length
     ? rulerHTML(today ? 'UTC · the hairline is now' : `UTC · ${dayName(day.getUTCDay()).toUpperCase()} — not today`)
       + view.groups.map((g) => groupHTML(g, ctx)).join('')
-    : '<div class="ldg-note">no rites charted — add them in the map editor.</div>';
+    : `<div class="ldg-note">${say('no rites charted — add them in the map editor.')}</div>`;
 }
 
 async function build() {
-  listEl.innerHTML = '<div class="ldg-note">asking the rites what they did…</div>';
+  listEl.innerHTML = `<div class="ldg-note">${say('asking the rites what they did…')}</div>`;
   try {
     RITES = (await (await fetch('api/v2/rites', { cache: 'no-store' })).json()).rites || [];
   } catch {

@@ -12,6 +12,7 @@
    map. Pure SVG + DOM, no libraries. */
 
 import { A, $, esc, zoneById, FALLBACK_HUE } from './config.js';
+import { say } from './words.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 let root, svg, nodesEl, legendEl;
@@ -220,7 +221,7 @@ function build() {
     `<span class="pth-lg"><i class="pth-lg-line pth-k-vlan"></i>vlan</span>` +
     `<span class="pth-lg"><i class="pth-lg-line pth-k-mesh"></i>mesh (Tailscale)</span>` +
     `<span class="pth-lg"><i class="pth-lg-line pth-k-telemetry"></i>telemetry</span>` +
-    `<span class="pth-lg"><i class="pth-lg-line pth-k-vassal"></i>vassal of the hypervisor</span>` +
+    `<span class="pth-lg"><i class="pth-lg-line pth-k-vassal"></i>${say('vassal of the hypervisor')}</span>` +
     `<span class="pth-lg pth-lg-note">◇ iron · ○ vm · ◈ ways — click any to fly there</span>`;
 }
 

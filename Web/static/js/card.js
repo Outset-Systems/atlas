@@ -5,6 +5,7 @@
    through `A`, so nothing else moved. Registered in atlas.js right after ui.js. */
 
 import { A, CFG, $, esc, host, glassAttrs, zoneById, nodeById, FALLBACK_HUE } from './config.js';
+import { say } from './words.js';
 import { calendarPointerHTML } from './calendar.js';
 
 const card = $('card');
@@ -132,7 +133,7 @@ A.openCard = function openCard(n) {
   // the NetBox virtualization model) — clicking one flies to it (2026-07-11)
   const vassals = A.DATA.nodes.filter(x => x.parent === n.id);
   const vassalHTML = vassals.length
-    ? `<div class="card-vassals-head">its vassals</div>` +
+    ? `<div class="card-vassals-head">${say('its vassals')}</div>` +
       vassals.map(v =>
         `<button class="card-link card-vassal" data-go="${esc(v.id)}">` +
         `<span class="svc-health" data-node="${esc(v.id)}"></span>${esc(v.name)} ›</button>`

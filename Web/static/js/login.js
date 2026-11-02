@@ -21,6 +21,12 @@
  * executable, so the CSP has no opinion about it.
  */
 
+try {
+  if (localStorage.getItem('atlas-words') === 'standard') {
+    document.getElementById('b-login').textContent = 'Sign in';
+  }
+} catch (e) { /* blocked site data: the door keeps its lore */ }
+
 var _cfg = {};
 try {
   _cfg = JSON.parse(document.getElementById('login-config').textContent || '{}');

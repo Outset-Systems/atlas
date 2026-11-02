@@ -1261,6 +1261,8 @@ body.drawer-open .zoom-stack { opacity: 0; pointer-events: none; }
 }
 .mk-eye:hover { transform: scale(1.3); }
 .mk-eye svg { width: 100%; height: 100%; display: block; }
+/* one mark per map: the eye for a map that asks for it, else the bird */
+body.tripwire-eye .tw-bird, body:not(.tripwire-eye) .tw-eye { display: none; }
 body.decoys-on .mk-eye { display: block; }
 /* With the watch up, the eye IS the marker (2026-09-02): it sits
    centred where the dot was, at roughly three times the dot's size, and the
@@ -1393,7 +1395,7 @@ body.decoys-on .mk.has-stone .mk-label { opacity: 1; transform: translateX(-50%)
 #scenes-list .chrome .ci-glyph { width: 16px; height: 16px; }   /* the band's 30px circles */
 /* the band is their fill; `.chrome`'s own blur would still draw a disc on it */
 #scenes-list .chrome { background: transparent; border-color: transparent; backdrop-filter: none; }
-#scenes-list .chrome:hover { border-color: var(--gilt); }
+#scenes-list .chrome:hover { color: var(--gilt); border-color: transparent; box-shadow: 0 0 14px rgba(var(--gilt-rgb), 0.45); }
 #scenes-list .menu-tools .chrome {
   position: static; flex: none; margin-right: 4px;
   width: 30px; height: 30px; font-size: 0.95rem;
@@ -1517,15 +1519,17 @@ body.scene-open #scenes-list {
   letter-spacing: 0.22em; color: var(--text-dim);
   padding: 8px 11px 7px; border-radius: 2px; text-align: center; white-space: nowrap;
   text-shadow: 0 2px 8px rgba(0,0,0,0.9), 0 0 14px rgba(0,0,0,0.6);
-  /* the ring the band's buttons wear on hover, on the same 250ms (owner, 2026-11-01) */
-  transition: color 200ms, background 200ms, border-color 250ms;
+  /* hover glows the accent, only the selected scene wears the outline (owner, 2026-11-01) */
+  transition: color 200ms, background 200ms, border-color 250ms, text-shadow 200ms;
 }
 /* tighter before anything has to scroll */
 @media (max-width: 1100px) {
   .scene { padding: 8px 5px 7px; letter-spacing: 0.1em; }
 }
-.scene:hover { color: var(--text); border-color: var(--gilt); }
-.scene.active { color: var(--gilt); background: rgba(13,11,7,0.45); border-color: rgba(var(--gilt-rgb), 0.7); }
+.scene:hover, :root[data-scheme="light"] .scene:hover {
+  color: var(--gilt); text-shadow: 0 0 10px rgba(var(--gilt-rgb), 0.75);
+}
+.scene.active { color: var(--gilt); background: rgba(13,11,7,0.45); border-color: var(--gilt); }
 /* (`.chron-fly` + its .t/.n lived here — the old scene-band flyout rows. The
    watchings' buttons are `.chron-btn` with a `.chron-fly-pop` tooltip; nothing
    has emitted `chron-fly` since. Removed 2026-08-21.) */
@@ -4139,6 +4143,14 @@ body.style-bright .mk-label {
 }
 body.style-bright .zone-label {
   background: rgba(13, 11, 7, 0.62); padding: 6px 14px; border-radius: 4px; text-shadow: none;
+}
+/* a name under the pointer comes up off the parchment (owner, 2026-11-01) */
+body.style-bright .mk:hover .mk-label {
+  background: rgba(13, 11, 7, 0.96); font-size: 1.2em;
+}
+body.style-bright .zone-label { pointer-events: auto; transition: opacity 600ms ease, background 150ms, transform 150ms; }
+body.style-bright .zone-label:hover {
+  background: rgba(13, 11, 7, 0.96); opacity: 1 !important; transform: translate(-50%, -50%) scale(1.15);
 }
 body.style-bright .mk-dot { filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.9)); }
 body.style-bright.net-on #map-base,

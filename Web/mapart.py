@@ -57,6 +57,9 @@ BUNDLED_DIR = os.path.join(settings.HERE, "static", "map")
 #: the gallery does not offer it as a backdrop. `places` and `zones` move the
 #: markers and the network names on this picture, for the same reason.
 STYLE_SUFFIX = ".style.json"
+MAX_STYLE_WORDS = 40
+STYLE_WORD_KEY = re.compile(r"(?:[^\W\d_]|[' ’-]){2,30}")
+STYLE_WORD = re.compile(r"(?:[^\W_]|[' ’-]){1,30}")
 MAX_STYLE_REGIONS = 32
 MAX_STYLE_POINTS = 512
 #: The range a dragged dot may take: the table, plus the sky and the black band.
@@ -195,6 +198,19 @@ def _style_region(raw):
     return region
 
 
+def _style_words(raw):
+    """The words a style speaks, word for word. Both sides stay plain words,
+    because the page sets them as markup. words-model.js checks the same."""
+    if not isinstance(raw, dict):
+        return {}
+    out = {}
+    for key, value in list(raw.items())[:MAX_STYLE_WORDS]:
+        key = str(key).strip().lower()
+        if isinstance(value, str) and STYLE_WORD_KEY.fullmatch(key) and STYLE_WORD.fullmatch(value.strip()):
+            out[key] = value.strip()
+    return out
+
+
 def style(name):
     """What the sidecar beside render `name` says, as {label, regions}; an
     empty answer when there is no sidecar or it cannot be read. A broken
@@ -221,6 +237,8 @@ def style(name):
             log.warning("map style %s: kept %d of %d regions", filename, len(regions), len(found))
         return {"label": str(raw.get("label") or "").strip(), "regions": regions,
                 "bright": raw.get("bright") is True,
+                "words": _style_words(raw.get("words")),
+                "tripwire": "eye" if raw.get("tripwire") == "eye" else "bird",
                 "places": _style_points(raw.get("places")),
                 "zones": _style_points(raw.get("zones"))}
     return {}

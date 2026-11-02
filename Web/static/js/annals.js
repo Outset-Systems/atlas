@@ -11,6 +11,7 @@
    place a viewer cannot see never appears here either. */
 
 import { A, $, esc, themeText, ago } from './config.js';
+import { say } from './words.js';
 import { makeScene } from './scene.js';
 
 let root, listEl, headEl;
@@ -52,13 +53,13 @@ function rowHTML(e) {
 }
 
 async function build() {
-  listEl.innerHTML = '<div class="ldg-note">reading the annals…</div>';
+  listEl.innerHTML = `<div class="ldg-note">${say('reading the annals…')}</div>`;
   let body;
   try {
     body = await (await fetch(`api/v2/events?limit=200${showAll ? '' : '&unacked=1'}`,
                               { cache: 'no-store' })).json();
   } catch {
-    listEl.innerHTML = '<div class="ldg-note">the annals could not be read.</div>';
+    listEl.innerHTML = `<div class="ldg-note">${say('the annals could not be read.')}</div>`;
     return;
   }
   const { events = [], counts = {} } = body;

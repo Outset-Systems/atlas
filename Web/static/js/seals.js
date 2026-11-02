@@ -14,6 +14,7 @@
    than implying it is live. (2026-08-04) */
 
 import { A, $, esc } from './config.js';
+import { say } from './words.js';
 import { makeScene } from './scene.js';
 
 let root, listEl, headEl;
@@ -74,8 +75,8 @@ function build() {
     }).length;
     const manual = certs.filter((c) => !c.renews).length;
     headEl.innerHTML = soon
-      ? `<span class="rt-alarm">${soon} seal${soon > 1 ? 's lapse' : ' lapses'} within a fortnight</span>`
-      : `<span class="rt-calm">no seal lapses within a fortnight</span>`
+      ? `<span class="rt-alarm">${soon} ${say(`${soon > 1 ? 'seals lapse' : 'seal lapses'} within a fortnight`)}</span>`
+      : `<span class="rt-calm">${say('no seal lapses within a fortnight')}</span>`
         + (manual ? `<span class="rt-waiting"> · ${manual} renewed by hand</span>` : '');
   }
 
@@ -92,13 +93,13 @@ function build() {
   listEl.innerHTML = ordered.map(({ head, sub, members: group }) => {
     return `<div class="ldg-block" style="--z-hue:var(--gilt)">
       <div class="ldg-zhead">
-        <span class="ldg-zname">${head}</span>
+        <span class="ldg-zname">${say(head)}</span>
         <span class="ldg-zsub">${sub}</span>
-        <span class="ldg-zcount">${group.length} seal${group.length > 1 ? 's' : ''}</span>
+        <span class="ldg-zcount">${group.length} ${say(group.length > 1 ? 'seals' : 'seal')}</span>
       </div>
       ${group.map(sealHTML).join('')}
     </div>`;
-  }).join('') || '<div class="ldg-note">no seals charted — add them in the map editor.</div>';
+  }).join('') || `<div class="ldg-note">${say('no seals charted — add them in the map editor.')}</div>`;
 }
 
 const scene = makeScene({ id: 'seals', closeId: 'sl-close', build: () => build() });

@@ -283,6 +283,8 @@ RACK = [
     {"u": "U5–8", "size": 4, "name": "Hypervisor", "node": "hypervisor", "desc": "4U tower on a shelf."},
     {"u": "U1–4", "size": 4, "name": "NAS", "node": "nas", "desc": "Four bays, one spare."},
     {"rack": "rack-b", "u": "U6", "size": 1, "name": "Patch Panel", "node": "", "desc": "12-port panel for the garage run."},
+    {"rack": "rack-b", "u": "U4–5", "size": 2, "name": "GPU Box", "node": "gpu-box", "desc": "Two slots for whatever needs a graphics card."},
+    {"rack": "rack-b", "u": "U3", "size": 1, "name": "Second NAS", "node": "nas-2", "desc": "The other copy of everything that matters."},
     {"rack": "rack-b", "u": "U1–2", "size": 2, "name": "Test Bench", "node": "", "desc": "Whatever is being tried this week."},
 ]
 RACK_REAR = [

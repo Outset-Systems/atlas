@@ -2,6 +2,7 @@
    the command-column flyouts, scene buttons, and toasts. */
 
 import { A, CFG, $, esc, host, glassAttrs, zoneById, canAdminWrite, ago, FALLBACK_HUE } from './config.js';
+import { say } from './words.js';
 import { chronicleItems, buildChronicle, buildAbyss } from './chronicle.js';
 import { makeScene } from './scene.js';
 
@@ -58,7 +59,7 @@ function togglePin(url) {
 
 function svcRow(list, svc) {
   const { name, url, kuma } = svc;
-  const sub = svc.group === 'CHRONICLE' ? 'a watching of the lab'
+  const sub = svc.group === 'CHRONICLE' ? say('a watching of the lab')
                                         : `a service of ${svc.group}`;
   const pinned = getPins().includes(url);
   const row = document.createElement('div');
@@ -546,7 +547,7 @@ function nameRegionHeads() {
   if (sky) {
     $('chronicle').querySelector('.chron-head').textContent = `THE ${sky.name.toUpperCase()}`;
     $('chronicle').querySelector('.chron-sub').textContent =
-      `vlan ${sky.vlan} · the realm above the realm`;
+      `vlan ${sky.vlan} · ${say('the realm above the realm')}`;
   }
   const depths = A.DATA.zones?.find(z => z.id === 'depths');
   if (depths) {

@@ -267,7 +267,7 @@ def test_the_viewer_gallery_lists_every_render_with_a_fetchable_url(arena):
     assert r.headers["Cache-Control"] == "private, no-cache"
     assert "Cookie" in r.headers.get("Vary", "")
     maps = r.get_json()["maps"]
-    assert set(maps[0]) == {"name", "label", "url", "default", "theme", "regions", "bright", "places", "zones", "zoom"}
+    assert set(maps[0]) == {"name", "label", "url", "default", "theme", "regions", "bright", "words", "tripwire", "places", "zones", "zoom"}
     bundled = next(m for m in maps if m["name"] == mapart.DEFAULT)
     # the default is whichever render the dataset names, else the bundled one
     import json
@@ -408,6 +408,27 @@ def test_a_style_places_the_map_and_bad_points_drop_alone(art, tmp_path):
     style = art.style("isle.png")
     assert style["places"] == {"router": {"x": 42, "y": 61}}
     assert style["zones"] == {"servers": {"x": 36, "y": 40}}
+
+
+def test_a_style_speaks_its_own_words_and_only_plain_ones(art, tmp_path):
+    import json
+    _style_files(art, tmp_path, json.dumps({"words": {
+        "Realm": "kingdom", "rite": "seeing stone", "seal": "<b>", "x": "too short a key",
+        "forge": 7, "annals": "é" * 31}}))
+    assert art.style("isle.png")["words"] == {"realm": "kingdom", "rite": "seeing stone"}
+
+
+def test_only_a_style_that_asks_for_it_wears_the_eye(art, tmp_path):
+    import json
+    _style_files(art, tmp_path, json.dumps({"tripwire": "eye"}))
+    assert art.style("isle.png")["tripwire"] == "eye"
+    _style_files(art, tmp_path, json.dumps({"tripwire": "<svg>"}))
+    assert art.style("isle.png")["tripwire"] == "bird"
+
+
+def test_a_style_with_no_words_has_none(art, tmp_path):
+    _style_files(art, tmp_path, COVE)
+    assert art.style("isle.png")["words"] == {}
 
 
 def test_the_maps_list_names_only_places_this_viewer_can_see(arena, tmp_path, monkeypatch):

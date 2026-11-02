@@ -17,6 +17,7 @@
    All writes go through the existing admin routes, with the same header. */
 
 import { A, CFG, $, esc, WRITE_HEADERS, postJSON } from './config.js';
+import { say } from './words.js';
 
 const SOURCE = { file: 'saved', env: 'deployment', default: 'default' };
 const LIFETIME = (d) => (d ? `${d} days` : 'never expires');
@@ -154,10 +155,10 @@ const tickable = (r) => (r.status === 'new' || r.status === 'clash') && !r.block
 function rowState(r, zones) {
   if (r.status === 'charted') return `on the map as ${esc(r.matched)}`;
   if (r.note) return esc(r.note);
-  if (r.type === 'zone') return 'a new realm';
+  if (r.type === 'zone') return say('a new realm');
   if (r.type === 'service') return 'a service on its host';
   const zone = zones.find((z) => z.id === r.zone);
-  return zone ? `lands in ${esc(zone.name)}` : 'no realm yet';
+  return zone ? `lands in ${esc(zone.name)}` : say('no realm yet');
 }
 
 function reviewRow(r, zones) {
@@ -206,7 +207,7 @@ function reviewHTML(view) {
     ${lists}
     ${ignored.length ? `<details class="con-ignored"><summary class="con-meta">Ignored (${ignored.length})</summary>
       ${ignored.map((r) => reviewRow(r, zones)).join('')}</details>` : ''}
-    ${fresh ? `<label class="dir-row"><span class="dir-label">Realm for a place whose address names none</span>
+    ${fresh ? `<label class="dir-row"><span class="dir-label">${say('Realm for a place whose address names none')}</span>
       <select class="dir-input" data-fallback><option value="">Uncharted</option>${choices}</select></label>
     <div class="sp-actions"><button class="sp-btn sp-btn-go" type="button" data-import disabled>Add to the map</button></div>` : ''}`;
 }

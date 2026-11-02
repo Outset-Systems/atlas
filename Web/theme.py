@@ -107,4 +107,6 @@ def client():
         "foldedZones": [str(z) for z in T.get("folded_zones") or []],
         "forgeNames": [str(n).lower() for n in T.get("forge_names") or []],
         "gatewayNodes": [str(n) for n in T.get("gateway_nodes") or []],
+        "standardWords": dict(T.get("standard_words") or {}),
+        "tripwire": "eye" if T.get("tripwire_icon") == "eye" else "bird",
     }

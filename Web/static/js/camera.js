@@ -254,6 +254,16 @@ viewport.addEventListener('pointercancel', endDrag);
    Both directions travel once out there, deliberately. Gating only the downward
    one would strand the Upper Deck: at full zoom-out, an upward wheel would
    push back in instead of rising, and the sky would be unreachable by wheel. */
+/** May the wheel move the view away from this edge? Asked of the clamp itself. */
+function canTravel() {
+  const y = cam.y;
+  cam.y -= 1;
+  clampCam();
+  const moved = cam.y !== y;
+  cam.y = y;
+  return moved;
+}
+
 viewport.addEventListener('wheel', (e) => {
   e.preventDefault();
   /* Moving the map puts the Index away (2026-08-11) — travelling and
@@ -276,11 +286,12 @@ viewport.addEventListener('wheel', (e) => {
     autoFrameSky();   // rising above the table gently recenters + frames the sky
     clampCam();
     apply(false);
-    // a region has no sky or Depths: at its edge the wheel goes back to meaning
-    // zoom, in to go deeper and out to leave
+    // a region has no sky or Depths. Its top edge just stops (owner, 2026-11-01),
+    // its bottom edge arms leaving, and only a region with no room to travel at
+    // all still zooms in, or the wheel would do nothing there
     if (A.inRegion?.() && cam.y === y) {
-      if (e.deltaY < 0) zoomAt(e.clientX, e.clientY, zoomFactor);
-      else A.regionFloor();
+      if (e.deltaY > 0) A.regionFloor();
+      else if (!canTravel()) zoomAt(e.clientX, e.clientY, zoomFactor);
     }
   }
 }, { passive: false });

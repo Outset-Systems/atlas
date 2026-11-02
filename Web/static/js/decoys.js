@@ -19,13 +19,24 @@
    A.paintDecoys), so a stone that starts speaking lights where it stands. */
 
 import { A, $, themeText } from './config.js';
+import { say } from './words.js';
 import { legacySources, listening, roster, watchByNode as watchModel } from './tripwire-model.js';
 
 let on = false;
 
-/* the eye, drawn once — currentColor, so the badge's voice class colours it */
+/* the mark, drawn once — currentColor, so the badge's voice class colours it.
+   Both go in and atlas.css shows one: the eye for a map that asks for it, the bird
+   for every other (table.js sets `body.tripwire-eye`). */
+const BIRD_SVG =
+  `<svg class="tw-bird" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" ` +
+  `stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">` +
+  `<path d="M6 16 C4.5 12 7 7.5 12 7.5 C14.5 7.5 16.2 9 16.6 10.6 L20 11.4 L16.8 12.8 C16.4 16 13.4 18 10 18 C8.4 18 7 17.4 6 16 Z"/>` +
+  `<path d="M8 12.6 C10 11 12.5 11.5 13.5 13.5 C11.5 15 9 14.8 8 12.6 Z"/>` +
+  `<path d="M6 16 L2.6 19 M10.4 18 V21 M13 17.6 V21"/>` +
+  `<circle cx="13.7" cy="10.2" r="0.9" fill="currentColor" stroke="none"/>` +
+  `</svg>`;
 const EYE_SVG =
-  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">` +
+  `<svg class="tw-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">` +
   `<path d="M2.5 11 C 6 6.4, 18 6.4, 21.5 11 C 18 15.6, 6 15.6, 2.5 11 Z"/>` +
   `<circle cx="12" cy="11" r="3"/>` +
   `<circle cx="12" cy="11" r="1.1" fill="currentColor" stroke="none"/>` +
@@ -62,7 +73,7 @@ function paint() {
     if (!eye) {
       eye = document.createElement('button');
       eye.className = 'mk-eye';
-      eye.innerHTML = EYE_SVG;
+      eye.innerHTML = EYE_SVG + BIRD_SVG;
       // The eye IS the marker while the watch is up (it stands where the dot
       // was, atlas.css), so its click does what the dot's does: centre the
       // map on the place and open its card (2026-09-02). THE GOSSIP
@@ -78,7 +89,7 @@ function paint() {
     }
     eye.dataset.voice = watch.voice;
     // a DOM property, not markup — no escaping wanted here
-    eye.title = `${watch.count} stone${watch.count === 1 ? '' : 's'} · ${watch.voice} — open THE ${themeText('stones', 'Decoys').toUpperCase()}`;
+    eye.title = `${watch.count} ${say(watch.count === 1 ? 'stone' : 'stones')} · ${watch.voice} — open THE ${say(themeText('stones', 'Decoys')).toUpperCase()}`;
   }
 }
 /* The signals poll calls this every 30s. While the layer is UP, an admin's
@@ -104,16 +115,16 @@ A.toggleDecoys = function toggleDecoys(force) {
   // verdicts the scene's head gives, in one line
   const { nodes, unplaced, speaking, total, lost, waiting } = watchByNode();
   if (!total) {
-    A.showToast?.(`No ${themeText('stones', 'decoys').toLowerCase()} are known — none charted, and ${themeText('decoy_source', 'the decoy feed')} names none.`);
+    A.showToast?.(`No ${say(themeText('stones', 'decoys')).toLowerCase()} are known — none charted, and ${themeText('decoy_source', 'the decoy feed')} names none.`);
   } else if (waiting) {
-    A.showToast?.('The webhook has not heard from a sender yet. The eyes are drawn from the chart, not the wire.');
+    A.showToast?.('The webhook has not heard from a sender yet. The marks are drawn from the chart, not the wire.');
   } else if (lost) {
-    A.showToast?.('CONTACT LOST — the watch is not answering. The eyes are drawn from the chart, not the wire.');
+    A.showToast?.('CONTACT LOST — the watch is not answering. The marks are drawn from the chart, not the wire.');
   } else if (speaking) {
-    A.showToast?.(`${speaking} ${themeText('stones', 'tripwires').toLowerCase()} ${themeText('tw_lit', 'TRIPPED')} — the eyes show where.`);
+    A.showToast?.(`${speaking} ${say(themeText('stones', 'tripwires')).toLowerCase()} ${themeText('tw_lit', 'TRIPPED')} — the marks show where.`);
   } else {
     A.showToast?.(`All quiet — ${nodes.size} place${nodes.size === 1 ? '' : 's'} under the watch` +
-      (unplaced ? ` (+${unplaced} stone${unplaced === 1 ? '' : 's'} unplaced)` : '') + '.');
+      (unplaced ? ` (+${unplaced} ${say(unplaced === 1 ? 'stone' : 'stones')} unplaced)` : '') + '.');
   }
 };
 

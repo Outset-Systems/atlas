@@ -58,7 +58,7 @@
     <section id="abyss" aria-label="The abyss watches — security &amp; the outer veil">
       <!-- re-stamped from the depths zone's name by nameRegionHeads() -->
       <div class="abyss-head">THE DEPTHS</div>
-      <div class="abyss-sub">security &amp; the outer veil, scried from the deep</div>
+      <div class="abyss-sub" data-say>security &amp; the outer veil, scried from the deep</div>
       <div class="chron-viewer">
         <div class="chron-stage" id="abyss-stage"></div>
         <button class="chron-arrow chron-prev" id="abyss-prev" title="Previous">‹</button>
@@ -71,7 +71,7 @@
            that names the busiest client IPs and the tool that asks who holds
            one belong in the same frame. Rendered by ui.js slideHTML for any
            watching carrying `whois: true`; behaviour in static/js/whois.js.) -->
-      <div class="chron-foot">&mdash; scried from the deep &middot; click any watching to open it &mdash;</div>
+      <div class="chron-foot" data-say>&mdash; scried from the deep &middot; click any watching to open it &mdash;</div>
     </section>
     <div id="sky-realm" aria-label="{{ theme.text.sky[:1]|upper }}{{ theme.text.sky[1:] }} — above the map">
       <div class="sky-glow" aria-hidden="true"></div>
@@ -191,10 +191,10 @@
   <button class="scene" data-scene="path">TOPOLOGY</button>
   <!-- THE RITES and THE FORGE live here since v1.45.0; the title says so for
        anyone who comes looking for either by its old name. -->
-  <button class="scene" data-scene="calendar" title="THE RITES and THE FORGE — every scheduled job in the lab on one clock">CALENDAR</button>
-  <button class="scene" data-scene="seals">SEALS</button>
-  <button class="scene" data-scene="stones">{{ theme.text.stones|upper }}</button>
-  <button class="scene" data-scene="annals">ANNALS</button>
+  <button class="scene" data-scene="calendar" title="Every scheduled job in the lab on one clock">CALENDAR</button>
+  <button class="scene" data-scene="seals" data-say>SEALS</button>
+  <button class="scene" data-scene="stones" data-say>{{ theme.text.stones|upper }}</button>
+  <button class="scene" data-scene="annals" data-say>ANNALS</button>
   <!-- ACCOUNTS is admin-only. Hidden here and revealed by ui.js when the
        viewer can actually use it — the server redacts the roster for
        everyone else regardless, so this is courtesy, not the control. -->
@@ -252,17 +252,24 @@
      ui.js instead of :hover for the same reason: the two elements are no
      longer relatives. -->
 <span class="atlas-tools" id="atlas-tools">
-      <button class="chrome ci-sky" id="btn-sky" title="Rise to {{ theme.text.sky }} · the Chronicle (S)" aria-label="{{ theme.text.sky }}"><svg class="ci-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.5 18H17a4 4 0 0 0 .6-7.95a5.5 5.5 0 0 0-10.5-1a4.5 4.5 0 0 0 .4 8.95Z"/></svg></button>
+      <button class="chrome ci-sky" id="btn-sky" data-say-title title="Rise to {{ theme.text.sky }} · the Chronicle (S)" aria-label="{{ theme.text.sky }}"><svg class="ci-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.5 18H17a4 4 0 0 0 .6-7.95a5.5 5.5 0 0 0-10.5-1a4.5 4.5 0 0 0 .4 8.95Z"/></svg></button>
       <button class="chrome ci-depths" id="btn-depths" title="Descend into the Depths (D)" aria-label="The Depths"><svg class="ci-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5v9.5M8.5 9.5 12 13l3.5-3.5"/><path d="M3.5 17.5c1.4 1 2.8 1 4.2 0s2.8-1 4.2 0 2.8 1 4.2 0 2.8-1 4.2 0"/></svg></button>
       <!-- THE decoy feed WATCH (2026-08-15) — the decoys as a map layer: an
            eye over every place a stone guards, voiced by the live feed. -->
-      <button class="chrome ci-decoys" id="btn-decoys" title="Show the {{ theme.text.stones_watch }} — the {{ theme.text.stones }}, where they stand (G)" aria-label="{{ theme.text.stones_watch|capitalize }} layer">
-        <svg class="ci-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+      <button class="chrome ci-decoys" id="btn-decoys" data-say-title title="Show the {{ theme.text.stones_watch }} — the {{ theme.text.stones }}, where they stand (G)" aria-label="{{ theme.text.stones_watch|capitalize }} layer">
+        <svg class="ci-glyph tw-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
           <path d="M2.5 11 C 6 6.4, 18 6.4, 21.5 11 C 18 15.6, 6 15.6, 2.5 11 Z"/>
           <circle cx="12" cy="11" r="3"/>
           <circle cx="12" cy="11" r="1.1" fill="currentColor" stroke="none"/>
           <path d="M12 14.6 L12 19.6 l-1.7 -1.5"/>
           <path d="M5.6 7.6 L4.2 5.8 M12 6.1 L12 4 M18.4 7.6 L19.8 5.8"/>
+        </svg>
+        <svg class="ci-glyph tw-bird" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M6 16 C4.5 12 7 7.5 12 7.5 C14.5 7.5 16.2 9 16.6 10.6 L20 11.4 L16.8 12.8 C16.4 16 13.4 18 10 18 C8.4 18 7 17.4 6 16 Z"/>
+          <path d="M8 12.6 C10 11 12.5 11.5 13.5 13.5 C11.5 15 9 14.8 8 12.6 Z"/>
+          <path d="M6 16 L2.6 19 M10.4 18 V21 M13 17.6 V21"/>
+          <circle cx="13.7" cy="10.2" r="0.9" fill="currentColor" stroke="none"/>
         </svg>
       </button>
 </span>
@@ -449,7 +456,7 @@
 
 <!-- THE SEALS — every certificate the realm presents, soonest to lapse first -->
 <div id="seals" aria-hidden="true">
-  <div class="ldg-panel" role="dialog" aria-label="The Seals — certificates">
+  <div class="ldg-panel" role="dialog" aria-label="Certificates">
     <div class="ldg-head">
       <span class="ldg-title">SEALS</span>
       <span class="ldg-sub">what vouches for the lab, and when it lapses</span>
@@ -468,9 +475,9 @@
      inline scripts, so an inline one here would be silently dead in a browser
      while every test still passed. -->
 <div id="stones" aria-hidden="true">
-  <div class="ldg-panel" role="dialog" aria-label="The {{ theme.text.stones }} — deception tripwires">
+  <div class="ldg-panel" role="dialog" aria-label="Deception tripwires">
     <div class="ldg-head">
-      <span class="ldg-title">{{ theme.text.stones|upper }}</span>
+      <span class="ldg-title" data-say>{{ theme.text.stones|upper }}</span>
       <span class="ldg-sub">silent watchers — anything that touches one is an event, not a maybe</span>
       <button class="ldg-close" id="gs-close" title="Close (Esc)">&times;</button>
     </div>
@@ -482,9 +489,9 @@
 
 <!-- THE ANNALS — every state change the watchers witnessed -->
 <div id="annals" aria-hidden="true">
-  <div class="ldg-panel" role="dialog" aria-label="The Annals — event history">
+  <div class="ldg-panel" role="dialog" aria-label="Event history">
     <div class="ldg-head">
-      <span class="ldg-title">ANNALS</span>
+      <span class="ldg-title" data-say>ANNALS</span>
       <span class="ldg-sub">what befell the lab, and when</span>
       <button class="ldg-close" id="ann-close" title="Close (Esc)">×</button>
     </div>
@@ -565,8 +572,8 @@
 <div id="embed-max" hidden>
   <div id="embed-max-title" aria-live="polite"></div>
   <button id="embed-max-close" title="Close (Esc)">×</button>
-  <button class="embed-max-arrow" id="embed-max-prev" title="Previous watching" hidden>‹</button>
-  <button class="embed-max-arrow" id="embed-max-next" title="Next watching" hidden>›</button>
+  <button class="embed-max-arrow" id="embed-max-prev" data-say-title title="Previous watching" hidden>‹</button>
+  <button class="embed-max-arrow" id="embed-max-next" data-say-title title="Next watching" hidden>›</button>
   <div class="chron-scrying" aria-hidden="true">
     <span></span><span></span><span></span><em>scrying…</em>
   </div>
@@ -686,6 +693,11 @@
             <input type="checkbox" id="sp-tilt">
           </label>
           <div class="sp-hint">Shows the map at an angle.</div>
+          <label class="sp-row">
+            <span>Use standard words</span>
+            <input type="checkbox" id="sp-words">
+          </label>
+          <div class="sp-hint">Says job for rite, zone for realm and history for annals, on every map. Off, each map keeps its lore. Saved in this browser.</div>
         </div>
       </div>
       <div class="sp-sec" data-sec="survey">

@@ -25,7 +25,8 @@
    gate rather than reaching the style engine. Clearing the override removes
    the inline tokens and the stylesheet's own :root wins again. */
 
-import { A, $, esc, canAdminWrite } from './config.js';
+import { A, CFG, $, esc, canAdminWrite } from './config.js';
+import { say, setStyleWords } from './words.js';
 
 const WALLPAPER_KEY = 'atlas-wallpaper';
 const TILT_KEY = 'atlas-tilt';
@@ -65,6 +66,8 @@ function wear(style) {
   A.styleZones = style?.zones || null;
   document.body.classList.toggle('on-style', Boolean(style));   // the realm's own scenery stays home
   document.body.classList.toggle('style-bright', style?.bright === true);   // atlas.css: ink for light art
+  setStyleWords(style?.words);
+  document.body.classList.toggle('tripwire-eye', (style ? style.tripwire : CFG.THEME?.tripwire) === 'eye');
   const label = style?.label;
   document.title = label ? `${label} Atlas` : realmName.tab;
   if (veilTitle) veilTitle.textContent = label ? label.toUpperCase() : realmName.veil;
@@ -73,6 +76,7 @@ function wear(style) {
 const styleOf = (m) => ({
   name: m.name, url: m.url, theme: m.theme || null,
   label: m.label || null, bright: m.bright === true, places: m.places || {}, zones: m.zones || {},
+  words: m.words || {}, tripwire: m.tripwire || 'bird',
 });
 
 /** The maps list answered: this browser's stored copy of its style may be old
@@ -81,8 +85,8 @@ export function refreshStyle(m) {
   const had = stored();
   if (!m || !had || m.name !== had.name) return;
   const now = styleOf(m);
-  if (JSON.stringify([had.label, had.bright, had.places, had.zones]) ===
-      JSON.stringify([now.label, now.bright, now.places, now.zones])) return;
+  if (JSON.stringify([had.label, had.bright, had.places, had.zones, had.words, had.tripwire]) ===
+      JSON.stringify([now.label, now.bright, now.places, now.zones, now.words, now.tripwire])) return;
   store({ ...had, ...now });
   wear(now);
   A.buildWorld?.();
@@ -145,7 +149,7 @@ async function buildTable() {
     `<button class="spm-row${(current ? current.name === m.name : m.default) ? ' on' : ''}" data-name="${esc(m.name)}">` +
       `<img class="spm-thumb" src="${esc(m.url)}" alt="" loading="lazy">` +
       `<span class="spm-label">${esc(m.label)}</span>` +
-      (m.default ? `<span class="spm-tag">the realm’s</span>` : '') +
+      (m.default ? `<span class="spm-tag">${say('the realm’s')}</span>` : '') +
       (m.theme ? `<span class="spm-tag spm-tag-theme">theme</span>` : '') +
     `</button>`
   ).join('');

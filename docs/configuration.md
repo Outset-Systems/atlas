@@ -389,5 +389,11 @@ This changes the picture only, never your data. A place the file does not name s
 and a place it does name cannot be dragged while that style is chosen, because the drag would save
 to the map's own spot.
 
+A style can bring its own words too. `words` maps a word the Atlas uses to the one this picture
+uses, in the case it finds it: `{"realm": "kingdom", "realms": "kingdoms", "tripwires": "little birds"}`.
+Plain words only, up to 40 of them, and they change the Atlas's own labels, never a name in your
+data. A viewer who turns on **Use standard words** under THE MAP in settings gets standard words on
+every map instead. `"tripwire": "eye"` swaps the bird that marks a tripwire for an eye.
+
 `"bright": true` tells the Atlas the picture is a light one. Names then sit on a dark plate, and the
 picture dims while the network layer is up or a place is split into its services.

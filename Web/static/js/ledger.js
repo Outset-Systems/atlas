@@ -14,6 +14,7 @@
    Roads and topology live in THE PATH (path.js). */
 
 import { A, CFG, $, esc, zoneById, nodeById, FALLBACK_HUE } from './config.js';
+import { say } from './words.js';
 import { makeScene } from './scene.js';
 import {
   GRID_LIMIT, chartedAddresses, countLabel, drawable, formatAddress,
@@ -64,7 +65,7 @@ function summaryHTML(prefixes, charted) {
       }).join('')
     : `<div class="ldg-note">port-level truth awaits the surveyor — add <code>ports</code> ` +
       `from the map editor (or curate <code>interfaces[]</code>) and every faceplate appears here, ` +
-      `coloured by realm.</div>`;
+      `coloured by ${say('realm')}.</div>`;
 
   return `<div class="ldg-block ldg-path" style="--z-hue:var(--gilt)">
     <div class="ldg-zhead">
@@ -192,7 +193,7 @@ function build() {
   listEl.innerHTML = summaryHTML(prefixes, charted) +
     (roots.length
       ? roots.map((p) => prefixHTML(p, charted)).join('')
-      : `<div class="ldg-note">no ground surveyed yet — give a realm a subnet, or add a ` +
+      : `<div class="ldg-note">no ground surveyed yet — give a ${say('realm')} a subnet, or add a ` +
         `<code>prefix</code> from the map editor, and its addresses appear here.</div>`);
 
   // an unclaimed address is still worth seeing: hosts outside every prefix

@@ -7,6 +7,8 @@
   "guest_maps": [],
   "map_labels": {"demo-lab.webp": "The Archipelago", "plain.webp": "The Still Water"},
   "sky_island": false,
+  "standard_words": {},
+  "tripwire_icon": "bird",
   "text": {
     "rack_location": "Home lab",
     "map_alt": "Map of the lab",

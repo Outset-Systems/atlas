@@ -867,6 +867,22 @@
     },
     {
       "rack": "rack-b",
+      "u": "U4–5",
+      "size": 2,
+      "name": "GPU Box",
+      "node": "gpu-box",
+      "desc": "Two slots for whatever needs a graphics card."
+    },
+    {
+      "rack": "rack-b",
+      "u": "U3",
+      "size": 1,
+      "name": "Second NAS",
+      "node": "nas-2",
+      "desc": "The other copy of everything that matters."
+    },
+    {
+      "rack": "rack-b",
       "u": "U1–2",
       "size": 2,
       "name": "Test Bench",
