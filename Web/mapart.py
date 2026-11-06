@@ -33,7 +33,7 @@ import os
 import re
 
 import settings
-from jsonio import write_bytes_atomic
+from jsonio import write_bytes_atomic, write_json_atomic
 
 log = logging.getLogger("atlas.data.mapart")
 
@@ -55,7 +55,11 @@ BUNDLED_DIR = os.path.join(settings.HERE, "static", "map")
 #: on one particular picture: the dataset's regions fit the realm's own art and
 #: mean nothing on another. Region art named here is reached by zooming in, so
 #: the gallery does not offer it as a backdrop. `places` and `zones` move the
-#: markers and the network names on this picture, for the same reason.
+#: markers and the network names on this picture, for the same reason, and
+#: `logos` gives a place the emblem it wears on this picture (`{"id": "wolf"}`,
+#: an icon in static/icons): a theme's own scenery stays on the theme's map.
+#: The operator writes it by hand, or an admin drags the dots on the style and
+#: saves (`save_layout`), which touches only the spots.
 STYLE_SUFFIX = ".style.json"
 MAX_STYLE_WORDS = 40
 STYLE_WORD_KEY = re.compile(r"(?:[^\W\d_]|[' ’-]){2,30}")
@@ -177,6 +181,23 @@ def _style_points(raw):
     return points
 
 
+#: Where the card's emblems live; a sidecar may only name one that is there.
+ICONS_DIR = os.path.join(settings.HERE, "static", "icons")
+_ICON_SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
+
+
+def _style_logos(raw):
+    """{place id: icon slug} from a sidecar's `logos`, for icons the Atlas has."""
+    if not isinstance(raw, dict):
+        return {}
+    out = {}
+    for key, slug in list(raw.items())[:MAX_STYLE_POINTS]:
+        if (_REGION_ID.match(str(key)) and isinstance(slug, str) and _ICON_SLUG.match(slug)
+                and os.path.isfile(os.path.join(ICONS_DIR, slug + ".svg"))):
+            out[key] = slug
+    return out
+
+
 def _style_region(raw):
     """One sidecar region in the dataset's shape plus its `url`, or None."""
     if not isinstance(raw, dict) or not _REGION_ID.match(str(raw.get("id") or "")):
@@ -240,8 +261,61 @@ def style(name):
                 "words": _style_words(raw.get("words")),
                 "tripwire": "eye" if raw.get("tripwire") == "eye" else "bird",
                 "places": _style_points(raw.get("places")),
-                "zones": _style_points(raw.get("zones"))}
+                "zones": _style_points(raw.get("zones")),
+                "logos": _style_logos(raw.get("logos"))}
     return {}
+
+
+def save_layout(name, body):
+    """Merge dragged spots into the sidecar beside uploaded render `name`, so
+    the places stand there for every viewer of that style. Returns how many
+    spots were written.
+
+    `body` is `{places, zones, regions: {region id: places}}`, each an
+    `{id: {x, y}}` checked by `_style_points`. Everything else in the sidecar
+    stays as the operator wrote it. A region the sidecar does not list is
+    skipped: this moves dots, it never draws a region. Raises ValueError with
+    a sentence for the editor.
+    """
+    safe = safe_name(name)
+    path, bundled = resolve(safe) if safe else (None, False)
+    if not path:
+        raise ValueError("no such map image")
+    filename = safe.rsplit(".", 1)[0] + STYLE_SUFFIX
+    if bundled or os.path.isfile(os.path.join(BUNDLED_DIR, filename)):
+        raise ValueError("this map style is built into the Atlas, so its layout is part of the image")
+    if not isinstance(body, dict):
+        raise ValueError("expected an object of places, zones and regions")
+    target = os.path.join(settings.MAPS_DIR, filename)
+    raw = {}
+    if os.path.isfile(target):
+        try:
+            with open(target, encoding="utf-8") as handle:
+                raw = json.load(handle)
+        except (OSError, ValueError) as e:
+            raise ValueError(f"the sidecar {filename} cannot be read, so it was left alone: {e}") from e
+        if not isinstance(raw, dict):
+            raise ValueError(f"the sidecar {filename} is not an object, so it was left alone")
+    written = 0
+    for key in ("places", "zones"):
+        points = _style_points(body.get(key))
+        if points:
+            raw[key] = {**(raw.get(key) if isinstance(raw.get(key), dict) else {}), **points}
+            written += len(points)
+    pins = body.get("regions") if isinstance(body.get("regions"), dict) else {}
+    for region in raw.get("regions") if isinstance(raw.get("regions"), list) else []:
+        if not isinstance(region, dict):
+            continue
+        points = _style_points(pins.get(region.get("id")))
+        if points:
+            region["places"] = {**(region.get("places") if isinstance(region.get("places"), dict) else {}),
+                                **points}
+            written += len(points)
+    if not written:
+        return 0
+    write_json_atomic(target, raw, keep_backup=False)
+    log.info("map style %s: %d spots saved", filename, written)
+    return written
 
 
 def _region_art(directory):

@@ -339,13 +339,28 @@ document.querySelectorAll('[data-scene]').forEach(btn => {
                      accounts: A.openAccounts, trust: A.openTrust,
                      settings: A.openSettings };
     const deselect = btn.classList.contains('active');
-    /* THE ATLAS is the home button (owner, 2026-11-01): it closes whatever is
-       up and brings the whole map back to centre. A.home and not A.recenter,
-       because from the Depths home is the map, not the middle of the Depths. */
+    /* THE ATLAS is the home button (owner, 2026-11-01), and since v1.67.0 it
+       also puts the map away (owner, 2026-11-05: "if you click the atlas
+       button it basically just hides the map with nodes"). A scene that is up
+       is closed FIRST and that is the whole click, so a scene can never strand
+       you; with nothing up, it switches between the map and THE DECK, the
+       column of charts (deck.js). Coming back to the map is coming home:
+       A.home and not A.recenter, because from the Depths home is the map, not
+       the middle of the Depths.
+       It centres first (owner, 2026-11-05: "clicking the button should center
+       the map or clicking it again would close/open it"): a map that has
+       moved goes home, and only a map already home is put away. On a phone
+       the button is hidden (atlas.css), since there is no map to bring back;
+       a desk asking for `?view=phone` still gets the top of the column. */
     if (btn.dataset.scene === 'atlas') {
+      const sceneWasUp = A.sceneOpen;
+      const wasHome = A.atHome?.() ?? true;
       closeAllScenes();
       setSceneActive('atlas');
       A.closeCard?.();
+      if (A.PHONE) { A.deckTop?.(); return; }
+      if (A.DECK) { A.setDeck(false, { remember: true }); A.home(true); return; }
+      if (!sceneWasUp && wasHome) { A.setDeck?.(true, { remember: true }); return; }
       A.home(true);
       return;
     }
@@ -526,8 +541,10 @@ $('sp-save').addEventListener('click', async (e) => {
   e.stopPropagation();
   try {
     const res = await A.savePositions();
-    A.showToast(res.saved ? `Saved ${res.saved} ${res.saved === 1 ? 'place' : 'places'} to the map — permanent for everyone.`
-                          : 'No places have been moved yet.');
+    const what = `${res.saved} ${res.saved === 1 ? 'spot' : 'spots'}`;
+    A.showToast(!res.saved ? 'No places have been moved yet.'
+      : res.style ? `Saved ${what} to ${res.style}. Everyone who views this map style sees them there.`
+      : `Saved ${res.saved} ${res.saved === 1 ? 'place' : 'places'} to the map — permanent for everyone.`);
   } catch (err) {
     A.showToast(`Could not save: ${err.message || err}`);
   }

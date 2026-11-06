@@ -50,14 +50,21 @@ async function copyText(text) {
 
 /* per-place emblem for the card portrait — the real product logo where a place
    IS a product (its OS / appliance / service), else a themed emoji, else kind. */
-/* -> static/icons/<slug>.svg. A place names its own emblem with `logo` in the
-   dataset; failing that the THEME's map (v1.48.0: `node_logos`, keyed by node
-   id — which ids exist is one lab's business, not the app's). */
+/* -> static/icons/<slug>.svg. A map style's own `logos` come first: a place wears
+   what that picture gives it (table.js sets A.styleLogos). Then the place's own
+   `logo` in the dataset, then the THEME's map (v1.48.0: `node_logos`, keyed by
+   node id). A theme emblem listed in its `scenery_logos` belongs to the theme's
+   own map, so on another style it stands down (2026-11-02: the sigil is
+   The lab's, not the Seven Kingdoms'). */
 const LOGO_SLUG = /^[a-z0-9][a-z0-9-]{0,39}$/;
 const nodeLogo = (n) => {
+  const styled = String(A.styleLogos?.[n.id] || '');
+  if (LOGO_SLUG.test(styled)) return styled;
   const own = String(n.logo || '');
   if (LOGO_SLUG.test(own)) return own;
-  return CFG.THEME.nodeLogos?.[n.id] || '';
+  const themed = CFG.THEME.nodeLogos?.[n.id] || '';
+  const onStyle = document.body.classList.contains('on-style');
+  return onStyle && (CFG.THEME.sceneryLogos || []).includes(themed) ? '' : themed;
 };
 
 function setPortrait(n) {

@@ -104,6 +104,8 @@ def client():
         "name": NAME,
         "text": dict(T["text"]),
         "nodeLogos": logos,
+        # emblems that belong to the theme's own map: on another map style they stand down
+        "sceneryLogos": [str(s) for s in T.get("scenery_logos") or [] if _SLUG_RE.match(str(s))],
         "foldedZones": [str(z) for z in T.get("folded_zones") or []],
         "forgeNames": [str(n).lower() for n in T.get("forge_names") or []],
         "gatewayNodes": [str(n) for n in T.get("gateway_nodes") or []],

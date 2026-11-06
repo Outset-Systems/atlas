@@ -17,7 +17,7 @@
 import assert from 'node:assert/strict';
 import {
   atSurveyOrBeyond, clampCam, clampK, fitScale, focusAnchor, glideTarget,
-  homeTarget, minCamX, panFloor, skyFrame, zoomTarget,
+  homeTarget, minCamX, panFloor, sameView, skyFrame, zoomTarget,
 } from '../static/js/camera-model.js';
 
 let passed = 0;
@@ -176,6 +176,15 @@ test('a narrow window opens on the places, a wide one on the picture', () => {
   assert.ok(homeTarget(PORTRAIT, 20).x > homeTarget(PORTRAIT).x);
   assert.equal(homeTarget(LANDSCAPE, 20).x, homeTarget(LANDSCAPE).x);
   assert.equal(homeTarget(PORTRAIT, undefined).x, homeTarget(PORTRAIT).x);
+});
+
+test('sameView: home is home, a pan or a zoom away is not', () => {
+  const home = homeTarget(LANDSCAPE);
+  assert.equal(sameView({ ...home }, home), true);
+  assert.equal(sameView({ ...home, x: home.x + 1.5 }, home), true);   // rounding, not a move
+  assert.equal(sameView({ ...home, x: home.x + 40 }, home), false);
+  assert.equal(sameView({ ...home, y: home.y - 40 }, home), false);
+  assert.equal(sameView({ ...home, k: home.k * 1.18 }, home), false); // one wheel notch
 });
 
 test('glideTarget puts the point at the anchor, biased up', () => {

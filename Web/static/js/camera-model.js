@@ -92,6 +92,14 @@ export function homeTarget(v, focusX) {
   return clampCam({ x, y: (v.vh - v.mapH * k) / 2, k }, v);
 }
 
+/** True when `cam` already stands at `target`, within a pixel or so and a
+    hair of zoom. THE ATLAS asks it: centred, a press puts the map away;
+    anywhere else, the press centres it (owner, 2026-11-05). */
+export function sameView(cam, target, px = 2) {
+  return Math.abs(cam.x - target.x) <= px && Math.abs(cam.y - target.y) <= px &&
+    Math.abs(cam.k / target.k - 1) <= 0.005;
+}
+
 /** Put map point (nx, ny — percentages) just above centre at zoom k. `anchorX`
     parks it off-centre instead; the 0.44 bias lifts it because the card sits
     low. Omit `anchorX` for the centre, exactly as before. */

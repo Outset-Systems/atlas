@@ -155,6 +155,8 @@ function home(gliding = true) {
   apply(gliding);
 }
 A.home = home;
+/** True when the camera already stands at home (THE ATLAS asks, ui.js). */
+A.atHome = () => model.sameView(A.cam, model.homeTarget(view(), placesMidX()));
 
 /** glide so map point (nx,ny in %) sits just above center at zoom k.
     `anchorX` (screen px) parks the point off-centre instead — the focus glide

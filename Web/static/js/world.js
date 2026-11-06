@@ -20,10 +20,17 @@ function buildZoneLabels() {
     // some VLANs keep their territory but drop the map text. The Depths never
     // draw theirs: the section below the map carries the name in its own heading.
     // A style that places a zone means it to be read there, so it names it.
-    const at = A.styleZones?.[z.id];
+    const at = A.styleDraft().zones[z.id] || A.styleZones?.[z.id];
     if (!at && (z.hide_label || z.id === 'depths')) continue;
     const el = document.createElement('div');
     el.className = 'zone-label';
+    // on a map style the network's names move with its places (Settings → Move places)
+    el.addEventListener('pointerdown', (e) => {
+      if (!A.editMode || !onStyleArt()) return;
+      let spot = null;
+      dragOnMap(e, el, (p) => (spot = { x: Math.max(0, Math.min(100, p.x)), y: Math.max(-40, Math.min(140, p.y)) }),
+        () => A.draftStyleSpot('zones', z.id, spot));
+    });
     el.style.left = (at ? at.x : z.label_x) + '%';
     el.style.top = (at ? at.y : z.label_y) + '%';
     el.style.color = z.hue;
@@ -1049,6 +1056,32 @@ const POS_KEY = 'atlas-pos-overrides';
 function posOverrides() {
   try { return JSON.parse(localStorage.getItem(POS_KEY) || '{}'); } catch { return {}; }
 }
+/* On another map style a spot belongs to that picture, so a drag there is kept
+   per style ({places, zones, regions: {id: places}}) and Save writes it into
+   the style's sidecar (mapart.save_layout), never the dataset. */
+const STYLE_POS_KEY = 'atlas-style-pos';
+let styleDrafts = (() => {
+  try { return JSON.parse(localStorage.getItem(STYLE_POS_KEY) || '{}') || {}; } catch { return {}; }
+})();
+const onStyleArt = () => Boolean(A.styleArt) && (A.onOtherStyle?.() ?? true);
+A.onStyleArt = onStyleArt;
+A.styleDraft = () => {
+  const d = (onStyleArt() && styleDrafts[A.styleArt]) || {};
+  return { places: d.places || {}, zones: d.zones || {}, regions: d.regions || {} };
+};
+A.draftStyleSpot = function draftStyleSpot(kind, id, at, regionId) {
+  const d = (styleDrafts[A.styleArt] = A.styleDraft());
+  const spot = { x: Math.round(at.x * 10) / 10, y: Math.round(at.y * 10) / 10 };
+  if (regionId) (d.regions[regionId] ??= {})[id] = spot;
+  else d[kind][id] = spot;
+  try { localStorage.setItem(STYLE_POS_KEY, JSON.stringify(styleDrafts)); } catch { /* private mode: the move still draws */ }
+};
+const draftCount = (d) => Object.keys(d.places).length + Object.keys(d.zones).length +
+  Object.values(d.regions).reduce((sum, pins) => sum + Object.keys(pins).length, 0);
+function dropStyleDraft() {
+  delete styleDrafts[A.styleArt];
+  try { localStorage.setItem(STYLE_POS_KEY, JSON.stringify(styleDrafts)); } catch { /* private mode */ }
+}
 /* Where a place stands: its own spot (`_home`, with any saved drag), unless the
    chosen map style puts it somewhere on that picture, or a region is on the stage
    (`A.levelPlaces`), which holds some places at their spots there and draws no
@@ -1057,18 +1090,19 @@ function posOverrides() {
 function applyOverrides() {
   const o = posOverrides();
   const level = A.levelPlaces;
+  const drafted = A.styleDraft().places;
   for (const n of A.DATA.nodes) {
     const home = o[n.id] || n._home || n;
     n._home = { x: home.x, y: home.y };
     n._realOff ??= Boolean(n.off_map);
-    const at = level ? level[n.id] : A.stylePlaces?.[n.id];
+    const at = level ? level[n.id] : drafted[n.id] || A.stylePlaces?.[n.id];
     n.off_map = n._realOff || Boolean(level && !at);
     const to = at || n._home;
     n.x = to.x; n.y = to.y;
   }
 }
 /** Where a place stands on the top-level map, whatever is on the stage now. */
-A.mainPlace = (n) => A.stylePlaces?.[n.id] || posOverrides()[n.id] || n._home || n;
+A.mainPlace = (n) => A.styleDraft().places[n.id] || A.stylePlaces?.[n.id] || posOverrides()[n.id] || n._home || n;
 A.editMode = false;
 A.setEditMode = function setEditMode(on) {
   A.editMode = !!on;
@@ -1076,6 +1110,11 @@ A.setEditMode = function setEditMode(on) {
   if (A.editMode) { A.closeCard?.(); }
 };
 A.copyPositions = function copyPositions() {
+  if (onStyleArt()) {   // in the sidecar's own shape, ready to paste into it
+    const d = A.styleDraft();
+    navigator.clipboard?.writeText(JSON.stringify(d, null, 2)).catch(() => {});
+    return draftCount(d);
+  }
   const o = posOverrides();
   const rounded = Object.fromEntries(Object.entries(o).map(
     ([id, p]) => [id, { x: +p.x.toFixed(1), y: +p.y.toFixed(1) }]));
@@ -1084,11 +1123,22 @@ A.copyPositions = function copyPositions() {
   return Object.keys(rounded).length;
 };
 A.resetPositions = function resetPositions() {
-  localStorage.removeItem(POS_KEY);
+  if (onStyleArt()) dropStyleDraft();
+  else localStorage.removeItem(POS_KEY);
   location.reload();
 };
 /* persist the moved dots server-side — permanent + shared to every viewer */
 A.savePositions = async function savePositions() {
+  if (onStyleArt()) {
+    const d = A.styleDraft();
+    if (!draftCount(d)) return { saved: 0 };
+    const r = await postJSON(`api/v2/admin/map-art/${encodeURIComponent(A.styleArt)}/layout`, d);
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.status);
+    const res = await r.json();
+    dropStyleDraft();   // the sidecar holds them now
+    A.useMaps?.(res.maps || []);
+    return { ...res, style: A.styleLabel || 'this map style' };
+  }
   const o = posOverrides();
   if (!Object.keys(o).length) return { saved: 0 };
   const r = await postJSON('api/v2/positions', o);   // carries the write proof (config.js)
@@ -1112,6 +1162,33 @@ function screenToPct(clientX, clientY) {
     x: ((p.x - A.cam.x) / A.cam.k) / A.MAPW * 100,
     y: ((p.y - A.cam.y) / A.cam.k) / A.MAPH * 100,
   };
+}
+
+A.screenToPct = screenToPct;   // regions.js pins with the same reading
+
+/* One drag in edit mode: `place` turns the pointer's percent into the spot,
+   `done` keeps it once the drag ends, and only if it really moved. */
+function dragOnMap(e, el, place, done) {
+  e.stopPropagation(); e.preventDefault();
+  delete el.dataset.dragged;
+  el.setPointerCapture(e.pointerId);
+  el.classList.add('dragging');
+  const move = (ev) => {
+    const at = place(screenToPct(ev.clientX, ev.clientY));
+    el.style.left = at.x + '%';
+    el.style.top = at.y + '%';
+    el.dataset.dragged = '1';
+  };
+  const up = () => {
+    el.classList.remove('dragging');
+    el.removeEventListener('pointermove', move);
+    for (const t of DRAG_END) el.removeEventListener(t, up);
+    if (el.dataset.dragged) done();
+  };
+  el.addEventListener('pointermove', move);
+  // a drag can end without a pointerup — the browser cancels it, or the
+  // capture is lost — and every ending must clean up (camera.js does the same)
+  for (const t of DRAG_END) el.addEventListener(t, up);
 }
 
 function buildMarkers() {
@@ -1140,6 +1217,14 @@ function buildMarkers() {
         <div class="mk-core"></div>
       </div>
       <div class="mk-label">${esc(n.name)}</div>`;
+    // A map style may give a place its own sigil (`logos` in its sidecar): the
+    // marker wears the emblem the card shows. Slug-checked here and on the server.
+    const sigil = String(A.styleLogos?.[n.id] || '');
+    if (/^[a-z0-9][a-z0-9-]{0,39}$/.test(sigil)) {
+      mk.classList.add('mk-sigil');
+      const core = mk.querySelector('.mk-core');
+      core.style.webkitMaskImage = core.style.maskImage = `url("static/icons/${sigil}.svg")`;
+    }
     mk.addEventListener('click', (e) => {
       if (mk.dataset.dragged) { delete mk.dataset.dragged; return; }  // a drag isn't a click
       e.stopPropagation();
@@ -1158,32 +1243,23 @@ function buildMarkers() {
     // edit-mode drag
     mk.addEventListener('pointerdown', (e) => {
       if (A.levelPlaces) { A.pinDrag?.(e, mk, n); return; }   // a pin on this region, not a move
-      // on a style that places it, this is not the spot a drag would save
-      if (!A.editMode || A.stylePlaces?.[n.id]) return;
-      e.stopPropagation(); e.preventDefault();
-      mk.setPointerCapture(e.pointerId);
-      mk.classList.add('dragging');
-      const move = (ev) => {
-        const p = screenToPct(ev.clientX, ev.clientY);
+      if (!A.editMode) return;
+      const styled = onStyleArt();
+      // on the realm's art a style's spot is not the one a drag would save
+      if (!styled && A.stylePlaces?.[n.id]) return;
+      dragOnMap(e, mk, (p) => {
         n.x = Math.max(0, Math.min(100, p.x));
         n.y = Math.max(-40, Math.min(140, p.y));
-        mk.style.left = n.x + '%';
-        mk.style.top = n.y + '%';
-        mk.dataset.dragged = '1';
-      };
-      const up = () => {
-        mk.classList.remove('dragging');
-        mk.removeEventListener('pointermove', move);
-        for (const t of DRAG_END) mk.removeEventListener(t, up);
-        const o = posOverrides();
-        o[n.id] = { x: n.x, y: n.y };
-        try { localStorage.setItem(POS_KEY, JSON.stringify(o)); } catch { /* private mode: the move still draws */ }
+        return n;
+      }, () => {
+        if (styled) A.draftStyleSpot('places', n.id, n);
+        else {
+          const o = posOverrides();
+          o[n.id] = { x: n.x, y: n.y };
+          try { localStorage.setItem(POS_KEY, JSON.stringify(o)); } catch { /* private mode: the move still draws */ }
+        }
         A.redrawLines?.();   // routes + territories follow the moved dot
-      };
-      mk.addEventListener('pointermove', move);
-      // a drag can end without a pointerup — the browser cancels it, or the
-      // capture is lost — and every ending must clean up (camera.js does the same)
-      for (const t of DRAG_END) mk.addEventListener(t, up);
+      });
     });
     markersEl.appendChild(mk);
   });

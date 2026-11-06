@@ -68,6 +68,9 @@ const realmName = { tab: document.title, veil: veilTitle?.textContent || '' };
 function wear(style) {
   A.stylePlaces = Object.keys(style?.places || {}).length ? style.places : null;
   A.styleZones = style?.zones || null;
+  A.styleLogos = style?.logos || null;   // card.js: the emblems a place wears on this picture
+  A.styleArt = style?.name || null;      // world.js: whose sidecar a drag on this picture is saved to
+  A.styleLabel = style?.label || null;
   document.body.classList.toggle('on-style', Boolean(style));   // the realm's own scenery stays home
   document.body.classList.toggle('style-bright', style?.bright === true);   // atlas.css: ink for light art
   setStyleWords(style?.words);
@@ -80,7 +83,7 @@ function wear(style) {
 const styleOf = (m) => ({
   name: m.name, url: m.url, theme: m.theme || null,
   label: m.label || null, bright: m.bright === true, places: m.places || {}, zones: m.zones || {},
-  words: m.words || {}, tripwire: m.tripwire || 'bird',
+  words: m.words || {}, tripwire: m.tripwire || 'bird', logos: m.logos || {},
 });
 
 /** The maps list answered: this browser's stored copy of its style may be old
@@ -89,8 +92,8 @@ export function refreshStyle(m) {
   const had = stored();
   if (!m || !had || m.name !== had.name) return;
   const now = styleOf(m);
-  if (JSON.stringify([had.label, had.bright, had.places, had.zones, had.words, had.tripwire]) ===
-      JSON.stringify([now.label, now.bright, now.places, now.zones, now.words, now.tripwire])) return;
+  if (JSON.stringify([had.label, had.bright, had.places, had.zones, had.words, had.tripwire, had.logos]) ===
+      JSON.stringify([now.label, now.bright, now.places, now.zones, now.words, now.tripwire, now.logos])) return;
   store({ ...had, ...now });
   wear(now);
   A.buildWorld?.();

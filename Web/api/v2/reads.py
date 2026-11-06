@@ -100,6 +100,7 @@ def maps_for_viewer():
             "tripwire": sidecar.get("tripwire") or "bird",
             "places": mine(sidecar.get("places")),
             "zones": sidecar.get("zones") or {},
+            "logos": mine(sidecar.get("logos")),
             "zoom": name in zoomed and name != default,
         })
     return out

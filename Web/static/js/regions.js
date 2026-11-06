@@ -46,7 +46,16 @@ const onOtherStyle = () => {
   const art = chosenStyle();
   return Boolean(art) && art !== realmArt;
 };
-const regions = () => (onOtherStyle() ? styleRegions.get(chosenStyle()) || [] : datasetRegions());
+A.onOtherStyle = onOtherStyle;   // world.js: a drag here belongs to the style's sidecar
+/* A style's regions wear this browser's unsaved pins too (world.js A.styleDraft). */
+const regions = () => {
+  if (!onOtherStyle()) return datasetRegions();
+  const drafted = A.styleDraft?.().regions || {};
+  const list = styleRegions.get(chosenStyle()) || [];
+  if (!Object.keys(drafted).length) return list;   // asked on every camera frame
+  return list.map((r) =>
+    (drafted[r.id] ? { ...r, places: { ...(r.places || {}), ...drafted[r.id] } } : r));
+};
 const regionById = (id) => regions().find((r) => r.id === id);
 const nodes = () => A.DATA?.nodes || [];
 const baseTitle = () => styleName() || String(A.DATA?.meta?.title || 'The map').replace(/ Atlas$/, '');
@@ -71,18 +80,26 @@ async function loadMaps() {
     const r = await fetch('api/v2/maps', { cache: 'no-cache' });
     if (!r.ok) return;
     const { maps } = await r.json();
-    A.MAPS_BY_NAME = Object.fromEntries(maps.map((m) => [m.name, m]));
-    realmArt = maps.find((m) => m.default)?.name || null;
-    styleRegions = new Map(maps.map((m) => [m.name, m.regions || []]));
-    // region art is not in the gallery, so the list carries its address here
-    for (const art of [...styleRegions.values()].flat()) A.MAPS_BY_NAME[art.map] ??= art;
-    if (chosenStyle()) {
-      refreshStyle(maps.find((m) => m.name === chosenStyle()));
+    if (useMaps(maps)) {
       A.onStyleChange();
       followHash();              // a link may have asked before this answered
     }
   } catch { /* the bundled guess still works */ }
 }
+
+/** Take a maps list in; true when a style is on. A layout save hands its
+    answer here too, and the region on the stage stays open for it. */
+function useMaps(maps) {
+  A.MAPS_BY_NAME = Object.fromEntries(maps.map((m) => [m.name, m]));
+  realmArt = maps.find((m) => m.default)?.name || null;
+  styleRegions = new Map(maps.map((m) => [m.name, m.regions || []]));
+  // region art is not in the gallery, so the list carries its address here
+  for (const art of [...styleRegions.values()].flat()) A.MAPS_BY_NAME[art.map] ??= art;
+  if (!chosenStyle()) return false;
+  refreshStyle(maps.find((m) => m.name === chosenStyle()));
+  return true;
+}
+A.useMaps = (maps) => { if (useMaps(maps)) A.buildWorld(); };
 
 /* ── frames on the main map ─────────────────────────────────────────────── */
 function frameEl(r) {
@@ -431,14 +448,15 @@ A.focusNode = async (id, ...rest) => {
 
 /* ── pinning a place on a region map (edit mode, admins) ─────────────────── */
 A.pinDrag = function pinDrag(e, mk, n) {
-  if (!A.editMode || !canAdminWrite() || !level || onOtherStyle()) return;   // not the dataset's region
+  if (!A.editMode || !level) return;
+  // on another style the pin is drafted for its sidecar; on the realm's it is the dataset's
+  const styled = onOtherStyle();
+  if (!styled && !canAdminWrite()) return;
   e.stopPropagation(); e.preventDefault();
   mk.setPointerCapture(e.pointerId);
   mk.classList.add('dragging');
-  const toPct = (ev) => ({
-    x: ((ev.clientX - A.cam.x) / A.cam.k / A.MAPW) * 100,
-    y: ((ev.clientY - A.cam.y) / A.cam.k / A.MAPH) * 100,
-  });
+  // world.js's reading of the pointer, which also sees through a tilted table
+  const toPct = (ev) => A.screenToPct(ev.clientX, ev.clientY);
   let last = null;
   const move = (ev) => {
     last = toPct(ev);
@@ -453,6 +471,13 @@ A.pinDrag = function pinDrag(e, mk, n) {
     if (!last) return;
     const r = level;
     const pin = { x: Math.round(last.x * 10) / 10, y: Math.round(last.y * 10) / 10 };
+    if (styled) {
+      A.draftStyleSpot('places', n.id, pin, r.id);
+      A.levelPlaces[n.id] = pin;
+      n.x = pin.x; n.y = pin.y;
+      A.redrawLines?.();
+      return;
+    }
     try {
       const { Editor } = await import('./editor/store.js');
       if (!Editor.loaded) await Editor.load();

@@ -533,6 +533,25 @@ def map_art_survey():
                     "images": mapart.available()})
 
 
+@admin_bp.route("/map-art/<name>/layout", methods=["POST"])
+def map_art_layout(name):
+    """Settings → Move places, on a map style: the dragged spots go into that
+    style's sidecar, so every viewer of the style sees them there."""
+    refusal = write_refusal()
+    if refusal:
+        return refusal
+    try:
+        saved = mapart.save_layout(name, request.get_json(silent=True))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 422
+    except OSError as e:
+        log.error("v2: could not save the layout of %s: %s", name, e)
+        return jsonify({"error": f"could not save that layout: {e}"}), 500
+    log.info("v2: layout of map style %s saved by %s (%d spots)", name, actor(), saved)
+    from .reads import maps_for_viewer
+    return jsonify({"ok": True, "saved": saved, "maps": maps_for_viewer()})
+
+
 @admin_bp.route("/map-art/<name>", methods=["DELETE"])
 def map_art_delete(name):
     refusal = write_refusal()

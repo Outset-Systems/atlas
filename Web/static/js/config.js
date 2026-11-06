@@ -114,7 +114,7 @@ export const CFG = {
   // THE THEME (v1.48.0): the words and emblems that name one lab — themes/*.json,
   // chosen by ATLAS_THEME on the server. Empty here = the plain theme's own wording
   // is used wherever a module falls back.
-  THEME: { name: 'plain', text: {}, nodeLogos: {}, foldedZones: [], forgeNames: [], gatewayNodes: [] },
+  THEME: { name: 'plain', text: {}, nodeLogos: {}, sceneryLogos: [], foldedZones: [], forgeNames: [], gatewayNodes: [] },
 };
 
 /** one themed phrase, with the module's own neutral fallback */

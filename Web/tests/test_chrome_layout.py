@@ -231,6 +231,27 @@ def test_the_atlas_button_goes_home():
     assert "A.home(true)" in click.group(0), "THE ATLAS no longer centres the map"
 
 
+def test_the_atlas_button_puts_the_map_away_and_back():
+    """Owner, 2026-11-05: "if you click the atlas button it basically just hides
+    the map with nodes". With nothing up it switches between the map and the
+    column of charts, remembered; a scene that is up is closed first and that
+    is the whole click; a phone has no map to bring back.
+    v1.68.0 (owner: "clicking the button should center the map or clicking it
+    again would close/open it"): a moved map goes home first, only a map
+    already home is put away, and the phone's band has no ATLAS at all."""
+    js = _read(UI)
+    click = re.search(r"if \(btn\.dataset\.scene === 'atlas'\) \{.*?return;\n    \}", js, re.S).group(0)
+    assert "const sceneWasUp = A.sceneOpen;" in click
+    assert click.index("sceneWasUp = A.sceneOpen") < click.index("closeAllScenes()"), \
+        "read whether a scene was up BEFORE closing it, or the toggle fires every time"
+    assert click.index("wasHome = A.atHome") < click.index("A.closeCard"), \
+        "ask whether the map is home BEFORE the card closes and moves nothing"
+    assert "if (A.DECK) { A.setDeck(false, { remember: true }); A.home(true); return; }" in click
+    assert "if (!sceneWasUp && wasHome) { A.setDeck?.(true, { remember: true }); return; }" in click
+    assert "if (A.PHONE) { A.deckTop?.(); return; }" in click
+    assert 'body.phone .scene[data-scene="atlas"] { display: none; }' in _read(CSS)
+
+
 def test_settings_left_the_drawer():
     """2026-09-04: "make settings a scene and take it out of the index
     window". Three releases of special rules existed only because settings was

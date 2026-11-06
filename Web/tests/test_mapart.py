@@ -267,7 +267,7 @@ def test_the_viewer_gallery_lists_every_render_with_a_fetchable_url(arena):
     assert r.headers["Cache-Control"] == "private, no-cache"
     assert "Cookie" in r.headers.get("Vary", "")
     maps = r.get_json()["maps"]
-    assert set(maps[0]) == {"name", "label", "url", "default", "theme", "regions", "bright", "words", "tripwire", "places", "zones", "zoom"}
+    assert set(maps[0]) == {"name", "label", "url", "default", "theme", "regions", "bright", "words", "tripwire", "places", "zones", "logos", "zoom"}
     bundled = next(m for m in maps if m["name"] == mapart.DEFAULT)
     # the default is whichever render the dataset names, else the bundled one
     import json
@@ -444,3 +444,76 @@ def test_the_maps_list_names_only_places_this_viewer_can_see(arena, tmp_path, mo
     isle = next(m for m in maps if m["name"] == "isle.png")
     assert list(isle["places"]) == ["shown"]
     assert list(isle["regions"][0]["places"]) == ["shown"]
+
+
+def test_a_style_gives_places_its_own_emblems_and_only_real_ones(art, tmp_path):
+    """The sigil is the lab's: on another picture a place wears that style's sigil."""
+    import json
+    _style_files(art, tmp_path, json.dumps({"logos": {
+        "keep": "wolf", "../up": "wolf", "gone": "no-such-icon", "path": "../wolf", "num": 7}}))
+    assert art.style("isle.png")["logos"] == {"keep": "wolf"}
+    _style_files(art, tmp_path, COVE)
+    assert art.style("isle.png")["logos"] == {}
+
+
+def test_the_theme_says_which_of_its_emblems_are_its_own_scenery():
+    import theme
+    assert set(theme.client()["sceneryLogos"]) <= {"sigil"} | set(theme.client()["nodeLogos"].values())
+
+
+# ── Settings → Move places, on a map style (save_layout) ─────────────────────
+def test_a_saved_layout_merges_into_the_sidecar_and_leaves_the_rest(art, tmp_path):
+    import json
+    sidecar = json.loads(COVE)
+    sidecar["places"] = {"kept": {"x": 5, "y": 5}}
+    _style_files(art, tmp_path, json.dumps(sidecar))
+    saved = art.save_layout("isle.png", {
+        "places": {"moved": {"x": 40, "y": 50}, "../bad": {"x": 1, "y": 1}, "far": {"x": 999, "y": 1}},
+        "zones": {"vlan": {"x": 10, "y": 11}},
+        "regions": {"cove": {"y": {"x": 3, "y": 4}}, "nowhere": {"z": {"x": 1, "y": 1}}},
+    })
+    assert saved == 3
+    raw = json.loads((tmp_path / "maps" / "isle.style.json").read_text(encoding="utf-8"))
+    assert raw["label"] == "The Isle"
+    assert raw["places"] == {"kept": {"x": 5, "y": 5}, "moved": {"x": 40, "y": 50}}
+    assert raw["zones"] == {"vlan": {"x": 10, "y": 11}}
+    assert raw["regions"][0]["places"] == {"x": {"x": 1, "y": 2}, "y": {"x": 3, "y": 4}}
+    assert [r["id"] for r in raw["regions"]] == ["cove"], "a save never draws a region"
+
+
+def test_a_layout_with_nothing_usable_writes_nothing(art, tmp_path):
+    _style_files(art, tmp_path, COVE)
+    before = (tmp_path / "maps" / "isle.style.json").read_bytes()
+    assert art.save_layout("isle.png", {"places": {"x": {"x": "1", "y": 2}}}) == 0
+    assert (tmp_path / "maps" / "isle.style.json").read_bytes() == before
+
+
+@pytest.mark.parametrize("name, sentence", [
+    ("../isle.png", "no such map image"),
+    ("gone.png", "no such map image"),
+    ("plain.webp", "built into the Atlas"),
+])
+def test_a_layout_is_saved_only_beside_an_uploaded_render(art, tmp_path, name, sentence):
+    _style_files(art, tmp_path, COVE)
+    with pytest.raises(ValueError, match=sentence):
+        art.save_layout(name, {"places": {"x": {"x": 1, "y": 1}}})
+
+
+def test_a_broken_sidecar_is_left_alone_by_a_save(art, tmp_path):
+    _style_files(art, tmp_path, "{not json")
+    with pytest.raises(ValueError, match="left alone"):
+        art.save_layout("isle.png", {"places": {"x": {"x": 1, "y": 1}}})
+    assert (tmp_path / "maps" / "isle.style.json").read_text(encoding="utf-8") == "{not json"
+
+
+def test_the_layout_route_saves_and_answers_with_the_maps(arena, tmp_path):
+    _style_files(None, tmp_path, COVE)
+    client = arena.app.test_client()
+    body = {"places": {"moved": {"x": 40, "y": 50}}}
+    assert client.post("/api/v2/admin/map-art/isle.png/layout", json=body).status_code == 403
+    resp = client.post("/api/v2/admin/map-art/isle.png/layout", json=body, headers=WRITE)
+    assert resp.status_code == 200, resp.get_json()
+    assert resp.get_json()["saved"] == 1
+    assert any(m["name"] == "isle.png" for m in resp.get_json()["maps"])
+    refused = client.post("/api/v2/admin/map-art/gone.png/layout", json=body, headers=WRITE)
+    assert refused.status_code == 422

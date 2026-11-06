@@ -396,15 +396,25 @@ in percent of the region's own picture, for where a place sits once you zoom in:
 }
 ```
 
-This changes the picture only, never your data. A place the file does not name stays where it is,
-and a place it does name cannot be dragged while that style is chosen, because the drag would save
-to the map's own spot.
+This changes the picture only, never your data. A place the file does not name stays where it is.
+
+You do not have to write the spots by hand. Choose the style, turn on **Drag places on the map**
+under MOVE PLACES in settings, and drag the places and the network names; open a region to place
+them on its own picture. **Save to map** writes the spots into the style's `.style.json` and leaves
+the rest of the file as it was. An admin can save; a read-only Atlas cannot, so a shared or demo
+map keeps the layout it was given. A style built into the image cannot be saved this way: copy its
+picture into `ATLAS_MAPS` under another name.
 
 A style can bring its own words too. `words` maps a word the Atlas uses to the one this picture
 uses, in the case it finds it: `{"realm": "kingdom", "realms": "kingdoms", "tripwires": "little birds"}`.
 Plain words only, up to 40 of them, and they change the Atlas's own labels, never a name in your
 data. A viewer who turns on **Use standard words** under THE MAP in settings gets standard words on
 every map instead. `"tripwire": "eye"` swaps the bird that marks a tripwire for an eye.
+
+A style can give a place a sigil. `logos` maps a place id to an icon the Atlas ships in
+`static/icons/` (`{"castle-on-the-hill": "wolf"}`): on this picture that place's marker takes the
+icon's shape, in the place's own colour, and its card shows the icon. An emblem a theme lists in
+`scenery_logos` belongs to the theme's own map and stands down on every other style.
 
 `"bright": true` tells the Atlas the picture is a light one. Names then sit on a dark plate, and the
 picture dims while the network layer is up or a place is split into its services.

@@ -849,16 +849,29 @@ body.depths #colophon { color: #3E5A52; }
   70% { transform: scale(2.1); opacity: 0; }
   100% { transform: scale(2.1); opacity: 0; }
 }
-/* The hypervisor node wears the sigil (the heart of the realm) instead of a dot */
-.mk[data-id="hypervisor"] .mk-dot { width: 20px; height: 20px; }
-.mk[data-id="hypervisor"] .mk-core {
+/* The hypervisor node wears the sigil (the heart of the realm) instead of a dot.
+   On the realm's own map only (owner, 2026-11-02: the sigil is the lab's); on a
+   map style, a place's sigil is whatever that style's `logos` gives it (.mk-sigil). */
+body:not(.on-style) .mk[data-id="hypervisor"] .mk-dot { width: 20px; height: 20px; }
+body:not(.on-style) .mk[data-id="hypervisor"] .mk-core {
   border-radius: 0; box-shadow: none;
   background: var(--mk-hue, var(--gilt-bright));
   filter: drop-shadow(0 0 5px var(--mk-hue, var(--gilt))) drop-shadow(0 0 12px var(--mk-glow, rgba(var(--gilt-rgb), 0.5)));
   -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23fff' d='M12 3 L6.5 13 L17.5 13 Z M6.5 13 L1 22.5 L12 22.5 Z M17.5 13 L12 22.5 L23 22.5 Z'/%3E%3C/svg%3E") center/contain no-repeat;
   mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23fff' d='M12 3 L6.5 13 L17.5 13 Z M6.5 13 L1 22.5 L12 22.5 Z M17.5 13 L12 22.5 L23 22.5 Z'/%3E%3C/svg%3E") center/contain no-repeat;
 }
-.mk[data-id="hypervisor"] .mk-ring { inset: -6px; border-radius: 4px; }
+body:not(.on-style) .mk[data-id="hypervisor"] .mk-ring { inset: -6px; border-radius: 4px; }
+/* a map style's sigil: world.js sets the emblem as the core's mask, inline, so its
+   address resolves against the page; the shape is the icon, the colour the place's */
+.mk.mk-sigil .mk-dot { width: 22px; height: 22px; }
+.mk.mk-sigil .mk-core {
+  border-radius: 0; box-shadow: none;
+  background: var(--mk-hue, var(--gilt-bright));
+  filter: drop-shadow(0 0 5px var(--mk-hue, var(--gilt))) drop-shadow(0 0 12px var(--mk-glow, rgba(var(--gilt-rgb), 0.5)));
+  -webkit-mask-position: center; -webkit-mask-size: contain; -webkit-mask-repeat: no-repeat;
+  mask-position: center; mask-size: contain; mask-repeat: no-repeat;
+}
+.mk.mk-sigil .mk-ring { inset: -6px; border-radius: 4px; }
 
 .mk:hover .mk-core, .mk.active .mk-core { transform: scale(1.45); }
 /* the marker wakes with a quick bounce as its label rises */
@@ -1203,6 +1216,9 @@ body.editing-map .mk { cursor: grab; }
 body.editing-map .mk .mk-dot { box-shadow: 0 0 0 2px rgba(var(--gilt-rgb), 0.7); }
 body.editing-map .mk.dragging { cursor: grabbing; z-index: 50; }
 body.editing-map .mk .mk-ring { animation: none; }
+/* on a map style the VLAN names are dragged too (world.js buildZoneLabels) */
+body.editing-map.on-style .zone-label { pointer-events: auto; cursor: grab; }
+body.editing-map.on-style .zone-label.dragging { cursor: grabbing; }
 /* THE CONTROL COLUMN (2026-08-15) — under ☰ at top-RIGHT, moved from top-left
    so one corner carries every control: menu on top, then ☁ ◈ ☾ 👁 + − reading
    down. It keeps the 2026-08-12 wins (a fixed home, no per-card measuring) and
@@ -4207,3 +4223,77 @@ body.style-bright #overlay.net-on .territory { fill-opacity: 0.16; stroke-opacit
 #embed-max-close:is(:hover, :focus-visible), #first-survey:is(:hover, :focus-visible) {
   box-shadow: 0 0 14px rgba(var(--gilt-rgb), var(--hover-glow-a));
 }
+
+/* ── THE DECK (v1.66.0 phone, v1.67.0 everywhere) ─────────────────────────
+   The Atlas without its map: the scene band over one scrolling column of the
+   Sky's and the Depths' charts. deck.js lifts the two sections out of the
+   stage into `#chart-deck` and puts them back; deck-model.js decides when.
+   On a phone it is the page. On a wider screen THE ATLAS puts the map away
+   and brings it back (owner, 2026-11-05). Everything that only steers the map
+   goes with the map: the zoom column, the network glyph, the sky / depths /
+   tripwire tools that hang off THE ATLAS, and the card's ⊖ (owner,
+   2026-11-05: no zoom, depths or network buttons). */
+#chart-deck { display: none; }
+body.deck #viewport, body.deck .zoom-stack, body.deck .atlas-tools, body.deck #btn-card-out { display: none; }
+body.deck #chart-deck {
+  display: block; position: fixed; inset: 0; z-index: 1;
+  overflow-y: auto; overscroll-behavior: contain;
+  /* the column scrolls BEHIND the band, so it starts below the crown */
+  padding: var(--crown-clear) 24px calc(32px + env(safe-area-inset-bottom, 0px));
+  background: var(--abyss);
+}
+/* the sections forget the map: no camera scale, no seat in map space
+   (camera.js still writes their `top`, which a static box ignores, and
+   re-measures it the moment they go back on the stage) */
+body.deck #chronicle, body.deck #abyss {
+  position: static; transform: none; width: auto; max-width: 1560px;
+  margin: 0 auto 24px; border-radius: 8px;
+}
+/* the Sky's charts are drawn for a bright field; on the map the sky behind
+   them is that field, here the section carries it */
+body.deck #chronicle {
+  background: linear-gradient(180deg, rgba(248,243,223,0.97), rgba(236,228,206,0.95));
+  border: 1px solid rgba(var(--gilt-rgb), 0.3);
+}
+body.deck #abyss {
+  background: radial-gradient(ellipse 90% 50% at 50% 0%, rgba(var(--depth-rgb), 0.10), transparent 75%), var(--surface);
+  border: 1px solid rgba(var(--depth-rgb), 0.2);
+}
+/* no map behind a frame to travel, so a frame never sleeps here */
+body.deck .chron-pane .chron-frame { pointer-events: auto; }
+body.deck .chron-pane::after { display: none; }
+/* the colophon rides at the column's foot (deck.js), in flow */
+body.deck #colophon { position: static; transform: none; margin: 4px 16px 0; text-align: center; }
+.deck-foot {
+  display: block; margin: 8px auto 0; width: max-content; padding: 10px 14px;
+  font-family: 'Cinzel', serif; font-size: 0.66rem; letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--text-dim); text-decoration: none;
+}
+.deck-foot:hover, .deck-foot:focus-visible { color: var(--gilt); }
+
+/* ── on a phone, the column is tightened for a thumb ── */
+/* THE ATLAS has nothing to do on a phone: there is no map to centre, bring
+   back or put away (owner, 2026-11-05), and a scene closes from its own band */
+body.phone .scene[data-scene="atlas"] { display: none; }
+body.phone #chart-deck { padding-left: 0; padding-right: 0; }
+body.phone #chronicle, body.phone #abyss { margin: 0 12px 16px; padding: 16px 10px 12px; }
+body.phone .chron-head, body.phone .abyss-head { font-size: 17px; letter-spacing: 0.22em; }
+body.phone .chron-sub, body.phone .abyss-sub { font-size: 13px; margin: 4px 0 12px; }
+/* a slide is sized to the phone, not to the window under the band */
+body.phone .chron-slide, body.phone .chron-slide.solo { height: clamp(300px, 58svh, 480px); }
+/* a group slide stacks its panes in one column and scrolls them inside its
+   own window, rather than squeezing two columns of figures into a phone's
+   width. It keeps the common height: a slide that grew would stretch every
+   slide in the carousel to match and leave the single figures half empty. */
+body.phone .chron-grid { grid-template-columns: 1fr; grid-auto-rows: 230px; overflow-y: auto; overscroll-behavior: contain; }
+/* the slide head on one line: the title gives way before the actions wrap */
+body.phone .chron-slide-head { gap: 8px; }
+body.phone .chron-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: 0.14em; }
+body.phone .chron-head-actions { gap: 10px; flex: none; }
+body.phone .chron-open { white-space: nowrap; }
+/* ‹ › sat on top of the figures at this width: a swipe pages instead, and the
+   dots get a hit area a thumb can find */
+body.phone .chron-arrow { display: none; }
+body.phone .chron-dots { gap: 2px; margin-top: 8px; }
+body.phone .chron-dot { width: 10px; height: 10px; box-sizing: content-box; padding: 8px; background-clip: content-box; }
+body.phone .chron-buttons, body.phone .abyss-buttons { gap: 8px; margin-top: 12px; }
