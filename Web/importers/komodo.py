@@ -7,7 +7,10 @@ fallback, and a server with neither lands with no address.
 
 from urllib.parse import quote
 
+import requests
+
 from . import review
+from .wire import TIMEOUT, ok, plural
 
 
 def fetch_snapshot(read):
@@ -48,3 +51,38 @@ def candidates(snapshot, base):
             f"komodo:server/{server}" if server in known else None,
             "A stack managed in Komodo. This opens it there.", detail=detail))
     return rows, []
+
+
+# ── the connection: what Settings shows, the test, and the survey ───────────
+SYSTEM = {
+    "key": "komodo", "name": "Komodo",
+    "about": "Servers and stacks.",
+    "credential": "Settings → API keys, for a user who only has read access.",
+    "fields": (("ATLAS_KOMODO_URL", "URL", "https://komodo.example:9120", "url"),
+               ("ATLAS_KOMODO_KEY", "API key", "", "secret"),
+               ("ATLAS_KOMODO_SECRET", "API secret", "", "secret"),
+               ("ATLAS_KOMODO_INSECURE", "Self-signed certificate", "", "insecure")),
+}
+
+
+def _read(base, creds, verify):
+    head = {"x-api-key": creds[0], "x-api-secret": creds[1], "content-type": "application/json"}
+
+    def read(kind):
+        r = requests.post(base + "/read", json={"type": kind, "params": {}}, headers=head,
+                          timeout=TIMEOUT, verify=verify, allow_redirects=False)
+        return ok(r, "Komodo").json()
+
+    return read
+
+
+def probe(base, creds, verify):
+    read = _read(base, creds, verify)
+    version = read("GetVersion")
+    version = version.get("version", "?") if isinstance(version, dict) else version
+    return (f"Komodo {version}: {plural(len(read('ListServers') or []), 'server')}, "
+            f"{plural(len(read('ListStacks') or []), 'stack')}")
+
+
+def survey(base, creds, verify):
+    return candidates(fetch_snapshot(_read(base, creds, verify)), base)

@@ -13,7 +13,10 @@ code yet: the fake responses in tests/test_connection_review.py are from the doc
 
 import time
 
+import requests
+
 from . import review
+from .wire import TIMEOUT, Refused, ok, plural
 
 #: Seconds to spend asking guests for addresses, across all of them.
 ADDRESS_BUDGET = 15
@@ -103,3 +106,36 @@ def candidates(snapshot):
         notes.append(f"{silent} running guest{'' if silent == 1 else 's'} did not report an address. "
                      "That takes the QEMU guest agent, and a role that may read it.")
     return rows, notes
+
+
+# ── the connection: what Settings shows, the test, and the survey ───────────
+SYSTEM = {
+    "key": "proxmox", "name": "Proxmox VE",
+    "about": "Nodes, virtual machines and containers.",
+    "credential": "Datacenter → Permissions → API Tokens. Give the token the PVEAuditor "
+                  "role on /. Paste it as user@pam!name=secret.",
+    "fields": (("ATLAS_PROXMOX_URL", "URL", "https://proxmox.example:8006", "url"),
+               ("ATLAS_PROXMOX_TOKEN", "API token", "", "secret"),
+               ("ATLAS_PROXMOX_INSECURE", "Self-signed certificate", "", "insecure")),
+}
+
+
+def _get(base, creds, verify):
+    head = {"Authorization": f"PVEAPIToken={creds[0]}"}
+    return lambda p: ok(requests.get(base + p, headers=head, timeout=TIMEOUT, verify=verify,
+                                     allow_redirects=False), "Proxmox").json().get("data")
+
+
+def probe(base, creds, verify):
+    get = _get(base, creds, verify)
+    version = (get("/api2/json/version") or {}).get("version", "?")
+    rows = get("/api2/json/cluster/resources") or []
+    if not rows:
+        raise Refused("Proxmox answered, but this token can see nothing. Give it PVEAuditor on /.")
+    nodes = sum(1 for r in rows if r.get("type") == "node")
+    guests = sum(1 for r in rows if r.get("type") in ("qemu", "lxc"))
+    return f"Proxmox VE {version}: {plural(nodes, 'node')}, {plural(guests, 'guest')}"
+
+
+def survey(base, creds, verify):
+    return candidates(fetch_snapshot(_get(base, creds, verify)))

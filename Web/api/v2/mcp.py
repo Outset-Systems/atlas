@@ -109,8 +109,8 @@ def _tools_call(msg_id, params, wrap):
         text, value = mcp_tools.call(name, params.get("arguments") or {})
     except mcp_tools.ToolError as e:
         return _rpc(msg_id, wrap({"content": [{"type": "text", "text": str(e)}], "isError": True}))
-    except (OSError, ValueError) as e:
-        log.warning("mcp: %s failed: %s", name, e)
+    except Exception as e:      # noqa: BLE001 — a hand-edited map can hold any shape; say so, do not 500
+        log.warning("mcp: %s failed: %s: %s", name, e.__class__.__name__, e)
         return _rpc(msg_id, wrap({"content": [{"type": "text", "text": "The map could not be read."}],
                                   "isError": True}))
     result = {"content": [{"type": "text", "text": text}], "isError": False}

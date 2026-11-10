@@ -294,6 +294,10 @@ def redact_for_groups(data):
     hidden = hidden_node_ids(d, groups)
     names = _hidden_words(d, groups)
     d["nodes"] = [n for n in d.get("nodes", []) if cleared(n, groups)]
+    # PROVENANCE: when and whether, not who. The change log is admin-only because
+    # it names people, and a stamp's `*_by` is the same names on another page.
+    import provenance
+    provenance.for_viewer(d["nodes"])
     # a rite's `host` is free text, so no node reference covers it: a rite that
     # names a hidden place in words goes as surely as one that points at it
     if names and isinstance(d.get("rites"), list):

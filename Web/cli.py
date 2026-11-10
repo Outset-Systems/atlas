@@ -33,6 +33,10 @@ def _store():
     return store
 
 
+#: Who a stamp names for a write made at the command line (provenance.py).
+ACTOR = "cli"
+
+
 def cmd_import_json(args):
     try:
         with open(args.path, encoding="utf-8") as f:
@@ -49,6 +53,11 @@ def cmd_import_json(args):
         return 3
     st = _store()
     with st.session_scope() as s:
+        # the stamp the Desk's writes get (provenance.py): a place this file adds
+        # starts unreviewed, unless the operator says the file's own stamps stand
+        import provenance
+        provenance.stamp(st.dump_labdata(s, args.site) or {}, data, None, ACTOR,
+                         "import-json", trust=args.keep_stamps)
         site = st.load_labdata(s, data, site_slug=args.site, site_name=args.name)
         print(f"imported {args.path} -> site {site.slug!r} v{site.data_version}: "
               f"{len(data.get('zones', []))} zones, {len(data.get('nodes', []))} nodes, "
@@ -96,7 +105,9 @@ def cmd_import_netbox(args):
 
     st = _store()
     with st.session_scope() as s:
+        before = st.dump_labdata(s, args.site)
         stats = sync(s, snapshot, site_slug=args.site, role_map=role_map)
+        st.restamp(s, args.site, before, ACTOR, "netbox")
         problems = validate(st.dump_labdata(s, args.site))
     print(f"netbox -> site {args.site!r}: " + ", ".join(f"{k} {v}" for k, v in stats.items() if v))
     for p in problems:
@@ -122,8 +133,10 @@ def cmd_import_nmap(args):
 
     st = _store()
     with st.session_scope() as s:
+        before = st.dump_labdata(s, args.site)
         stats = import_observations(s, hosts, site_slug=args.site,
                                     source=args.source, promote=args.promote)
+        st.restamp(s, args.site, before, ACTOR, args.source)
         drift = [
             f"{o.ip or o.mac} {('(' + o.hostname + ')') if o.hostname else ''}".strip()
             for o in undocumented(s, args.site)
@@ -153,7 +166,9 @@ def cmd_import_csv(args):
         return 3
     st = _store()
     with st.session_scope() as s:
+        before = st.dump_labdata(s, args.site)
         stats = import_rows(s, rows, site_slug=args.site, retire_missing=args.retire_missing)
+        st.restamp(s, args.site, before, ACTOR, "csv")
         problems = validate(st.dump_labdata(s, args.site))
     print(f"csv -> site {args.site!r}: {len(rows)} row(s), "
           + ", ".join(f"{k} {v}" for k, v in stats.items() if v))
@@ -389,6 +404,16 @@ def cmd_user_del(args):
     return 0
 
 
+def cmd_mcp(args):
+    """MCP over stdio: a pipe to this Atlas's own MCP endpoint (mcp_stdio.py)."""
+    token = os.environ.get("ATLAS_TOKEN", "").strip()
+    if args.token_file:
+        with open(args.token_file, encoding="utf-8") as fh:
+            token = fh.read().strip()
+    import mcp_stdio
+    return mcp_stdio.main(token)
+
+
 def main(argv=None):
     # The dataset (and validation messages) carry em-dashes and arrows; a
     # Windows console is cp1252 and would raise UnicodeEncodeError mid-export.
@@ -407,6 +432,9 @@ def main(argv=None):
     p.add_argument("--site", default="default", help="site slug (default: default)")
     p.add_argument("--name", help="site display name (default: dataset meta.title)")
     p.add_argument("--strict", action="store_true", help="refuse import on validation problems")
+    p.add_argument("--keep-stamps", action="store_true",
+                   help="restoring or moving a map: keep the file's own record of who charted "
+                        "and checked each place (otherwise every new place starts unchecked)")
     p.set_defaults(fn=cmd_import_json)
 
     p = sub.add_parser("import-netbox", help="read-only sync from a NetBox instance")
@@ -464,6 +492,11 @@ def main(argv=None):
     p.add_argument("--new-secret", action="store_true",
                    help="print a fresh random secret to store instead")
     p.set_defaults(fn=cmd_tripwires_key)
+
+    p = sub.add_parser("mcp", help="serve MCP over stdio, for a client that cannot send a "
+                                   "header (needs an API token in ATLAS_TOKEN)")
+    p.add_argument("--token-file", help="read the token from this file instead of ATLAS_TOKEN")
+    p.set_defaults(fn=cmd_mcp)
 
     p = sub.add_parser("initdb", help="create tables (dev; deployments use alembic)")
     p.set_defaults(fn=cmd_initdb)

@@ -515,3 +515,11 @@ body.pre #first-survey { display: none; }
    seated above Left/Top/Width/Height as their heading, not a fifth field. */
 .dsk-field-wide { grid-column: 1 / -1; }
 .dsk-field-wide > div { display: flex; gap: 8px; align-items: center; }
+
+/* ── checked by a person (provenance.py) ──────────────────────────────── */
+/* the same inset rule a maintenance window's state uses: warn = an import
+   wrote it and nobody has looked; quiet = charted before the record began */
+.dsk-table tr.dsk-p-unchecked td:first-child { box-shadow: inset 2px 0 0 var(--sem-warn); }
+.dsk-table tr.dsk-p-unknown td:first-child { box-shadow: inset 2px 0 0 var(--ink-soft); }
+.dsk-table tbody.dsk-only-pending tr[data-standing="checked"] { display: none; }
+.dsk-review-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }

@@ -14,7 +14,7 @@ from contextlib import contextmanager
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from .labdata import dump_labdata, get_site, load_labdata, site_stamp  # noqa: F401
+from .labdata import dump_labdata, get_site, load_labdata, restamp, site_stamp  # noqa: F401
 from .models import (  # noqa: F401
     Base,
     Node,

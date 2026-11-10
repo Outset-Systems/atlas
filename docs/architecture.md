@@ -46,7 +46,9 @@ Web/                  the app (this is what the image runs)
   templates/          index.html (the map), login.html
   static/             CSS, fonts, icons, map art, JavaScript modules
   cli.py              atlasctl: imports, exports, accounts, relay tokens
-  importers/          NetBox, nmap and CSV importers
+  importers/          one module per system an Atlas reads, plus nmap, CSV and lease parsers
+  connections.py      the registry of those systems
+  provenance.py       who charted a place, and whether a person has checked it
   tests/              pytest suite and node tests
 relay/                optional push agent that runs on another machine
 demo-lab/             the invented demo lab and its builder
@@ -140,7 +142,11 @@ per surface, each attaching routes to it:
 | `feeds.py` | `/signals`, `/rites`, `/events` |
 | `probes.py` | `/embeddable` (may this URL be framed?), `/whois` |
 | `beat.py` | `/rites/<key>/beat` (a job reports that it ran) |
-| `admin.py` | `/admin/*`: the editor's ops, revisions and revert, discovery, maintenance, CSV import, map images, Directory and Sources settings, the read-only Deployment view |
+| `admin.py` | `/admin/*`, the editor: ops, revisions and revert, discovery, maintenance, CSV import, map images. Also the admins-only gate and what the other admin modules share |
+| `admin_directory.py` | `/admin/auth*`: who may sign in and who is an admin |
+| `admin_sources.py` | `/admin/integrations*`, `/admin/deployment`: the live sources, a test of each, the read-only Deployment view |
+| `admin_connections.py` | `/admin/tokens*`, `/admin/connections*`: API tokens, and the systems an Atlas reads (test, review, import) |
+| `mcp.py`, `reference.py` | `/mcp` (the MCP endpoint) and `/openapi.json` (the API reference) |
 | `accounts_v2.py` | `/auth/*`: sign-in, MFA, password, users, audit (sessions only) |
 | `sites.py` | `/sites/*` (db backend only) |
 | `ingest_v2.py` | `/ingest/{signals,inventory,observed}` (db backend and `ATLAS_INGEST_ENABLED=1`) |
@@ -211,7 +217,8 @@ filtered per viewer before it is served, and responses vary on the viewer.
 (`store/models.py`: sites, zones, nodes and the rest), so one instance can
 hold several sites and accept pushes from relay agents. Schema changes are
 Alembic migrations in `migrations/versions/`. `cli.py import-json` and
-`export` move a dataset between the two backends, and a round-trip test
+`export` move a dataset between the two backends (`import-json --keep-stamps`
+keeps each place's record of who charted and checked it), and a round-trip test
 guards that export renders exactly like the file it came from.
 
 ### Other files under `/data`

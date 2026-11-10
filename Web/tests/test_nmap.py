@@ -173,3 +173,26 @@ if __name__ == "__main__":
             print(f"  FAIL {name}: {e}")
     print("PASS" if not failures else f"{failures} FAILURE(S)")
     sys.exit(1 if failures else 0)
+
+
+def test_a_promoted_stranger_is_stamped_unreviewed_and_the_rest_are_left_alone():
+    """The importers write rows, not a dataset, so they pass the store's stamp:
+    `restamp` gives what they added the same standing a Desk survey gets."""
+    from store import restamp
+    with _scope() as s:
+        _seed(s, "stamped")
+        before = dump_labdata(s, "stamped")
+        import_observations(s, parse_nmap_xml(SCAN), site_slug="stamped", promote=True)
+        moved = restamp(s, "stamped", before, "cli", "nmap")
+        after = dump_labdata(s, "stamped")
+        again = restamp(s, "stamped", after, "cli", "nmap")
+    was = {n["id"] for n in before["nodes"]}
+    new = [n for n in after["nodes"] if n["id"] not in was]
+    assert new and moved >= len(new)
+    for n in new:
+        mark = n["provenance"]
+        assert mark["reviewed"] is False and mark["source"] == "nmap" and mark["charted_by"] == "cli"
+    # a place the scan did not change says nothing new, and a second pass is a no-op
+    untouched = [n for n in after["nodes"] if n["id"] in was and "provenance" not in n]
+    assert untouched
+    assert again == 0

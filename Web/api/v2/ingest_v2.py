@@ -22,6 +22,9 @@ from . import bp
 
 log = logging.getLogger("atlas.api.v2")
 
+#: Who a stamp names for what a relay pushed in (provenance.py).
+RELAY = "relay"
+
 ingest_bp = Blueprint("ingest", __name__, url_prefix="/ingest")
 
 
@@ -69,7 +72,7 @@ def ingest_signals():
 def ingest_inventory():
     """Apply a NetBox-shaped snapshot the relay fetched on the customer LAN."""
     from importers.netbox import DEFAULT_ROLE_MAP, parse_role_map, sync
-    from store import session_scope
+    from store import dump_labdata, restamp, session_scope
 
     payload, err = ingest.body()
     if err:
@@ -93,8 +96,10 @@ def ingest_inventory():
         return jsonify({"error": str(e)}), 422
 
     with session_scope() as session:
+        before = dump_labdata(session, g.site_slug)
         stats = sync(session, snapshot, site_slug=g.site_slug,
                      role_map=role_map or DEFAULT_ROLE_MAP)
+        restamp(session, g.site_slug, before, RELAY, "netbox")
     log.info("ingest inventory: site=%s %s", g.site_slug, stats)
     return jsonify({"ok": True, "site": g.site_slug, "stats": stats})
 
@@ -103,7 +108,7 @@ def ingest_inventory():
 def ingest_observed():
     """Record a discovery sweep. Returns the drift count — the product's point."""
     from importers.nmap import import_observations
-    from store import session_scope
+    from store import dump_labdata, restamp, session_scope
 
     payload, err = ingest.body()
     if err:
@@ -119,8 +124,10 @@ def ingest_observed():
         return jsonify({"error": "source must be nmap, arp or relay"}), 422
 
     with session_scope() as session:
+        before = dump_labdata(session, g.site_slug)
         stats = import_observations(session, hosts, site_slug=g.site_slug,
                                     source=source, promote=bool(payload.get("promote")))
+        restamp(session, g.site_slug, before, RELAY, source)
     if stats["undocumented"]:
         log.warning("ingest observed: site=%s %d undocumented device(s)",
                     g.site_slug, stats["undocumented"])

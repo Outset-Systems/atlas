@@ -48,7 +48,7 @@ function setups(token) {
       note: 'For Ollama, LM Studio or your own harness: point any client that speaks MCP over HTTP at this address. Answers stay on your network.',
       text: `URL:    ${url}\nHeader: Authorization: Bearer ${shown}` },
     rest: { name: 'REST', lang: 'shell',
-      note: 'The same token reads lab-data, maps, signals, rites and events under api/v2.',
+      note: 'The same token reads lab-data, maps, signals, rites and events under api/v2. The reference is api/v2/openapi.json.',
       text: `curl -H "Authorization: Bearer ${shown}" ${readUrl()}` },
   };
 }

@@ -1,0 +1,1636 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Atlas API",
+    "version": "2.0.0",
+    "description": "What an API token can read from an Atlas. Tokens are issued in Settings, Connections, by an admin. A token is read-only, sees what a signed-in viewer with no groups sees, and reaches only the paths in this document. The rest of `/api/v2` belongs to the page and is not a contract.",
+    "license": {
+      "name": "MIT",
+      "identifier": "MIT"
+    }
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "This Atlas."
+    }
+  ],
+  "security": [
+    {
+      "token": []
+    }
+  ],
+  "paths": {
+    "/api/v2/lab-data": {
+      "get": {
+        "operationId": "getDataset",
+        "summary": "The whole map",
+        "description": "Places, zones, routes, addresses, racks, certificates and scheduled jobs, in one document. Send `If-None-Match` with the last `ETag` to get a 304 when nothing changed.",
+        "responses": {
+          "200": {
+            "description": "The dataset.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Dataset"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Atlas-Data-Problems": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "How many problems the dataset's own check found. Absent when none."
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooMany"
+          },
+          "500": {
+            "$ref": "#/components/responses/Unreadable"
+          },
+          "304": {
+            "description": "Unchanged since the `ETag` sent."
+          }
+        }
+      }
+    },
+    "/api/v2/maps": {
+      "get": {
+        "operationId": "listMaps",
+        "summary": "The pictures the map can be drawn on",
+        "description": "Each image, with where it seats the places a token may see.",
+        "responses": {
+          "200": {
+            "description": "The pictures.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Maps"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooMany"
+          }
+        }
+      }
+    },
+    "/api/v2/signals": {
+      "get": {
+        "operationId": "getSignals",
+        "summary": "Live health",
+        "description": "Never fails: a source that does not answer is listed as `silent` and its places have no entry. Reading it can record a state change in the event history.",
+        "responses": {
+          "200": {
+            "description": "The feed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Signals"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooMany"
+          }
+        }
+      }
+    },
+    "/api/v2/rites": {
+      "get": {
+        "operationId": "listScheduledJobs",
+        "summary": "Scheduled jobs and whether they ran",
+        "description": "Every charted job with its verdict.",
+        "responses": {
+          "200": {
+            "description": "The jobs.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rites"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooMany"
+          },
+          "500": {
+            "$ref": "#/components/responses/Unreadable"
+          }
+        }
+      }
+    },
+    "/api/v2/events": {
+      "get": {
+        "operationId": "listEvents",
+        "summary": "The event history",
+        "description": "State changes, newest first. Tripwire events are never sent to a token.",
+        "responses": {
+          "200": {
+            "description": "The events.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Events"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooMany"
+          }
+        },
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 100
+            },
+            "description": "How many to return. The history keeps 2,000."
+          },
+          {
+            "name": "unacked",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            },
+            "description": "`1` returns only events nobody has acknowledged."
+          }
+        ]
+      }
+    },
+    "/api/v2/openapi.json": {
+      "get": {
+        "operationId": "getReference",
+        "summary": "This document",
+        "description": "The same document as `docs/openapi.json` in the repository.",
+        "responses": {
+          "200": {
+            "description": "OpenAPI 3.1.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooMany"
+          }
+        }
+      }
+    },
+    "/api/v2/mcp": {
+      "post": {
+        "operationId": "mcp",
+        "summary": "The MCP endpoint",
+        "description": "Model Context Protocol over HTTP: JSON-RPC, tools only, read-only, no session and no stream. An MCP client speaks this for you; the tools are `atlas_overview`, `atlas_search`, `atlas_place`, `atlas_impact`, `atlas_health`, `atlas_events`, `atlas_missed_jobs`, `atlas_unreviewed`, `atlas_changes`. A token is the only credential it takes.",
+        "x-mcp-tools": [
+          "atlas_overview",
+          "atlas_search",
+          "atlas_place",
+          "atlas_impact",
+          "atlas_health",
+          "atlas_events",
+          "atlas_missed_jobs",
+          "atlas_unreviewed",
+          "atlas_changes"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RpcRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A JSON-RPC reply. A tool's failure is a reply, not a status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RpcReply"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "A notification was accepted. No body."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooMany"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "token": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "`Authorization: Bearer atl_...`"
+      }
+    },
+    "schemas": {
+      "Dataset": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "meta": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "title": {
+                "type": "string",
+                "description": "The name of this atlas."
+              },
+              "surveyed": {
+                "type": "string",
+                "description": "When the map was last walked, `YYYY-MM-DD`."
+              },
+              "art": {
+                "type": "string",
+                "description": "Which base render is in use — a note to your future self."
+              },
+              "map_image": {
+                "type": "string",
+                "description": "The picture the map is drawn on — a bare filename, e.g. `floor-2.webp`. Blank uses the render the Atlas ships with. Upload your own in the Desk. Places are positioned in fractions of the image, so swapping it keeps every marker where it is."
+              },
+              "tribute": {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                  "total_gb": {
+                    "type": "number",
+                    "description": "How much the hypervisor has in total."
+                  },
+                  "host_reserve_gb": {
+                    "type": "number",
+                    "description": "Held back for the hypervisor itself — free headroom is what's left."
+                  },
+                  "cpu_cores": {
+                    "type": "number",
+                    "description": "Physical cores on the hypervisor. Shown as the iron behind the vCPU count; blank simply hides that line."
+                  },
+                  "cpu_threads": {
+                    "type": "number",
+                    "description": "Logical processors — what a vCPU is actually assigned against. This is the denominator of the vCPU score, so a wrong number here reads as false headroom."
+                  }
+                },
+                "description": "The numbers RESOURCES divides among the vassals."
+              }
+            },
+            "description": "The atlas settings."
+          },
+          "zones": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "Short unique key, e.g. `monitoring`."
+                },
+                "name": {
+                  "type": "string",
+                  "description": "Display name, e.g. `Monitoring`."
+                },
+                "vlan": {
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean"
+                  ],
+                  "description": "VLAN id. Use `—` for a segment that isn't one."
+                },
+                "subnet": {
+                  "type": "string",
+                  "description": "The realm's primary prefix, e.g. `10.0.20.0/24`. Use `—` for a segment with no addressing."
+                },
+                "hue": {
+                  "type": "string",
+                  "description": "The realm's colour, used everywhere."
+                },
+                "net_hue": {
+                  "type": "string",
+                  "description": "Optional separate colour for this realm's routes on the network layer."
+                },
+                "lore": {
+                  "type": "string",
+                  "description": "The in-world line shown on its card."
+                },
+                "label_x": {
+                  "type": "number",
+                  "description": "Where the realm's name sits on the map, 0–100% across."
+                },
+                "label_y": {
+                  "type": "number",
+                  "description": "…and 0–100% down."
+                },
+                "hide_label": {
+                  "type": "boolean",
+                  "description": "Keep the realm, drop its name from the map."
+                },
+                "origin": {
+                  "type": "string",
+                  "description": "The system and record this came from, set by a connection import, e.g. `netbox:vlan:20`. A later review knows it by this."
+                }
+              }
+            },
+            "description": "The realms."
+          },
+          "regions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "Short unique key, e.g. `server-room`."
+                },
+                "name": {
+                  "type": "string",
+                  "description": "What the frame and the breadcrumb say, e.g. `Server room`."
+                },
+                "map": {
+                  "type": "string",
+                  "description": "The render to draw for this region: a file name from the gallery (upload it there first), e.g. `server-room.webp`."
+                },
+                "parent": {
+                  "type": "string",
+                  "description": "Blank = drawn on the main map. Otherwise the region whose map this one sits on. Names an entry in `regions`."
+                },
+                "x": {
+                  "type": "number",
+                  "description": "The rectangle on the parent map: its left edge, 0–100% across."
+                },
+                "y": {
+                  "type": "number",
+                  "description": "…its top edge, 0–100% down."
+                },
+                "w": {
+                  "type": "number",
+                  "description": "…its width, in % of the parent map's width."
+                },
+                "h": {
+                  "type": "number",
+                  "description": "…its height, in % of the parent map's height."
+                },
+                "auto": {
+                  "type": "boolean",
+                  "description": "Zooming in until the rectangle fills the window opens it. Off = only the frame's button opens it."
+                },
+                "places": {
+                  "description": "`{\"place-id\": {\"x\": 40, \"y\": 62}}` — where a place sits on THIS map. Leave blank when the detailed map is a true enlargement: places are then mapped through the rectangle. Drag them in edit mode to pin."
+                }
+              }
+            },
+            "description": "The regions."
+          },
+          "nodes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "Short unique key, e.g. `app-host`."
+                },
+                "name": {
+                  "type": "string",
+                  "description": "Display name. Shown in UPPERCASE."
+                },
+                "kind": {
+                  "type": "string",
+                  "examples": [
+                    "physical",
+                    "vm",
+                    "network",
+                    "unknown"
+                  ],
+                  "description": "physical = iron · vm = a guest · network = gear or the world beyond · unknown = found by a scan, not yet classified."
+                },
+                "zone": {
+                  "type": "string",
+                  "description": "Which realm it belongs to. Names an entry in `zones`."
+                },
+                "x": {
+                  "type": "number",
+                  "description": "Map position, 0–100% across."
+                },
+                "y": {
+                  "type": "number",
+                  "description": "Map position, 0–100% down. Past 100 puts it in the void below."
+                },
+                "role": {
+                  "type": "string",
+                  "description": "What it does, in a phrase. The part before `·` becomes its epigraph."
+                },
+                "lore": {
+                  "type": "string",
+                  "description": "A line about it, shown on its card."
+                },
+                "ip": {
+                  "type": "string",
+                  "description": "Its address, or `—` for none. A whole prefix is allowed for a place that *is* a network (Tailscale's 100.64.0.0/10)."
+                },
+                "hw": {
+                  "type": "string",
+                  "description": "The mono data line: OS · RAM · disks."
+                },
+                "hue": {
+                  "type": "string",
+                  "description": "Override the marker colour. Defaults to the realm's."
+                },
+                "shape": {
+                  "type": "string",
+                  "examples": [
+                    "diamond",
+                    "triangle"
+                  ],
+                  "description": "Marker shape. Blank = the default circle."
+                },
+                "parent": {
+                  "type": "string",
+                  "description": "Its host, if this is a vassal. Draws it as a child in TOPOLOGY, and means its alarms fold into the host's when the host goes dark. Names an entry in `nodes`."
+                },
+                "depends_on": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Places this one cannot work without. When one of them goes dark, this place's alarm folds into theirs instead of adding to the noise. Declare only real needs — a guessed dependency hides a real outage. Names an entry in `nodes`."
+                },
+                "children": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "The reverse of parent — rarely needed, kept for hand-edited maps. Names an entry in `nodes`."
+                },
+                "reaches": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Places it can talk to. Lights the reachability web. Names an entry in `nodes`."
+                },
+                "scroll": {
+                  "type": "string",
+                  "description": "Path to its documentation. Click-to-copy on the card."
+                },
+                "spark": {
+                  "type": "boolean",
+                  "description": "Draw a CPU + RAM gauge on its card (needs node-exporter and LAN HTTP)."
+                },
+                "planned": {
+                  "type": "boolean",
+                  "description": "Charted but not yet built — drawn faint."
+                },
+                "off_map": {
+                  "type": "boolean",
+                  "description": "Charted, but not drawn. Its services still list in THE INDEX; its marker and its routes are skipped. For a place that is decided but not yet laid."
+                },
+                "require_group": {
+                  "type": "string",
+                  "description": "Hide this place from anyone whose Hub groups don't include it."
+                },
+                "links": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "properties": {
+                      "label": {
+                        "type": "string",
+                        "description": "The service name, as shown on the card."
+                      },
+                      "url": {
+                        "type": "string",
+                        "description": "Where the service answers. http:// or https://"
+                      },
+                      "desc": {
+                        "type": "string",
+                        "description": "What this service is *for*, in a sentence or two. Shown on its own pane when you open it from a place's card. Leave it blank and the pane falls back to stating where it runs — which the epigraph already said."
+                      },
+                      "hue": {
+                        "type": "string",
+                        "description": "A colour for this service's dot. Defaults to the realm's."
+                      },
+                      "kuma": {
+                        "type": "string",
+                        "description": "The exact Uptime-Kuma monitor NAME that watches this service. Omit it and the service simply shows no health dot."
+                      },
+                      "container": {
+                        "type": "string",
+                        "description": "Docker container name, if cAdvisor scrapes it — powers 'view its metrics'."
+                      },
+                      "connects": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "description": "Places this one service talks to. Narrows the reach web in TOPOLOGY. Names an entry in `nodes`."
+                      },
+                      "path": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "description": "The hops its traffic actually takes, IN ORDER, starting from this place — e.g. `gateway, edge, traefik, pangolin, the-wild` for something reached from the internet. Drawn as a chain instead of a star, so the map can say *through*. Every consecutive pair must be a charted route, or the map is drawing a route that isn't there. Names an entry in `nodes`."
+                      },
+                      "open_in": {
+                        "type": "string",
+                        "examples": [
+                          "auto",
+                          "here",
+                          "tab"
+                        ],
+                        "description": "`auto` asks the service whether it allows framing and shows it in THE VIEWING GLASS when it does. `here` insists. `tab` never frames it — for anything that only works with the whole window."
+                      },
+                      "require_group": {
+                        "type": "string",
+                        "description": "Hide this service from anyone whose Hub groups don't include it."
+                      }
+                    }
+                  },
+                  "description": "Everything hosted here. Each becomes a card button and an Index row."
+                },
+                "monitors": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "The Uptime Kuma monitors that light this marker, by their exact name. The worst of them wins. A connection review fills this in; `signals.kuma` still works beside it."
+                },
+                "origin": {
+                  "type": "string",
+                  "description": "The system and record this came from, set by a connection import, e.g. `proxmox:qemu/101`. A later review knows it by this."
+                },
+                "provenance": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "description": "When this place was charted and whether a person has checked it. Written by the server at each change. Absent on a place charted before the map kept it: treat that as unknown. The names (who) are kept too and are not sent to a token.",
+                  "properties": {
+                    "charted_at": {
+                      "type": "string",
+                      "description": "UTC, as `2026-11-09T21:14:03Z`."
+                    },
+                    "source": {
+                      "type": "string",
+                      "examples": [
+                        "hand",
+                        "survey",
+                        "unifi"
+                      ],
+                      "description": "`hand`, or the import that wrote it."
+                    },
+                    "changed_at": {
+                      "type": "string",
+                      "description": "UTC, as `2026-11-09T21:14:03Z`."
+                    },
+                    "reviewed": {
+                      "type": "boolean",
+                      "description": "False until a person saves the place by hand."
+                    },
+                    "reviewed_at": {
+                      "type": "string",
+                      "description": "UTC, as `2026-11-09T21:14:03Z`."
+                    }
+                  }
+                }
+              }
+            },
+            "description": "The places."
+          },
+          "routes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "from": {
+                  "type": "string",
+                  "description": "Names an entry in `nodes`."
+                },
+                "to": {
+                  "type": "string",
+                  "description": "Names an entry in `nodes`."
+                },
+                "kind": {
+                  "type": "string",
+                  "examples": [
+                    "wan",
+                    "edge",
+                    "vlan",
+                    "mesh",
+                    "telemetry"
+                  ],
+                  "description": "wan = the world · edge = the way in · vlan = inside a realm · mesh = Tailscale · telemetry = a scrape path."
+                }
+              }
+            },
+            "description": "The routes."
+          },
+          "prefixes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "Short unique key, e.g. `admin-v4`."
+                },
+                "cidr": {
+                  "type": "string",
+                  "description": "Any prefix length, v4 or v6 — `10.0.20.0/24`, `10.0.0.0/8`, `fd00::/64`."
+                },
+                "zone": {
+                  "type": "string",
+                  "description": "The realm this prefix serves, if one. Names an entry in `zones`."
+                },
+                "name": {
+                  "type": "string",
+                  "description": "What it's for, e.g. `Admin VLAN`."
+                },
+                "role": {
+                  "type": "string",
+                  "examples": [
+                    "prefix",
+                    "container",
+                    "reserved"
+                  ],
+                  "description": "container = a supernet holding others · prefix = a real segment · reserved = set aside, never assigned."
+                },
+                "note": {
+                  "type": "string"
+                },
+                "ranges": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "properties": {
+                      "start": {
+                        "type": "string"
+                      },
+                      "end": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "examples": [
+                          "dhcp",
+                          "reserved"
+                        ]
+                      },
+                      "note": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "description": "DHCP pools and reserved ranges inside this prefix."
+                }
+              }
+            },
+            "description": "The prefixes."
+          },
+          "interfaces": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "device": {
+                  "type": "string",
+                  "description": "Which place owns this port. Names an entry in `nodes`."
+                },
+                "name": {
+                  "type": "string",
+                  "description": "Port name or number, e.g. `1` or `eth0`."
+                },
+                "kind": {
+                  "type": "string",
+                  "examples": [
+                    "rj45",
+                    "sfp",
+                    "sfp+",
+                    "console",
+                    "power",
+                    "virtual"
+                  ]
+                },
+                "vlan": {
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean"
+                  ],
+                  "description": "The VLAN on this port; blank for a trunk."
+                },
+                "poe": {
+                  "type": "boolean"
+                },
+                "speed": {
+                  "type": "string",
+                  "description": "e.g. `1G`, `2.5G`, `10G`."
+                },
+                "peer": {
+                  "type": "string",
+                  "description": "What's on the other end, in words."
+                },
+                "note": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The ports."
+          },
+          "racks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "Short unique key, e.g. `rack-a`."
+                },
+                "name": {
+                  "type": "string",
+                  "description": "The rack's own name, e.g. `Rack A`."
+                },
+                "location": {
+                  "type": "string",
+                  "description": "Where it stands, e.g. `Server room`. Blank uses the theme's default."
+                }
+              }
+            },
+            "description": "The racks."
+          },
+          "rack": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "rack": {
+                  "type": "string",
+                  "description": "Which rack it sits in. Blank means the first rack. Names an entry in `racks`."
+                },
+                "u": {
+                  "type": "string",
+                  "description": "`U7` for one unit, `U3–U4` for two. The Rearrange tool writes this too."
+                },
+                "name": {
+                  "type": "string",
+                  "description": "What sits here."
+                },
+                "size": {
+                  "type": "integer",
+                  "description": "How many U it occupies."
+                },
+                "node": {
+                  "type": "string",
+                  "description": "The place this vessel is, if it's charted on the map. Names an entry in `nodes`."
+                },
+                "desc": {
+                  "type": "string",
+                  "description": "What this slot holds, in your words. Shown in the RACKS pane for every vessel; for an uncharted one it also stands in for the role."
+                },
+                "kind": {
+                  "type": "string",
+                  "examples": [
+                    "auto",
+                    "compute",
+                    "forge",
+                    "gateway",
+                    "switch",
+                    "storage",
+                    "power",
+                    "enclosure",
+                    "patch"
+                  ],
+                  "description": "Which faceplate it wears. `auto` reads the name and Description."
+                },
+                "depth_mm": {
+                  "type": "integer",
+                  "description": "How deep it runs, for the 3D rack. Blank uses a typical depth for its kind."
+                }
+              }
+            },
+            "description": "The vessels."
+          },
+          "rack_rear": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "rack": {
+                  "type": "string",
+                  "description": "Which rack it hangs behind. Blank means the first rack. Names an entry in `racks`."
+                },
+                "name": {
+                  "type": "string"
+                },
+                "desc": {
+                  "type": "string"
+                },
+                "node": {
+                  "type": "string",
+                  "description": "Names an entry in `nodes`."
+                }
+              }
+            },
+            "description": "The rear fittings."
+          },
+          "vms": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "The charted place this vassal is. Must match a place id. Names an entry in `nodes`."
+                },
+                "host": {
+                  "type": "string",
+                  "description": "The hypervisor carrying it. Names an entry in `nodes`."
+                },
+                "vcpu": {
+                  "type": "integer"
+                },
+                "ram_gb": {
+                  "type": "number"
+                },
+                "demand_gb": {
+                  "type": "number",
+                  "description": "What it actually consumes — draws the fill inside its bar."
+                },
+                "disk_gb": {
+                  "type": "number"
+                },
+                "dynamic": {
+                  "type": "string",
+                  "description": "Dynamic-memory range, e.g. `4–12`."
+                },
+                "state": {
+                  "type": "string",
+                  "examples": [
+                    "on",
+                    "off"
+                  ]
+                }
+              }
+            },
+            "description": "The vassals."
+          },
+          "signals": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "kuma": {
+                "description": "`{\"Monitor Name\": \"place-id\"}` — ties a Kuma monitor to a marker."
+              },
+              "drift_ignore": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Kuma monitors you deliberately don't chart. Keeps the drift chip honest. ⚠ Matched EXACTLY against the monitor name — an entry with a note appended (`Checks [STALE: …]`) silences nothing, because no monitor is called that. Four such entries sat here doing nothing until 2026-08-09. Put the reason in the commit, not in the string. Charting a monitor on a link already clears it, so an entry for a charted monitor is redundant too."
+              }
+            },
+            "description": "Which monitor watches which place. Not the live feed."
+          },
+          "chronicle": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "title": {
+                  "type": "string"
+                },
+                "note": {
+                  "type": "string",
+                  "description": "The one-line caption on its button."
+                },
+                "url": {
+                  "type": "string",
+                  "description": "Where `open ›` (or the button) takes you. Optional since v1.36.0 — a native watching needs none."
+                },
+                "embed": {
+                  "type": "string",
+                  "description": "An embeddable URL — makes it a live inline panel."
+                },
+                "chart": {
+                  "type": "string",
+                  "description": "A key from the Atlas's own catalogue (`/api/v2/charts`) — the watching is drawn in the map's ink from Prometheus/Loki instead of framing Grafana. Blank = matched automatically when the embed URL names a panel the catalogue knows."
+                },
+                "range": {
+                  "type": "string",
+                  "description": "Grafana window override, e.g. `now-24h`."
+                },
+                "solo": {
+                  "type": "boolean",
+                  "description": "Render it as one panel, not a full board."
+                },
+                "about": {
+                  "type": "string",
+                  "description": "What am I looking at? Shown behind the ⓘ."
+                },
+                "pane_group": {
+                  "type": "string",
+                  "description": "Watchings with the same group name render together as ONE carousel slide — quarter-panes in a grid, titled by the group name. Blank = its own slide."
+                },
+                "open_in": {
+                  "type": "string",
+                  "examples": [
+                    "auto",
+                    "here",
+                    "tab"
+                  ],
+                  "description": "`auto` asks the dashboard whether it allows framing and shows it in THE VIEWING GLASS when it does. `here` insists. `tab` never frames it — for consoles that refuse the glass."
+                },
+                "broken": {
+                  "type": "boolean",
+                  "description": "Mark it dark and refuse to embed it — for a dashboard that isn't reporting."
+                }
+              }
+            },
+            "description": "The watchings."
+          },
+          "abyss": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "title": {
+                  "type": "string"
+                },
+                "note": {
+                  "type": "string"
+                },
+                "url": {
+                  "type": "string",
+                  "description": "An absolute URL, or a path this app serves like `report/security`. Optional since v1.36.0 — a native watching needs none."
+                },
+                "embed": {
+                  "type": "string"
+                },
+                "chart": {
+                  "type": "string",
+                  "description": "A key from `/api/v2/charts`; blank = matched from the embed URL."
+                },
+                "range": {
+                  "type": "string"
+                },
+                "solo": {
+                  "type": "boolean"
+                },
+                "whois": {
+                  "type": "boolean",
+                  "description": "Put the whois box beside this panel, so an address shown on it can be handed to the registries without leaving the map. Meant for a panel that lists addresses — TOP CLIENTS is the one it was built for."
+                },
+                "about": {
+                  "type": "string"
+                },
+                "pane_group": {
+                  "type": "string"
+                },
+                "open_in": {
+                  "type": "string",
+                  "examples": [
+                    "auto",
+                    "here",
+                    "tab"
+                  ]
+                },
+                "broken": {
+                  "type": "boolean"
+                }
+              }
+            },
+            "description": "The scryings."
+          },
+          "rites": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "cadence": {
+                  "type": "string",
+                  "examples": [
+                    "continuous",
+                    "daily",
+                    "weekly",
+                    "monthly",
+                    "parked"
+                  ]
+                },
+                "when": {
+                  "type": "string",
+                  "description": "When it turns, in words: `Sun 03:00 UTC`."
+                },
+                "host": {
+                  "type": "string",
+                  "description": "Where it runs."
+                },
+                "note": {
+                  "type": "string",
+                  "description": "What it does, in one line."
+                },
+                "key": {
+                  "type": "string",
+                  "description": "The name it reports under. Defaults to the slugified name — set this before renaming a rite, or its history detaches."
+                },
+                "expect_every": {
+                  "type": "string",
+                  "description": "How often it should actually turn: `24h`, `7d`, `15m`. Blank inherits the cadence (daily = 24h, weekly = 7d). This is what makes a missed turning visible."
+                },
+                "grace": {
+                  "type": "string",
+                  "description": "How late it may be before it counts as missed. Blank = a quarter of the interval, never under 15m."
+                },
+                "asks": {
+                  "type": "string",
+                  "description": "The place whose model this rite calls, if it calls one: the GPU box. Naming it puts the rite on that place's calendar. Names an entry in `nodes`."
+                },
+                "model": {
+                  "type": "string",
+                  "description": "What it asks for: `qwen3:14b · 32k`. Colours the lane — the heavy 30B model that never fit the card is drawn in the warning tone."
+                },
+                "at": {
+                  "type": "string",
+                  "description": "`13:45` to start then; `:35` for an hourly rite. Blank = no clock (on request, or a week after boot) — listed under the day, not drawn."
+                },
+                "days": {
+                  "type": "string",
+                  "description": "`Mon–Fri`, `Sun`, `weekdays`. Blank = every day."
+                },
+                "between": {
+                  "type": "string",
+                  "description": "For an hourly rite, the window it keeps: `13:00–01:00` (wraps past midnight). Blank = all day."
+                },
+                "hold": {
+                  "type": "integer",
+                  "description": "Minutes a run typically keeps the model busy — the width of its block. Blank = 10."
+                }
+              }
+            },
+            "description": "The rites."
+          },
+          "certs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "What it vouches for: `www.example.com`, `nas.corp.example`."
+                },
+                "kind": {
+                  "type": "string",
+                  "examples": [
+                    "tls",
+                    "ssh-host",
+                    "ca"
+                  ]
+                },
+                "issuer": {
+                  "type": "string",
+                  "description": "Who signed it: `Let's Encrypt`, `step-ca`, `the domain controller-CA`."
+                },
+                "host": {
+                  "type": "string",
+                  "description": "Where it is presented from."
+                },
+                "expires": {
+                  "type": "string",
+                  "description": "The day it lapses, ISO: `2026-09-02`."
+                },
+                "renews": {
+                  "type": "string",
+                  "description": "What renews it and when. Blank means a human does — which is the thing this section exists to make visible."
+                },
+                "note": {
+                  "type": "string",
+                  "description": "One line."
+                }
+              }
+            },
+            "description": "The certs."
+          }
+        },
+        "description": "The whole map. No field is promised present: a hand-edited dataset is served as it is, and keys the catalogue does not know are kept. Places a token may not see are removed, with everything that names them."
+      },
+      "Maps": {
+        "type": "object",
+        "properties": {
+          "maps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "The image's file name."
+                },
+                "label": {
+                  "type": "string"
+                },
+                "url": {
+                  "type": "string",
+                  "description": "Where the image is served."
+                },
+                "default": {
+                  "type": "boolean",
+                  "description": "The map's own picture."
+                },
+                "zoom": {
+                  "type": "boolean",
+                  "description": "Art a region zooms into, not a backdrop."
+                },
+                "bright": {
+                  "type": "boolean"
+                },
+                "theme": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "additionalProperties": true
+                },
+                "regions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                },
+                "places": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "description": "Where this picture seats each place, by id."
+                },
+                "zones": {
+                  "type": "object",
+                  "additionalProperties": true
+                },
+                "logos": {
+                  "type": "object",
+                  "additionalProperties": true
+                },
+                "words": {
+                  "type": "object",
+                  "additionalProperties": true
+                },
+                "tripwire": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "Signals": {
+        "type": "object",
+        "additionalProperties": true,
+        "description": "Live health, merged from every source this Atlas is pointed at. A place or service with no entry is unknown, not healthy.",
+        "properties": {
+          "generated": {
+            "type": "number",
+            "description": "When the feed was built, epoch seconds."
+          },
+          "cached": {
+            "type": "boolean",
+            "description": "Served from the 30 second cache."
+          },
+          "sources": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Each source by name: `ok`, or `silent` when it did not answer."
+          },
+          "nodes": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "state": {
+                  "type": "string",
+                  "examples": [
+                    "healthy",
+                    "degraded",
+                    "down",
+                    "slumbering",
+                    "maintenance"
+                  ]
+                }
+              }
+            },
+            "description": "Places by id."
+          },
+          "services": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "state": {
+                  "type": "string",
+                  "examples": [
+                    "healthy",
+                    "degraded",
+                    "down",
+                    "slumbering",
+                    "maintenance"
+                  ]
+                }
+              }
+            },
+            "description": "Services by monitor name."
+          },
+          "rites": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "state": {
+                  "type": "string",
+                  "examples": [
+                    "healthy",
+                    "degraded",
+                    "down",
+                    "slumbering",
+                    "maintenance"
+                  ]
+                }
+              }
+            },
+            "description": "Scheduled jobs that are late, missed or failed, by key."
+          },
+          "causes": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "For a place that is down because another is: which one."
+          },
+          "maintenance": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "repairs": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "metrics": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "drift": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "Rites": {
+        "type": "object",
+        "properties": {
+          "rites": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "A scheduled job as charted, with what actually happened to it.",
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "host": {
+                  "type": "string"
+                },
+                "cadence": {
+                  "type": "string",
+                  "examples": [
+                    "continuous",
+                    "daily",
+                    "weekly",
+                    "monthly",
+                    "parked"
+                  ]
+                },
+                "when": {
+                  "type": "string"
+                },
+                "verdict": {
+                  "type": "string",
+                  "examples": [
+                    "kept",
+                    "late",
+                    "missed",
+                    "failed",
+                    "awaited",
+                    "unwatched"
+                  ],
+                  "description": "`awaited`: watched, never reported. `unwatched`: no interval is expected of it."
+                },
+                "expect_every": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "description": "Seconds."
+                },
+                "grace": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "description": "Seconds."
+                },
+                "age_s": {
+                  "type": "number",
+                  "description": "Seconds since it last reported."
+                },
+                "last": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "description": "The last report: `at`, `status`, `note`, `source`, `duration_s`."
+                },
+                "runs": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "Events": {
+        "type": "object",
+        "properties": {
+          "events": {
+            "type": "array",
+            "description": "Newest first.",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "id": {
+                  "type": "integer"
+                },
+                "at": {
+                  "type": "string",
+                  "description": "When it was first observed, UTC."
+                },
+                "kind": {
+                  "type": "string",
+                  "description": "What changed state: a place, a service, a job."
+                },
+                "target": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "from": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "to": {
+                  "type": "string"
+                },
+                "gravity": {
+                  "type": "string",
+                  "examples": [
+                    "grave",
+                    "warn",
+                    "planned",
+                    "clear",
+                    "consequence"
+                  ]
+                },
+                "cause": {
+                  "type": "string",
+                  "description": "Present when another fault explains this one."
+                },
+                "ack": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "additionalProperties": true,
+                  "description": "Who acknowledged it and what they wrote, or null."
+                }
+              }
+            }
+          },
+          "counts": {
+            "type": "object",
+            "properties": {
+              "total": {
+                "type": "integer"
+              },
+              "unacked": {
+                "type": "integer"
+              },
+              "last_24h": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      },
+      "Refusal": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "Unreadable": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "RpcRequest": {
+        "type": "object",
+        "required": [
+          "jsonrpc",
+          "method"
+        ],
+        "properties": {
+          "jsonrpc": {
+            "const": "2.0"
+          },
+          "id": {
+            "type": [
+              "string",
+              "integer"
+            ]
+          },
+          "method": {
+            "type": "string",
+            "examples": [
+              "initialize",
+              "ping",
+              "tools/list",
+              "tools/call"
+            ]
+          },
+          "params": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "RpcReply": {
+        "type": "object",
+        "properties": {
+          "jsonrpc": {
+            "const": "2.0"
+          },
+          "id": {
+            "type": [
+              "string",
+              "integer",
+              "null"
+            ]
+          },
+          "result": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "integer"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "responses": {
+      "Unauthorized": {
+        "description": "No token, or one that is not valid or has expired.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Refusal"
+            }
+          }
+        }
+      },
+      "TooMany": {
+        "description": "More than 120 requests in a minute on this token.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Refusal"
+            }
+          }
+        },
+        "headers": {
+          "Retry-After": {
+            "schema": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "Unreadable": {
+        "description": "The dataset on disk could not be read.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Unreadable"
+            }
+          }
+        }
+      }
+    }
+  }
+}

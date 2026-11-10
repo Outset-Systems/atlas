@@ -63,6 +63,8 @@ READ_PATHS = frozenset({
     "/api/v2/signals",
     "/api/v2/rites",
     "/api/v2/events",
+    # the reference for the five above: static, and the same file as docs/openapi.json
+    "/api/v2/openapi.json",
 })
 
 _TOKEN = re.compile(r"^atl_([0-9a-f]{8})_[A-Za-z0-9_-]{32,64}$")

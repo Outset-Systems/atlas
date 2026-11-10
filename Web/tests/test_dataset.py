@@ -206,10 +206,20 @@ def test_a_save_touches_only_the_lines_it_changed(store, tmp_path):
                   "body": {"role": "changed · for the test"}}], actor="t")
     after = (tmp_path / "lab-data.json").read_text(encoding="utf-8")
 
-    before_lines, after_lines = original.split("\n"), after.split("\n")
-    changed = sum(1 for a, b in zip(before_lines, after_lines) if a != b)
-    assert len(before_lines) == len(after_lines), "line count must not move"
-    assert changed == 1, f"expected a one-line diff, got {changed}"
+    # The diff is the edited line and the place's own stamp (provenance.py), and
+    # nothing else: no reformatting, no reordering, no other place touched.
+    import difflib
+    diff = [d for d in difflib.unified_diff(original.split("\n"), after.split("\n"), lineterm="", n=0)
+            if d[:1] in "+-" and d[:3] not in ("+++", "---")]
+    removed = [d[1:].strip() for d in diff if d[0] == "-"]
+    added = [d[1:].strip() for d in diff if d[0] == "+"]
+    stamp = [a for a in added if not a.startswith('"role"') and not a.startswith('"links"')
+             and a not in ("],", "]")]
+    assert len([r for r in removed if r.startswith('"role"')]) == 1
+    assert len([a for a in added if a.startswith('"role"')]) == 1
+    assert stamp[0] == '"provenance": {' and stamp[-1] in ("}", "},"), stamp
+    assert all(s.startswith(('"changed_', '"reviewed', '"provenance"', "}")) for s in stamp), stamp
+    assert len(removed) <= 2 and len(added) <= len(stamp) + 2, diff
 
 
 def test_the_file_stays_lf_and_two_space_indented(store, tmp_path):

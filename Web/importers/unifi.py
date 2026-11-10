@@ -32,7 +32,10 @@ tests/test_unifi.py are shaped from those records.
 import ipaddress
 import re
 
+import requests
+
 from . import review
+from .wire import TIMEOUT, Refused, ok, plural
 from .netbox import _hue_of
 
 #: A site is a path segment, and only ever one.
@@ -222,3 +225,105 @@ def candidates(snapshot):
         notes.append(f"{wired + wireless} client{'' if wired + wireless == 1 else 's'} connected now "
                      f"({wired} wired, {wireless} wireless). A client that is off is not listed.")
     return rows, notes
+
+
+# ── the connection: what Settings shows, the test, and the survey ───────────
+SYSTEM = {
+    "key": "unifi", "name": "UniFi Network",
+    "about": "Devices, clients, networks and the ports and links between them.",
+    "credential": "Either an API key (UniFi OS: Settings → Control Plane → Integrations), "
+                  "made by an admin with the View Only role, or a local account with the "
+                  "View Only role and no MFA, for any controller. A console listens on 443, "
+                  "UniFi OS Server on 11443, the older Network Application on 8443.",
+    "fields": (("ATLAS_UNIFI_URL", "URL", "https://unifi.example", "url"),
+               ("ATLAS_UNIFI_SITE", "Site", "default", "text"),
+               ("ATLAS_UNIFI_API_KEY", "API key", "", "secret"),
+               ("ATLAS_UNIFI_USERNAME", "Or a local user", "", "secret"),   # half a credential, so write-only too
+               ("ATLAS_UNIFI_PASSWORD", "Its password", "", "secret"),
+               ("ATLAS_UNIFI_INSECURE", "Self-signed certificate", "", "insecure")),
+    # [site, key, user, password]: the key alone, or a user with a password
+    "ready": lambda c: bool(c[1] or (c[2] and c[3])),
+}
+
+
+class Controller:
+    """A read-only conversation with a UniFi controller: an API key on every call, or
+    one login, the reads and a logout. `get(path)` answers the `data` list."""
+
+    def __init__(self, base, creds, verify):
+        site, key, user, password = creds
+        self.base, self.verify, self.site = base, verify, site
+        self.head, self.cookies, self.prefix, self.out = {"Accept": "application/json"}, {}, "", None
+        if key:
+            # an API key exists only on UniFi OS, where the Network app sits under /proxy/network
+            self.head["X-API-KEY"] = key
+            self.prefix = "/proxy/network"
+            return
+        body = {"username": user, "password": password}
+        for login, prefix, logout in (("/api/auth/login", "/proxy/network", "/api/auth/logout"),
+                                      ("/api/login", "", "/api/logout")):
+            r = requests.post(base + login, json=body, headers=self.head, timeout=TIMEOUT,
+                              verify=verify, allow_redirects=False)
+            if r.status_code == 404:
+                continue                      # not this generation of controller
+            if r.status_code in (400, 401, 403):
+                raise Refused("UniFi refused the user name and password. A cloud account "
+                              "with MFA cannot sign in here: use a local account.")
+            ok(r, "UniFi")
+            jar = getattr(r, "cookies", None)
+            self.cookies = jar.get_dict() if hasattr(jar, "get_dict") else dict(jar or {})
+            token = r.headers.get("X-CSRF-Token") or r.headers.get("x-csrf-token")
+            if token:
+                self.head["X-CSRF-Token"] = token
+            self.prefix, self.out = prefix, logout
+            return
+        raise Refused("UniFi did not offer a sign-in at this address. Is it the controller's URL?")
+
+    def get(self, path):
+        r = requests.get(self.base + self.prefix + path, headers=self.head, cookies=self.cookies,
+                         timeout=TIMEOUT, verify=self.verify, allow_redirects=False)
+        body = ok(r, "UniFi").json()
+        if isinstance(body, dict) and (body.get("meta") or {}).get("rc") == "error":
+            raise Refused(f"UniFi said no: {(body.get('meta') or {}).get('msg') or 'an error'}.")
+        return body.get("data") if isinstance(body, dict) else body
+
+    def close(self):
+        if not self.out:
+            return
+        try:
+            requests.post(self.base + self.out, headers=self.head, cookies=self.cookies,
+                          timeout=TIMEOUT, verify=self.verify, allow_redirects=False)
+        except requests.exceptions.RequestException:
+            pass                               # the session times out on its own
+
+
+def _with_controller(base, creds, verify, ask):
+    try:
+        site_path(creds[0])
+    except ValueError as e:
+        raise Refused(str(e)) from e
+    conn = Controller(base, creds, verify)
+    try:
+        return ask(conn, creds[0] or DEFAULT_SITE)
+    finally:
+        conn.close()
+
+
+def probe(base, creds, verify):
+    def ask(conn, site):
+        sites = conn.get("/api/self/sites") or []
+        names = [s.get("name") for s in sites if isinstance(s, dict)]
+        if site not in names:
+            listed = ", ".join(f"{s.get('name')} ({s.get('desc')})" for s in sites[:6]
+                               if isinstance(s, dict)) or "none"
+            raise Refused(f"This controller has no site called {site}. It has: {listed}.")
+        devices = conn.get(f"/api/s/{site}/stat/device") or []
+        clients = conn.get(f"/api/s/{site}/stat/sta") or []
+        return (f"UniFi site {site}: {plural(len(devices), 'device')}, "
+                f"{plural(len(clients), 'client')} connected")
+    return _with_controller(base, creds, verify, ask)
+
+
+def survey(base, creds, verify):
+    return _with_controller(base, creds, verify,
+                            lambda conn, site: candidates(fetch_snapshot(conn.get, site)))

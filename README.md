@@ -8,6 +8,8 @@ Prometheus and Loki for the numbers.
 **[Try the live demo](https://atlas.example.com/demo/)** ·
 [Install](docs/install.md) ·
 [Configuration](docs/configuration.md) ·
+[API](docs/api.md) ·
+[AI agents](docs/mcp.md) ·
 [outset.systems/atlas](https://outset.systems/atlas/)
 
 [![Release](https://img.shields.io/github/v/release/Outset-Systems/atlas?include_prereleases&label=release)](https://github.com/Outset-Systems/atlas/releases)
@@ -82,8 +84,10 @@ Every name and address in these pictures is invented.
   when a viewer asks, which is on by default (`ATLAS_WHOIS=0` turns it off).
   Plain JavaScript, no build step.
 
-**Planned for v0.2:** NetBox integration (sync, beyond today's one-way
-command-line import) and 3D views of the main map (racks already have one).
+**Coming in v0.2:** a documented API and an MCP server, so scripts and AI
+agents can ask the map what is here, who charted it and whether a person has
+checked it, before they act. See [the API guide](docs/api.md) and
+[Atlas for AI agents](docs/mcp.md).
 
 ## Quickstart
 

@@ -506,3 +506,84 @@ def test_a_test_needs_an_admin_and_a_known_system(realm, admin):
     r = admin.post("/api/v2/admin/connections/test", headers=W,
                    json={"key": "proxmox", "settings": {"ATLAS_PROXMOX_URL": "file:///etc/passwd"}})
     assert r.status_code == 400
+
+
+# ── MCP over stdio: a pipe to the same endpoint ─────────────────────────────
+def _stdio(realm, raw, *messages):
+    import io
+
+    import mcp_stdio
+    out = io.StringIO()
+    lines = [m if isinstance(m, str) else json.dumps(m) for m in messages]
+    mcp_stdio.serve(realm.app.test_client(), raw, lines, out)
+    return [json.loads(line) for line in out.getvalue().splitlines()]
+
+
+def test_stdio_serves_both_eras_through_the_http_endpoint(realm, admin):
+    raw = issue(admin)
+    meta = {"io.modelcontextprotocol/protocolVersion": MODERN,
+            "io.modelcontextprotocol/clientCapabilities": {}}
+    replies = _stdio(
+        realm, raw,
+        {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-11-25"}},
+        {"jsonrpc": "2.0", "method": "notifications/initialized"},
+        "",
+        {"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
+        {"jsonrpc": "2.0", "id": 3, "method": "tools/call",
+         "params": {"name": "atlas_search", "arguments": {"query": "alpha"}, "_meta": meta}})
+    assert [r["id"] for r in replies] == [1, 2, 3]            # the notification said nothing
+    assert replies[0]["result"]["serverInfo"]["name"] == "atlas"
+    import mcp_tools
+    assert [t["name"] for t in replies[1]["result"]["tools"]] == [t["name"] for t in mcp_tools.TOOLS]
+    found = replies[2]["result"]["structuredContent"]["matches"]
+    assert [m["id"] for m in found if m["kind"] == "place"] == ["alpha"]
+
+
+def test_stdio_sees_no_more_than_the_token_does(realm, admin):
+    raw = issue(admin)
+    reply = _stdio(realm, raw, {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                                "params": {"name": "atlas_place", "arguments": {"place": "hidden"}}})[0]
+    assert reply["result"]["isError"] is True
+
+
+def test_stdio_with_a_bad_token_or_bad_line_answers_in_json_rpc(realm, admin):
+    bad = _stdio(realm, "atl_00000000_" + "x" * 40, {"jsonrpc": "2.0", "id": 7, "method": "tools/list"})[0]
+    assert bad["id"] == 7 and bad["error"]["code"] == -32001 and "not valid" in bad["error"]["message"]
+    raw = issue(admin)
+    junk = _stdio(realm, raw, "not json", "[1, 2]")
+    assert [r["error"]["code"] for r in junk] == [-32700, -32700]
+
+
+# ── the registry: one module per system, all the same shape ─────────────────
+def test_every_connection_is_one_module_with_the_same_three_names():
+    import connections
+    seen = set()
+    for module in connections.CONNECTORS:
+        system = module.SYSTEM
+        assert {"key", "name", "about", "credential", "fields"} <= set(system), module.__name__
+        assert module.__name__ == f"importers.{system['key']}"      # the file is named for the system
+        assert callable(module.probe) and callable(module.survey), module.__name__
+        kinds = [f[3] for f in system["fields"]]
+        assert kinds.count("url") == 1 and set(kinds) <= {"url", "secret", "text", "insecure"}
+        assert all(f[0].startswith("ATLAS_") for f in system["fields"])
+        assert system["key"] not in seen
+        seen.add(system["key"])
+    assert [s["key"] for s in connections.SYSTEMS] == [m.SYSTEM["key"] for m in connections.CONNECTORS]
+    assert all(connections.known(k) for k in seen)
+
+
+def test_stdio_survives_a_message_that_cannot_be_a_header(realm, admin):
+    raw = issue(admin)
+    meta = {"io.modelcontextprotocol/protocolVersion": MODERN}
+    replies = _stdio(realm, raw,
+                     {"jsonrpc": "2.0", "id": 1, "method": "a\nb", "params": {"_meta": meta}},
+                     {"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
+    assert [r["id"] for r in replies] == [1, 2]
+    assert "error" in replies[0] and "tools" in replies[1]["result"]
+
+
+def test_stdio_refuses_to_start_without_a_plausible_token(capsys):
+    import mcp_stdio
+    assert mcp_stdio.main("") == 2
+    assert mcp_stdio.main("atl_abc\nX-Evil: 1") == 2
+    assert mcp_stdio.main("not-a-token") == 2

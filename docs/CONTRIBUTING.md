@@ -172,6 +172,44 @@ review.
 - New behaviour needs a test. A bug fix needs a test that failed before.
 - Update the docs in the same pull request when behaviour or settings change.
 
+## Adding a connection
+
+A connection lets Atlas read a system you already run (Proxmox, UniFi, NetBox)
+and offer what it finds for review. Atlas never scans, and a connection never
+writes to the map on its own: it produces rows, an admin ticks the ones to
+keep, and those land as unreviewed places.
+
+One system is one module in `Web/importers/`, named for its key. Read
+`Web/importers/portainer.py` first: it is the smallest complete one. A module
+has three names, described in `Web/importers/wire.py`:
+
+- `SYSTEM`: the catalogue entry. Its key, its name, how to get a read-only
+  credential, and its fields. Settings draws the form from this.
+- `probe(base, creds, verify)`: one or two read-only calls. Returns a sentence
+  such as "Portainer: 2 environments, 5 stacks".
+- `survey(base, creds, verify)`: reads what the system knows and returns
+  `(candidates, notes)`. Build candidates with the helpers in
+  `Web/importers/review.py` (`place`, `service`, `zone`, `port`, `route`).
+
+Then:
+
+1. Add the module to `CONNECTORS` in `Web/connections.py`.
+2. Document each `ATLAS_*` setting in `docs/configuration.md`, or the
+   env-coverage check fails.
+3. Add tests against recorded or hand-built answers. No test may call a real
+   system. `Web/tests/test_unifi.py` shows the pattern.
+
+Rules every connection keeps:
+
+- Ask for the system's read-only kind of credential, and say which in
+  `SYSTEM["credential"]`.
+- Never follow a redirect: it would carry the credential somewhere else. Use
+  `wire.ok()`, which refuses one.
+- Use `wire.TIMEOUT` on every call.
+- Raise `wire.Refused` with a sentence the admin can act on.
+- If the system's API is unofficial, say so in the module's docstring and in
+  `docs/configuration.md`.
+
 ## Nothing personal, nothing borrowed
 
 The Atlas is a generic tool, and the repository must stay that way:

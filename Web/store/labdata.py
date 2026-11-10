@@ -184,6 +184,45 @@ def dump_labdata(session, site_slug="default"):
     return out
 
 
+def restamp(session, site_slug, before, actor, origin):
+    """Stamp what an importer just wrote straight into the tables.
+
+    The netbox, nmap and csv importers write rows, not a dataset, so they pass
+    `dataset.DatasetStore` and its stamp. Call this in the same session, with
+    the dump taken before the import: a place it added starts unreviewed and a
+    place it changed is marked changed (provenance.py). Returns how many
+    stamps moved.
+    """
+    import provenance
+    site = get_site(session, site_slug)
+    if site is None:
+        return 0
+    session.flush()
+    session.expire(site, ["zones", "nodes", "routes"])
+    after = dump_labdata(session, site_slug)
+    provenance.stamp(before or {}, after, None, actor, origin)
+    marks = {n["id"]: n.get(provenance.KEY) for n in after.get("nodes") or []
+             if isinstance(n.get("id"), str)}
+    moved = 0
+    for row in session.scalars(select(Node).where(Node.site_id == site.id)):
+        if row.slug not in marks:        # retired: not on the map, nothing to say
+            continue
+        extra = dict(row.extra_json or {})
+        want = marks[row.slug]
+        if extra.get(provenance.KEY) == want:
+            continue
+        if want is None:
+            extra.pop(provenance.KEY, None)
+        else:
+            extra[provenance.KEY] = want
+        row.extra_json = extra           # a new dict, so the JSON column sees the change
+        moved += 1
+    if moved:
+        session.flush()
+        session.expire(site, ["nodes"])
+    return moved
+
+
 def site_stamp(session, site_slug="default"):
     """(data_version, updated_at epoch) for cache/ETag — or None if no site."""
     site = get_site(session, site_slug)

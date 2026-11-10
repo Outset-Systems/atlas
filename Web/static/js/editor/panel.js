@@ -12,6 +12,7 @@ import { A, $, esc } from '../config.js';
 import { say } from '../words.js';
 import Editor, { EditorError } from './store.js';
 import { buildForm, makeEl as el } from './form.js';
+import { standing, sentence, waiting } from './standing.js';
 
 let root, sideEl, bodyEl, titleEl, subEl;
 let active = 'nodes';
@@ -160,6 +161,18 @@ function drawTable(key) {
       iconBtn('⧉', 'Duplicate', () => duplicate(key, entry)),
       iconBtn('✕', `Remove this ${section.singular}`, () => confirmDelete(key, entry, ref), 'warn'));
     tr.append(act);
+    if (key === 'nodes') {
+      // has a person checked this place? (the server's stamp, read back)
+      const state = standing(entry);
+      tr.dataset.standing = state;
+      tr.dataset.id = id;
+      tr.title = sentence(entry);
+      if (state !== 'checked') {
+        tr.classList.add(`dsk-p-${state}`);
+        act.prepend(iconBtn('✓', 'Mark as checked: you have looked at this and it is right',
+          () => markChecked([id])));
+      }
+    }
     if (entry.state) tr.classList.add(`dsk-w-${entry.state}`);
     if (section.id_field && overridden.has(id)) {
       tr.classList.add('dsk-overridden');
@@ -169,12 +182,84 @@ function drawTable(key) {
   });
 
   table.append(tbody);
+  if (key === 'nodes') {
+    const waitingFor = reviewNotice(entries, section, tbody);
+    if (waitingFor) bodyEl.append(waitingFor);
+  }
   bodyEl.append(table);
 
   search.addEventListener('input', () => {
     const q = search.value.trim().toLowerCase();
     for (const tr of tbody.children) tr.hidden = q && !tr.dataset.find.includes(q);
   });
+}
+
+/* ── checked by a person ──────────────────────────────────────────────── */
+
+/** The store takes 500 changes in one save. */
+const REVIEW_BATCH = 400;
+
+/** Say "I have looked at these and they are right". Nothing on a place changes
+    but its stamp, which the server writes (provenance.py). */
+async function markChecked(ids) {
+  let done = 0;
+  try {
+    for (let i = 0; i < ids.length; i += REVIEW_BATCH) {
+      const ops = ids.slice(i, i + REVIEW_BATCH).map((id) => ({ op: 'review', section: 'nodes', id }));
+      const result = await run(() => Editor.apply(ops, 'marked as checked'), false);
+      if (!result) return;          // someone else saved first: run() reloaded and redrew
+      done += ops.length;
+    }
+  } catch (err) {
+    A.showToast?.(err.message || 'That could not be saved.');
+    return;
+  }
+  A.showToast?.(done === 1 ? 'Marked as checked.' : `${done} marked as checked.`);
+  show('nodes');
+}
+
+/** The line above the places: how many nobody has checked, and the two ways on. */
+function reviewNotice(entries, section, tbody) {
+  const line = waiting(entries, section.plural);
+  if (!line) return null;
+  const box = el('div', 'dsk-notice dsk-notice-warn dsk-review');
+  box.append(el('div', 'dsk-review-text',
+    `${esc(line)} Open one and save it, press ✓ on its row, or mark several at once.`));
+  const only = el('button', 'dsk-btn', 'Show only these');
+  const all = el('button', 'dsk-btn', 'Mark the ones shown as checked');
+  only.addEventListener('click', () => {
+    const on = tbody.classList.toggle('dsk-only-pending');
+    only.textContent = on ? `Show every ${section.singular}` : 'Show only these';
+    disarm();
+  });
+  // Two presses: the first counts what is on screen and says so, the second writes.
+  let armed = null;
+  function disarm() {
+    armed = null;
+    all.textContent = 'Mark the ones shown as checked';
+    all.classList.remove('dsk-btn-go');
+  }
+  all.addEventListener('click', async () => {
+    if (armed) {
+      const ids = armed;
+      all.disabled = true;
+      await markChecked(ids);
+      all.disabled = false;
+      disarm();
+      return;
+    }
+    const ids = [...tbody.children]
+      .filter((tr) => !tr.hidden && tr.dataset.standing !== 'checked')
+      .map((tr) => tr.dataset.id);
+    if (!ids.length) return;
+    armed = ids;
+    all.textContent = `Yes, I have checked ${ids.length === 1 ? 'this one' : `these ${ids.length}`}`;
+    all.classList.add('dsk-btn-go');
+  });
+  const bar = el('div', 'dsk-review-bar');
+  bar.append(only, all);
+  box.append(bar);
+  return box;
 }
 
 function iconBtn(glyph, title, onClick, kind) {
@@ -201,6 +286,13 @@ function drawForm(key, entry, ref) {
       'Changing the position here will clear that override.', 'warn'));
   }
 
+  if (editing && key === 'nodes') {
+    // who charted it and whether anyone has checked it; Save is how you check it
+    const checked = standing(entry) === 'checked';
+    bodyEl.append(notice(
+      sentence(entry) + (checked ? '' : ' Saving it here, changed or not, marks it as checked.'),
+      checked ? 'info' : 'warn'));
+  }
   bodyEl.append(errors, form.el);
   if (key === 'regions') seatRegionView(form);
 
@@ -676,7 +768,7 @@ function drawDrafts(nodes, headline, caveat) {
     try {
       // One batch: either every discovered place lands or none does, so a
       // typo in the fourth doesn't leave three half-charted strangers.
-      await run(() => Editor.apply(ops, 'charted from a survey'));
+      await run(() => Editor.apply(ops, 'charted from a survey', 'survey'));
       show('nodes');
     } catch (err) {
       errors.append(problemList(err));

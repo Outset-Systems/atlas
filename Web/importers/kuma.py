@@ -14,7 +14,10 @@ line carries the monitor's name, type, URL, hostname and port.
 import re
 from urllib.parse import urlsplit
 
+import requests
+
 from . import review
+from .wire import TIMEOUT, Refused, ok, plural
 
 _LABEL = re.compile(r'(\w+)="((?:[^"\\]|\\.)*)"')
 #: Kuma writes an absent label as the word.
@@ -67,3 +70,36 @@ def candidates(monitors):
                                                                  _STATE.get(m["state"], "")) if b)))
     notes = [] if monitors else ["Kuma answered with no monitors."]
     return rows, notes
+
+
+# ── the connection: what Settings shows, the test, and the survey ───────────
+SYSTEM = {
+    "key": "kuma", "name": "Uptime Kuma",
+    "about": "Which monitor watches which place. The same address and key THE SOURCES uses.",
+    "credential": "Settings → API Keys. A key opens /metrics and nothing else: it cannot "
+                  "add, pause or delete a monitor.",
+    "fields": (("ATLAS_KUMA_URL", "URL", "http://kuma.example:3001", "url"),
+               ("ATLAS_KUMA_API_KEY", "API key", "", "secret"),
+               ("ATLAS_KUMA_INSECURE", "Self-signed certificate", "", "insecure")),
+}
+
+
+def metrics(base, creds, verify):
+    """The monitors, read from /metrics. Every other review borrows this, so a place
+    arrives with the monitors that watch it (`connections._with_monitors`)."""
+    # Kuma's /metrics is HTTP Basic: no user name, the key as the password
+    r = requests.get(base + "/metrics", auth=("", creds[0]), timeout=TIMEOUT, verify=verify,
+                     allow_redirects=False)
+    return parse_metrics(ok(r, "Uptime Kuma").text)
+
+
+def probe(base, creds, verify):
+    monitors = metrics(base, creds, verify)
+    if not monitors:
+        raise Refused("Kuma answered, but listed no monitors. Is that the key's own instance?")
+    up = sum(1 for m in monitors if m["state"] == 1)
+    return f"Uptime Kuma: {plural(len(monitors), 'monitor')}, {up} up"
+
+
+def survey(base, creds, verify):
+    return candidates(metrics(base, creds, verify))

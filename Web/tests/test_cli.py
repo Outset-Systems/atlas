@@ -27,11 +27,30 @@ assert cli.main([*DB, "initdb"]) == 0  # tables exist regardless of test order
 
 
 def test_initdb_import_export_round_trip():
-    assert cli.main([*DB, "import-json", "--site", "lab", GOLDEN_PATH]) == 0
+    # --keep-stamps: the file is the record, so nothing is added to it
+    assert cli.main([*DB, "import-json", "--site", "lab", "--keep-stamps", GOLDEN_PATH]) == 0
     out_path = os.path.join(TMP, "export.json")
     assert cli.main([*DB, "export", "--site", "lab", "-o", out_path]) == 0
     with open(out_path, encoding="utf-8") as f:
         assert json.load(f) == GOLDEN, "CLI round-trip diverged from source dataset"
+
+
+def test_a_plain_import_marks_each_new_place_unchecked_and_changes_nothing_else():
+    assert cli.main([*DB, "import-json", "--site", "stamped", GOLDEN_PATH]) == 0
+    out_path = os.path.join(TMP, "stamped.json")
+    assert cli.main([*DB, "export", "--site", "stamped", "-o", out_path]) == 0
+    with open(out_path, encoding="utf-8") as f:
+        out = json.load(f)
+    for node in out["nodes"]:
+        mark = node.pop("provenance")
+        assert mark["reviewed"] is False and mark["source"] == "import-json" and mark["charted_by"] == "cli"
+    assert out == GOLDEN
+    # the same file again adds nothing new: no place is re-charted or marked changed
+    assert cli.main([*DB, "import-json", "--site", "stamped", GOLDEN_PATH]) == 0
+    assert cli.main([*DB, "export", "--site", "stamped", "-o", out_path]) == 0
+    with open(out_path, encoding="utf-8") as f:
+        again = json.load(f)
+    assert all(n["provenance"]["charted_at"] == n["provenance"]["changed_at"] for n in again["nodes"])
 
 
 def test_sites_lists_the_site():

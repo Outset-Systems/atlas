@@ -209,6 +209,24 @@ knows with the saved settings, so save first, and lists it beside what the map a
 Nothing reaches the map until you tick it and press **Add to the map**. It runs when
 you press it and never in the background, so the map does not change under you.
 
+What you add arrives unreviewed. Each place is stamped with the system it came from, and
+stays marked as unchecked, to people and to API tokens alike, until someone checks it.
+
+To check a place, open it in the Desk and save it, or press ✓ on its row in the list of
+places. The list says how many places nobody has checked. **Show only these** narrows it
+to them, and **Mark the ones shown as checked** does every row on screen after a second
+press to confirm, so search first to check a group at a time. A map charted before Atlas
+kept this record starts with every place unchecked, and this is how to clear it.
+
+The command-line importers stamp what they write the same way: a place added by
+`cli.py import-nmap --promote`, `import-csv`, `import-netbox` or `import-json` starts
+unchecked. When you restore a backup or move a map between backends, add `--keep-stamps`
+to `import-json` so each place keeps the record the file holds.
+
+UniFi is read through the controller's unofficial API, the one its own app uses. Ubiquiti
+does not document it for outside use and can change it in any release, so this connection
+can stop returning data until Atlas catches up. Nothing it does changes your devices.
+
 | System | Places | Other |
 |---|---|---|
 | Proxmox VE | nodes, virtual machines, containers | a guest's host is set as its `parent` |
@@ -343,17 +361,23 @@ variables of its own. The web app does not read them.
 Settings → Connections issues tokens for scripts, local models and coding harnesses
 (admins only). A token is shown once and stored as a hash. It is read-only, it sees what
 a signed-in viewer with no groups sees, and it reaches only `lab-data`, `maps`, `signals`,
-`rites` and `events` under `/api/v2`, plus the MCP endpoint:
+`rites`, `events` and `openapi.json` under `/api/v2`, plus the MCP endpoint. [The API
+guide](api.md) has each path with an example, and [`openapi.json`](openapi.json) is the
+reference.
 
 ```
 POST /api/v2/mcp        Authorization: Bearer <token>
 ```
 
 The endpoint speaks MCP over HTTP, both the 2026-07-28 revision and the earlier
-`initialize` handshake, and offers five read-only tools: `atlas_overview`, `atlas_search`,
-`atlas_place`, `atlas_health` and `atlas_events`. Settings shows the setup for each client.
+`initialize` handshake, and offers nine read-only tools. [Atlas for AI agents](mcp.md) lists
+them and how an agent should read the answers. Settings shows the setup for each client.
 A cloud tool sends what it reads to its model's vendor, so a token handed to one takes
 this map off your network.
+
+A client that can only start a command gets the same endpoint over stdio:
+`docker exec -i atlas python cli.py mcp --token-file /data/agent.token`. Without
+`--token-file` the command reads the API token from `ATLAS_TOKEN`, which nothing else uses.
 
 If a proxy puts its own sign-in in front of the Atlas, point the tool at the Atlas directly:
 that proxy's login cannot be answered with a token.

@@ -87,8 +87,9 @@ export const Editor = {
   },
 
   /** Apply operations, then refresh both the editor's copy and the map's. */
-  async apply(ops, note = '') {
-    const result = await post('ops', { ops, expect: this.stamp, note });
+  async apply(ops, note = '', origin = '') {
+    // `origin` names an import ('survey'): what it writes starts unreviewed
+    const result = await post('ops', { ops, expect: this.stamp, note, origin });
     this.stamp = result.stamp;
     await this.reload();
     await A.refreshData?.();

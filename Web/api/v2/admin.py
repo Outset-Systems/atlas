@@ -19,7 +19,6 @@ what made six editors affordable.
 """
 
 import logging
-import os
 import time
 
 from flask import Blueprint, jsonify, request
@@ -179,11 +178,11 @@ def get_dataset():
 
 
 # ── Writes ───────────────────────────────────────────────────────────────────
-def _commit(ctx, ops, expect, note):
+def _commit(ctx, ops, expect, note, origin=None):
     """One batch through the store, or the error response a write route answers with.
     Returns (result, None) or (None, response)."""
     try:
-        result = ctx.store.apply(ops, actor=actor(), expect=expect, note=note)
+        result = ctx.store.apply(ops, actor=actor(), expect=expect, note=note, origin=origin)
     except ds.ConflictError as e:
         return None, _fail(e, 409)
     except ds.BusyError as e:
@@ -192,6 +191,11 @@ def _commit(ctx, ops, expect, note):
         return None, (resp, 503)
     except ds.RejectedError as e:
         return None, _fail(e, 422)
+    except (TypeError, AttributeError, KeyError) as e:
+        # a value of the wrong shape (an id that is a list, say) that the checks
+        # tripped over before they could name it: refused, and nothing was saved
+        log.warning("v2: malformed change refused: %s: %s", e.__class__.__name__, e)
+        return None, _fail(ds.RejectedError("that change holds a value of the wrong shape"), 422)
     except OSError as e:
         log.error("v2: dataset write failed: %s", e)
         return None, (jsonify({"error": f"could not save: {e}"}), 500)
@@ -225,8 +229,10 @@ def apply_ops():
     body = request.get_json(silent=True)
     if not isinstance(body, dict):
         return jsonify({"error": "expected {ops, expect}"}), 400
+    # `origin` lets the page say "these came from a survey": it can only lower
+    # the standing of what it writes (unreviewed), never raise it
     result, refused = _commit(atlas(), body.get("ops"), body.get("expect"),
-                              str(body.get("note") or "")[:200])
+                              str(body.get("note") or "")[:200], body.get("origin"))
     return refused or jsonify(result)
 
 
@@ -567,173 +573,10 @@ def map_art_delete(name):
     return jsonify({"ok": True, "images": mapart.available()})
 
 
-# ── THE DIRECTORY ────────────────────────────────────────────────────────────
-@admin_bp.route("/auth")
-def auth_settings():
-    import auth_config
-    import ldap_backend
-    return jsonify({
-        "settings": auth_config.effective(),
-        "sources": auth_config.sources(),
-        "allowed": list(auth_config.ALLOWED),
-        "mode": settings.auth_config().get("mode", ""),
-        "ldap_ready": ldap_backend.enabled(),
-        "backends": ldap_backend.backends(),
-        "local_admin_exists": _local_admin_exists(),
-    })
-
-
-@admin_bp.route("/auth/test", methods=["POST"])
-def auth_settings_test():
-    refusal = write_refusal()
-    if refusal:
-        return refusal
-    body = request.get_json(silent=True) or {}
-    proposed = body.get("settings") or {}
-    username = (body.get("username") or "").strip()
-    password = body.get("password") or ""
-    if not username or not password:
-        return jsonify({"ok": False, "error": "A name and password are needed to test a bind."}), 400
-    import auth_config
-    unknown = [k for k in proposed if k not in auth_config.ALLOWED]
-    if unknown:
-        return jsonify({"ok": False, "error": f"not a directory setting: {unknown[0]}"}), 400
-
-    import ldap_backend
-    overrides = {k: str(proposed.get(k, "") or "").strip() for k in auth_config.ALLOWED}
-    try:
-        ok, info = ldap_backend.authenticate(username, password, overrides=overrides)
-    except ValueError as e:            # ldaps:// enforcement, bad URL
-        return jsonify({"ok": False, "error": str(e)}), 400
-    except Exception as e:             # noqa: BLE001 — the directory is remote
-        log.warning("v2: directory test failed: %s", e)
-        return jsonify({"ok": False, "error": f"The directory did not answer: {e}"}), 200
-
-    info = info or {}
-    is_admin_result = bool(info.get("is_admin"))
-    if ok and is_admin_result:
-        _remember_ldap_admin_proof()           # the SHARED receipt (H5)
-    log.info("v2: directory test by %s: ok=%s admin=%s", actor(), bool(ok), is_admin_result)
-    return jsonify({"ok": bool(ok), "is_admin": is_admin_result,
-                    "groups": info.get("groups") or [],
-                    "display_name": info.get("display_name") or "",
-                    "error": "" if ok else (info.get("error") or "That account could not sign in.")})
-
-
-@admin_bp.route("/auth", methods=["POST"])
-def auth_settings_save():
-    refusal = write_refusal()
-    if refusal:
-        return refusal
-    import auth_config
-    proposed = (request.get_json(silent=True) or {}).get("settings") or {}
-    unknown = [k for k in proposed if k not in auth_config.ALLOWED]
-    if unknown:
-        return jsonify({"error": f"not a directory setting: {unknown[0]}"}), 400
-
-    def in_force(key):
-        return (str(proposed.get(key, "") or "").strip()
-                or os.environ.get(key, "") or "").strip()
-
-    backends = [b.strip().lower() for b in (in_force("ATLAS_AUTH_BACKENDS") or "local").split(",")
-                if b.strip()]
-    if not any(b in ("local", "ldap") for b in backends):
-        return jsonify({"error": "At least one sign-in backend (local or ldap) must stay enabled."}), 422
-    url = in_force("ATLAS_LDAP_URL")
-    if "ldap" in backends:
-        if not url or not in_force("ATLAS_LDAP_BASE_DN"):
-            return jsonify({"error": "The directory needs both a URL and a base DN."}), 422
-        if not url.lower().startswith("ldaps://"):
-            return jsonify({"error": "Only ldaps:// is accepted — a plaintext bind "
-                                     "would put every password on the wire."}), 422
-
-    if "local" not in backends and not _has_ldap_admin_proof():
-        return jsonify({
-            "error": "Test the directory with an admin account first. Saving a "
-                     "directory-only sign-in without proving an admin can get "
-                     "back in would lock this Atlas for everyone.",
-            "needs_proof": True,
-        }), 422
-    if "local" in backends and not _local_admin_exists() and not _has_ldap_admin_proof():
-        log.warning("v2: directory settings saved with no local admin present")
-
-    try:
-        effective = auth_config.save(proposed)
-    except (ValueError, OSError) as e:
-        return jsonify({"error": f"could not save: {e}"}), 500
-    log.info("v2: directory settings changed by %s", actor())
-    import ldap_backend
-    return jsonify({"ok": True, "settings": effective,
-                    "sources": auth_config.sources(),
-                    "backends": ldap_backend.backends(),
-                    "ldap_ready": ldap_backend.enabled()})
-
-
-# ── THE SOURCES — integration settings (v1.37.0) ─────────────────────────────
-def _hub_state():
-    """What the live hub is actually running, and how each source answered
-    last time — so the form shows the truth beside the settings."""
-    try:
-        hub = atlas().signals
-        feed = hub._cache or {}
-        return {"enabled": list(getattr(hub, "enabled", [])),
-                "last": dict(feed.get("sources") or {})}
-    except Exception:  # noqa: BLE001 — a form must never 500 over a status line
-        return {"enabled": [], "last": {}}
-
-
-def _probe(kind, url, key, path=None):
-    """Ask one source whether it is there, the way the Atlas will ask it.
-    Returns (ok, detail). Never raises — the answer is the point. `path` is
-    the decoy feed's roster path as typed (None = the one in force)."""
-    import requests
-    base = (url or "").rstrip("/")
-    if not base:
-        return False, "no URL to ask"
-    try:
-        if kind == "prometheus":
-            r = requests.get(base + "/-/ready", timeout=5)
-            r.raise_for_status()
-            q = requests.get(base + "/api/v1/query", params={"query": "count(up == 1)"}, timeout=5)
-            q.raise_for_status()
-            res = q.json().get("data", {}).get("result", [])
-            n = int(float(res[0]["value"][1])) if res else 0
-            return True, f"Prometheus is ready — {n} watchfire{'s' if n != 1 else ''} up"
-        if kind == "loki":
-            r = requests.get(base + "/ready", timeout=5)
-            r.raise_for_status()
-            return True, "Loki is ready"
-        if kind == "kuma":
-            r = requests.get(base + "/metrics", auth=("", key) if key else None, timeout=5)
-            if r.status_code == 401:
-                return False, "Kuma refused the key"
-            r.raise_for_status()
-            n = sum(1 for line in r.text.splitlines() if line.startswith("monitor_status{"))
-            return True, f"Kuma answers — {n} monitor{'s' if n != 1 else ''}"
-        if kind == "decoys":
-            import envnames
-            import integrations
-            header = envnames.env("ATLAS_DECOYS_KEY_HEADER")
-            # TRIPWIRES: ask where the adapter will ask (ATLAS_DECOYS_PATH)
-            r = requests.get(base + (path or integrations.decoys_path()),
-                             headers={header: key or ""}, timeout=5)
-            if r.status_code in (401, 403, 404):
-                return False, "the decoy feed did not admit that key"
-            r.raise_for_status()
-            stones = r.json().get("stones", {})
-            n = len(stones)
-            return True, f"the decoy feed answers — {n} decoy{'s' if n != 1 else ''} charted"
-        return False, f"unknown source {kind!r}"
-    except Exception as e:  # noqa: BLE001 — a remote that will not answer is the finding
-        return False, f"did not answer: {e.__class__.__name__}: {str(e)[:120]}"
-
-
-_PROBE_FIELDS = {"prometheus": ("ATLAS_PROM_URL", None),
-                 "loki": ("ATLAS_LOKI_URL", None),
-                 "kuma": ("ATLAS_KUMA_URL", "ATLAS_KUMA_API_KEY"),
-                 "decoys": ("ATLAS_DECOYS_URL", "ATLAS_DECOYS_KEY")}
-
-
+# ── Shared by the screens that reach outward ─────────────────────────────────
+# THE SOURCES and CONNECTIONS (admin_sources.py, admin_connections.py) both aim
+# requests at addresses an admin typed. The URL check, the rule about saved
+# secrets and the limiter are one copy, here.
 def _valid_url(value):
     from urllib.parse import urlparse
     try:
@@ -741,109 +584,6 @@ def _valid_url(value):
     except ValueError:
         return False
     return u.scheme in ("http", "https") and bool(u.netloc)
-
-
-@admin_bp.route("/integrations")
-def integrations_get():
-    import integrations
-    return jsonify({"settings": integrations.describe(),
-                    "allowed": list(integrations.ALLOWED),
-                    "groups": {k: list(v) for k, v in integrations.GROUPS.items()},
-                    "sources": list(integrations.SOURCES),
-                    "hub": _hub_state()})
-
-
-# ── THE DEPLOYMENT — every knob the app knows, read-only (v1.38.0) ───────────
-_SECRETISH = ("KEY", "SECRET", "PASSWORD", "TOKEN")
-
-
-def _known_env_names():
-    """Every environment variable settings.py (and the two secret readers)
-    consult, found by reading the source — so a knob added tomorrow shows up
-    without anyone remembering to register it."""
-    import glob as _glob
-    import re as _re
-    import integrations
-    import auth_config
-    import settings as _settings
-    names = set()
-    web = os.path.dirname(os.path.abspath(_settings.__file__))
-    pattern = _re.compile(r'"((?:ATLAS|PROMETHEUS)_[A-Z0-9_]+|HUB_URL)"')
-    for path in _glob.glob(os.path.join(web, "*.py")) + _glob.glob(os.path.join(web, "api", "**", "*.py"), recursive=True):
-        try:
-            with open(path, encoding="utf-8") as fh:
-                names |= set(pattern.findall(fh.read()))
-        except OSError:
-            pass
-    names |= set(integrations.ALLOWED)   # the runtime-settable ones live outside settings.py
-    names |= set(auth_config.ALLOWED)    # ldap_backend reads these, not settings.py
-    names |= {"ATLAS_AUTH_MODE", "ATLAS_HUB_SECRET", "ATLAS_HUB_SECRET_FILE",
-              "ATLAS_HUB_AUTH_HEADER", "ATLAS_ADMIN_GROUP", "ATLAS_THEME", "HUB_URL", "ATLAS_METRICS_TOKEN", "ATLAS_METRICS_TOKEN_FILE",
-              "ATLAS_KUMA_URL", "ATLAS_KUMA_API_KEY", "ATLAS_KUMA_API_KEY_FILE",
-              "ATLAS_DECOYS_URL", "ATLAS_DECOYS_KEY", "ATLAS_DECOYS_KEY_FILE",
-              "ATLAS_DECOYS_KEY_HEADER", "ATLAS_DECOYS_PATH",
-              "ATLAS_TRIPWIRES_WEBHOOK", "ATLAS_TRIPWIRES_SECRET", "ATLAS_TRIPWIRES_SECRET_FILE",
-              "ATLAS_TRIPWIRES_STATE",
-              "ATLAS_LOKI_URL", "ATLAS_INTEGRATIONS", "PROMETHEUS_MULTIPROC_DIR"}
-    return sorted(names)
-
-
-@admin_bp.route("/deployment")
-def deployment_view():
-    """What this instance is actually running with: each knob, the layer its
-    value came from (settings file / environment / default), and the value —
-    masked to set/unset for anything that looks like a secret. Read-only by
-    construction: there is no POST twin, and there must never be one (the
-    allow-lists in auth_config/integrations are the only writable knobs)."""
-    import auth_config
-    import integrations
-    layer = {"settings": "settings", "deployment": "environment", "unset": "default"}
-    stored = integrations.sources()
-    dir_stored, dir_values = auth_config.sources(), auth_config.effective()
-    from urllib.parse import urlsplit, urlunsplit
-    from flask import current_app
-
-    def shown(name, value, secret):
-        if secret:
-            return "set" if value else "unset"
-        # a URL that carries credentials (ATLAS_DB_URL is a DSN; a proxy URL
-        # could be one) shows its shape, never its password (review, 2026-09-03)
-        try:
-            u = urlsplit(value)
-            if u.password or u.username:
-                host = u.hostname or ""
-                if u.port:
-                    host += f":{u.port}"
-                return urlunsplit((u.scheme, f"{u.username or ''}:***@{host}", u.path, u.query, u.fragment))
-        except ValueError:
-            pass
-        return value
-
-    rows = []
-    for name in _known_env_names():
-        secret = any(tag in name for tag in _SECRETISH) or name in integrations.SECRETS
-        if name in integrations.ALLOWED:
-            value, source = integrations.get(name), layer[stored[name]]
-        elif name in auth_config.ALLOWED:
-            value, source = dir_values[name], layer[dir_stored[name]]
-        else:
-            # NAMES THAT CHANGED (v1.48.0): a deployment still on an old name
-            # is still configured; envnames reads either spelling
-            import envnames
-            value = os.environ.get(name, "") or (
-                (envnames.env(name) or "") if envnames.is_set(name) else "")
-            source = "environment" if value else "default"
-        rows.append({"name": name, "source": source, "secret": secret,
-                     "value": shown(name, value, secret)})
-    # `metrics` is what /metrics will actually DO: the registry came up AND a
-    # token is configured. A token with a registry that failed to start (the
-    # 09-03 uid case) is "off", not "on" — the first cut reported the token alone.
-    token_set = bool(os.environ.get("ATLAS_METRICS_TOKEN") or os.environ.get("ATLAS_METRICS_TOKEN_FILE"))
-    return jsonify({"version": settings.APP_VERSION, "mode": settings.auth_config().get("mode", ""),
-                    "metrics": bool(current_app.config.get("METRICS_ENABLED")) and token_set,
-                    "metrics_registry": bool(current_app.config.get("METRICS_ENABLED")),
-                    "metrics_token": token_set,
-                    "knobs": rows})
 
 
 def _secret_stays_home():
@@ -873,274 +613,11 @@ def _probe_allowed(who):
         return True
 
 
-@admin_bp.route("/integrations/test", methods=["POST"])
-def integrations_test():
-    """Probe ONE source with the values as typed (unsaved) — a blank key means
-    'the one in force', so a stored secret can be tested without retyping it, at
-    the address it was saved with and nowhere else."""
-    refusal = write_refusal()
-    if refusal:
-        return refusal
-    if not _probe_allowed(actor()):
-        return jsonify({"ok": False, "error": "Too many tests in a minute — wait a moment."}), 429
-    import integrations
-    body = request.get_json(silent=True) or {}
-    kind = str(body.get("kind") or "").strip().lower()
-    if kind not in _PROBE_FIELDS:
-        return jsonify({"ok": False, "error": f"not a source that can be tested: {kind!r}"}), 400
-    proposed = body.get("settings") or {}
-    unknown = [k for k in proposed if k not in integrations.ALLOWED]
-    if unknown:
-        return jsonify({"ok": False, "error": f"not an integration setting: {unknown[0]}"}), 400
-    url_key, secret_key = _PROBE_FIELDS[kind]
-    url = str(proposed.get(url_key) or "").strip() or integrations.get(url_key)
-    if not url:
-        return jsonify({"ok": False, "error": f"No URL is set for {kind} — nothing to ask."}), 400
-    if not _valid_url(url):
-        return jsonify({"ok": False, "error": "That is not an http(s) URL with a host."}), 400
-    if integrations.moves_secret(url_key, proposed):
-        return jsonify({"ok": False, "error": _secret_stays_home()}), 400
-    key = (str(proposed.get(secret_key) or "").strip() or integrations.get(secret_key)) if secret_key else None
-    path = None
-    if kind == "decoys":
-        path = str(proposed.get("ATLAS_DECOYS_PATH") or "").strip() or None
-        if path and not integrations.valid_decoys_path(path):
-            return jsonify({"ok": False, "error": "ATLAS_DECOYS_PATH must be an absolute "
-                                                  "path like /api/stones."}), 400
-    # the path only when one was typed: `_probe(kind, url, key)` stays the call shape
-    ok, detail = _probe(kind, url, key, path=path) if path else _probe(kind, url, key)
-    log.info("v2: source test %s by %s: ok=%s", kind, actor(), ok)
-    return jsonify({"ok": ok, "detail": detail if ok else "", "error": "" if ok else detail})
-
-
-@admin_bp.route("/integrations", methods=["POST"])
-def integrations_save():
-    refusal = write_refusal()
-    if refusal:
-        return refusal
-    import integrations
-    proposed = (request.get_json(silent=True) or {}).get("settings") or {}
-    unknown = [k for k in proposed if k not in integrations.ALLOWED]
-    if unknown:
-        return jsonify({"error": f"not an integration setting: {unknown[0]}"}), 400
-
-    def in_force(key):
-        given = proposed.get(key)
-        if key in integrations.SECRETS:
-            if given is None and key in proposed:
-                return ""                              # being cleared
-            return str(given or "").strip() or integrations.get(key)
-        if key in proposed:
-            return str(given or "").strip() or integrations._env(key)
-        return integrations.get(key)
-
-    for key in integrations.URLS:
-        value = in_force(key)
-        if value and not _valid_url(value):
-            return jsonify({"error": f"{key} must be an http(s) URL with a host."}), 422
-        # saving is how a blank secret would otherwise follow a URL to a new host
-        if integrations.moves_secret(key, proposed, saving=True):
-            return jsonify({"error": _secret_stays_home()}), 422
-    # THE GLASS (v1.38.2): the hosts list goes into a CSP header, where a `;`
-    # or a newline voids the whole value (embeddable.frame_src refuses it, but
-    # the form should say so before the save, not the log after); the two
-    # switches are '1', '0' or blank.
-    hosts = str(proposed.get("ATLAS_EMBED_HOSTS", "") or "")
-    if ";" in hosts or "\n" in hosts or "\r" in hosts:
-        return jsonify({"error": "ATLAS_EMBED_HOSTS is a space-separated list of origins — no ';' or newlines."}), 422
-    decoys_path = str(proposed.get("ATLAS_DECOYS_PATH", "") or "").strip()
-    if decoys_path and not integrations.valid_decoys_path(decoys_path):
-        return jsonify({"error": "ATLAS_DECOYS_PATH must be an absolute path on the decoy "
-                                 "feed, like /api/stones — no scheme, host, query or spaces."}), 422
-    site = str(proposed.get("ATLAS_UNIFI_SITE", "") or "").strip()
-    if site and not integrations.valid_unifi_site(site):
-        return jsonify({"error": "ATLAS_UNIFI_SITE is the site's short name from the controller's "
-                                 "address, like default: letters, digits, - and _ only."}), 422
-    for key in integrations.BOOLS:
-        if key in proposed and str(proposed.get(key) or "").strip() not in ("", "0", "1"):
-            return jsonify({"error": f"{key} must be 1, 0, or blank (the deployment's value)."}), 422
-    wanted = [s.strip().lower() for s in in_force("ATLAS_SIGNALS_SOURCES").split(",") if s.strip()]
-    bad = [s for s in wanted if s not in integrations.SOURCES]
-    if bad:
-        return jsonify({"error": f"unknown signals source: {bad[0]} — one of "
-                                 f"{', '.join(integrations.SOURCES)}"}), 422
-    for src, need in integrations.SOURCE_NEEDS.items():
-        if src in wanted and not in_force(need):
-            return jsonify({"error": f"the {src} source needs {need} before it can be enabled."}), 422
-    try:
-        described = integrations.save(proposed)
-    except Exception as e:  # noqa: BLE001 — ValueError, OSError, or a master key that will not open
-        log.warning("v2: integration settings save failed: %s", e)
-        return jsonify({"error": f"could not save: {e}"}), 500
-    log.info("v2: integration settings changed by %s", actor())
-    # the hub rebuilds on its next poll (it watches the file's mtime); make it now
-    try:
-        atlas().signals._refresh_adapters()
-    except Exception:  # noqa: BLE001 — the next poll will
-        pass
-    return jsonify({"ok": True, "settings": described, "hub": _hub_state()})
-
-
-# ── CONNECTIONS: API tokens and the systems an Atlas can be pointed at ───────
-
-@admin_bp.route("/tokens")
-def tokens_get():
-    import api_tokens
-    return jsonify({"tokens": api_tokens.listing(), "lifetimes": list(api_tokens.LIFETIMES),
-                    "default_days": api_tokens.DEFAULT_DAYS})
-
-
-@admin_bp.route("/tokens", methods=["POST"])
-def tokens_issue():
-    refusal = write_refusal()
-    if refusal:
-        return refusal
-    import api_tokens
-    body = request.get_json(silent=True) or {}
-    try:
-        record, raw = api_tokens.issue(body.get("name"), body.get("days"), actor())
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 422
-    # the only time the plaintext exists outside the caller's hands
-    resp = jsonify({"ok": True, "token": record, "secret": raw})
-    resp.headers["Cache-Control"] = "no-store"
-    return resp
-
-
-@admin_bp.route("/tokens/<tid>", methods=["DELETE"])
-def tokens_revoke(tid):
-    refusal = write_refusal()
-    if refusal:
-        return refusal
-    import api_tokens
-    if not api_tokens.revoke(tid, actor()):
-        return jsonify({"error": "no such token"}), 404
-    return jsonify({"ok": True})
-
-
-@admin_bp.route("/connections")
-def connections_get():
-    import connections
-    return jsonify({"systems": connections.describe()})
-
-
-@admin_bp.route("/connections/test", methods=["POST"])
-def connections_test():
-    """One read-only call to one system, with the values as typed. A blank secret
-    means the one in force, so a stored key can be tested without retyping it, at
-    the address it was saved with and nowhere else."""
-    refusal = write_refusal()
-    if refusal:
-        return refusal
-    if not _probe_allowed(actor()):
-        return jsonify({"ok": False, "error": "Too many tests in a minute. Wait a moment."}), 429
-    import connections
-    import integrations
-    body = request.get_json(silent=True) or {}
-    key = str(body.get("key") or "").strip().lower()
-    if not connections.known(key):
-        return jsonify({"ok": False, "error": "not a system that can be tested"}), 400
-    typed = body.get("settings") or {}
-
-    def value(name):
-        return str(typed.get(name) or "").strip() or integrations.get(name)
-
-    url = value(connections.field(key, "url")[0])
-    if url and not _valid_url(url):
-        return jsonify({"ok": False, "error": "That is not an http(s) URL with a host."}), 400
-    if integrations.moves_secret(connections.field(key, "url")[0], typed):
-        return jsonify({"ok": False, "error": _secret_stays_home()}), 400
-    creds = connections.credentials(key, value)
-    insecure = connections.insecure(
-        key, lambda name: typed[name] if name in typed else integrations.get(name))
-    ok, detail = connections.probe(key, url, creds, insecure)
-    log.info("v2: connection test %s by %s: ok=%s", key, actor(), ok)
-    return jsonify({"ok": ok, "detail": detail if ok else "", "error": "" if ok else detail})
-
-
-def _survey(key):
-    """What a system knows, read with its SAVED settings. A review takes nothing
-    typed, so there is no address here for `moves_secret` to judge."""
-    import connections
-    import integrations
-    url = integrations.get(connections.field(key, "url")[0])
-    creds = connections.credentials(key, integrations.get)
-    return connections.survey(key, url, creds, connections.insecure(key, integrations.get))
-
-
-def _review_key(body):
-    import connections
-    key = str(body.get("key") or "").strip().lower()
-    return key if connections.known(key) else None
-
-
-@admin_bp.route("/connections/review", methods=["POST"])
-def connections_review():
-    """Discovery and the results list, in one read-only pass. Nothing is written:
-    the rows go to a person, who ticks what to add."""
-    refusal = write_refusal()
-    if refusal:
-        return refusal
-    if not _probe_allowed(actor()):
-        return jsonify({"ok": False, "error": "Too many requests in a minute. Wait a moment."}), 429
-    key = _review_key(request.get_json(silent=True) or {})
-    if key is None:
-        return jsonify({"ok": False, "error": "not a system that can be reviewed"}), 400
-    from importers import review
-    ok, answer = _survey(key)
-    log.info("v2: connection review %s by %s: ok=%s", key, actor(), ok)
-    if not ok:
-        return jsonify({"ok": False, "error": answer})
-    try:
-        data, stamp = atlas().store.read()
-    except ds.RejectedError as e:
-        return _fail(e, 409)
-    candidates, notes = answer
-    return jsonify({"ok": True, "stamp": stamp, "notes": notes,
-                    "rows": review.annotate(candidates, data, discovery.ignored()),
-                    "zones": [{"id": z.get("id"), "name": z.get("name")}
-                              for z in data.get("zones", []) or []]})
-
-
-@admin_bp.route("/connections/import", methods=["POST"])
-def connections_import():
-    """Write the ticked rows through the store, so they land in the change log and
-    can be undone. The system is read again first: what is written is what it says
-    now, and a browser can only choose among those rows, not supply them."""
-    refusal = write_refusal()
-    if refusal:
-        return refusal
-    if not _probe_allowed(actor()):
-        return jsonify({"ok": False, "error": "Too many requests in a minute. Wait a moment."}), 429
-    body = request.get_json(silent=True) or {}
-    key, picks = _review_key(body), body.get("picks")
-    if key is None:
-        return jsonify({"ok": False, "error": "not a system that can be reviewed"}), 400
-    if not isinstance(picks, list) or not picks or not all(isinstance(p, str) for p in picks):
-        return jsonify({"ok": False, "error": "Nothing was ticked."}), 400
-    import connections
-    from importers import review
-    ok, answer = _survey(key)
-    if not ok:
-        return jsonify({"ok": False, "error": answer}), 502
-    ctx = atlas()
-    try:
-        data, stamp = ctx.store.read()
-    except ds.RejectedError as e:
-        return _fail(e, 409)
-    rows = review.annotate(answer[0], data, discovery.ignored())
-    name = connections.label(key)
-    fallback = str(body.get("zone") or "")
-    if fallback and fallback not in {z.get("id") for z in data.get("zones", []) or []}:
-        return jsonify({"ok": False, "error": "That realm is not on the map any more."}), 422
-    try:
-        ops = review.plan(rows, picks, data, label=name, fallback=fallback)
-    except review.PlanError as e:
-        return jsonify({"ok": False, "error": str(e), "problems": e.problems}), 422
-    # `expect` is the stamp the review was drawn from: a map that moved since is refused
-    result, refused = _commit(ctx, ops, body.get("expect") or stamp, f"imported from {name}")
-    log.info("v2: connection import %s by %s: %d picks, ok=%s", key, actor(), len(picks), not refused)
-    return refused or jsonify({**result, "added": len(picks)})
-
+# The other admin screens. They attach to `admin_bp`, so they are imported here,
+# after everything above exists and before the blueprint is registered. The
+# editor stays in this file; each of these is one screen of Settings.
+from . import admin_connections, admin_directory, admin_sources  # noqa: E402,F401
+# Names that lived in this module before the split and are still reached through it.
+from .admin_sources import _probe  # noqa: E402,F401
 
 bp.register_blueprint(admin_bp)

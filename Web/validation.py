@@ -40,8 +40,10 @@ def _ids(data, section_key):
     s = schema.get(section_key)
     if not s or not s["id_field"]:
         return set()
+    # an id that is a list or an object is not an identity; the field check says so,
+    # and this must not crash on it first (a set cannot hold one)
     return {e.get(s["id_field"]) for e in data.get(section_key, []) or []
-            if isinstance(e, dict)}
+            if isinstance(e, dict) and isinstance(e.get(s["id_field"]), (str, int, float, type(None)))}
 
 
 def _check_refs(problems, label, section_key, entry, known):

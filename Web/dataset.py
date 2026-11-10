@@ -37,6 +37,7 @@ import json
 import logging
 import os
 
+import provenance
 import schema
 import validation
 from filelock import LockTimeout, exclusive
@@ -48,7 +49,7 @@ log = logging.getLogger("atlas.data.dataset")
 # generations is ~2 MB — cheap enough that pruning is about tidiness, not space.
 KEEP_REVISIONS = 50
 
-OPS = ("upsert", "insert", "delete", "move")
+OPS = ("upsert", "insert", "delete", "move", provenance.REVIEW)
 
 
 class ConflictError(Exception):
@@ -260,6 +261,16 @@ def _apply_one(data, op):
     section_key = op.get("section")
     s = _section_or_reject(section_key)
 
+    if kind == provenance.REVIEW:
+        # "A person has checked this place." It changes nothing on the place;
+        # the stamp is written by provenance.stamp, which reads this same op.
+        if section_key != provenance.SECTION:
+            raise RejectedError(f"only a place can be marked as checked, not a {s['singular']}")
+        index = _find_index(data, section_key, op.get("id")) if isinstance(op.get("id"), str) else -1
+        if index < 0:
+            raise RejectedError(f"{section_key}: there is no such place to mark as checked")
+        return f"checked {s['noun']} {_entry_label(section_key, data[section_key][index], index)}"
+
     if s["kind"] == "object":
         if kind != "upsert":
             raise RejectedError(f"{section_key} can only be updated, not {kind}ed")
@@ -389,7 +400,7 @@ class DatasetStore:
         data = self._load()
         return data, content_stamp(data)
 
-    def apply(self, ops, actor="unknown", expect=None, note=""):
+    def apply(self, ops, actor="unknown", expect=None, note="", origin=None):
         """Validate and commit a batch. Returns a result dict for the client.
 
         `expect` is the stamp the client last read. When it doesn't match, the
@@ -407,11 +418,11 @@ class DatasetStore:
         """
         try:
             with exclusive(self._lock_path()):
-                return self._apply_locked(ops, actor, expect, note)
+                return self._apply_locked(ops, actor, expect, note, origin)
         except LockTimeout as e:
             raise BusyError(str(e)) from e
 
-    def _apply_locked(self, ops, actor, expect, note):
+    def _apply_locked(self, ops, actor, expect, note, origin=None):
         before = self._load()
         stamp = content_stamp(before)
         if expect and expect != stamp:
@@ -420,6 +431,9 @@ class DatasetStore:
                 "reload to see their version, then make your change again")
 
         after, summaries = apply_ops(before, ops)
+        # who charted what, and whether a person has checked it (provenance.py).
+        # `origin` is blank for a hand edit and names the import otherwise.
+        provenance.stamp(before, after, ops, actor, origin)
 
         problems = validation.validate(after, strict=True)
         if problems:
@@ -534,6 +548,7 @@ class DatasetStore:
             raise RejectedError(
                 [f"that older version no longer validates: {p}" for p in problems[:5]])
         before = self._load()
+        provenance.restamp_revert(before, snapshot, actor)
         summary = [f"reverted to the state before revision {revision_id}"]
         new_id = self._record(before, actor, summary,
                               [{"op": "revert", "to": int(revision_id)}], "")

@@ -332,8 +332,9 @@ export function buildForm(sectionKey, entry, opts = {}) {
   // the dataset is allowed to be richer than the form, and a field you cannot
   // see is a field you will accidentally destroy. A trimmed form hides fields
   // on purpose and never writes them, so it has nothing to warn about.
+  // (`provenance` is the server's own stamp: the panel says it in words instead.)
   const unmodelled = only ? [] : Object.keys(original).filter(
-    (k) => !section.fields.some((f) => f.name === k));
+    (k) => k !== 'provenance' && !section.fields.some((f) => f.name === k));
   if (unmodelled.length) {
     form.append(el('div', 'dsk-extra',
       `<span class="dsk-extra-head">also on file, kept as-is</span>` +

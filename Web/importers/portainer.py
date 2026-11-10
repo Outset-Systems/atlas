@@ -9,7 +9,10 @@ this code yet: the fake responses in tests/test_connection_review.py are from th
 
 from urllib.parse import quote
 
+import requests
+
 from . import review
+from .wire import TIMEOUT, ok, plural
 
 #: Environment types. 1 and 2 are Docker, 4 an edge agent; the rest are Kubernetes
 #: or Azure, which have no single host to name.
@@ -53,3 +56,31 @@ def candidates(snapshot, base):
             "A stack managed in Portainer. This opens it there.",
             detail="running" if stack.get("Status") == 1 else "stopped"))
     return rows, []
+
+
+# ── the connection: what Settings shows, the test, and the survey ───────────
+SYSTEM = {
+    "key": "portainer", "name": "Portainer",
+    "about": "Docker environments and stacks.",
+    "credential": "My account → Access tokens. A token has its owner's rights, so make it "
+                  "from a read-only user.",
+    "fields": (("ATLAS_PORTAINER_URL", "URL", "https://portainer.example:9443", "url"),
+               ("ATLAS_PORTAINER_KEY", "Access token", "", "secret"),
+               ("ATLAS_PORTAINER_INSECURE", "Self-signed certificate", "", "insecure")),
+}
+
+
+def _get(base, creds, verify):
+    head = {"X-API-Key": creds[0]}
+    return lambda p: ok(requests.get(base + p, headers=head, timeout=TIMEOUT, verify=verify,
+                                     allow_redirects=False), "Portainer").json()
+
+
+def probe(base, creds, verify):
+    get = _get(base, creds, verify)
+    return (f"Portainer: {plural(len(get('/api/endpoints') or []), 'environment')}, "
+            f"{plural(len(get('/api/stacks') or []), 'stack')}")
+
+
+def survey(base, creds, verify):
+    return candidates(fetch_snapshot(_get(base, creds, verify)), base)

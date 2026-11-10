@@ -19,6 +19,8 @@ resurrected if they return. All network fetching happens before any write.
 
 from datetime import datetime, timezone
 
+import requests
+
 from sqlalchemy import select
 
 from store.labdata import get_site
@@ -26,6 +28,7 @@ from store.layout import auto_layout
 from store.models import Node, Site, Zone
 
 from . import review
+from .wire import TIMEOUT, Refused, ok, plural
 from .common import UNCHARTED_SLUG, slugify, subnet_index, zone_for_ip
 from .common import ensure_uncharted as _ensure_uncharted
 # The HTTP half lives in netbox_client so the relay can import it without the
@@ -261,3 +264,37 @@ def sync(session, snapshot, site_slug, role_map=None):
     session.flush()
     session.expire(site, ["zones", "nodes", "routes"])
     return stats
+
+
+# ── the connection: what Settings shows, the test, and the survey ───────────
+SYSTEM = {
+    "key": "netbox", "name": "NetBox",
+    "about": "Devices, virtual machines and VLANs.",
+    "credential": "User menu → API tokens, with Write enabled turned off.",
+    "fields": (("ATLAS_NETBOX_URL", "URL", "https://netbox.example", "url"),
+               ("ATLAS_NETBOX_API_TOKEN", "API token", "", "secret"),
+               ("ATLAS_NETBOX_INSECURE", "Self-signed certificate", "", "insecure")),
+}
+
+
+def probe(base, creds, verify):
+    # v2 tokens (nbt_...) are bearer tokens; the older kind says `Token`.
+    scheme = "Bearer" if creds[0].startswith("nbt_") else "Token"
+    head = {"Authorization": f"{scheme} {creds[0]}", "Accept": "application/json"}
+    get = lambda p: ok(requests.get(base + p, headers=head, timeout=TIMEOUT,   # noqa: E731
+                                    verify=verify, allow_redirects=False), "NetBox").json()
+    version = get("/api/status/").get("netbox-version", "?")
+    return f"NetBox {version}: {plural(get('/api/dcim/devices/?limit=1').get('count', 0), 'device')}"
+
+
+def survey(base, creds, verify):
+    try:
+        return candidates(fetch_snapshot(NetBoxClient(base, creds[0], timeout=TIMEOUT * 2, verify=verify)))
+    except NetBoxError as e:
+        if e.status in (401, 403):
+            raise Refused("NetBox refused the credential.") from e
+        if 300 <= (e.status or 0) < 400:
+            raise Refused("NetBox redirected somewhere else. Use the final URL.") from e
+        if isinstance(e.__cause__, requests.exceptions.RequestException):
+            raise e.__cause__
+        raise Refused(f"NetBox answered, but not usefully: {e}") from e
