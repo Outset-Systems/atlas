@@ -199,6 +199,19 @@ export const Editor = {
   /** nmap XML or a DHCP lease file, told apart by the first character: XML
       opens with `<`, no lease format does. */
   fileSurvey(text) { return text.trimStart().startsWith('<') ? this.scan(text) : this.leases(text); },
+  /** the systems Settings → Connections knows, and which are set up */
+  connections() { return call('connections'); },
+  /** what a connected system sees on the network now, filed into the survey */
+  observe(key) { return post('discovery/connection', { key }); },
+  /** a connection's review: every row it offers, annotated against the map */
+  review(key) { return post('connections/review', { key }); },
+  /** land the picked rows of a review, then re-read the map */
+  async importPicks(key, picks, expect) {
+    const result = await post('connections/import', { key, picks, expect });
+    await this.reload();
+    await A.refreshData?.();
+    return result;
+  },
   decide(keys, action) { return post('discovery/decide', { keys, action }); },
   draftsFrom(keys) { return post('discovery/as-nodes', { keys }); },
   importCsv(csv) { return post('import/csv', { csv }); },

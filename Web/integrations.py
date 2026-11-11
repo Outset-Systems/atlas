@@ -117,10 +117,10 @@ URLS = ("ATLAS_PROM_URL", "ATLAS_LOKI_URL", "ATLAS_KUMA_URL", "ATLAS_DECOYS_URL"
         "ATLAS_PROXMOX_URL", "ATLAS_PORTAINER_URL", "ATLAS_KOMODO_URL", "ATLAS_NETBOX_URL",
         "ATLAS_UNIFI_URL")
 #: The signals sources the hub knows how to build (signals.build_hub_from_env).
-SOURCES = ("kuma", "prometheus", "deception", "relay", "static")
+SOURCES = ("kuma", "prometheus", "unifi", "deception", "relay", "static")
 #: Which source needs which URL in force before it can be enabled.
 SOURCE_NEEDS = {"kuma": "ATLAS_KUMA_URL", "prometheus": "ATLAS_PROM_URL",
-                "deception": "ATLAS_DECOYS_URL"}
+                "deception": "ATLAS_DECOYS_URL", "unifi": "ATLAS_UNIFI_URL"}
 
 #: Where the decoy feed serves its roster when nothing says otherwise.
 DECOYS_PATH_DEFAULT = "/api/stones"

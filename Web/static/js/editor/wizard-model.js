@@ -6,6 +6,34 @@
    group that no charted network already covers. A /24 is a guess, and the
    person sees it and can change it before anything is written. */
 
+/** From a connection's review, what a first import should bring: the networks,
+    the gear, the wired machines, and the ports and roads that stand on them.
+    Wireless clients are phones and speakers, so they are counted and left out.
+    `{ picks, networks, gear, wired, wireless }`. Pure. */
+export function firstImport(rows) {
+  // new only: a clash is two things or a move, and only a person can say which
+  const open = (r) => r.status === 'new' && !r.blocked;
+  const take = new Set();
+  const count = { networks: 0, gear: 0, wired: 0, wireless: 0 };
+  for (const r of rows || []) {
+    if (r.type === 'place' && r.group === 'Wireless clients') { if (open(r)) count.wireless += 1; continue; }
+    if (!open(r)) continue;
+    if (r.type === 'zone') { take.add(r.key); count.networks += 1; }
+    if (r.type === 'place') {
+      take.add(r.key);
+      count[r.group === 'Wired clients' ? 'wired' : 'gear'] += 1;
+    }
+  }
+  const standing = new Map((rows || []).map((r) => [r.key, r]));
+  const there = (key) => take.has(key) || standing.get(key)?.status === 'charted';
+  for (const r of rows || []) {
+    if (!open(r)) continue;
+    if (r.type === 'port' && there(r.parent)) take.add(r.key);
+    if (r.type === 'route' && there(r.parent) && there(r.peer)) take.add(r.key);
+  }
+  return { picks: [...take], ...count };
+}
+
 const octets = (ip) => {
   const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(String(ip ?? '').trim());
   if (!m) return null;

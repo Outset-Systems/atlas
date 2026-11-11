@@ -15,7 +15,7 @@ import { A, $, esc } from '../config.js';
 import Editor from './store.js';
 import { buildForm, makeEl as el } from './form.js';
 import { openDesk, reviewCsv, LEASE_HELP } from './panel.js';
-import { suggestNetworks } from './wizard-model.js';
+import { suggestNetworks, firstImport } from './wizard-model.js';
 
 let root, bodyEl, stepEl;
 let step = 0;
@@ -99,8 +99,12 @@ function stepStart() {
   bar(button('‹ Back', '', stepRealm), button('I will do this later', '', close));
 }
 
-/** The three ways in that read something you already have. */
+/** The ways in that read something you already have. */
 function importChoices(host, back) {
+  host.append(choice('⌂', 'Read your UniFi controller',
+    'Its networks with their own names, the gateway, switches and access points, and ' +
+    'every machine on a cable, with the port each one is on. Read-only, with a View Only key.',
+    () => fromController(back)));
   host.append(choice('◈', 'Scan your network',
     `Run <code>${esc(scanCommand())}</code> on a machine in that network, where you ` +
     'have the right to, and paste what it prints. The Atlas never probes the network ' +
@@ -237,6 +241,64 @@ function stepPlaces() {
   importChoices(choices, stepPlaces);
   bodyEl.append(choices);
   bar(button('‹ Back', '', stepZone), button('I will do this later', '', close));
+}
+
+/* ── a controller that already knows ──────────────────────────────────────
+   One review, read through the connection saved in Settings, and one import:
+   networks and the things on them land together, so nothing waits for a
+   network to exist. The credential is typed in one place only, Connections. */
+async function fromController(back) {
+  panel('Read your UniFi controller', 'Asking it what it knows.');
+  bar(button('‹ Back', '', back));
+  let systems = [];
+  try { ({ systems } = await Editor.connections()); } catch (err) { fail(err); return; }
+  const unifi = systems.find((s) => s.key === 'unifi');
+  if (!unifi?.configured) {
+    panel('Read your UniFi controller',
+      'The Atlas needs the controller\'s address and a read-only key first. Add them under ' +
+      'Settings, Connections, UniFi Network, press Test, then come back here.');
+    bar(button('‹ Back', '', back),
+      button('Open Settings ›', 'go', () => { close(); A.openSettings?.(); }));
+    return;
+  }
+  let view;
+  try { view = await Editor.review('unifi'); } catch (err) { fail(err); return; }
+  if (!view.ok) {
+    panel('Read your UniFi controller', 'The controller did not answer the way the Atlas expected.');
+    bodyEl.append(el('div', 'dsk-notice dsk-notice-bad', esc(view.error || 'No answer.')));
+    bar(button('‹ Back', '', back),
+      button('Open Settings ›', '', () => { close(); A.openSettings?.(); }));
+    return;
+  }
+  const found = firstImport(view.rows);
+  const n = (count, one, many) => `${count} ${count === 1 ? one : many}`;
+  panel('What your controller knows',
+    'These land together, each marked as not yet checked by a person. Anything can be ' +
+    'renamed, moved or removed afterwards.');
+  const list = el('div', 'dsk-notice',
+    [n(found.networks, 'network', 'networks'), n(found.gear, 'UniFi device', 'UniFi devices'),
+     n(found.wired, 'machine on a cable', 'machines on a cable')].map(esc).join(' · '));
+  bodyEl.append(list);
+  for (const note of view.notes || []) bodyEl.append(el('div', 'dsk-notice', esc(note)));
+  if (found.wireless) {
+    bodyEl.append(el('div', 'dsk-notice',
+      esc(`${n(found.wireless, 'Wi-Fi client is', 'Wi-Fi clients are')} left out: phones and speakers ` +
+          'would fill the map. Add any you want from Settings, Connections, Review.')));
+  }
+  if (!found.picks.length) {
+    bodyEl.append(el('div', 'dsk-notice', 'Everything the controller lists is already on the map.'));
+    bar(button('‹ Back', '', back), button('Done', 'go', close));
+    return;
+  }
+  bar(button('‹ Back', '', back),
+    button('Add these ›', 'go', async () => {
+      try {
+        await Editor.importPicks('unifi', found.picks, view.stamp);
+        close();
+        A.showToast?.('Charted from UniFi. Check each place in the map editor.');
+        await openDesk('nodes');
+      } catch (err) { fail(err); }
+    }));
 }
 
 function choice(glyph, title, blurb, onClick) {

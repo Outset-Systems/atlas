@@ -141,6 +141,33 @@ def connections_review():
                               for z in data.get("zones", []) or []]})
 
 
+@admin_bp.route("/discovery/connection", methods=["POST"])
+def discovery_connection():
+    """What a connected system sees on the network now, filed into THE SURVEY
+    beside a scan and a lease file. Saved settings only, so there is no address
+    here for a stored credential to be sent to. Nothing is charted."""
+    refusal = write_refusal()
+    if refusal:
+        return refusal
+    if not _probe_allowed(actor()):
+        return jsonify({"ok": False, "error": "Too many requests in a minute. Wait a moment."}), 429
+    import connections
+    import integrations
+    key = str((request.get_json(silent=True) or {}).get("key") or "").strip().lower()
+    if not connections.observes(key):
+        return jsonify({"ok": False, "error": "not a system that can be read for the survey"}), 400
+    url = integrations.get(connections.field(key, "url")[0])
+    creds = connections.credentials(key, integrations.get)
+    ok, answer = connections.observe(key, url, creds, connections.insecure(key, integrations.get))
+    log.info("v2: survey from %s by %s: ok=%s", key, actor(), ok)
+    if not ok:
+        return jsonify({"ok": False, "error": answer})
+    hosts, note = answer
+    new = discovery.record(hosts, atlas().backend, atlas().site)
+    return jsonify({"ok": True, "source": connections.label(key), "seen": len(hosts), "new": new,
+                    "note": note})
+
+
 @admin_bp.route("/connections/import", methods=["POST"])
 def connections_import():
     """Write the ticked rows through the store, so they land in the change log and

@@ -68,8 +68,9 @@ Every name and address in these pictures is invented.
   place your markers on it. The Atlas speaks in lore (rites, realms, annals) or,
   with one setting, in standard words, and a style can bring words of its own.
 - **Edit in the browser.** A guided first setup and forms for every field.
-  Fill the map from a CSV device list, an nmap sweep or your router's DHCP
-  leases (ISC, dnsmasq, Kea, Windows Server). A sweep or leases device arrives
+  Fill the map from a UniFi controller (its networks, gear, ports and the
+  machines on them, in one import), a CSV device list, an nmap sweep or your
+  router's DHCP leases (ISC, dnsmasq, Kea, Windows Server). A sweep or leases device arrives
   with a suggested type from its maker or its name, for you to check; a CSV
   row takes the type you gave it, `physical` if you gave none. The Atlas never
   scans the network itself. On the `db` backend, NetBox and nmap importers on

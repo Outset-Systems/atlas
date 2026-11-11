@@ -616,6 +616,28 @@ async function drawSurvey() {
     `where you already have the rights, or copy your router's DHCP leases, and hand it ` +
     `the result.</span>`));
 
+  // a connected system that can say what is on the network: one press, no paste
+  let observers = [];
+  try {
+    observers = (await Editor.connections()).systems.filter((s) => s.observes && s.configured);
+  } catch { /* not an admin of Connections, or it did not load: the paste box still works */ }
+  for (const sys of observers) {
+    const read = el('button', 'dsk-btn', `Read ${esc(sys.name)}`);
+    read.title = 'Everything connected now, filed here beside a scan. Nothing is charted.';
+    read.addEventListener('click', async () => {
+      read.disabled = true;
+      try {
+        const res = await Editor.observe(sys.key);
+        if (!res.ok) throw new Error(res.error || 'It did not answer.');
+        A.showToast?.(`${res.seen} seen by ${res.source} · ${res.new} new to the survey.`);
+        show('survey');
+      } catch (err) {
+        bodyEl.append(problemList(err));
+      } finally { read.disabled = false; }
+    });
+    bodyEl.append(read);
+  }
+
   const paste = el('details', 'dsk-drop');
   paste.innerHTML = `<summary>Bring in a survey (nmap XML) or DHCP leases</summary>` +
     `<p class="dsk-help">A sweep, on a machine that can see the segment:<br>` +

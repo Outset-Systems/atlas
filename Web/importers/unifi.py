@@ -37,12 +37,14 @@ import re
 
 import requests
 
+import suggest
+
 from . import review
 from .wire import TIMEOUT, Refused, ok, plural
 from .netbox import _hue_of
 
 #: A site is a path segment, and only ever one.
-SITE_OK = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+SITE_OK = re.compile(r"\A[A-Za-z0-9_-]{1,64}\Z")     # \Z: `$` would let a trailing newline through
 DEFAULT_SITE = "default"
 
 #: Device types, as UniFi names them, and the heading each is listed under.
@@ -51,10 +53,6 @@ _GROUPS = {"ugw": "Gateways", "udm": "Gateways", "uxg": "Gateways", "usw": "Swit
 _ROLES = {"Gateways": "Gateway", "Switches": "Switch", "Access points": "Access point",
           "Power": "Power distribution"}
 
-#: MAC prefixes hypervisors hand their guests: Hyper-V, KVM/QEMU, VMware (three),
-#: Proxmox, VirtualBox, Xen. A client with one of these is a guest of something.
-_VIRTUAL = ("00:15:5d", "52:54:00", "00:50:56", "00:0c:29", "00:05:69", "bc:24:11",
-            "08:00:27", "00:16:3e")
 
 #: Network purposes that are a segment of the LAN. `wan` and `remote-user-vpn` are not.
 _LAN = ("corporate", "guest", "vlan-only")
@@ -201,10 +199,50 @@ def _hosts(snapshot, devices):
             by_port.setdefault((sw, c.get("sw_port")), []).append(mac)
     out = {}
     for macs in by_port.values():
-        real = [m for m in macs if not m.startswith(_VIRTUAL)]
+        real = [m for m in macs if not suggest.virtual_vendor(m)]   # A hypervisor's NIC is a guest
         if len(real) == 1 and len(macs) > 1:
             out.update({m: real[0] for m in macs if m != real[0]})
     return out
+
+
+def _ssids(d):
+    """The networks an access point is broadcasting, each once."""
+    names = [review.clean(v.get("essid")) for v in d.get("vap_table") or [] if isinstance(v, dict)]
+    return list(dict.fromkeys(n for n in names if n))
+
+
+def _on_ports(snapshot, devices, names, host_of, client_names):
+    """{(device mac, port): what is on the other end, in words}.
+
+    A neighbour the device heard by LLDP, a device that says this is its
+    uplink, or the wired clients on the port. Guests are counted behind their
+    host, so a hypervisor's port reads as one machine and its guests."""
+    heard = {}
+
+    def add(mac, port, word):
+        if mac in devices and port is not None and word:
+            heard.setdefault((mac, str(port)), [])
+            if word not in heard[(mac, str(port))]:
+                heard[(mac, str(port))].append(word)
+
+    for mac, d in devices.items():
+        for n in d.get("lldp_table") or []:
+            other = _mac(n.get("chassis_id")) if isinstance(n, dict) else ""
+            if other in devices:
+                add(mac, n.get("local_port_idx"), names[other])
+        up = d.get("uplink") or {}
+        add(_mac(up.get("uplink_mac")), up.get("uplink_remote_port"), names[mac])
+    guests = {}
+    for guest, host in host_of.items():
+        guests[host] = guests.get(host, 0) + 1
+    for c in snapshot.get("clients", []):
+        mac = _mac(c.get("mac"))
+        if not mac or mac in devices or mac in host_of or not c.get("is_wired"):
+            continue
+        n = guests.get(mac, 0)
+        add(_mac(c.get("sw_mac")), c.get("sw_port"),
+            client_names[mac] + (f" and {n} guest{'' if n == 1 else 's'}" if n else ""))
+    return {k: ", ".join(v)[:120] for k, v in heard.items()}
 
 
 def _networks(snapshot):
@@ -225,108 +263,157 @@ def _networks(snapshot):
     return rows, vlan_of
 
 
-def candidates(snapshot):
-    """(rows, notes)."""
-    rows, vlan_of = _networks(snapshot)
-    lans = _lans(snapshot)
-    devices = {}
-    for d in snapshot.get("devices", []):
-        mac = _mac(d.get("mac"))
-        if mac:
-            devices[mac] = d
-    names = {mac: _device_name(d) for mac, d in devices.items()}
-    links = {}
+class _Reading:
+    """One snapshot, indexed once, and the rows it turns into.
 
-    def link(a, b, detail):
+    `rows` holds places and ports in listing order; `links` and `facts` are kept
+    apart because each is said once however many records mention it."""
+
+    def __init__(self, snapshot):
+        self.snapshot = snapshot
+        self.rows, self.vlan_of = _networks(snapshot)
+        self.lans = _lans(snapshot)
+        self.clients = [c for c in snapshot.get("clients", []) if isinstance(c, dict)]
+        self.devices = {_mac(d.get("mac")): d for d in snapshot.get("devices", []) if _mac(d.get("mac"))}
+        self.names = {mac: _device_name(d) for mac, d in self.devices.items()}
+        self.client_names = {_mac(c.get("mac")): _client_name(c) for c in self.clients}
+        self.host_of = _hosts(snapshot, self.devices)
+        self.on_port = _on_ports(snapshot, self.devices, self.names, self.host_of, self.client_names)
+        self.links, self.facts = {}, []
+        self.wired = self.wireless = 0
+
+    def link(self, a, b, detail):
         """One route per pair of things, whichever side reported it first."""
         pair = tuple(sorted((a, b)))
-        if a != b and pair not in links:
+        if a != b and pair not in self.links:
             ends = "~".join(k.split(":", 1)[1] for k in pair)      # device/<mac>~client/<mac>
-            links[pair] = review.route(f"unifi:link/{ends}", "Links",
-                                       a, b, detail)
+            self.links[pair] = review.route(f"unifi:link/{ends}", "Links", a, b, detail)
 
-    for mac, d in devices.items():
-        key = f"unifi:device/{mac}"
+    def adds(self, key, name, **what):
+        """What the controller knows about a thing the map may already have."""
+        self.facts.append(review.fact(f"unifi:fact/{key.split(':', 1)[1]}", "What UniFi adds",
+                                      name, key, what))
+
+    # ── a device, its links, its ports and its outlets ──────────────────────
+    def device(self, mac, d):
+        key, name = f"unifi:device/{mac}", self.names[mac]
         group = "Power" if _is_power(d) else _GROUPS.get(d.get("type"), "Other UniFi gear")
-        ports = d.get("port_table") or []
-        model = review.clean(d.get("model_name") or d.get("model"))
+        ports = [p for p in d.get("port_table") or [] if isinstance(p, dict) and p.get("port_idx") is not None]
         outlets, drawing = _outlets(d) if group == "Power" else ("", "")
-        bits = [b for b in (model, outlets or (f"{len(ports)} ports" if ports else ""),
-                            f"UniFi {review.clean(d.get('version'))}" if d.get("version") else "") if b]
-        state = "online" if d.get("state") == 1 else "offline"
-        ip, also = (_gateway_addresses(d, lans) if group == "Gateways"
+        ssids = _ssids(d)
+        bits = [b for b in (review.clean(d.get("model_name") or d.get("model")),
+                            outlets or (f"{len(ports)} ports" if ports else ""),
+                            f"UniFi {review.clean(d.get('version'))}" if d.get("version") else "",
+                            f"Wi-Fi {', '.join(ssids)}" if ssids else "") if b]
+        hw = " · ".join(bits)
+        ip, also = (_gateway_addresses(d, self.lans) if group == "Gateways"
                     else (review.address(d.get("ip")), []))
         # what it draws right now is a reading, so it is shown and not kept
-        rows.append(review.place(key, group, names[mac], "network",
-                                 f"{_ROLES.get(group, 'UniFi device')} · from UniFi",
-                                 ip=ip, also=also, hw=" · ".join(bits),
-                                 detail=" · ".join(b for b in bits + [drawing, state] if b)))
+        state = "online" if d.get("state") == 1 else "offline"
+        self.rows.append(review.place(key, group, name, "network",
+                                      f"{_ROLES.get(group, 'UniFi device')} · from UniFi",
+                                      ip=ip, also=also, mac=mac, hw=hw,
+                                      detail=" · ".join(b for b in bits + [drawing, state] if b)))
+        self.adds(key, name, mac=mac, hw=hw)
+        self._uplinks(key, d)
+        for p in ports:
+            self._port(mac, key, name, p)
+        if group == "Power":
+            self._outlet_rows(mac, key, name, d)
+
+    def _uplinks(self, key, d):
         up = d.get("uplink") or {}
         upstream = _mac(up.get("uplink_mac"))
-        if upstream in devices:
+        if upstream in self.devices:
             how = ("wireless" if up.get("type") == "wireless" else
-                   f"port {up.get('port_idx')} → {names[upstream]} port {up.get('uplink_remote_port')}"
+                   f"port {up.get('port_idx')} → {self.names[upstream]} port {up.get('uplink_remote_port')}"
                    if up.get("port_idx") and up.get("uplink_remote_port") else "uplink")
-            link(key, f"unifi:device/{upstream}", how)
+            self.link(key, f"unifi:device/{upstream}", how)
         for n in d.get("lldp_table") or []:
-            other = _mac(n.get("chassis_id"))
-            if other in devices:
-                link(key, f"unifi:device/{other}", f"LLDP on port {n.get('local_port_idx')}")
-        for p in ports:
-            idx = p.get("port_idx")
-            if idx is None:
-                continue
-            vlan = vlan_of.get(str(p.get("native_networkconf_id")))
-            speed = _speed(p.get("speed")) if p.get("up") else ""
-            rows.append(review.port(f"unifi:port/{mac}/{idx}", f"Ports on {names[mac]}", str(idx), key,
-                                    kind=_iface_kind(p), speed=speed, vlan=vlan,
-                                    poe=bool(p.get("port_poe")),
-                                    detail=" · ".join(b for b in (review.clean(p.get("name")),
-                                                                  speed or "down") if b)))
+            other = _mac(n.get("chassis_id")) if isinstance(n, dict) else ""
+            if other in self.devices:
+                self.link(key, f"unifi:device/{other}", f"LLDP on port {n.get('local_port_idx')}")
 
-    wired = wireless = 0
-    host_of = _hosts(snapshot, devices)
-    client_names = {_mac(c.get("mac")): _client_name(c) for c in snapshot.get("clients", [])}
-    for c in snapshot.get("clients", []):
+    def _port(self, mac, key, name, p):
+        idx = p["port_idx"]
+        # a WAN port is on no network of the site, whatever network id it carries
+        wan = str(p.get("network_name") or "").lower().startswith("wan")
+        vlan = None if wan else self.vlan_of.get(str(p.get("native_networkconf_id")))
+        speed = _speed(p.get("speed")) if p.get("up") else ""
+        peer = self.on_port.get((mac, str(idx)), "") or ("the internet" if wan and p.get("up") else "")
+        self.rows.append(review.port(f"unifi:port/{mac}/{idx}", f"Ports on {name}", str(idx), key,
+                                     kind=_iface_kind(p), speed=speed, vlan=vlan,
+                                     poe=bool(p.get("port_poe")), peer=peer,
+                                     detail=" · ".join(b for b in (review.clean(p.get("name")),
+                                                                   speed or "down", peer) if b)))
+        if peer or speed:
+            self.facts.append(review.fact(f"unifi:fact/port/{mac}/{idx}", "What UniFi adds",
+                                          f"{name} port {idx}", key,
+                                          {"peer": peer, "speed": speed}, port=str(idx)))
+
+    def _outlet_rows(self, mac, key, name, d):
+        for o in d.get("outlet_table") or []:
+            if not isinstance(o, dict) or o.get("index") is None:
+                continue
+            label = review.clean(o.get("name"))
+            # `outlet N`, never `N`: the strip has a network port called 1 as well
+            self.rows.append(review.port(
+                f"unifi:outlet/{mac}/{o['index']}", f"Outlets on {name}", f"outlet {o['index']}", key,
+                kind="power", peer=label,
+                detail=" · ".join(b for b in (label, "on" if o.get("relay_state") else "off") if b)))
+
+    # ── a client: a machine on a cable, a guest of one, or something on Wi-Fi ─
+    def client(self, c):
         mac = _mac(c.get("mac"))
-        if not mac or mac in devices:
-            continue
-        key = f"unifi:client/{mac}"
-        on_wire = bool(c.get("is_wired"))
-        wired += on_wire
-        wireless += not on_wire
-        where, host = "", host_of.get(mac)
+        if not mac or mac in self.devices:
+            return                                   # a device listed as a client is still one thing
+        key, on_wire = f"unifi:client/{mac}", bool(c.get("is_wired"))
+        self.wired += on_wire
+        self.wireless += not on_wire
+        where, host = "", self.host_of.get(mac)
+        switch, ap = _mac(c.get("sw_mac")), _mac(c.get("ap_mac"))
         if host:
             # a guest: it hangs off its host, and the host's cable is the only road
-            where = f"a guest of {client_names[host]}"
-        elif on_wire and _mac(c.get("sw_mac")) in devices:
-            where = f"port {c.get('sw_port')} of {names[_mac(c.get('sw_mac'))]}"
-            link(key, f"unifi:device/{_mac(c.get('sw_mac'))}", f"on port {c.get('sw_port')}")
-        elif not on_wire and _mac(c.get("ap_mac")) in devices:
-            where = f"{review.clean(c.get('essid')) or 'Wi-Fi'} on {names[_mac(c.get('ap_mac'))]}"
-            link(key, f"unifi:device/{_mac(c.get('ap_mac'))}",
-                 f"Wi-Fi {review.clean(c.get('essid'))}".strip())
+            where = f"a guest of {self.client_names[host]}"
+        elif on_wire and switch in self.devices:
+            where = f"port {c.get('sw_port')} of {self.names[switch]}"
+            self.link(key, f"unifi:device/{switch}", f"on port {c.get('sw_port')}")
+        elif not on_wire and ap in self.devices:
+            where = f"{review.clean(c.get('essid')) or 'Wi-Fi'} on {self.names[ap]}"
+            self.link(key, f"unifi:device/{ap}", f"Wi-Fi {review.clean(c.get('essid'))}".strip())
         vendor = review.clean(c.get("oui"))
         what = "virtual machine" if host else "wired client" if on_wire else "wireless client"
-        rows.append(review.place(key, "Wired clients" if on_wire else "Wireless clients",
-                                 _client_name(c), "vm" if host else "unknown",
-                                 f"{what} · from UniFi",
-                                 ip=review.address(c.get("ip")), hw=vendor,
-                                 parent=f"unifi:client/{host}" if host else None,
-                                 detail=" · ".join(b for b in (vendor, where) if b)))
-    rows += links.values()
+        self.rows.append(review.place(key, "Wired clients" if on_wire else "Wireless clients",
+                                      self.client_names[mac], "vm" if host else "unknown",
+                                      f"{what} · from UniFi",
+                                      ip=review.address(c.get("ip")), hw=vendor, mac=mac,
+                                      parent=f"unifi:client/{host}" if host else None,
+                                      detail=" · ".join(b for b in (vendor, where) if b)))
+        self.adds(key, self.client_names[mac], mac=mac)
 
-    notes = []
-    if not devices:
-        notes.append("The controller lists no devices for this site. A wrong site name looks "
-                     "exactly like this: it is the short name in the controller's address, "
-                     "usually `default`.")
-    for part in snapshot.get("missing", []):
-        notes.append(f"The controller would not list its {part}, so this review has none.")
-    if wired + wireless:
-        notes.append(f"{wired + wireless} client{'' if wired + wireless == 1 else 's'} connected now "
-                     f"({wired} wired, {wireless} wireless). A client that is off is not listed.")
-    return rows, notes
+    def notes(self):
+        out = []
+        if not self.devices:
+            out.append("The controller lists no devices for this site. A wrong site name looks "
+                       "exactly like this: it is the short name in the controller's address, "
+                       "usually `default`.")
+        for part in self.snapshot.get("missing", []):
+            out.append(f"The controller would not list its {part}, so this review has none.")
+        total = self.wired + self.wireless
+        if total:
+            out.append(f"{total} client{'' if total == 1 else 's'} connected now "
+                       f"({self.wired} wired, {self.wireless} wireless). A client that is off is not listed.")
+        return out
+
+
+def candidates(snapshot):
+    """(rows, notes)."""
+    reading = _Reading(snapshot)
+    for mac, d in reading.devices.items():
+        reading.device(mac, d)
+    for c in reading.clients:
+        reading.client(c)
+    return reading.rows + list(reading.links.values()) + reading.facts, reading.notes()
 
 
 # ── the connection: what Settings shows, the test, and the survey ───────────
@@ -418,7 +505,8 @@ def _site(conn, typed):
     if len(names) == 1:
         return names[0], (f"This controller has no site called {shown}. Its only site is "
                           f"`{names[0]}`, so that is the one read here.")
-    listed = ", ".join(f"{s.get('name')} ({s.get('desc')})" for s in sites[:6])
+    listed = ", ".join(f"{review.clean(s.get('name'), 64)} ({review.clean(s.get('desc'), 64)})"
+                       for s in sites[:6])
     raise Refused(f"This controller has no site called {shown}. It has: {listed}.")
 
 
@@ -449,3 +537,33 @@ def survey(base, creds, verify):
         rows, notes = candidates(fetch_snapshot(conn.get, site))
         return rows, ([said] if said else []) + notes
     return _with_controller(base, creds, verify, ask)
+
+
+def sightings(snapshot):
+    """Everything connected now, as the survey's hosts: what a ping sweep and a
+    lease file say between them, read from the controller instead. One row per
+    address; a gateway is seen at a LAN address, never its WAN one."""
+    lans = _lans(snapshot)
+    hosts, seen = [], set()
+
+    def add(ip, mac, name, vendor):
+        if ip == "—" or ip in seen:
+            return
+        seen.add(ip)
+        hosts.append({"ip": ip, "mac": mac or None, "hostname": name or None,
+                      "vendor": vendor or None, "source": "unifi"})
+
+    for d in snapshot.get("devices", []):
+        gateway = _GROUPS.get(d.get("type")) == "Gateways" and not _is_power(d)
+        ip = _gateway_addresses(d, lans)[0] if gateway else review.address(d.get("ip"))
+        add(ip, _mac(d.get("mac")), review.clean(d.get("name") or d.get("hostname")), "Ubiquiti")
+    for c in snapshot.get("clients", []):
+        add(review.address(c.get("ip")), _mac(c.get("mac")),
+            review.clean(c.get("name") or c.get("hostname")), review.clean(c.get("oui")))
+    return hosts
+
+
+def observe(base, creds, verify):
+    """(hosts for the survey, a sentence about the site when one is owed)."""
+    return _with_controller(base, creds, verify,
+                            lambda conn, site, said: (sightings(fetch_snapshot(conn.get, site)), said))

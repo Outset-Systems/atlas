@@ -39,6 +39,8 @@ SYSTEMS = tuple(m.SYSTEM for m in CONNECTORS)
 _BY_KEY = {s["key"]: s for s in SYSTEMS}
 _PROBES = {m.SYSTEM["key"]: m.probe for m in CONNECTORS}
 _SURVEYS = {m.SYSTEM["key"]: m.survey for m in CONNECTORS}
+#: The systems that can say what is on the network right now, for THE SURVEY.
+_OBSERVERS = {m.SYSTEM["key"]: m.observe for m in CONNECTORS if hasattr(m, "observe")}
 
 
 def describe():
@@ -54,6 +56,7 @@ def describe():
                            "source": f.get("source") or ""})
         out.append({"key": system["key"], "name": system["name"], "about": system["about"],
                     "credential": system["credential"], "fields": fields,
+                    "observes": system["key"] in _OBSERVERS,
                     "configured": any(f["kind"] == "url" and f["value"] for f in fields)})
     return out
 
@@ -138,6 +141,16 @@ def survey(key, url, creds, insecure=False):
         rows, notes = _SURVEYS[key](base, creds, not insecure)
         return (rows, notes) if key == "kuma" else _with_monitors(rows, notes)
     return _asking(key, url, creds, ask)
+
+
+def observes(key):
+    return key in _OBSERVERS
+
+
+def observe(key, url, creds, insecure=False):
+    """What one system sees on the network now. Returns (True, (hosts, note)) or
+    (False, a sentence). Read-only, like a survey."""
+    return _asking(key, url, creds, lambda base: _OBSERVERS[key](base, creds, not insecure))
 
 
 def label(key):

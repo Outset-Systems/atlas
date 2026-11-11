@@ -81,13 +81,15 @@ def _candidate(key, shape, group, name, **rest):
 
 
 def place(key, group, name, kind, role, *, ip="—", hw="", parent=None, scroll=None, detail=None,
-          also=()):
+          also=(), mac=""):
     """`also` is every other address the thing answers at (a gateway has one per
     network). The map may know it by any of them; only `ip` is ever written."""
     row = _candidate(key, "place", group, name, kind=kind, role=clean(role), ip=ip, hw=clean(hw),
                      parent=parent, detail=clean(hw if detail is None else detail))
     if also:
         row["also"] = [a for a in also if _real_ip(a)]
+    if mac:
+        row["mac"] = clean(mac, 17)
     if isinstance(scroll, str) and scroll.strip():
         row["scroll"] = clean(scroll, 400)
     return row
@@ -103,9 +105,28 @@ def zone(key, group, name, vlan, subnet, hue):
                       detail=f"vlan {vlan}" + (f" · {clean(subnet)}" if subnet else ""))
 
 
-def port(key, group, name, parent, *, kind="rj45", speed="", vlan=None, poe=False, detail=""):
+def port(key, group, name, parent, *, kind="rj45", speed="", vlan=None, poe=False, detail="",
+         peer=""):
     return _candidate(key, "port", group, name, parent=parent, kind=kind, speed=clean(speed),
-                      vlan=vlan, poe=bool(poe), detail=clean(detail))
+                      vlan=vlan, poe=bool(poe), detail=clean(detail), peer=clean(peer))
+
+
+#: What a fact may add: to a place, and to a port on it.
+FACT_FIELDS = {"place": ("mac", "hw"), "port": ("peer", "speed")}
+
+
+def fact(key, group, name, parent, adds, *, port=None):
+    """What a system knows about something the map already has: a place's MAC, what
+    is on the other end of a port. `parent` is the place's own row; `port` names
+    the port on it when the fact is about one. A place the same review is adding
+    carries these itself, so a fact only ever lands on the map as it stands."""
+    on = "port" if port is not None else "place"
+    adds = {k: clean(v) for k, v in (adds or {}).items() if k in FACT_FIELDS[on] and clean(v)}
+    row = _candidate(key, "fact", group, name, parent=parent, adds=adds,
+                     detail=" · ".join(f"{k} {v}" for k, v in adds.items()))
+    if port is not None:
+        row["port"] = clean(port)
+    return row
 
 
 def route(key, group, a, b, detail=""):
@@ -119,7 +140,7 @@ def monitor(key, name, host, detail=""):
 
 
 #: Rows that stand on another row, so they are read after the rows they stand on.
-_DEPENDENT = ("service", "port", "route", "monitor")
+_DEPENDENT = ("service", "port", "route", "monitor", "fact")
 
 
 def _real_ip(ip):
@@ -174,8 +195,11 @@ class _Map:
         self.zones = data.get("zones", []) or []
         self.routes = {frozenset((r.get("from"), r.get("to")))
                        for r in data.get("routes", []) or [] if isinstance(r, dict)}
-        self.ports = {(i.get("device"), str(i.get("name")))
-                      for i in data.get("interfaces", []) or [] if isinstance(i, dict)}
+        self.port_at = {}                      # (device, name) → (its index, the port)
+        for index, i in enumerate(data.get("interfaces", []) or []):
+            if isinstance(i, dict):
+                self.port_at.setdefault((i.get("device"), str(i.get("name"))), (index, i))
+        self.ports = set(self.port_at)
         # every monitor that already lights something, and what it lights
         self.tied = {}
         for n in self.nodes.values():
@@ -186,10 +210,12 @@ class _Map:
                     self.tied.setdefault(link["kuma"], n.get("id"))
         for name, node_id in (((data.get("signals") or {}).get("kuma")) or {}).items():
             self.tied.setdefault(name, node_id)
-        self.by_origin, self.by_ip, self.by_name, self.at_ip = {}, {}, {}, {}
+        self.by_origin, self.by_ip, self.by_name, self.at_ip, self.by_mac = {}, {}, {}, {}, {}
         for n in self.nodes.values():
             if n.get("origin"):
                 self.by_origin[n["origin"]] = n
+            if isinstance(n.get("mac"), str) and n["mac"]:
+                self.by_mac.setdefault(n["mac"].lower(), n)
             if _real_ip(n.get("ip")):
                 self.by_ip[n["ip"]] = n
                 self.at_ip.setdefault(n["ip"], []).append(n)
@@ -202,6 +228,8 @@ class _Map:
         things or a move, and only a person can say which."""
         if row["key"] in self.by_origin:
             return CHARTED, self.by_origin[row["key"]]
+        if row.get("mac") and row["mac"].lower() in self.by_mac:
+            return CHARTED, self.by_mac[row["mac"].lower()]   # the same card, whatever its address now
         ip = _real_ip(row["ip"])
         held = ([ip] if ip else []) + list(row.get("also") or [])
         for addr in held:
@@ -285,6 +313,9 @@ def annotate(candidates, data, ignored=()):
             _annotate_port(row, by_key.get(row["parent"]), chart)
         elif row["type"] == "route":
             _annotate_route(row, by_key.get(row["parent"]), by_key.get(row["peer"]), chart)
+        elif row["type"] == "fact":
+            if not _annotate_fact(row, by_key.get(row["parent"]), chart):
+                continue                       # its place is not on the map: the place brings it
         else:
             _annotate_monitor(row, chart)
         if row["key"] in ignored and row["status"] != CHARTED:
@@ -333,6 +364,31 @@ def _annotate_route(row, a, b, chart):
             row.update(status=CHARTED, matched=f"{a['matched']} ↔ {b['matched']}")
 
 
+def _annotate_fact(row, host, chart):
+    """NEW while the map lacks any of it, CHARTED once it holds all of it. A fact
+    never overwrites what a person wrote: `hw` is offered only for a place this
+    system imported, and a port's words only where the map has none."""
+    row["status"] = NEW
+    if host is None or host["status"] != CHARTED:
+        return False
+    node = chart.nodes[host["matched"]]
+    if "port" in row:
+        found = chart.port_at.get((host["matched"], row["port"]))
+        if found is None:
+            return False                       # the port row carries the same words
+        have = found[1]
+        missing = {k: v for k, v in row["adds"].items() if not have.get(k)}
+    else:
+        have, ours = node, node.get("origin") == host["key"]
+        missing = {k: v for k, v in row["adds"].items()
+                   if have.get(k) != v and (k != "hw" or ours) and (k == "hw" or not have.get(k))}
+    row["adds"] = missing
+    row["detail"] = " · ".join(f"{k} {v}" for k, v in missing.items())
+    if not missing:
+        row.update(status=CHARTED, matched=host["matched"])
+    return True
+
+
 def _annotate_monitor(row, chart):
     row["status"] = NEW
     if row["name"] in chart.tied:
@@ -371,6 +427,8 @@ def plan(rows, picks, data, *, label, fallback=""):
     ports = [r for r in chosen if r["type"] == "port"]
     routes = [r for r in chosen if r["type"] == "route"]
     monitors = [r for r in chosen if r["type"] == "monitor"]
+    facts = [r for r in chosen if r["type"] == "fact"]
+    chart = _Map(data)
     for row in services + ports + routes:
         for end in (row["parent"], row.get("peer")):
             host = by_key.get(end)
@@ -413,14 +471,24 @@ def plan(rows, picks, data, *, label, fallback=""):
                {"label": row["name"], "url": row["url"], "desc": row["about"], "open_in": "tab"})
     for row in monitors:
         append(row["place"], "monitors", row["name"])
+    port_edits = []
+    for row in facts:
+        target = by_key[row["parent"]]["matched"]
+        if "port" in row:
+            index = chart.port_at[(target, row["port"])][0]
+            port_edits.append({"op": "upsert", "section": "interfaces", "index": index,
+                               "body": dict(row["adds"])})
+        else:
+            edits.setdefault(target, {}).update(row["adds"])
 
     ops += [{"op": "insert", "section": "nodes", "body": d} for d in drafts]
     ops += [{"op": "upsert", "section": "nodes", "id": node, "body": body}
             for node, body in edits.items()]
+    ops += port_edits                           # by position, so before any port is added
     for row in ports:
         body = {"device": at(row["parent"]), "name": row["name"], "kind": row["kind"],
                 "note": f"from {label}"}
-        body.update({k: row[k] for k in ("speed", "vlan") if row.get(k) not in (None, "")})
+        body.update({k: row[k] for k in ("speed", "vlan", "peer") if row.get(k) not in (None, "")})
         if row.get("poe"):
             body["poe"] = True
         ops.append({"op": "insert", "section": "interfaces", "body": body})
@@ -468,6 +536,8 @@ def _drafts(places, by_key, scratch, label, fallback):
         })
         if row.get("scroll"):
             node["scroll"] = row["scroll"]
+        if row.get("mac"):
+            node["mac"] = row["mac"]
         if row.get("monitors"):
             node["monitors"] = list(row["monitors"])
         drafts.append(node)

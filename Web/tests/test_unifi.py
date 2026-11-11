@@ -521,3 +521,129 @@ def test_clients_with_no_port_reported_are_nobodys_guests():
                         {"mac": R_VM1, "ip": "10.0.10.7", "is_wired": True, "sw_mac": R_GW}]}
     rows, _ = unifi.candidates(snap)
     assert all(r.get("parent") is None for r in rows if r["type"] == "place")
+
+
+# ── what UniFi adds to a map that already has the place ──────────────────────
+def _facts(data=None):
+    from importers import review as rv
+    from importers import unifi
+    cands, _notes = unifi.candidates(REAL)
+    rows = rv.annotate(cands, data or REAL_MAP)
+    return rows, {r["key"]: r for r in rows}
+
+
+def test_a_charted_place_is_offered_its_mac_and_a_new_one_carries_its_own():
+    rows, got = _facts()
+    fact = got[f"unifi:fact/device/{R_GW}"]
+    assert (fact["type"], fact["status"], fact["adds"]) == ("fact", "new", {"mac": R_GW})
+    assert got[f"unifi:client/{R_NAS}"]["mac"] == R_NAS                   # new: the place row has it
+    assert f"unifi:fact/client/{R_NAS}" not in got                        # and no second row says so
+
+
+def test_a_fact_never_overwrites_what_a_person_wrote():
+    data = json.loads(json.dumps(REAL_MAP))
+    data["nodes"][0].update(hw="hand-written", mac="aa:aa:aa:aa:aa:aa")
+    _, got = _facts(data)
+    assert got[f"unifi:fact/device/{R_GW}"]["status"] == "charted"       # nothing left to add
+    data["nodes"][0].update(origin=f"unifi:device/{R_GW}", mac="")
+    _, got = _facts(data)
+    adds = got[f"unifi:fact/device/{R_GW}"]["adds"]
+    assert adds["mac"] == R_GW and adds["hw"].startswith("UDMPROSE")      # its own import: UniFi's line
+
+
+def test_ticked_facts_land_as_edits_to_the_places_and_ports_already_there():
+    from importers import review as rv
+    data = json.loads(json.dumps(REAL_MAP))
+    data["interfaces"] = [{"device": "front-door", "name": "6", "kind": "rj45", "note": "by hand"}]
+    rows, got = _facts(data)
+    port = got[f"unifi:fact/port/{R_GW}/6"]
+    assert port["adds"] == {"peer": "Big Iron and 2 guests", "speed": "1G"}
+    ops = rv.plan(rows, [f"unifi:fact/device/{R_GW}", port["key"]], data, label="UniFi Network")
+    assert {"op": "upsert", "section": "nodes", "id": "front-door", "body": {"mac": R_GW}} in ops
+    assert {"op": "upsert", "section": "interfaces", "index": 0,
+            "body": {"peer": "Big Iron and 2 guests", "speed": "1G"}} in ops
+    data["interfaces"][0]["peer"] = "the big one"                         # a person's words stand
+    _, got = _facts(data)
+    assert "peer" not in got[f"unifi:fact/port/{R_GW}/6"]["adds"]
+
+
+def test_a_place_is_known_by_its_mac_after_its_address_changes():
+    data = json.loads(json.dumps(REAL_MAP))
+    data["nodes"].append({"id": "vault", "name": "OLD NAME", "ip": "10.50.40.99", "mac": R_NAS.upper()})
+    _, got = _facts(data)
+    assert (got[f"unifi:client/{R_NAS}"]["status"], got[f"unifi:client/{R_NAS}"]["matched"]) == ("charted", "vault")
+
+
+def test_a_power_strips_outlets_are_ports_of_their_own_kind():
+    _, got = _facts()
+    outlet = got[f"unifi:outlet/{R_PDU}/2"]
+    assert (outlet["type"], outlet["name"], outlet["kind"], outlet["peer"]) == ("port", "outlet 2", "power", "Fan")
+    assert got[f"unifi:port/{R_PDU}/1"]["name"] == "1"                    # its network port keeps its name
+
+
+def test_an_access_point_says_what_it_broadcasts():
+    from importers import unifi
+    rows, _ = unifi.candidates({"devices": [{
+        "mac": R_GW, "type": "uap", "model": "U7PROMAX", "name": "Hall", "ip": "10.0.10.3",
+        "vap_table": [{"essid": "home", "radio": "na"}, {"essid": "home", "radio": "ng"}, {"essid": "things"}]}]})
+    assert rows[0]["hw"] == "U7PROMAX · Wi-Fi home, things" and rows[0]["mac"] == R_GW
+
+
+# ── the controller as a survey, and as a first import ────────────────────────
+def test_the_survey_can_be_read_from_the_controller_and_nothing_is_charted(realm, admin, net):
+    save(admin, UNIFI_KEY)
+    before = realm.data_path.read_text(encoding="utf-8")
+    j = admin.post("/api/v2/admin/discovery/connection", headers=W, json={"key": "unifi"}).get_json()
+    assert j["ok"] and j["source"] == "UniFi Network" and j["seen"] == 5 and j["new"] == 5
+    assert realm.data_path.read_text(encoding="utf-8") == before
+    seen = {o["ip"]: o for o in admin.get("/api/v2/admin/discovery").get_json()["observed"]}
+    assert seen["10.0.10.40"]["mac"] == NAS and seen["10.0.10.40"]["hostname"] == "nas"
+    assert "unifi" in seen["10.0.10.40"]["source"]
+    again = admin.post("/api/v2/admin/discovery/connection", headers=W, json={"key": "unifi"}).get_json()
+    assert again["seen"] == 5 and again["new"] == 0                       # seen twice is still one device
+
+
+def test_only_a_system_that_sees_the_network_can_feed_the_survey(realm, admin, net):
+    r = admin.post("/api/v2/admin/discovery/connection", headers=W, json={"key": "kuma"})
+    assert r.status_code == 400
+    j = admin.post("/api/v2/admin/discovery/connection", headers=W, json={"key": "unifi"}).get_json()
+    assert not j["ok"] and j["error"] == "No URL to ask."                 # not set up: said, not raised
+
+
+def test_a_gateway_is_sighted_at_a_lan_address():
+    from importers import unifi
+    hosts = {h["mac"]: h for h in unifi.sightings(REAL)}
+    assert hosts[R_GW]["ip"] == "10.50.1.1"
+    assert "203.0.113.7" not in json.dumps(list(hosts.values()))
+    assert hosts[R_VM1]["vendor"] == "Microsoft Corporation" and hosts[R_VM1]["source"] == "unifi"
+
+
+def test_networks_gear_and_machines_land_on_an_empty_map_in_one_import():
+    from importers import review as rv
+    from importers import unifi
+    empty = {"zones": [], "nodes": [], "routes": []}
+    cands, _ = unifi.candidates(REAL)
+    rows = rv.annotate(cands, empty)
+    assert not [r for r in rows if r["type"] == "fact"]                    # nothing on the map to add to
+    picks = [r["key"] for r in rows if r["status"] == "new" and not r["blocked"]]
+    ops = rv.plan(rows, picks, empty, label="UniFi Network")
+    zones = {o["body"]["id"] for o in ops if o["section"] == "zones"}
+    nodes = {o["body"]["id"]: o["body"] for o in ops if o["section"] == "nodes"}
+    assert {"home", "servers", "edge", "guests"} <= zones
+    assert nodes["front-door"]["zone"] == "home" and nodes["front-door"]["mac"] == R_GW
+    assert nodes["big-iron"]["zone"] == "servers"
+    guest = next(n for n in nodes.values() if n.get("mac") == R_VM2)
+    assert guest["parent"] == "big-iron" and guest["kind"] == "vm"
+    outlets = [o["body"] for o in ops if o["section"] == "interfaces" and o["body"]["kind"] == "power"]
+    assert [o["name"] for o in outlets] == ["outlet 1", "outlet 2", "outlet 3"] and outlets[1]["peer"] == "Fan"
+
+
+def test_a_wan_port_is_on_no_network_of_the_site():
+    from importers import unifi
+    rows, _ = unifi.candidates({
+        "devices": [{"mac": R_GW, "type": "udm", "name": "Edge", "ip": "10.50.1.1", "port_table": [
+            {"port_idx": 9, "name": "ISP", "up": True, "speed": 1000, "media": "GE",
+             "network_name": "wan", "native_networkconf_id": "n-home"}]}],
+        "networks": REAL["networks"]})
+    port = next(r for r in rows if r["type"] == "port")
+    assert port["vlan"] is None and port["peer"] == "the internet"

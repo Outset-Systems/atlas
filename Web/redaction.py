@@ -333,6 +333,17 @@ def redact_for_groups(data):
                       if not isinstance(e, dict)
                       or _scrub_entry(e, refs, hidden, defining)]
         _scrub_signals_block(d, hidden)
+        # A PORT'S WORDS (2026-11-11). `peer` and `note` say what is on the other
+        # end in prose, and a connection import now writes them: "VAULT and 3
+        # guests" on a visible switch names a hidden place, its port and what it
+        # hosts. No reference walker can see prose, and matching it against the
+        # hidden names misses a place the controller calls something else. So
+        # the rule is the blunt one, as for `accounts`: while anything is hidden
+        # from this viewer, they get the ports and not the words on them.
+        for port in d.get("interfaces") or []:
+            if isinstance(port, dict):
+                port.pop("peer", None)
+                port.pop("note", None)
         # REGIONS (v1.49.0): `places` is a json object keyed BY place id, so
         # the ref walker above cannot see it — a pin would name a hidden place
         # (and say where it sits) to a viewer not cleared for it.

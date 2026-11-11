@@ -122,9 +122,10 @@ def _merge_hosts(state, hosts):
         existing = state["hosts"].get(key)
         if existing:
             incoming = {k: v for k, v in host.items() if v is not None}
-            if incoming.get("source") == "dhcp":
-                # a lease adds what a scan could not see (the MAC, the name the
-                # device gave itself) and never overwrites what one found
+            if incoming.get("source") in ("dhcp", "unifi"):
+                # a lease, or a controller's client list, adds what a scan could
+                # not see (the MAC, the name the device gave itself) and never
+                # overwrites what one found
                 incoming = {k: v for k, v in incoming.items()
                             if k in ("ip", "source") or not existing.get(k)}
             incoming["source"] = _sources(existing.get("source"), host.get("source"))

@@ -160,9 +160,16 @@ Live health comes from optional sources. Each one is off until its URL is set
 and its name is listed in `ATLAS_SIGNALS_SOURCES`. A source that is down or
 misconfigured only removes its markers; the map still draws.
 
+The `unifi` source reports what is connected to a UniFi Network controller
+right now, for places on the map that no Kuma monitor watches. A place the
+controller does not list is unknown, not down: only a UniFi device the
+controller itself shows as offline is marked down. It uses the UniFi
+connection's saved address and credential (`ATLAS_UNIFI_URL` and its API key
+or local user, under Connections).
+
 | Variable | Default | What it does | Secret | Settings screen |
 |---|---|---|---|---|
-| `ATLAS_SIGNALS_SOURCES` | (empty) | Comma-separated list of live sources to poll: `prometheus`, `kuma`, `deception` (the decoy feed), `relay` (pushes stored by the ingest API, `db` backend), `static` (a JSON file). Empty means a static map, except on the bundled demo (`ATLAS_FALLBACK=bundled`, not yet seeded), which reads the image's demo feed and reports it as the `demo` source. | no | yes (Sources) |
+| `ATLAS_SIGNALS_SOURCES` | (empty) | Comma-separated list of live sources to poll: `prometheus`, `kuma`, `unifi`, `deception` (the decoy feed), `relay` (pushes stored by the ingest API, `db` backend), `static` (a JSON file). Empty means a static map, except on the bundled demo (`ATLAS_FALLBACK=bundled`, not yet seeded), which reads the image's demo feed and reports it as the `demo` source. | no | yes (Sources) |
 | `ATLAS_SIGNALS_FILE` | `/data/signals.json` | The JSON file the `static` source reads. | no | no |
 | `ATLAS_PROM_URL` | (unset) | Prometheus base URL, for example `http://prometheus:9090`. Feeds the card vitals, the patch line on a card and the built-in charts. Marker colours come from Kuma, not from here. | no | yes (Sources) |
 | `ATLAS_LOKI_URL` | (unset) | Loki base URL, for example `http://loki:3100`. Feeds the log-derived charts. | no | yes (Sources) |
@@ -233,11 +240,22 @@ can stop returning data until Atlas catches up. Nothing it does changes your dev
 | Portainer | environments | stacks, as services on their environment |
 | Komodo | servers | stacks, as services on their server |
 | NetBox | devices, virtual machines | VLANs, as realms, with the subnet of their first prefix |
+| UniFi Network | the gateway, switches, access points and power strips; every client connected now | networks, as realms; each device's ports, with what is on the other end; a power strip's outlets; links between them |
 
 - **Already on the map** means the same record was imported before, or the address matches,
   or the name matches. Those rows cannot be ticked. A tick only adds: an import never
   changes or removes what is already charted.
 - **Same name, different address** is listed with a warning. Tick it to add a second place.
+- **What a system adds** lists what it knows about a place or a port the map already has: a
+  MAC address, the networks an access point broadcasts, what is plugged into a port. Tick a
+  row to add it. It fills blanks only. What a person typed is never replaced, and the hardware
+  line is offered only on a place that system imported.
+- **A place is known by its MAC** once it has one, so a machine that changes address is still
+  the same place at the next review.
+- **A gateway** is charted at one of its LAN addresses and matched by any of them. Its WAN
+  address is never read onto the map.
+- **A hypervisor's guests** show on its switch port. Each is listed as a virtual machine with
+  the host as its `parent`, and only the host gets a link to the switch.
 - **A stack needs a host**, so ticking one ticks its host, unless the host is already charted.
   Its link opens the stack in Portainer or Komodo, because neither says where a stack answers.
 - **Ignore** hides a row from later reviews. Ignored rows stay listed at the foot of the review,
@@ -252,6 +270,15 @@ An import is one entry in the change log, with the note `imported from <system>`
 undone there or with the **Undo** beside the result. The Undo refuses if the map has changed
 since, because undoing restores the whole map as it was. The system is read again at import, so
 what lands is what it says at that moment, and an import of more than 500 changes is refused.
+
+Two more places read a connection, both with the settings saved here and nothing typed again:
+
+- **Guided setup** offers "Read your UniFi controller" as a way to start. It adds the
+  networks, the gear, the machines on a cable and their ports in one import. Wi-Fi clients are
+  counted and left out; add the ones you want from the review above.
+- **The Survey** shows a "Read UniFi Network" button. It files everything connected now beside
+  your scans and lease files, with the MAC and name a ping sweep cannot see. Nothing is charted
+  until you choose it there. A device that is switched off is not seen.
 
 ## Embedding (the viewing glass)
 

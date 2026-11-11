@@ -46,6 +46,8 @@ def _apply_kuma_map(ctx):
             adapter.monitor_map = monitor_map
         elif getattr(adapter, "name", "") == "prometheus":
             adapter.ip_map = ip_map
+        elif getattr(adapter, "name", "") == "unifi":
+            adapter.set_places(*signals.unifi_places(data))
 
 
 def _label_for(ctx):

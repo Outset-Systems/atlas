@@ -57,6 +57,10 @@ def _dataset(tmp_path):
         "vms": [
             {"id": "secret-place", "host": "public-place", "name": "Secret VM"},
         ],
+        "interfaces": [
+            {"device": "public-place", "name": "7", "kind": "rj45", "speed": "1G",
+             "peer": "Vault-Keeper and 3 guests", "note": "uplink to the vault keeper"},
+        ],
         "signals": {"kuma": {"secret-monitor": "secret-place",
                              "public-monitor": "public-place"}},
     }
@@ -192,3 +196,14 @@ def test_per_viewer_responses_say_they_vary(realm):
 
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-q"]))
+
+
+def test_a_ports_words_do_not_name_what_is_hidden(realm):
+    """A connection import writes what is on the other end of a port in prose.
+    Whatever the controller calls a hidden place, a viewer not cleared for it
+    gets the port and not the words."""
+    seen = _login(realm, "alice").get("/api/v2/lab-data").get_json()
+    assert seen["interfaces"] == [{"device": "public-place", "name": "7", "kind": "rj45", "speed": "1G"}]
+    assert "ault" not in json.dumps(seen)
+    whole = _login(realm, "ops").get("/api/v2/lab-data").get_json()
+    assert whole["interfaces"][0]["peer"] == "Vault-Keeper and 3 guests"

@@ -485,6 +485,10 @@
                   "type": "string",
                   "description": "The mono data line: OS · RAM · disks."
                 },
+                "mac": {
+                  "type": "string",
+                  "description": "Its hardware address, e.g. `00:11:32:aa:bb:cc`. A connection import fills it in; a later review knows the place by it even after its address changes."
+                },
                 "hue": {
                   "type": "string",
                   "description": "Override the marker colour. Defaults to the realm's."

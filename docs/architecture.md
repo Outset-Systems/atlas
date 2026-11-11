@@ -262,7 +262,8 @@ own token checks instead.
 ## Signals and sources
 
 `signals.py` has one small adapter per source: `PrometheusAdapter`,
-`KumaAdapter` (Kuma's `/metrics`), `DeceptionAdapter` (the decoy feed),
+`KumaAdapter` (Kuma's `/metrics`), `UniFiAdapter` (what is connected now, for
+charted places no monitor watches), `DeceptionAdapter` (the decoy feed),
 `RelayAdapter` (the latest push stored by ingest) and `StaticFileAdapter`.
 Each has a hard three-second timeout and **never raises**: any failure is
 "no signal", so a dead source removes its markers and nothing else.

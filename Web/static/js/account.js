@@ -423,7 +423,7 @@ async function renderDeployment() {
    force came from. Keys are write-only: the form never learns a stored one,
    only that one is set; TEST with a blank key asks with the one in force. */
 const SRC_FIELDS = [
-  ['ATLAS_SIGNALS_SOURCES', 'Live sources (comma-separated)', 'kuma,prometheus,deception'],
+  ['ATLAS_SIGNALS_SOURCES', 'Live sources (comma-separated)', 'kuma,prometheus,unifi,deception'],
   ['ATLAS_PROM_URL', 'Prometheus URL', 'http://prometheus:9090'],
   ['ATLAS_LOKI_URL', 'Loki URL', 'http://loki:3100'],
   ['ATLAS_KUMA_URL', 'Uptime-Kuma URL', 'http://kuma:3001'],

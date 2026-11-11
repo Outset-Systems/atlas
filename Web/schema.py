@@ -294,6 +294,10 @@ SECTIONS = {
               help="Its address, or `—` for none. A whole prefix is allowed for a "
                    "place that *is* a network (Tailscale's 100.64.0.0/10)."),
             f("hw", "text", label="Hardware", help="The mono data line: OS · RAM · disks."),
+            f("mac", "text", label="MAC",
+              help="Its hardware address, e.g. `00:11:32:aa:bb:cc`. A connection import "
+                   "fills it in; a later review knows the place by it even after its "
+                   "address changes."),
             f("hue", "color", help="Override the marker colour. Defaults to the realm's."),
             f("shape", "select", options=NODE_SHAPES,
               help="Marker shape. Blank = the default circle."),

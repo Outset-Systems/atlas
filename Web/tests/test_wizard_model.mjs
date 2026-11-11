@@ -1,7 +1,7 @@
 /* What guided setup reads off a list of addresses. `node tests/test_wizard_model.mjs` */
 
 import assert from 'node:assert/strict';
-import { inCidr, suggestNetworks } from '../static/js/editor/wizard-model.js';
+import { inCidr, suggestNetworks, firstImport } from '../static/js/editor/wizard-model.js';
 
 let passed = 0;
 const test = (name, fn) => {
@@ -35,6 +35,29 @@ test('a charted network is not offered again', () => {
 test('nothing usable means nothing to offer', () => {
   assert.deepEqual(suggestNetworks(['', '—', 'fe80::1', null, '999.1.1.1']), []);
   assert.deepEqual(suggestNetworks(undefined), []);
+});
+
+test('a first import takes networks, gear and wired machines, and leaves Wi-Fi clients out', () => {
+  const row = (key, type, group, status = 'new', more = {}) => ({ key, type, group, status, blocked: false, ...more });
+  const rows = [
+    row('n1', 'zone', 'Networks'),
+    row('n2', 'zone', 'Networks', 'charted'),
+    row('gw', 'place', 'Gateways', 'charted'),
+    row('ap', 'place', 'Access points'),
+    row('nas', 'place', 'Wired clients'),
+    row('old', 'place', 'Wired clients', 'clash'),
+    row('phone', 'place', 'Wireless clients'),
+    row('p1', 'port', 'Ports', 'new', { parent: 'gw' }),
+    row('p2', 'port', 'Ports', 'new', { parent: 'phone' }),
+    row('r1', 'route', 'Links', 'new', { parent: 'gw', peer: 'ap' }),
+    row('r2', 'route', 'Links', 'new', { parent: 'phone', peer: 'ap' }),
+    row('r3', 'route', 'Links', 'new', { parent: 'gw', peer: 'nas', blocked: true }),
+    row('f1', 'fact', 'What UniFi adds', 'new', { parent: 'gw' }),
+  ];
+  const got = firstImport(rows);
+  assert.deepEqual(got.picks.sort(), ['ap', 'n1', 'nas', 'p1', 'r1']);
+  assert.deepEqual([got.networks, got.gear, got.wired, got.wireless], [1, 1, 1, 1]);
+  assert.deepEqual(firstImport([]).picks, []);
 });
 
 console.log(`wizard-model: ${passed} passed`);

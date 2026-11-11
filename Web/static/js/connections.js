@@ -160,6 +160,7 @@ function rowState(r, zones) {
   if (r.type === 'service') return 'a service on its host';
   if (r.type === 'port') return 'a port on its device';
   if (r.type === 'route') return 'a link between them';
+  if (r.type === 'fact') return 'adds to what the map has';
   const zone = zones.find((z) => z.id === r.zone);
   return zone ? `lands in ${esc(zone.name)}` : say('no realm yet');
 }
