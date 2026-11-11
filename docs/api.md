@@ -8,12 +8,21 @@ This page covers what an API token can read. The machine-readable version is
 [`openapi.json`](openapi.json) (OpenAPI 3.1), and a running Atlas serves the
 same document at `/api/v2/openapi.json`.
 
-## Get a token
+## Turn it on, then get a token
+
+Agent access is off on a new Atlas: every token is refused and the MCP endpoint
+answers 404. An admin turns it on, and can turn it off again at any time, which
+stops every token at once and keeps them.
 
 1. Sign in as an admin.
 2. Open Settings, then Connections.
-3. Name the token, choose how long it lasts (30, 90 or 365 days, or never) and
+3. Press **Turn on** beside "Agent access is off".
+4. Name the token, choose how long it lasts (30, 90 or 365 days, or never) and
    create it.
+
+`ATLAS_AGENT_API=0` in the deployment keeps agent access off, and the Settings
+screen cannot turn it on. `ATLAS_AGENT_API=1` starts it on. See
+[the configuration reference](configuration.md).
 
 The token is shown once. Atlas keeps only a hash of it, so a lost token is
 revoked and replaced, not recovered. Revoking takes effect at once.
@@ -25,16 +34,28 @@ one.
 
 - **It reads.** There is no write scope. Changes to the map are made by a
   person in a session.
-- **It sees what a signed-in viewer with no groups sees.** Places marked for a
-  group are removed, along with every route, address, job and event that names
-  them. Account rosters and tripwires are never sent to a token.
+- **It sees no more than a signed-in viewer with no groups, and a little
+  less.** Places marked for a group are removed, along with every route,
+  address, job and event that names them. Account rosters and tripwires are
+  never sent to a token. Three more things a person reads and a token does not:
+  - **Credentials in a URL.** A charted URL reaches a token without
+    `user:pass@` and without its query string, whatever its scheme. A secret in
+    a URL's path, or in a note that merely contains a URL, is not caught, so do
+    not chart those.
+  - **A job's own words.** What a scheduled job wrote about its run (its
+    `note`) and the address it reported from are left out of `/api/v2/rites`.
+  - **Who acknowledged an event.** An event says that it was acknowledged and
+    when, not by whom or in what words. This holds for every viewer who is not
+    an admin.
 - **It opens seven doors**, listed below. Every other path ignores the token
   and answers as it would to a stranger.
 - **It is limited to 120 requests a minute.** Past that the answer is 429 with
   `Retry-After: 60`.
 
 What a tool reads leaves with it. A cloud AI tool sends what it reads to its
-model's vendor, so a token handed to one takes this map off your network.
+model's vendor, so a token handed to one takes this map off your network:
+names, IP and MAC addresses, service URLs and the notes you wrote. Use a local
+model where you can. Atlas cannot tell where a client sends what it reads.
 
 ## Try it
 
@@ -47,6 +68,11 @@ curl -s -H "Authorization: Bearer $TOKEN" "$ATLAS/api/v2/lab-data"
 
 If a proxy puts its own sign-in in front of Atlas, point the script at Atlas
 directly. That proxy's login cannot be answered with a token.
+
+Do that only where Atlas checks who is asking: `accounts` or `hybrid` mode, or
+`hub` mode with `ATLAS_HUB_SECRET` set. In `hub` mode without that secret Atlas
+believes a plain header, so anyone who can reach its port can claim to be an
+admin. Atlas refuses tokens in that mode, so that nobody opens the port for one.
 
 ## The paths
 
@@ -118,7 +144,9 @@ does not answer is reported, and the rest of the feed is still sent.
 
 Each job as charted, plus a `verdict`: `kept`, `late`, `missed`, `failed`,
 `awaited` (watched, never reported) or `unwatched` (nothing is expected of
-it). `age_s` is the seconds since it last reported.
+it). `age_s` is the seconds since it last reported. `last` holds when the job
+last reported, how it ended and how long it took; `runs` is the recent history
+of the same. A token is not sent the text the job wrote or where it posted from.
 
 ### History: `/api/v2/events`
 
@@ -131,7 +159,8 @@ curl -s -H "Authorization: Bearer $TOKEN" "$ATLAS/api/v2/events?limit=20&unacked
 
 Each event says what changed (`kind`, `target`, `name`), from which state to
 which, and when it was first observed. A `cause` means another fault explains
-this one.
+this one. `ack.at` is when someone acknowledged it; who, and what they wrote,
+are for admins.
 
 ### AI tools: `/api/v2/mcp`
 
@@ -145,11 +174,12 @@ should read the answers.
 | Status | Meaning |
 |---|---|
 | 401 | No token, or one that is not valid or has expired |
-| 403 | A token tried something other than a read |
+| 403 | A token tried something other than a read, or agent access is off |
+| 404 | On `/api/v2/mcp`: agent access is off |
 | 429 | Too many requests on this token; wait a minute |
 | 500 | The dataset on disk could not be read |
 
-A 401, 403 or 429 carries `{"error": ..., "reason": ...}`.
+A 401, 403, 404 or 429 from the token gate carries `{"error": ..., "reason": ...}`.
 
 ## What is stable
 

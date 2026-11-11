@@ -155,7 +155,22 @@ def record(feed, label_for=None):
     return fresh
 
 
-def listing(limit=100, visible=None, unacked_only=False, visible_services=None):
+def for_viewer(event):
+    """An event as someone who is not an admin reads it: that it was
+    acknowledged and when, not by whom or in what words. Returns a copy.
+
+    The same rule as a place's provenance (`provenance.for_viewer`): when and
+    whether, not who. An ack's `by` is an admin's sign-in name and its `note` is
+    whatever they typed, about a place this viewer may not be cleared for.
+    """
+    ack = event.get("ack")
+    if not isinstance(ack, dict):
+        return event
+    return {**event, "ack": {"at": ack.get("at")}}
+
+
+def listing(limit=100, visible=None, unacked_only=False, visible_services=None,
+            visible_rites=None):
     """The annals, newest first.
 
     `visible` is the set of node ids the viewer is cleared to see. Events are
@@ -168,6 +183,11 @@ def listing(limit=100, visible=None, unacked_only=False, visible_services=None):
     service row names its monitor, and a monitor charted on a hidden place —
     or on a hidden link of a visible one — is exactly what the node gate was
     there to keep out of the history.
+
+    `visible_rites` is that gate for rite events, whose target is a rite's key
+    (`heartbeats.keys_of` over the viewer's redacted rites). A rite that names
+    a hidden place is dropped from `/rites`; without this its row stayed here,
+    by name and state.
     """
     store = _STORE.load()
     out = []
@@ -180,6 +200,9 @@ def listing(limit=100, visible=None, unacked_only=False, visible_services=None):
             continue
         if visible_services is not None and kind == "service" \
                 and event.get("target") not in visible_services:
+            continue
+        if visible_rites is not None and kind == "rite" \
+                and event.get("target") not in visible_rites:
             continue
         # a visible place can be dark BEHIND a hidden one, which names it
         if visible is not None and "cause" in event and event["cause"] not in visible:
@@ -201,9 +224,10 @@ def _counts(rows):
     }
 
 
-def counts(visible=None, visible_services=None):
+def counts(visible=None, visible_services=None, visible_rites=None):
     """Totals for the chrome: how much is unacknowledged, how busy it's been."""
-    return _counts(listing(limit=KEEP, visible=visible, visible_services=visible_services))
+    return _counts(listing(limit=KEEP, visible=visible, visible_services=visible_services,
+                           visible_rites=visible_rites))
 
 
 def acknowledge(event_id, actor, note=""):

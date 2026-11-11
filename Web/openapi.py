@@ -26,7 +26,7 @@ import schema
 #: The contract's own version, apart from the app's. It moves when a documented
 #: path, parameter or field changes, so the file on disk does not churn with
 #: every release.
-CONTRACT = "2.0.0"
+CONTRACT = "2.1.0"
 
 OPENAPI_PATH = "/api/v2/openapi.json"
 
@@ -135,6 +135,7 @@ def _json(ref, description):
 
 def _refusals(*extra):
     out = {"401": {"$ref": "#/components/responses/Unauthorized"},
+           "403": {"$ref": "#/components/responses/Off"},
            "429": {"$ref": "#/components/responses/TooMany"}}
     for status in extra:
         out[status] = {"$ref": "#/components/responses/Unreadable"}
@@ -208,7 +209,9 @@ def _schemas():
                 "expect_every": {"type": ["number", "null"], "description": "Seconds."},
                 "grace": {"type": ["number", "null"], "description": "Seconds."},
                 "age_s": {"type": "number", "description": "Seconds since it last reported."},
-                "last": {**_ANY_OBJECT, "description": "The last report: `at`, `status`, `note`, `source`, `duration_s`."},
+                "last": {**_ANY_OBJECT, "description": ("The last report: `at`, `status`, `duration_s`. What the job "
+                                                        "wrote about its run and the address it posted "
+                                                        "from are not sent to a token.")},
                 "runs": {"type": "array", "items": _ANY_OBJECT},
             }}}}},
         "Events": {"type": "object", "properties": {
@@ -225,7 +228,8 @@ def _schemas():
                                 "examples": ["grave", "warn", "planned", "clear", "consequence"]},
                     "cause": {"type": "string", "description": "Present when another fault explains this one."},
                     "ack": {"type": ["object", "null"], "additionalProperties": True,
-                            "description": "Who acknowledged it and what they wrote, or null."},
+                            "description": ("`at`: when it was acknowledged; null if it was not. "
+                                            "Who, and what they wrote, are for admins.")},
                 }}},
             "counts": {"type": "object", "properties": {
                 "total": {"type": "integer"}, "unacked": {"type": "integer"},
@@ -300,6 +304,7 @@ def _paths():
             "schema": {"$ref": "#/components/schemas/RpcRequest"}}}},
         "responses": {"200": _json("RpcReply", "A JSON-RPC reply. A tool's failure is a reply, not a status."),
                       "202": {"description": "A notification was accepted. No body."},
+                      "404": {"$ref": "#/components/responses/Off"},
                       **_refusals()},
     }}
     return paths
@@ -313,8 +318,11 @@ def document():
             "version": CONTRACT,
             "description": (
                 "What an API token can read from an Atlas. Tokens are issued in Settings, "
-                "Connections, by an admin. A token is read-only, sees what a signed-in "
-                "viewer with no groups sees, and reaches only the paths in this document. "
+                "Connections, by an admin, once agent access is turned on there. A token is "
+                "read-only, sees no more than a signed-in viewer with no groups, and reaches "
+                "only the paths in this document. A URL reaches it without `user:pass@` or "
+                "its query string. While agent access is off every path here answers 403 to "
+                "a token and the MCP endpoint answers 404. "
                 "The rest of `/api/v2` belongs to the page and is not a contract."),
             "license": {"name": "MIT", "identifier": "MIT"},
         },
@@ -328,6 +336,8 @@ def document():
             "schemas": _schemas(),
             "responses": {
                 "Unauthorized": _json("Refusal", "No token, or one that is not valid or has expired."),
+                "Off": _json("Refusal", "Agent access is turned off on this Atlas, or the token "
+                                        "tried something other than a read."),
                 "TooMany": {**_json("Refusal", f"More than {api_tokens.RATE_PER_MINUTE} requests in a "
                                                "minute on this token."),
                             "headers": {"Retry-After": {"schema": {"type": "string"}}}},

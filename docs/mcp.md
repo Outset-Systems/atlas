@@ -10,29 +10,46 @@ reconfigures anything on your network.
 
 ## What leaves your network
 
-A tool result goes wherever the model is. With a local model, answers stay on
-your network. With a cloud model, every answer the agent reads is sent to that
-model's vendor: places, addresses and service URLs. Decide that before you hand a token to a cloud tool.
+Use a local model. Atlas never calls a model itself; a tool result goes
+wherever the model that asked for it runs.
+
+- **A local model** (Ollama, LM Studio, your own harness on your own hardware):
+  answers stay on your network.
+- **A cloud model** (Claude Code, Codex, Gemini CLI and the like): every answer
+  The agent reads is sent to that model's vendor, and the vendor's own terms
+  decide how long it is kept. That includes place names, IP addresses, MAC
+  addresses, service URLs and the descriptions you wrote. A token can also read
+  the whole map at once through `/api/v2/lab-data`.
+
+Atlas cannot see where a client sends what it reads, so it cannot stop a token
+from reaching a cloud model. Only the person who creates the token can decide that.
+Give each tool its own token, name it after the tool, and revoke it when you
+stop using that tool.
 
 ## Set it up
 
-You need an API token: Settings, Connections, as an admin. It is shown once.
+Agent access is off on a new Atlas. As an admin, open Settings, Connections and
+press **Turn on**. Turning it off again stops every tool at once and keeps the
+tokens. A deployment can hold it off with `ATLAS_AGENT_API=0`
+([configuration](configuration.md)).
+
+Then create an API token on the same screen. It is shown once.
 [The API guide](api.md) explains what a token can and cannot see.
 
 Settings, Connections also shows these lines filled in for your address.
 
-**Claude Code**
-
-```sh
-claude mcp add --transport http atlas https://atlas.example.net/api/v2/mcp \
-  --header "Authorization: Bearer $ATLAS_TOKEN"
-```
-
-**Any client that speaks MCP over HTTP** (a local model's harness, for one)
+**A local model: any client that speaks MCP over HTTP**
 
 ```
 URL:    https://atlas.example.net/api/v2/mcp
 Header: Authorization: Bearer atl_...
+```
+
+**Claude Code** (cloud: what it reads goes to Anthropic)
+
+```sh
+claude mcp add --transport http atlas https://atlas.example.net/api/v2/mcp \
+  --header "Authorization: Bearer $ATLAS_TOKEN"
 ```
 
 **A client that can only start a command** (stdio)
@@ -47,7 +64,10 @@ a file only the container reads. `ATLAS_TOKEN` in the environment works too,
 but a token typed on a command line stays in your shell history.
 
 If a proxy puts its own sign-in in front of Atlas, point the client at Atlas
-directly. That proxy's login cannot be answered with a token.
+directly. That proxy's login cannot be answered with a token. Do that only in
+`accounts` or `hybrid` mode, or in `hub` mode with `ATLAS_HUB_SECRET` set: in
+`hub` mode without that secret Atlas believes a plain header, anyone who can
+reach its port can claim to be an admin, and Atlas refuses tokens.
 
 ## The tools
 
@@ -145,8 +165,11 @@ The same limits as any token:
 - account rosters;
 - tripwires;
 - the names of the people who charted or reviewed a place;
-- what a scheduled job wrote about its own run (its note), since a job's words
-  are not the map owner's;
+- what a scheduled job wrote about its own run (its note) and the address it
+  reported from, since a job's words are not the map owner's;
+- who acknowledged an event, and what they wrote;
+- the `user:pass@` and the query string of a charted URL. A secret in a URL's
+  path, or in a note, is not caught;
 - the review inbox, the change log and every admin screen.
 
 ## Protocol

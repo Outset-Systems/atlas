@@ -39,8 +39,9 @@ function rowHTML(e) {
     ? 'went dark with it' : (PHRASE[e.to] || `became ${e.to}`);
   const behind = e.cause
     ? `<span class="ann-behind"> behind ${esc(e.cause)}</span>` : '';
+  // who saw it and what they wrote are an admin's to read: anyone else gets "seen"
   const ack = e.ack
-    ? `<span class="ann-ack">seen by ${esc(e.ack.by)}${e.ack.note ? ` — ${esc(e.ack.note)}` : ''}</span>`
+    ? `<span class="ann-ack">seen${e.ack.by ? ` by ${esc(e.ack.by)}` : ''}${e.ack.note ? ` — ${esc(e.ack.note)}` : ''}</span>`
     : (A.editorReady?.() && (e.gravity === 'grave' || e.gravity === 'warn')
         ? `<button class="ann-ack-btn" data-id="${esc(e.id)}">acknowledge</button>` : '');
   return `<div class="ann-row ${GRAVITY_CLASS[e.gravity] || ''}">

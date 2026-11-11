@@ -1105,6 +1105,10 @@ a.sp-btn { text-decoration: none; text-align: center; display: block; }
 #con-name { flex: 1 1 0; min-width: 0; width: auto; }
 #con-life { flex: 0 0 auto; width: auto; }
 #con-issue { flex: 0 0 auto; }
+/* the switch for agent access as a whole: the words, then the one button */
+.con-access { display: flex; align-items: center; gap: 10px; margin: 8px 0; padding: 8px 10px; border: 1px solid var(--hair); border-radius: 4px; color: var(--text); }
+.con-access.con-access-on { border-color: rgba(var(--gilt-rgb), 0.55); }
+.con-access .sp-btn { margin-left: auto; flex: 0 0 auto; }
 .con-fresh { margin: 8px 0; padding: 8px 10px; border: 1px solid rgba(var(--gilt-rgb), 0.55); border-radius: 4px; color: var(--text); }
 .con-code {
   margin: 4px 0 0; padding: 8px 10px; overflow-x: auto; border-radius: 4px; white-space: pre;

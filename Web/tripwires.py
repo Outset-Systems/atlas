@@ -440,21 +440,26 @@ def is_trip(event):
 
 
 def listing_without_trips(limit=100, visible=None, unacked_only=False,
-                          visible_services=None):
-    """The annals for a viewer not cleared for tripwires: trip rows removed
-    BEFORE the limit, so the page is still `limit` long."""
-    out = [e for e in events.listing(limit=events.KEEP, visible=visible,
-                                     unacked_only=unacked_only,
-                                     visible_services=visible_services)
+                          visible_services=None, visible_rites=None):
+    """The annals for a viewer who is not an admin: trip rows removed BEFORE the
+    limit, so the page is still `limit` long, and each row without the name of
+    whoever acknowledged it or what they wrote (`events.for_viewer`). This is
+    the one door every non-admin reading takes: the page, a token, the MCP tool."""
+    out = [events.for_viewer(e)
+           for e in events.listing(limit=events.KEEP, visible=visible,
+                                   unacked_only=unacked_only,
+                                   visible_services=visible_services,
+                                   visible_rites=visible_rites)
            if not is_trip(e)]
     return out[:limit]
 
 
-def counts_without_trips(visible=None, visible_services=None):
+def counts_without_trips(visible=None, visible_services=None, visible_rites=None):
     """`events.counts()` with trip rows left out of every total — a bare
     "1 unacknowledged" would say a tripwire just fired."""
     return events._counts(listing_without_trips(limit=events.KEEP, visible=visible,
-                                                visible_services=visible_services))
+                                                visible_services=visible_services,
+                                                visible_rites=visible_rites))
 
 
 # ── the read model ───────────────────────────────────────────────────────────

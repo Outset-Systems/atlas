@@ -23,7 +23,7 @@ const SOURCE = { file: 'saved', env: 'deployment', default: 'default' };
 const LIFETIME = (d) => (d ? `${d} days` : 'never expires');
 
 let issued = '';       // the plaintext, for as long as this panel stays open
-let tab = 'claude';
+let tab = 'local';     // a local model first: its answers never leave the network
 
 const endpoint = () => new URL('api/v2/mcp', document.baseURI).href;
 const readUrl = () => new URL('api/v2/signals', document.baseURI).href;
@@ -34,22 +34,25 @@ const readUrl = () => new URL('api/v2/signals', document.baseURI).href;
 function setups(token) {
   const shown = token || 'PASTE_YOUR_TOKEN';
   const url = endpoint();
+  /* Local first, then the plain read, then the cloud harnesses, each saying where
+     its answers go. The order is the advice. */
+  const cloud = (vendor) => `Cloud model: everything it reads from this map is sent to ${vendor}. `;
   return {
-    claude: { name: 'Claude Code', lang: 'shell',
-      note: 'Then run claude mcp list to check it.',
-      text: `export ATLAS_TOKEN="${shown}"\nclaude mcp add --transport http --scope user atlas ${url} --header "Authorization: Bearer $ATLAS_TOKEN"` },
-    codex: { name: 'Codex', lang: '~/.codex/config.toml',
-      note: 'The file names the variable, so the token stays out of it. Set ATLAS_TOKEN before starting Codex.',
-      text: `[mcp_servers.atlas]\nurl = "${url}"\nbearer_token_env_var = "ATLAS_TOKEN"` },
-    gemini: { name: 'Gemini CLI', lang: '~/.gemini/settings.json',
-      note: 'This file holds the token in plain text, so never commit it. Check with /mcp.',
-      text: JSON.stringify({ mcpServers: { atlas: { httpUrl: url, headers: { Authorization: `Bearer ${shown}` } } } }, null, 2) },
     local: { name: 'Local model', lang: 'any MCP client',
       note: 'For Ollama, LM Studio or your own harness: point any client that speaks MCP over HTTP at this address. Answers stay on your network.',
       text: `URL:    ${url}\nHeader: Authorization: Bearer ${shown}` },
     rest: { name: 'REST', lang: 'shell',
       note: 'The same token reads lab-data, maps, signals, rites and events under api/v2. The reference is api/v2/openapi.json.',
       text: `curl -H "Authorization: Bearer ${shown}" ${readUrl()}` },
+    claude: { name: 'Claude Code (cloud)', lang: 'shell',
+      note: cloud('Anthropic') + 'Then run claude mcp list to check it.',
+      text: `export ATLAS_TOKEN="${shown}"\nclaude mcp add --transport http --scope user atlas ${url} --header "Authorization: Bearer $ATLAS_TOKEN"` },
+    codex: { name: 'Codex (cloud)', lang: '~/.codex/config.toml',
+      note: cloud('OpenAI') + 'The file names the variable, so the token stays out of it. Set ATLAS_TOKEN before starting Codex.',
+      text: `[mcp_servers.atlas]\nurl = "${url}"\nbearer_token_env_var = "ATLAS_TOKEN"` },
+    gemini: { name: 'Gemini CLI (cloud)', lang: '~/.gemini/settings.json',
+      note: cloud('Google') + 'This file holds the token in plain text, so never commit it. Check with /mcp.',
+      text: JSON.stringify({ mcpServers: { atlas: { httpUrl: url, headers: { Authorization: `Bearer ${shown}` } } } }, null, 2) },
   };
 }
 
@@ -60,6 +63,32 @@ function tokenRow(t) {
       <span class="con-name">${esc(t.name)}</span>
       <span class="con-meta">${when} · ${ends}</span>
       <button class="sp-btn sp-btn-warn" type="button" data-revoke="${esc(t.id)}" data-name="${esc(t.name)}">Revoke</button>
+    </div>`;
+}
+
+/* The switch for agent access as a whole. It starts off, and off refuses every
+   token at once without revoking any. A deployment that sets ATLAS_AGENT_API=0
+   holds it shut, and then there is no button here to press. */
+function accessHTML(access, count) {
+  const kept = count
+    ? ` The ${count === 1 ? 'token below is' : `${count} tokens below are`} kept, and refused until it is on again.`
+    : '';
+  if (access.on) {
+    return `<div class="con-access con-access-on">
+        <span><strong>Agent access is on.</strong> A tool that holds a token can read this map.</span>
+        <button class="sp-btn sp-btn-warn" type="button" id="con-access" data-on="0">Turn off</button>
+      </div>`;
+  }
+  if (access.locked) {
+    return `<div class="con-access">
+        <span><strong>Agent access is off, and locked.</strong> This deployment sets
+          <code>ATLAS_AGENT_API=0</code>, so it can only be turned on there.${kept}</span>
+      </div>`;
+  }
+  return `<div class="con-access">
+      <span><strong>Agent access is off.</strong> No tool can read this map: every token is refused
+        and the MCP address answers "not found".${kept}</span>
+      <button class="sp-btn sp-btn-go" type="button" id="con-access" data-on="1">Turn on</button>
     </div>`;
 }
 
@@ -432,23 +461,30 @@ export async function renderConnections() {
 
   const life = tok.lifetimes.map((d) =>
     `<option value="${d ?? ''}"${d === tok.default_days ? ' selected' : ''}>${LIFETIME(d)}</option>`).join('');
-  el.innerHTML =
-    `<button class="sp-sub" type="button">CONNECTIONS <span class="sp-sub-plain">· AI tools, scripts and other systems</span></button>
-     <div class="sp-sec-body">
-     <div class="sp-sub-h">Let a tool read this map</div>
-     <div class="acct-note">A token is read-only and sees what a viewer with no groups sees: no accounts,
-       no tripwires, no restricted places. <em>A cloud tool sends what it reads to its model's vendor,
-       so this map leaves your network with it.</em> A local model keeps it here.</div>
-     <div id="con-fresh" class="con-fresh" ${issued ? '' : 'hidden'}>Copy this now. It will not be shown again.
-       <pre class="con-code">${esc(issued)}</pre></div>
-     <div class="con-tokens">${tok.tokens.map(tokenRow).join('') || '<div class="acct-note">No tokens yet.</div>'}</div>
-     <div class="dir-test">
-       <input class="dir-input" id="con-name" placeholder="what is it for? e.g. claude on my laptop" maxlength="64" autocomplete="off">
+  // an Atlas from before the switch answers without `access`: it has none, so it is on
+  const access = tok.access || { on: true, locked: false };
+  // creating a token and the setup lines are for an Atlas that will honour one
+  const making = access.on
+    ? `<div class="dir-test">
+       <input class="dir-input" id="con-name" placeholder="what is it for? e.g. local model on my GPU box" maxlength="64" autocomplete="off">
        <select class="dir-input con-life" id="con-life" aria-label="Lifetime">${life}</select>
        <button class="sp-btn sp-btn-go" type="button" id="con-issue">Create</button>
      </div>
      <div class="dir-result" id="con-result"></div>
-     <div id="con-setup">${setupHTML()}</div>
+     <div id="con-setup">${setupHTML()}</div>`
+    : '<div class="dir-result" id="con-result"></div>';
+  el.innerHTML =
+    `<button class="sp-sub" type="button">CONNECTIONS <span class="sp-sub-plain">· AI tools, scripts and other systems</span></button>
+     <div class="sp-sec-body">
+     <div class="sp-sub-h">Let a tool read this map</div>
+     <div class="acct-note">A token is read-only and sees no more than a viewer with no groups: no accounts,
+       no tripwires, no restricted places. <em>A cloud tool sends what it reads to its model's vendor,
+       so this map leaves your network with it.</em> A local model keeps it here.</div>
+     ${accessHTML(access, tok.tokens.length)}
+     <div id="con-fresh" class="con-fresh" ${issued ? '' : 'hidden'}>Copy this now. It will not be shown again.
+       <pre class="con-code">${esc(issued)}</pre></div>
+     <div class="con-tokens">${tok.tokens.map(tokenRow).join('') || '<div class="acct-note">No tokens yet.</div>'}</div>
+     ${making}
      <div class="sp-sub-h">Let this Atlas read a system</div>
      <div class="acct-note">Test makes one or two read-only calls and reports what it found. Review lists
        what the system knows, using what is saved here, and you tick what to add to the map. It never runs
@@ -457,6 +493,19 @@ export async function renderConnections() {
      </div>`;
 
   wireSetup(el);
+  $('con-access')?.addEventListener('click', async (e) => {
+    const on = e.target.dataset.on === '1';
+    if (!on && !confirm('Turn agent access off? Every tool reading this map stops at once. Tokens are kept.')) return;
+    const { r, j } = await post('api/v2/admin/tokens/access', { on });
+    if (!r.ok) {
+      const box = $('con-result');
+      box.className = 'dir-result dir-bad';
+      box.textContent = j.error || 'Could not change agent access.';
+      return;
+    }
+    if (!on) issued = '';      // a token shown a moment ago is no use to copy now
+    await renderConnections();
+  });
   $('con-issue')?.addEventListener('click', async () => {
     const box = $('con-result');
     const days = $('con-life').value;

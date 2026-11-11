@@ -26,7 +26,26 @@ from .admin import (  # noqa: E402
 def tokens_get():
     import api_tokens
     return jsonify({"tokens": api_tokens.listing(), "lifetimes": list(api_tokens.LIFETIMES),
-                    "default_days": api_tokens.DEFAULT_DAYS})
+                    "default_days": api_tokens.DEFAULT_DAYS, "access": api_tokens.access()})
+
+
+@admin_bp.route("/tokens/access", methods=["POST"])
+def tokens_access():
+    """The switch for agent access as a whole: `{"on": true|false}`. Off refuses
+    every token at once and keeps them; on is refused while the deployment says
+    `ATLAS_AGENT_API=0`."""
+    refusal = write_refusal()
+    if refusal:
+        return refusal
+    import api_tokens
+    body = request.get_json(silent=True) or {}
+    if not isinstance(body.get("on"), bool):
+        return jsonify({"error": "Send on: true or on: false."}), 422
+    try:
+        state = api_tokens.set_access(body["on"], actor())
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 422
+    return jsonify({"ok": True, "access": state})
 
 
 @admin_bp.route("/tokens", methods=["POST"])

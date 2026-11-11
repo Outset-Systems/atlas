@@ -331,6 +331,33 @@ def status_for(rites, now=None):
     return out
 
 
+#: What a reporting job said about its own run, and where it said it from. A
+#: job's words are not the map owner's, and the address is the poster's.
+JOB_WORDS = ("note", "source")
+
+
+def without_job_words(row):
+    """A `status_for` row as an API token reads it: when the job last ran, how it
+    ended and how long it took, not the text it sent or the address it sent it
+    from. Returns a copy.
+
+    The run history stays: it is times and outcomes, written by this module. The
+    MCP tool has always left the words out (`mcp_tools.missed_jobs`); this is the
+    same rule for `/api/v2/rites`, which until 2026-11-11 handed them to a token.
+    """
+    last = row.get("last")
+    if not isinstance(last, dict):
+        return row
+    return {**row, "last": {k: v for k, v in last.items() if k not in JOB_WORDS}}
+
+
+def keys_of(rites):
+    """The keys of a dataset's rites. Given a viewer's redacted rites, this is
+    the gate for anything else that names one: the signals feed's rites block and
+    the rite rows in the annals."""
+    return {key_for(r) for r in rites or [] if isinstance(r, dict)}
+
+
 def as_feed(rites, now=None):
     """`{key: {"state": …, "name": …}}` for the rites THE ANNALS should watch.
 

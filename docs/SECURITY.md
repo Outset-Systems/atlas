@@ -82,6 +82,37 @@ running instance.
 
 ## Hardening log
 
+### 2026-11-11
+
+A review of what an API token and the MCP endpoint hand to a script or an AI
+agent. The token mechanics held (random secrets stored as hashes, a
+constant-time compare, expiry and revocation on every request, read-only).
+What changed:
+
+- Agent access is off until an admin turns it on in Settings, Connections.
+  While it is off the MCP endpoint answers 404 and every token is refused
+  before it is looked up. `ATLAS_AGENT_API=0` holds it off, and the Settings
+  screen cannot undo that. Turning it off takes effect on the next request.
+- `/api/v2/rites` no longer sends a token what a scheduled job wrote about its
+  run, or the address the job posted from. The MCP tool never did.
+- An event's acknowledgement tells anyone who is not an admin when it was
+  acknowledged, not by whom or in what words.
+- Events about a scheduled job that is hidden from a viewer are hidden too.
+- A charted URL reaches a token without `user:pass@` and without its query
+  string, whatever its scheme. A secret in a URL's path or in a note is not
+  caught.
+- A token no longer shares a cache key with a signed-in viewer who has no
+  groups, since the two now read different bodies.
+- In `hub` mode with no `ATLAS_HUB_SECRET` Atlas believes a plain header, so
+  its port must stay closed to everything but the Hub. Tokens are refused in
+  that mode, so that nobody opens the port for one.
+
+Known and not yet changed: a token still reads the rest of the map, including
+IP and MAC addresses, notes and names an import wrote, and there is no record
+of what a token read. Atlas cannot tell where a client sends what it reads, so
+use a local model, and give a token only to a tool you would show your network
+diagram to.
+
 ### 2026-11-01
 
 A defensive review of the app, the image and the publishing tooling. Fixed in

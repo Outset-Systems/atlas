@@ -5,17 +5,27 @@ issued by an admin, shown once and stored only as a hash. It expires unless
 someone says otherwise, it records when it was last used, and revoking it is
 immediate.
 
+OFF UNTIL SOMEONE TURNS IT ON (2026-11-11). `access()` decides whether any
+token is honoured at all, and it starts off: the MCP endpoint answers 404 and a
+token on a read route is refused before it is looked up. An admin turns it on in
+Settings, Connections; `ATLAS_AGENT_API=0` in the deployment keeps it off and
+that screen cannot undo it. The answer is read from the store on every request,
+like the tokens, so turning it off is immediate on every worker.
+
 THREE LIMITS, AND WHY THEY ARE NOT OPTIONS:
 
   * **Read-only.** There is no write scope to choose. The first thing an AI
     harness does with a tool is try it, and a map that can be edited by a model
     on a bad prompt is not a map anyone can trust. Writes stay a person in a
     session.
-  * **An ordinary viewer's eyes.** `viewer_groups()` answers an empty set for a
-    token request, so `redact_for_groups` and the signals feed cut it down
-    exactly as they cut down a signed-in viewer with no clearance: no account
-    rosters, no tripwires, no `require_group` places. A token can never see more
-    than a person with no groups, whoever issued it.
+  * **No more than an ordinary viewer's eyes.** `viewer_groups()` answers an
+    empty set for a token request, so `redact_for_groups` and the signals feed
+    cut it down as they cut down a signed-in viewer with no clearance: no
+    account rosters, no tripwires, no `require_group` places. A token can never
+    see more than a person with no groups, whoever issued it, and it sees a
+    little less: a URL reaches it without `user:pass@` or its query string
+    (`redaction.bare_urls`), and a scheduled job's own words about its run stay
+    behind (`heartbeats.without_job_words`).
   * **A short list of doors.** `READ_PATHS` plus the MCP endpoint, GET only for
     the former. Everything else ignores the header and answers as if there were
     no credential, so a new route is closed to tokens until a diff here says
@@ -37,11 +47,22 @@ from collections import defaultdict, deque
 
 from flask import g, has_request_context, jsonify, request
 
+import envnames
 import settings
 from filelock import exclusive
 from jsonio import iso_utc, read_json_dict, write_json_atomic
 
 log = logging.getLogger("atlas.api.tokens")
+
+#: The deployment's word on agent access. "0" keeps it off and Settings cannot turn
+#: it on; "1" turns it on until an admin turns it off; unset leaves it to the
+#: switch in Settings, which starts off.
+ACCESS_ENV = "ATLAS_AGENT_API"
+OFF_REASON = ("Agent access is turned off on this Atlas. "
+              "An admin can turn it on in Settings, Connections.")
+_NO = ("0", "off", "false", "no")
+_YES = ("1", "on", "true", "yes")
+_KEEP = object()
 
 PREFIX = "atl_"
 STORE = "api-tokens.json"
@@ -86,20 +107,64 @@ def _hash(raw):
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
-def _load():
+def _store():
     """Read the file every time, on purpose. It is at most 50 short rows, and a
     cache keyed on its mtime let a revoked token keep working: two writes in one
-    clock tick look like no write at all. Revoking has to be immediate."""
-    return list(read_json_dict(_path()).get("tokens") or [])
+    clock tick look like no write at all. Revoking has to be immediate, and so
+    does turning agent access off."""
+    return read_json_dict(_path())
 
 
-def _save(tokens):
+def _load():
+    return list(_store().get("tokens") or [])
+
+
+def _save(tokens, enabled=_KEEP):
+    """Write the tokens, and the switch beside them. `enabled` left alone keeps
+    whatever the file says, so issuing or revoking never moves the switch."""
     path = _path()
-    write_json_atomic(path, {"tokens": tokens}, keep_backup=False)
+    chosen = _store().get("enabled") if enabled is _KEEP else enabled
+    doc = {"tokens": tokens}
+    if isinstance(chosen, bool):
+        doc["enabled"] = chosen
+    write_json_atomic(path, doc, keep_backup=False)
     try:
         os.chmod(path, 0o600)
     except OSError:      # a share that will not take modes; the hashes are not the keys
         pass
+
+
+def access():
+    """Whether a token may read this Atlas at all: `{"on", "locked", "by"}`.
+
+    Three voices, and off wins. The deployment's `ATLAS_AGENT_API=0` is a lock:
+    nothing on the Settings screen undoes it, so a stolen admin session cannot
+    open what the owner closed in the compose file. Otherwise the switch an admin
+    set in Settings decides. With neither, `ATLAS_AGENT_API=1` means on and
+    anything else means off, which is how a fresh install starts.
+    """
+    env = (envnames.env(ACCESS_ENV) or "").strip().lower()
+    if env in _NO:
+        return {"on": False, "locked": True, "by": "deployment"}
+    chosen = _store().get("enabled")
+    if isinstance(chosen, bool):
+        return {"on": chosen, "locked": False, "by": "settings"}
+    on = env in _YES
+    return {"on": on, "locked": False, "by": "deployment" if on else "default"}
+
+
+def set_access(on, actor):
+    """Turn agent access on or off from Settings. Off always works. On is refused
+    while the deployment holds the lock. Tokens are kept either way: off refuses
+    them, it does not revoke them."""
+    on = bool(on)
+    if on and access()["locked"]:
+        raise ValueError(f"This deployment sets {ACCESS_ENV}=0, so agent access "
+                         "cannot be turned on here. Change it there.")
+    with exclusive(_lock_path()):
+        _save(_load(), enabled=on)
+    log.warning("agent access turned %s by %s", "on" if on else "off", actor)
+    return access()
 
 
 def _public(rec):
@@ -123,6 +188,10 @@ def issue(name, days, actor):
         raise ValueError(f"Keep the name under {MAX_NAME} characters.")
     if days not in LIFETIMES:
         raise ValueError("That is not one of the offered lifetimes.")
+    if not access()["on"]:
+        # a token minted while access is off would start working, unannounced,
+        # the moment someone turned it on
+        raise ValueError("Agent access is off. Turn it on first, then create the token.")
     with exclusive(_lock_path()):
         tokens = _load()
         if len(tokens) >= MAX_TOKENS:
@@ -200,8 +269,18 @@ def _bearer():
     return security.bearer_token(request)
 
 
+def _plain_hub():
+    """Hub mode with no signing secret: Atlas believes a plain `X-Remote-User`
+    header, so it is safe only while nothing but the Hub can reach its port. A
+    client with a token has to reach that port itself, which is the one thing
+    that mode cannot survive, so tokens are not served there."""
+    import hub_auth.auth as auth
+    return auth.AUTH_MODE == "hub" and not auth.AUTH_SECRET
+
+
 def _refuse(status, reason):
-    resp = jsonify({"error": "Unauthorized" if status == 401 else "Refused", "reason": reason})
+    error = {401: "Unauthorized", 404: "Not found"}.get(status, "Refused")
+    resp = jsonify({"error": error, "reason": reason})
     resp.status_code = status
     if status == 401:
         resp.headers["WWW-Authenticate"] = "Bearer"
@@ -223,6 +302,15 @@ def gate():
         # The read routes are also the map's own, for a browser with a session,
         # and another kind of bearer (a relay's site token) is none of our business.
         return None
+    if not access()["on"]:
+        # OFF IS OFF. The MCP endpoint is not there, and a token on a read route is
+        # refused before it is looked up, so a leaked one cannot even learn whether
+        # it is still valid.
+        return _refuse(404 if path == MCP_PATH else 403, OFF_REASON)
+    if _plain_hub():
+        return _refuse(403, "API tokens need Atlas to do its own sign-in (accounts mode) or the "
+                            "Hub to sign each request (ATLAS_HUB_SECRET). This Atlas trusts a "
+                            "plain header, so its port must stay closed to everything but the Hub.")
     if not raw:
         # The MCP endpoint is not the map's: a token is its whole credential, which
         # is also why it needs no same-origin check (a cookie opens nothing here).

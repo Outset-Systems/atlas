@@ -69,8 +69,9 @@ def answer(client, token, line):
     if isinstance(body, dict) and body.get("jsonrpc") == "2.0":
         return body
     # the gate's own refusals are plain JSON, not JSON-RPC: say them in the caller's terms
+    # (404 is the gate too: agent access is off, and the reason says so)
     reason = (body or {}).get("reason") if isinstance(body, dict) else None
-    return _error(msg.get("id"), UNAUTHORIZED if resp.status_code in (401, 403, 429) else INVALID_REQUEST,
+    return _error(msg.get("id"), UNAUTHORIZED if resp.status_code in (401, 403, 404, 429) else INVALID_REQUEST,
                   reason or f"The Atlas answered {resp.status_code}")
 
 

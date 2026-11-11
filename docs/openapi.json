@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Atlas API",
-    "version": "2.0.0",
-    "description": "What an API token can read from an Atlas. Tokens are issued in Settings, Connections, by an admin. A token is read-only, sees what a signed-in viewer with no groups sees, and reaches only the paths in this document. The rest of `/api/v2` belongs to the page and is not a contract.",
+    "version": "2.1.0",
+    "description": "What an API token can read from an Atlas. Tokens are issued in Settings, Connections, by an admin, once agent access is turned on there. A token is read-only, sees no more than a signed-in viewer with no groups, and reaches only the paths in this document. A URL reaches it without `user:pass@` or its query string. While agent access is off every path here answers 403 to a token and the MCP endpoint answers 404. The rest of `/api/v2` belongs to the page and is not a contract.",
     "license": {
       "name": "MIT",
       "identifier": "MIT"
@@ -53,6 +53,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/Off"
+          },
           "429": {
             "$ref": "#/components/responses/TooMany"
           },
@@ -84,6 +87,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/Off"
+          },
           "429": {
             "$ref": "#/components/responses/TooMany"
           }
@@ -109,6 +115,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/Off"
+          },
           "429": {
             "$ref": "#/components/responses/TooMany"
           }
@@ -133,6 +142,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Off"
           },
           "429": {
             "$ref": "#/components/responses/TooMany"
@@ -161,6 +173,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Off"
           },
           "429": {
             "$ref": "#/components/responses/TooMany"
@@ -211,6 +226,9 @@
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
+          "403": {
+            "$ref": "#/components/responses/Off"
+          },
           "429": {
             "$ref": "#/components/responses/TooMany"
           }
@@ -257,8 +275,14 @@
           "202": {
             "description": "A notification was accepted. No body."
           },
+          "404": {
+            "$ref": "#/components/responses/Off"
+          },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Off"
           },
           "429": {
             "$ref": "#/components/responses/TooMany"
@@ -1429,7 +1453,7 @@
                 "last": {
                   "type": "object",
                   "additionalProperties": true,
-                  "description": "The last report: `at`, `status`, `note`, `source`, `duration_s`."
+                  "description": "The last report: `at`, `status`, `duration_s`. What the job wrote about its run and the address it posted from are not sent to a token."
                 },
                 "runs": {
                   "type": "array",
@@ -1499,7 +1523,7 @@
                     "null"
                   ],
                   "additionalProperties": true,
-                  "description": "Who acknowledged it and what they wrote, or null."
+                  "description": "`at`: when it was acknowledged; null if it was not. Who, and what they wrote, are for admins."
                 }
               }
             }
@@ -1604,6 +1628,16 @@
     "responses": {
       "Unauthorized": {
         "description": "No token, or one that is not valid or has expired.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Refusal"
+            }
+          }
+        }
+      },
+      "Off": {
+        "description": "Agent access is turned off on this Atlas, or the token tried something other than a read.",
         "content": {
           "application/json": {
             "schema": {

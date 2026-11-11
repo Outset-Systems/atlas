@@ -136,6 +136,53 @@ def group_key(groups):
     return "|".join(sorted(groups)) or "-none-"
 
 
+# ── What a URL carries besides an address ────────────────────────────────────
+#
+# A charted URL can hold a credential in two places: `user:pass@` before the
+# host, and the query string (`?token=…`, a chart's `auth_token`). A person
+# signed in needs the link to work, so they get it whole. An API token reads the
+# map on behalf of a program that may send every answer to a model's vendor, and
+# an agent that wants to know what runs where needs the scheme, the host, the
+# port and the path, not the secret. So a token gets the URL without both.
+#
+# Any scheme: rtsp, ssh and postgres URLs carry passwords as readily as http
+# ones. What this cannot see: a secret in the PATH (`/hooks/<secret>`), or a URL
+# inside a sentence in a note. Those leave as written.
+_URL = re.compile(r"^\s*([A-Za-z][A-Za-z0-9+.-]*)://(\S*)\s*$")
+
+
+def bare_url(value):
+    """`value` without userinfo, query or fragment when it is a URL; else as given."""
+    if not isinstance(value, str):
+        return value
+    m = _URL.match(value)
+    if not m:
+        return value
+    scheme, rest = m.groups()
+    cut = min((i for i in (rest.find("?"), rest.find("#")) if i != -1), default=len(rest))
+    rest = rest[:cut]
+    authority, slash, path = rest.partition("/")
+    if "@" not in authority and "@" in path and not authority.startswith("[") \
+            and re.search(r":(?!\d*$)", authority):
+        # `user:pa/ss@host`: a password with a bare "/" in it. What follows the
+        # colon is not a port, so the host is whatever comes after the "@".
+        authority, slash, path = rest.split("@", 1)[1].partition("/")
+    return f"{scheme}://{authority.rsplit('@', 1)[-1]}{slash}{path}"
+
+
+def bare_urls(value):
+    """Every string in a dataset that is a URL, made bare. In place; returns it."""
+    if isinstance(value, dict):
+        for key, inner in value.items():
+            value[key] = bare_urls(inner)
+    elif isinstance(value, list):
+        for i, inner in enumerate(value):
+            value[i] = bare_urls(inner)
+    elif isinstance(value, str):
+        return bare_url(value)
+    return value
+
+
 # ── Scrubbing references to hidden places ───────────────────────────────────
 #
 # Dropping a node from `nodes[]` is only half of hiding it. Its id is also
@@ -351,4 +398,10 @@ def redact_for_groups(data):
             pins = r.get("places") if isinstance(r, dict) else None
             if isinstance(pins, dict):
                 r["places"] = {k: v for k, v in pins.items() if k not in hidden}
+    import api_tokens
+    if api_tokens.current():
+        # A TOKEN READS A LITTLE LESS THAN A PERSON WITH NO GROUPS (2026-11-11), so
+        # it must not share that person's cache key: an ETag or a cache built on
+        # the group set alone would hand one of them the other's body.
+        return bare_urls(d), group_key(groups) + "+token"
     return d, group_key(groups)

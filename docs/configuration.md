@@ -38,6 +38,7 @@ restart.
 | `ATLAS_HOST` | `0.0.0.0` | Bind address for the development server only. The container runs gunicorn, which binds `0.0.0.0:5006` regardless. | no | no |
 | `ATLAS_PORT` | `5006` | Port for the development server only. In the container, change the published port in compose instead. | no | no |
 | `ATLAS_READONLY` | depends on mode | `1` refuses every write, `0` allows writes. When unset, `standalone` mode is read-only (it has no sign-in, so anyone who can reach the port would be an admin) unless `ATLAS_ALLOW_INSECURE=1`; `accounts`, `hybrid` and `hub` modes are writable and check admin rights per request. | no | no |
+| `ATLAS_AGENT_API` | (unset) | Whether API tokens and the MCP endpoint are served at all. Unset: off until an admin turns it on in Settings, Connections. `0`: off, and that screen cannot turn it on. `1`: on, until an admin turns it off there. While it is off the MCP endpoint answers 404, every token is refused, and none can be created. Tokens are kept, not revoked. | no | yes (Connections), unless `0` |
 | `ATLAS_ALLOW_INSECURE` | (unset) | `1` acknowledges that `standalone` mode serves the whole map with no sign-in. It silences the startup security warning and makes standalone writable. Use only on loopback or a trusted network. | no | no |
 
 ## Data and storage

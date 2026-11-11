@@ -139,7 +139,7 @@ def _redact_feed(ctx, feed, groups):
     if hidden:
         out.pop("repairs", None)      # its counts and its next reason span every window
     if isinstance(out.get("rites"), dict):
-        seen = {heartbeats.key_for(r) for r in redact_for_groups(data)[0].get("rites") or []}
+        seen = heartbeats.keys_of(redact_for_groups(data)[0].get("rites"))
         out["rites"] = {k: v for k, v in out["rites"].items() if k in seen}
     causes = feed.get("causes")
     if isinstance(causes, dict):
@@ -246,6 +246,12 @@ def rites_feed():
     heartbeats.sweep_dropped_files()
     rites = redact_for_groups(data)[0].get("rites") or []
     status = {row["key"]: row for row in heartbeats.status_for(rites)}
+    # A TOKEN DOES NOT READ WHAT A JOB WROTE (2026-11-11). The MCP tool always
+    # left a run's note and the poster's address out; this route handed both to
+    # the same token. A person signed in still sees them: the calendar shows them.
+    import api_tokens
+    if api_tokens.current():
+        status = {key: heartbeats.without_job_words(row) for key, row in status.items()}
     out = []
     for rite in rites:
         if isinstance(rite, dict):
@@ -265,27 +271,32 @@ def events_feed():
     """
     ctx = atlas()
     groups = viewer_groups()
-    visible = services = None
+    visible = services = rites = None
     if not sees_everything(groups):
         try:
             data, _, _ = ctx.dataset()
             visible = {n.get("id") for n in data.get("nodes", []) if cleared(n, groups)}
             # a service row names its monitor, so it takes the monitor gate
             services = visible_monitors(data, groups)
+            # a rite row names its rite, so it takes the gate `/rites` takes: one
+            # dropped there for naming a hidden place was still listed here
+            rites = heartbeats.keys_of(redact_for_groups(data)[0].get("rites"))
         except (OSError, ValueError):
-            visible, services = set(), set()
+            visible, services, rites = set(), set(), set()
     limit = min(request.args.get("limit", type=int) or 100, events.KEEP)
     unacked = request.args.get("unacked") == "1"
     if sees_everything(groups):
         body = {"events": events.listing(limit=limit, visible=visible, unacked_only=unacked),
                 "counts": events.counts(visible=visible)}
     else:
-        # TRIPWIRES: a trip row (and its share of the counts) is admin-only
+        # TRIPWIRES: a trip row (and its share of the counts) is admin-only, and
+        # so is who acknowledged a row and what they wrote (`events.for_viewer`)
         body = {"events": tripwires.listing_without_trips(
                     limit=limit, visible=visible, unacked_only=unacked,
-                    visible_services=services),
+                    visible_services=services, visible_rites=rites),
                 "counts": tripwires.counts_without_trips(visible=visible,
-                                                         visible_services=services)}
+                                                         visible_services=services,
+                                                         visible_rites=rites)}
     resp = make_response(jsonify(body))
     resp.headers["Cache-Control"] = "no-store"
     return vary_on_viewer(resp)

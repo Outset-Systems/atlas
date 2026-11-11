@@ -181,8 +181,9 @@ def test_a_chart_legend_drops_a_hidden_place(realm, viewer):
             charts.viewer_groups = keep_c
 
 
-def test_mcp_events_take_the_monitor_gate(realm):
+def test_mcp_events_take_the_monitor_gate(realm, monkeypatch):
     import api_tokens
+    monkeypatch.setenv("ATLAS_AGENT_API", "1")      # agent access starts off
     _, raw = api_tokens.issue("t", 30, "x")
     r = realm.test_client().post(
         "/api/v2/mcp", headers={"Authorization": "Bearer " + raw},

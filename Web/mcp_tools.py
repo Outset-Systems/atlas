@@ -233,8 +233,10 @@ def recent_events(args):
     visible = {n.get("id") for n in data.get("nodes") or []}
     groups = viewer_groups()
     services = None if sees_everything(groups) else visible_monitors(data, groups)
+    # `data` is already this token's redacted map, so its rites are the visible ones
     return {"events": tripwires.listing_without_trips(limit=_limit(args), visible=visible,
-                                                      visible_services=services)}
+                                                      visible_services=services,
+                                                      visible_rites=heartbeats.keys_of(data.get("rites")))}
 
 
 def _brief(node, feed):

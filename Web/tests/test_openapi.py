@@ -37,7 +37,9 @@ def realm(tmp_path, monkeypatch):
                         "ATLAS_INTEGRATIONS": str(tmp_path / "integrations.json"),
                         "ATLAS_SECRET_KEY": "test-signing-key", "ATLAS_INSECURE_COOKIES": "1",
                         "ATLAS_SIGNALS_SOURCES": "", "ATLAS_AUTH_BACKENDS": "local",
-                        "ATLAS_MFA_REQUIRED": "", "ATLAS_ALLOW_INSECURE": "1"}.items():
+                        "ATLAS_MFA_REQUIRED": "", "ATLAS_ALLOW_INSECURE": "1",
+                        # agent access starts off; these suites are about what a token reads
+                        "ATLAS_AGENT_API": "1"}.items():
         monkeypatch.setenv(name, value)
     app = fresh_app()
     import accounts
