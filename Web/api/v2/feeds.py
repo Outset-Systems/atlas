@@ -88,8 +88,11 @@ def _drift(ctx, feed):
     return {"count": len(uncharted), "uncharted": uncharted}
 
 
-def _redact_feed(ctx, feed, groups):
+def _redact_feed(ctx, feed, groups, data=None):
     """The signals feed, cut down to the places this viewer is cleared for.
+
+    `data` is the dataset to judge by, for a caller that hides more than the
+    file says (`cloud_view.withhold`). Left out, the dataset is read here.
 
     `lab-data` has been redacted since the feature existed and `events`
     filters through `cleared()`, but this feed — the one that is keyed by node
@@ -103,7 +106,8 @@ def _redact_feed(ctx, feed, groups):
     # the account roster — cleared to see everything, or none of it.
     sources = {k: v for k, v in (feed.get("sources") or {}).items() if k != "deception"}
     try:
-        data, _, _ = ctx.dataset()
+        if data is None:
+            data, _, _ = ctx.dataset()
     except (OSError, ValueError):
         # Fail closed. Without the dataset there is no way to know which ids
         # this viewer may see, and every key in this feed is one of those ids.

@@ -31,8 +31,19 @@ THREE LIMITS, AND WHY THEY ARE NOT OPTIONS:
     no credential, so a new route is closed to tokens until a diff here says
     otherwise.
 
-What a tool reads leaves with it. A cloud harness sends tool results to its
-model's vendor, which is why the Settings screen says so beside the button.
+TWO KINDS (2026-11-11). What a tool reads leaves with it, and a cloud harness
+sends every tool result to its model's vendor. The Atlas cannot see where a
+client sends things, so the admin says which kind a token is when it is made,
+and that cannot be changed afterwards:
+
+  * `full` is for a local model or a script on the owner's own network. It reads
+    what the limits above describe, on every door.
+  * `cloud` is for a cloud AI tool. It reads the reduced view in `cloud_view.py`
+    (only places a person has checked, a short list of fields, no address, URL
+    or note), through the MCP endpoint only, and it lives 30 days at most.
+
+A token from before the kinds existed is `full`, which is what it was made as,
+and the list says so. A kind this code does not recognise gets the reduced view.
 """
 
 import hashlib
@@ -71,6 +82,14 @@ MAX_NAME = 64
 #: Offered lifetimes, in days. None = never, which is allowed and is not the default.
 LIFETIMES = (30, 90, 365, None)
 DEFAULT_DAYS = 90
+#: The two kinds of token. See TWO KINDS in the module docstring.
+FULL, CLOUD = "full", "cloud"
+PROFILES = (FULL, CLOUD)
+#: A cloud token is short-lived on purpose, and there is no "never" for one.
+CLOUD_LIFETIMES = (7, 30)
+CLOUD_DEFAULT_DAYS = 30
+CLOUD_ONLY_MCP = ("This token is for a cloud tool, so it reads through the MCP endpoint only. "
+                  "A script or a local model needs a full token.")
 #: `last_used` is a convenience, not an audit log: one write a minute at most, so
 #: a chatty harness does not turn every read into a file replace.
 TOUCH_EVERY_S = 60
@@ -167,10 +186,27 @@ def set_access(on, actor):
     return access()
 
 
+def profile_of(rec):
+    """Which view a token reads. One made before the kinds existed is `full`: that
+    is what it was issued as. Anything else that is not exactly `full` reads the
+    reduced view, so a kind this code does not know is never the larger one."""
+    if "profile" not in rec:
+        return FULL
+    return FULL if rec.get("profile") == FULL else CLOUD
+
+
+def lifetimes(profile):
+    """(offered lifetimes in days, the default) for a kind of token."""
+    return (CLOUD_LIFETIMES, CLOUD_DEFAULT_DAYS) if profile == CLOUD else (LIFETIMES, DEFAULT_DAYS)
+
+
 def _public(rec):
     now = time.time()
     return {k: rec.get(k) for k in ("id", "name", "created", "created_by", "expires", "last_used")} | {
         "expired": bool(rec.get("expires_at")) and rec["expires_at"] <= now,
+        "profile": profile_of(rec),
+        # made before a token had a kind: it reads the full view, and nobody chose that
+        "untyped": "profile" not in rec,
     }
 
 
@@ -179,14 +215,22 @@ def listing():
     return [_public(t) for t in _load()]
 
 
-def issue(name, days, actor):
-    """Create a token. Returns (public record, the plaintext, shown this once)."""
+def issue(name, days, actor, profile=FULL):
+    """Create a token. Returns (public record, the plaintext, shown this once).
+
+    `profile` is fixed here for the token's life: there is no route that changes
+    it, so a cloud token cannot be widened and a full one is revoked, not narrowed.
+    """
     name = re.sub(r"\s+", " ", str(name or "")).strip()
     if not name:
         raise ValueError("Give the token a name, so you can tell it from the next one.")
     if len(name) > MAX_NAME:
         raise ValueError(f"Keep the name under {MAX_NAME} characters.")
-    if days not in LIFETIMES:
+    if profile not in PROFILES:
+        raise ValueError("A token is either full or cloud.")
+    if days not in lifetimes(profile)[0]:
+        if profile == CLOUD:
+            raise ValueError("A cloud token lasts 7 or 30 days.")
         raise ValueError("That is not one of the offered lifetimes.")
     if not access()["on"]:
         # a token minted while access is off would start working, unannounced,
@@ -204,10 +248,10 @@ def issue(name, days, actor):
         expires_at = now + days * 86400 if days else None
         rec = {"id": tid, "name": name, "hash": _hash(raw), "created": iso_utc(now),
                "created_by": actor, "expires": iso_utc(expires_at) if expires_at else None,
-               "expires_at": expires_at, "last_used": None}
+               "expires_at": expires_at, "last_used": None, "profile": profile}
         tokens.append(rec)
         _save(tokens)
-    log.info("api token %s (%s) issued by %s, expires %s", tid, name, actor, rec["expires"])
+    log.info("api token %s (%s, %s) issued by %s, expires %s", tid, name, profile, actor, rec["expires"])
     return _public(rec), raw
 
 
@@ -318,6 +362,9 @@ def gate():
     rec = authenticate(raw)
     if rec is None:
         return _refuse(401, "that token is not valid, or it has expired")
+    if path != MCP_PATH and profile_of(rec) == CLOUD:
+        # the read routes serve the dataset whole; the reduced view lives in the tools
+        return _refuse(403, CLOUD_ONLY_MCP)
     if path != MCP_PATH and request.method not in ("GET", "HEAD"):
         return _refuse(403, "API tokens are read-only")
     if not _allow(rec["id"]):

@@ -45,7 +45,7 @@ APP_NAME = _theme.T["app_name"]
 # a public door (atlas.example.com) and again for the hosted edition, where
 # one login page fronts many realms and must not leak which one you asked for.
 APP_BRAND = os.environ.get("ATLAS_BRAND", "").strip() or "The Atlas"
-APP_VERSION = "0.2.0-dev.11"
+APP_VERSION = "0.2.0-dev.12"
 ACCENT_COLOR = "#C9A554"
 
 HERE = os.path.dirname(os.path.abspath(__file__))

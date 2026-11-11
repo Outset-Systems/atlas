@@ -25,8 +25,19 @@ from .admin import (  # noqa: E402
 @admin_bp.route("/tokens")
 def tokens_get():
     import api_tokens
+    kinds = {}
+    for profile in api_tokens.PROFILES:
+        offered, default = api_tokens.lifetimes(profile)
+        kinds[profile] = {"lifetimes": list(offered), "default_days": default}
+    # how much of this map a cloud token would read, said where the token is made
+    import cloud_view
+    try:
+        standing = cloud_view.standing(atlas().dataset()[0])
+    except (OSError, ValueError):
+        standing = None
     return jsonify({"tokens": api_tokens.listing(), "lifetimes": list(api_tokens.LIFETIMES),
-                    "default_days": api_tokens.DEFAULT_DAYS, "access": api_tokens.access()})
+                    "default_days": api_tokens.DEFAULT_DAYS, "access": api_tokens.access(),
+                    "profiles": kinds, "cloud_view": standing})
 
 
 @admin_bp.route("/tokens/access", methods=["POST"])
@@ -56,7 +67,9 @@ def tokens_issue():
     import api_tokens
     body = request.get_json(silent=True) or {}
     try:
-        record, raw = api_tokens.issue(body.get("name"), body.get("days"), actor())
+        # a client from before the kinds existed sends none, and gets what it always got
+        record, raw = api_tokens.issue(body.get("name"), body.get("days"), actor(),
+                                       profile=body.get("profile", api_tokens.FULL))
     except ValueError as e:
         return jsonify({"error": str(e)}), 422
     # the only time the plaintext exists outside the caller's hands

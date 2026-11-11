@@ -107,9 +107,12 @@ and whether a person has checked it, before it acts.
   Everything else on the map, addresses included, it can read.
 - **Use a local model.** Atlas never calls a model itself. With a local model
   (Ollama, LM Studio, your own harness), answers stay on your network. With a
-  cloud model, everything the agent reads, including addresses and service
-  URLs, is sent to that model's vendor. Atlas cannot tell which kind of model a
-  token was given to, so decide before you create one.
+  cloud model, everything the agent reads is sent to that model's vendor.
+- **A cloud tool gets a smaller token.** Atlas cannot tell where a client sends
+  what it reads, so you say what a token is for when you create it. A cloud
+  token reads only places a person has checked, with no addresses, MAC
+  addresses, URLs, hardware or notes, through the MCP endpoint only, for 30
+  days at most. The names of those places and how they connect still leave.
 - **Off until you turn it on.** On a new Atlas every token is refused and the
   MCP endpoint answers 404, until an admin turns agent access on in Settings,
   Connections. `ATLAS_AGENT_API=0` keeps it off for good. Each token is shown

@@ -51,4 +51,29 @@ test('the waiting line counts both reasons and is silent when all are checked', 
     '1 of 2 places has not been checked by a person. 1 came from an import.');
 });
 
+const ADDED_TO = { id: 'host', provenance: { charted_by: 'ada', charted_at: '2026-11-09T21:14:03Z', source: 'hand',
+  reviewed: true, reviewed_by: 'ada', reviewed_at: '2026-11-10T08:00:00Z', changed_since_review: true } };
+
+test('a checked place an import has added to is waiting for a look, and says why', () => {
+  assert.equal(standing(ADDED_TO), 'changed');
+  assert.equal(standing({ provenance: { reviewed: false, changed_since_review: true } }), 'unchecked');
+  assert.equal(sentence(ADDED_TO), 'Charted by ada on 2026-11-09. Checked by ada on 2026-11-10. '
+    + 'It has changed since, and nobody has looked at what changed.');
+  assert.equal(waiting([CHECKED, ADDED_TO]),
+    '1 of 2 places is waiting for a person to look. 1 changed after being checked.');
+  assert.equal(waiting([ADDED_TO, IMPORTED, OLD]),
+    '3 of 3 places are waiting for a person to look. 1 came from an import, '
+    + '1 changed after being checked, 1 was charted before the map kept this record.');
+});
+
+test('the Desk and the server agree on what is waiting: the mark, the times, or no time at all', () => {
+  const at = (reviewed_at, changed_at, extra = {}) => ({ provenance: { reviewed: true, reviewed_at, changed_at, ...extra } });
+  assert.equal(standing(at('2026-11-10T08:00:00Z', '2026-11-09T08:00:00Z')), 'checked');
+  assert.equal(standing(at('2026-11-10T08:00:00Z', '2026-11-10T08:00:00Z')), 'checked');   // a hand save
+  assert.equal(standing(at('2026-11-10T08:00:00Z', undefined)), 'checked');                // the tick on an old place
+  assert.equal(standing(at('2026-11-10T08:00:00Z', '2026-11-11T08:00:00Z')), 'changed');   // changed later, no mark
+  assert.equal(standing(at(undefined, undefined)), 'changed');                             // cannot say when
+  assert.equal(standing(at('2026-11-10T08:00:00Z', '2026-11-10T08:00:00Z', { changed_since_review: true })), 'changed');
+});
+
 console.log(`\n${passed} passed`);

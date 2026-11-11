@@ -26,7 +26,7 @@ import schema
 #: The contract's own version, apart from the app's. It moves when a documented
 #: path, parameter or field changes, so the file on disk does not churn with
 #: every release.
-CONTRACT = "2.1.0"
+CONTRACT = "2.2.0"
 
 OPENAPI_PATH = "/api/v2/openapi.json"
 
@@ -73,6 +73,12 @@ STAMPED = {"nodes": {"provenance": {
         "reviewed": {"type": "boolean",
                      "description": "False until a person saves the place by hand."},
         "reviewed_at": _WHEN,
+        "changed_since_review": {
+            "type": "boolean",
+            "description": ("Present and true when the place has changed since a person "
+                            "reviewed it, most often because an import added to it. "
+                            "`reviewed` stays true; what changed is unconfirmed until the "
+                            "next review.")},
     }}}}
 
 
@@ -322,7 +328,9 @@ def document():
                 "read-only, sees no more than a signed-in viewer with no groups, and reaches "
                 "only the paths in this document. A URL reaches it without `user:pass@` or "
                 "its query string. While agent access is off every path here answers 403 to "
-                "a token and the MCP endpoint answers 404. "
+                "a token and the MCP endpoint answers 404. A token made for a cloud AI tool "
+                "reads a reduced view through the MCP endpoint only, and every other path "
+                "here answers it 403. "
                 "The rest of `/api/v2` belongs to the page and is not a contract."),
             "license": {"name": "MIT", "identifier": "MIT"},
         },
@@ -336,8 +344,9 @@ def document():
             "schemas": _schemas(),
             "responses": {
                 "Unauthorized": _json("Refusal", "No token, or one that is not valid or has expired."),
-                "Off": _json("Refusal", "Agent access is turned off on this Atlas, or the token "
-                                        "tried something other than a read."),
+                "Off": _json("Refusal", "Agent access is turned off on this Atlas, the token tried "
+                                        "something other than a read, or it is a cloud token "
+                                        "asking for a path other than the MCP endpoint."),
                 "TooMany": {**_json("Refusal", f"More than {api_tokens.RATE_PER_MINUTE} requests in a "
                                                "minute on this token."),
                             "headers": {"Retry-After": {"schema": {"type": "string"}}}},

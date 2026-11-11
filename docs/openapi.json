@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Atlas API",
-    "version": "2.1.0",
-    "description": "What an API token can read from an Atlas. Tokens are issued in Settings, Connections, by an admin, once agent access is turned on there. A token is read-only, sees no more than a signed-in viewer with no groups, and reaches only the paths in this document. A URL reaches it without `user:pass@` or its query string. While agent access is off every path here answers 403 to a token and the MCP endpoint answers 404. The rest of `/api/v2` belongs to the page and is not a contract.",
+    "version": "2.2.0",
+    "description": "What an API token can read from an Atlas. Tokens are issued in Settings, Connections, by an admin, once agent access is turned on there. A token is read-only, sees no more than a signed-in viewer with no groups, and reaches only the paths in this document. A URL reaches it without `user:pass@` or its query string. While agent access is off every path here answers 403 to a token and the MCP endpoint answers 404. A token made for a cloud AI tool reads a reduced view through the MCP endpoint only, and every other path here answers it 403. The rest of `/api/v2` belongs to the page and is not a contract.",
     "license": {
       "name": "MIT",
       "identifier": "MIT"
@@ -675,6 +675,10 @@
                     "reviewed_at": {
                       "type": "string",
                       "description": "UTC, as `2026-11-09T21:14:03Z`."
+                    },
+                    "changed_since_review": {
+                      "type": "boolean",
+                      "description": "Present and true when the place has changed since a person reviewed it, most often because an import added to it. `reviewed` stays true; what changed is unconfirmed until the next review."
                     }
                   }
                 }
@@ -1637,7 +1641,7 @@
         }
       },
       "Off": {
-        "description": "Agent access is turned off on this Atlas, or the token tried something other than a read.",
+        "description": "Agent access is turned off on this Atlas, the token tried something other than a read, or it is a cloud token asking for a path other than the MCP endpoint.",
         "content": {
           "application/json": {
             "schema": {

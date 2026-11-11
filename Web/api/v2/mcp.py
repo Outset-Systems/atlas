@@ -122,7 +122,7 @@ def _tools_call(msg_id, params, wrap):
 
 def _discover():
     return {"supportedVersions": list(MODERN + LEGACY), "capabilities": {"tools": {}},
-            "instructions": mcp_tools.INSTRUCTIONS, "ttlMs": 300000, "cacheScope": "private"}
+            "instructions": mcp_tools.instructions(), "ttlMs": 300000, "cacheScope": "private"}
 
 
 def _serve_modern(msg, params, version):
@@ -148,7 +148,7 @@ def _serve_legacy(msg, params):
         asked = str(params.get("protocolVersion") or "")
         return _rpc(msg_id, {"protocolVersion": asked if asked in LEGACY else LEGACY[0],
                              "capabilities": {"tools": {}}, "serverInfo": _server(),
-                             "instructions": mcp_tools.INSTRUCTIONS})
+                             "instructions": mcp_tools.instructions()})
     header = request.headers.get("MCP-Protocol-Version")
     if header and header not in LEGACY:
         return _err(msg_id, INVALID_REQUEST, "Unsupported protocol version", status=400,

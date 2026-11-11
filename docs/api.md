@@ -17,8 +17,13 @@ stops every token at once and keeps them.
 1. Sign in as an admin.
 2. Open Settings, then Connections.
 3. Press **Turn on** beside "Agent access is off".
-4. Name the token, choose how long it lasts (30, 90 or 365 days, or never) and
-   create it.
+4. Choose what the token is for. **A local model or a script** makes a full
+   token, which is what this page describes. **A cloud AI tool** makes a cloud
+   token, which reads a reduced view through the MCP endpoint only and is
+   refused on every path below with a 403:
+   [Atlas for AI agents](mcp.md#what-a-cloud-token-reads) describes it.
+5. Name the token, choose how long it lasts (30, 90 or 365 days, or never; 7 or
+   30 days for a cloud token) and create it.
 
 `ATLAS_AGENT_API=0` in the deployment keeps agent access off, and the Settings
 screen cannot turn it on. `ATLAS_AGENT_API=1` starts it on. See
@@ -112,7 +117,9 @@ Each place may carry `provenance`, stamped by Atlas whenever the place changes:
 
 `reviewed` is false for a place an import wrote and nobody has checked, and
 true once a person saves it by hand or marks it as checked in the Desk
-(`reviewed_at` says when). Who charted,
+(`reviewed_at` says when). `changed_since_review: true` is added when a place has
+changed since it was reviewed, most often because an import added to it: the
+review stands, and what changed is unconfirmed until the next one. Who charted,
 changed and reviewed a place is kept too, and shown to admins only: a token
 is told when and whether, not who. A place with no `provenance` was charted before Atlas kept it:
 treat who and when as unknown. Nothing a client sends under this key is kept.
@@ -174,7 +181,7 @@ should read the answers.
 | Status | Meaning |
 |---|---|
 | 401 | No token, or one that is not valid or has expired |
-| 403 | A token tried something other than a read, or agent access is off |
+| 403 | A token tried something other than a read, agent access is off, or a cloud token asked for a path other than the MCP endpoint |
 | 404 | On `/api/v2/mcp`: agent access is off |
 | 429 | Too many requests on this token; wait a minute |
 | 500 | The dataset on disk could not be read |

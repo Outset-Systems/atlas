@@ -1109,6 +1109,10 @@ a.sp-btn { text-decoration: none; text-align: center; display: block; }
 .con-access { display: flex; align-items: center; gap: 10px; margin: 8px 0; padding: 8px 10px; border: 1px solid var(--hair); border-radius: 4px; color: var(--text); }
 .con-access.con-access-on { border-color: rgba(var(--gilt-rgb), 0.55); }
 .con-access .sp-btn { margin-left: auto; flex: 0 0 auto; }
+/* what a token is for: two choices, each with what it means beside it */
+.con-kinds { display: flex; flex-direction: column; margin: 10px 0 2px; }
+.con-kinds .con-check { margin: 3px 0; }
+.con-token .dir-src { flex: 0 0 auto; }
 .con-fresh { margin: 8px 0; padding: 8px 10px; border: 1px solid rgba(var(--gilt-rgb), 0.55); border-radius: 4px; color: var(--text); }
 .con-code {
   margin: 4px 0 0; padding: 8px 10px; overflow-x: auto; border-radius: 4px; white-space: pre;

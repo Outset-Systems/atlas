@@ -175,6 +175,35 @@ if __name__ == "__main__":
     sys.exit(1 if failures else 0)
 
 
+def test_an_importer_that_changes_a_checked_place_marks_it_and_the_mark_is_stored():
+    """The command line and the relay write rows and stamp through `restamp`. A
+    place they change that a person had checked keeps its review and gains the
+    mark, and the mark comes back out of the tables."""
+    import provenance
+    from store import restamp
+    from store.models import Node
+    from sqlalchemy import select
+    with _scope() as s:
+        _seed(s, "marked")
+        first = dump_labdata(s, "marked")
+        place = first["nodes"][0]["id"]
+        site = get_site(s, "marked")
+        row = s.scalars(select(Node).where(Node.site_id == site.id, Node.slug == place)).one()
+        row.extra_json = {**(row.extra_json or {}),
+                          "provenance": {"reviewed": True, "reviewed_at": "2026-11-02T09:00:00Z"}}
+        s.flush()
+        before = dump_labdata(s, "marked")
+        assert provenance.settled(next(n for n in before["nodes"] if n["id"] == place))
+        # an importer rewrites what the place is
+        row.role = "whatever the importer read"
+        s.flush()
+        restamp(s, "marked", before, "relay", "netbox")
+        after = next(n for n in dump_labdata(s, "marked")["nodes"] if n["id"] == place)
+    assert after["provenance"]["reviewed"] is True
+    assert after["provenance"]["changed_since_review"] is True
+    assert not provenance.settled(after)
+
+
 def test_a_promoted_stranger_is_stamped_unreviewed_and_the_rest_are_left_alone():
     """The importers write rows, not a dataset, so they pass the store's stamp:
     `restamp` gives what they added the same standing a Desk survey gets."""

@@ -28,7 +28,9 @@ THE RULES:
     for every row on screen, so a map charted before this existed can be
     checked in one sitting.
   * An import that adds to a reviewed place records the change and leaves the
-    review standing. The review is of the place, not of each line on it.
+    review standing. The review is of the place, not of each line on it. The
+    stamp says so with `changed_since_review: true` until a person looks again,
+    and `settled` is the test for "reviewed, and nothing has changed it since".
   * Dragging a marker is not a change to what the place is, and stamps nothing.
   * A place charted before this existed has no stamp, and readers are told so
     rather than handed an invented date.
@@ -61,6 +63,11 @@ REVIEW = "review"
 #: Every text field a stamp may hold.
 FIELDS = ("charted_by", "charted_at", "source", "changed_by", "changed_at",
           "reviewed_by", "reviewed_at")
+#: Set, as `true`, when an import changes a place a person had already reviewed.
+#: The review stands, and it is of what was there before. The next review or hand
+#: save clears it. The stamps' times cannot say this alone: they are whole
+#: seconds, and a review and an import can share one.
+UNSEEN = "changed_since_review"
 #: Where a marker sits says nothing about the place.
 LAYOUT = frozenset({"x", "y"})
 
@@ -129,6 +136,8 @@ def _own(node):
     out = {k: str(mark[k])[:80] for k in FIELDS if isinstance(mark.get(k), str) and mark[k]}
     if isinstance(mark.get("reviewed"), bool):
         out["reviewed"] = mark["reviewed"]
+    if mark.get(UNSEEN) is True:
+        out[UNSEEN] = True
     return out or None
 
 
@@ -169,9 +178,12 @@ def stamp(before, after, ops, actor, origin=None, now=None, trust=False):
             if _bare(node) != _bare(prior):
                 mark = mark or {}
                 mark.update({"changed_by": actor, "changed_at": when})
+                if not by_hand and mark.get("reviewed") is True:
+                    mark[UNSEEN] = True      # the review is of what was here before this
         if node_id in checked or (by_hand and node_id in named):
             mark = mark or {}
             mark.update({"reviewed": True, "reviewed_by": actor, "reviewed_at": when})
+            mark.pop(UNSEEN, None)
         if mark is None:
             node.pop(KEY, None)          # nothing known, and nothing a client may invent
         else:
@@ -219,7 +231,38 @@ def describe(node):
     out["reviewed"] = mark.get("reviewed") if isinstance(mark.get("reviewed"), bool) else None
     if out["reviewed"] is False:
         out["note"] = "Written by an import and not yet checked by a person. Treat as unconfirmed."
+    elif out["reviewed"] and not settled(node):
+        # the mark an import leaves, or a stamp whose times say the same thing
+        out[UNSEEN] = True
+        out["note"] = ("Reviewed by a person, and it has changed since. "
+                       "Treat what changed as unconfirmed.")
     return out
+
+
+def settled(node):
+    """True when a person has reviewed this place AND nothing has changed it since.
+
+    `reviewed` alone is not that. An import that adds to a reviewed place leaves
+    the review standing (see THE RULES above), so a service a container named
+    itself, or a fact a controller reported, can sit on a place that says
+    `reviewed: true` without anyone having looked at it. The stamp still tells
+    the two apart. `stamp` sets `changed_since_review` when an import changes a
+    reviewed place, and clears it at the next review or hand save. For a stamp
+    written before that mark existed the times decide: an import moves
+    `changed_at` and not `reviewed_at`. Either one is enough to say no.
+
+    Used where every word on a place has to have been in front of a person:
+    the view an API token for a cloud tool gets (`cloud_view.py`). A stamp with
+    no `reviewed_at` proves nothing, so it does not count.
+    """
+    mark = node.get(KEY) if isinstance(node, dict) else None
+    if not isinstance(mark, dict) or mark.get("reviewed") is not True:
+        return False
+    reviewed_at = str(mark.get("reviewed_at") or "")
+    if not reviewed_at or mark.get(UNSEEN) is True:
+        return False
+    # stamps are `...Z` and compare as text (`iso_utc`)
+    return reviewed_at >= str(mark.get("changed_at") or "")
 
 
 def summary(nodes):

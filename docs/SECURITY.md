@@ -107,9 +107,25 @@ What changed:
   its port must stay closed to everything but the Hub. Tokens are refused in
   that mode, so that nobody opens the port for one.
 
-Known and not yet changed: a token still reads the rest of the map, including
-IP and MAC addresses, notes and names an import wrote, and there is no record
-of what a token read. Atlas cannot tell where a client sends what it reads, so
+Added the same day, from the same review:
+
+- A token is made for a local model or for a cloud AI tool, and the kind is
+  fixed when it is made. A cloud token reads only places a person has checked
+  with nothing changed since, and only a short list of their fields: no IP or
+  MAC address, URL, hardware, note, monitor name, rack, port, prefix or
+  certificate. It opens the MCP endpoint only and lasts 30 days at most. A kind
+  the code does not recognise gets this reduced view. A network is named only
+  when a readable place sits in it, and a scheduled job is left out when its
+  name names a withheld place.
+- An import that adds to a place a person had already reviewed marks it
+  `changed_since_review`. Text an import wrote can no longer sit unseen under
+  a `reviewed: true`, and a cloud token stops reading the place until someone
+  has looked again.
+
+Known and not yet changed: a full token still reads the whole map, including
+IP and MAC addresses, notes and names an import wrote. A cloud token still
+sends the names of checked places and how they connect. There is no record of
+what a token read. Atlas cannot tell where a client sends what it reads, so
 use a local model, and give a token only to a tool you would show your network
 diagram to.
 

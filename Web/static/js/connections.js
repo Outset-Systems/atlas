@@ -23,7 +23,10 @@ const SOURCE = { file: 'saved', env: 'deployment', default: 'default' };
 const LIFETIME = (d) => (d ? `${d} days` : 'never expires');
 
 let issued = '';       // the plaintext, for as long as this panel stays open
-let tab = 'local';     // a local model first: its answers never leave the network
+let issuedKind = '';   // which kind that token is: its lines are shown for that kind only
+let kind = 'full';     // a local model first: its answers never leave the network
+let tab = 'local';
+const FIRST_TAB = { full: 'local', cloud: 'claude' };
 
 const endpoint = () => new URL('api/v2/mcp', document.baseURI).href;
 const readUrl = () => new URL('api/v2/signals', document.baseURI).href;
@@ -31,19 +34,24 @@ const readUrl = () => new URL('api/v2/signals', document.baseURI).href;
 /* Formats change, so each was read from the harness's own docs on 2026-10-31.
    Gemini takes the header's value literally in settings.json, so it gets the
    token itself or the placeholder, never a variable. */
-function setups(token) {
+function setups(token, forKind) {
   const shown = token || 'PASTE_YOUR_TOKEN';
   const url = endpoint();
-  /* Local first, then the plain read, then the cloud harnesses, each saying where
-     its answers go. The order is the advice. */
-  const cloud = (vendor) => `Cloud model: everything it reads from this map is sent to ${vendor}. `;
+  /* A token is made for one or the other, and gets the lines for that. A full
+     token is never shown beside a cloud tool's command: the way to connect one
+     is to make it a cloud token. */
+  const cloud = (vendor) => `Cloud model: what this token reads is sent to ${vendor}. `;
+  if (forKind !== 'cloud') {
+    return {
+      local: { name: 'Local model', lang: 'any MCP client',
+        note: 'For Ollama, LM Studio or your own harness: point any client that speaks MCP over HTTP at this address. Answers stay on your network.',
+        text: `URL:    ${url}\nHeader: Authorization: Bearer ${shown}` },
+      rest: { name: 'REST', lang: 'shell',
+        note: 'The same token reads lab-data, maps, signals, rites and events under api/v2. The reference is api/v2/openapi.json.',
+        text: `curl -H "Authorization: Bearer ${shown}" ${readUrl()}` },
+    };
+  }
   return {
-    local: { name: 'Local model', lang: 'any MCP client',
-      note: 'For Ollama, LM Studio or your own harness: point any client that speaks MCP over HTTP at this address. Answers stay on your network.',
-      text: `URL:    ${url}\nHeader: Authorization: Bearer ${shown}` },
-    rest: { name: 'REST', lang: 'shell',
-      note: 'The same token reads lab-data, maps, signals, rites and events under api/v2. The reference is api/v2/openapi.json.',
-      text: `curl -H "Authorization: Bearer ${shown}" ${readUrl()}` },
     claude: { name: 'Claude Code (cloud)', lang: 'shell',
       note: cloud('Anthropic') + 'Then run claude mcp list to check it.',
       text: `export ATLAS_TOKEN="${shown}"\nclaude mcp add --transport http --scope user atlas ${url} --header "Authorization: Bearer $ATLAS_TOKEN"` },
@@ -53,14 +61,41 @@ function setups(token) {
     gemini: { name: 'Gemini CLI (cloud)', lang: '~/.gemini/settings.json',
       note: cloud('Google') + 'This file holds the token in plain text, so never commit it. Check with /mcp.',
       text: JSON.stringify({ mcpServers: { atlas: { httpUrl: url, headers: { Authorization: `Bearer ${shown}` } } } }, null, 2) },
+    other: { name: 'Another cloud tool', lang: 'any MCP client',
+      note: 'Any client that speaks MCP over HTTP. What this token reads is sent to that tool\u2019s vendor.',
+      text: `URL:    ${url}\nHeader: Authorization: Bearer ${shown}` },
   };
+}
+
+/* What each kind reads, said where the choice is made. The cloud line carries
+   this map's own numbers: a cloud token reads only what a person has checked. */
+function kindNote(tok) {
+  if (kind !== 'cloud') {
+    return 'Reads everything on the map a viewer with no groups could, addresses included, on every '
+      + 'route. For a model or a script that runs on your own network.';
+  }
+  const v = tok.cloud_view;
+  const count = v && (v.readable + v.withheld) ? ` That is ${v.readable} of ${v.readable + v.withheld} places on this map.` : '';
+  const empty = v && !v.readable && v.withheld ? ' Check places in the Desk first, or the tool reads an empty map.' : '';
+  return 'Reads only places a person has checked and nothing has changed since.' + count + empty
+    + ' No addresses, MAC addresses, URLs, hardware or notes, and through the MCP address only.'
+    + ' The names of those places, what they are for and how they connect still go to the tool\u2019s vendor.';
+}
+
+function lifeOptions(tok) {
+  const p = (tok.profiles && tok.profiles[kind]) || { lifetimes: tok.lifetimes, default_days: tok.default_days };
+  return p.lifetimes.map((d) =>
+    `<option value="${d ?? ''}"${d === p.default_days ? ' selected' : ''}>${LIFETIME(d)}</option>`).join('');
 }
 
 function tokenRow(t) {
   const when = t.last_used ? `last used ${esc(t.last_used)}` : 'not used yet';
   const ends = t.expired ? 'expired' : t.expires ? `expires ${esc(t.expires)}` : 'never expires';
+  const view = t.profile === 'cloud' ? 'cloud view'
+    : t.untyped ? 'full view, made before tokens had a kind' : 'full view';
   return `<div class="con-token${t.expired ? ' con-dead' : ''}">
       <span class="con-name">${esc(t.name)}</span>
+      <span class="dir-src">${view}</span>
       <span class="con-meta">${when} · ${ends}</span>
       <button class="sp-btn sp-btn-warn" type="button" data-revoke="${esc(t.id)}" data-name="${esc(t.name)}">Revoke</button>
     </div>`;
@@ -93,7 +128,9 @@ function accessHTML(access, count) {
 }
 
 function setupHTML() {
-  const all = setups(issued);
+  // the token just made is shown in the lines for its own kind, and nowhere else
+  const all = setups(issuedKind === kind ? issued : '', kind);
+  if (!all[tab]) tab = FIRST_TAB[kind];
   const s = all[tab];
   const tabs = Object.entries(all).map(([k, v]) =>
     `<button class="con-tab${k === tab ? ' on' : ''}" type="button" role="tab" aria-selected="${k === tab}" data-tab="${k}">${esc(v.name)}</button>`).join('');
@@ -459,15 +496,21 @@ export async function renderConnections() {
     [tok, con] = [await a.json(), await b.json()];
   } catch { el.hidden = true; return; }
 
-  const life = tok.lifetimes.map((d) =>
-    `<option value="${d ?? ''}"${d === tok.default_days ? ' selected' : ''}>${LIFETIME(d)}</option>`).join('');
   // an Atlas from before the switch answers without `access`: it has none, so it is on
   const access = tok.access || { on: true, locked: false };
+  const pick = (value, label, hint) =>
+    `<label class="con-check"><input type="radio" name="con-kind" value="${value}"${kind === value ? ' checked' : ''}>
+       ${label} <span class="con-meta">${hint}</span></label>`;
   // creating a token and the setup lines are for an Atlas that will honour one
   const making = access.on
-    ? `<div class="dir-test">
-       <input class="dir-input" id="con-name" placeholder="what is it for? e.g. local model on my GPU box" maxlength="64" autocomplete="off">
-       <select class="dir-input con-life" id="con-life" aria-label="Lifetime">${life}</select>
+    ? `<div class="con-kinds" role="radiogroup" aria-label="What the token is for">
+       ${pick('full', 'A local model or a script', 'full view, stays on your network')}
+       ${pick('cloud', 'A cloud AI tool', 'reduced view, 30 days at most')}
+     </div>
+     <div class="acct-note" id="con-kind-note">${esc(kindNote(tok))}</div>
+     <div class="dir-test">
+       <input class="dir-input" id="con-name" placeholder="what is it for?" maxlength="64" autocomplete="off">
+       <select class="dir-input con-life" id="con-life" aria-label="Lifetime">${lifeOptions(tok)}</select>
        <button class="sp-btn sp-btn-go" type="button" id="con-issue">Create</button>
      </div>
      <div class="dir-result" id="con-result"></div>
@@ -479,7 +522,7 @@ export async function renderConnections() {
      <div class="sp-sub-h">Let a tool read this map</div>
      <div class="acct-note">A token is read-only and sees no more than a viewer with no groups: no accounts,
        no tripwires, no restricted places. <em>A cloud tool sends what it reads to its model's vendor,
-       so this map leaves your network with it.</em> A local model keeps it here.</div>
+       so say which kind of tool a token is for.</em> A local model keeps the map here.</div>
      ${accessHTML(access, tok.tokens.length)}
      <div id="con-fresh" class="con-fresh" ${issued ? '' : 'hidden'}>Copy this now. It will not be shown again.
        <pre class="con-code">${esc(issued)}</pre></div>
@@ -503,20 +546,32 @@ export async function renderConnections() {
       box.textContent = j.error || 'Could not change agent access.';
       return;
     }
-    if (!on) issued = '';      // a token shown a moment ago is no use to copy now
+    if (!on) { issued = ''; issuedKind = ''; }      // a token shown a moment ago is no use to copy now
     await renderConnections();
   });
+  for (const radio of el.querySelectorAll('input[name="con-kind"]')) {
+    radio.addEventListener('change', () => {
+      // in place, so a name already typed stays
+      kind = radio.value;
+      tab = FIRST_TAB[kind];
+      $('con-kind-note').textContent = kindNote(tok);
+      $('con-life').innerHTML = lifeOptions(tok);
+      $('con-setup').innerHTML = setupHTML();
+      wireSetup(el);
+    });
+  }
   $('con-issue')?.addEventListener('click', async () => {
     const box = $('con-result');
     const days = $('con-life').value;
     const { r, j } = await post('api/v2/admin/tokens',
-      { name: $('con-name').value, days: days ? Number(days) : null });
+      { name: $('con-name').value, days: days ? Number(days) : null, profile: kind });
     if (!r.ok) {
       box.className = 'dir-result dir-bad';
       box.textContent = j.error || 'Could not create a token.';
       return;
     }
     issued = j.secret;
+    issuedKind = kind;
     await renderConnections();
   });
   for (const b of el.querySelectorAll('[data-revoke]')) {

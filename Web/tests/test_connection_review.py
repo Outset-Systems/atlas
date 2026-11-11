@@ -301,6 +301,32 @@ def test_portainer_stacks_become_services_on_their_environment(realm, admin, rem
     assert remote.seen[0][1]["headers"]["X-API-Key"] == "ptr_topsecret"
 
 
+def test_an_import_onto_a_checked_place_marks_it_until_someone_looks(realm, admin, remote):
+    """The review stands when an import adds to a place, so the stamp has to say
+    that something arrived after it: a stack's name is whatever its author typed."""
+    import provenance
+
+    def check(place):
+        r = admin.post("/api/v2/admin/ops", headers=W,
+                       json={"ops": [{"op": "review", "section": "nodes", "id": place}]})
+        assert r.status_code == 200, r.get_json()
+
+    check("alpha")
+    assert provenance.settled(node(realm, "alpha"))
+    connect(admin, "portainer")
+    remote.table = PORTAINER
+    body = review(admin, "portainer")
+    assert import_(admin, "portainer", ["portainer:stack/7"], body).status_code == 200
+    alpha = node(realm, "alpha")
+    assert [l["label"] for l in alpha["links"]] == ["Grafana", "monitoring"]
+    assert alpha["provenance"]["reviewed"] is True and alpha["provenance"]["changed_since_review"] is True
+    assert not provenance.settled(alpha)
+    # a look clears it
+    check("alpha")
+    assert "changed_since_review" not in node(realm, "alpha")["provenance"]
+    assert provenance.settled(node(realm, "alpha"))
+
+
 def test_a_stack_cannot_land_without_its_host(realm, admin, remote):
     connect(admin, "portainer")
     remote.table = PORTAINER

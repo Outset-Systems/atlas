@@ -17,14 +17,53 @@ wherever the model that asked for it runs.
   answers stay on your network.
 - **A cloud model** (Claude Code, Codex, Gemini CLI and the like): every answer
   The agent reads is sent to that model's vendor, and the vendor's own terms
-  decide how long it is kept. That includes place names, IP addresses, MAC
-  addresses, service URLs and the descriptions you wrote. A token can also read
-  the whole map at once through `/api/v2/lab-data`.
+  decide how long it is kept.
 
-Atlas cannot see where a client sends what it reads, so it cannot stop a token
-from reaching a cloud model. Only the person who creates the token can decide that.
+Atlas cannot see where a client sends what it reads, so you say it when you
+create the token. A token is one of two kinds, and its kind cannot be changed
+afterwards:
+
+| | A full token | A cloud token |
+|---|---|---|
+| Made for | a local model, or a script on your network | a cloud AI tool |
+| Places | every place a viewer with no groups could see | only places a person has checked, with nothing changed since |
+| Fields | the map as charted: addresses, MAC addresses, URLs, hardware, notes | name, kind, zone, role, what it depends on, its roads, its services' names, health, when it was checked |
+| Doors | the MCP endpoint and the read routes | the MCP endpoint only |
+| Lifetime | 30, 90 or 365 days, or never | 7 or 30 days |
+
+A cloud token still sends the names of the places you checked, what they are
+for, how they connect and whether they are well. It reduces what a vendor
+receives. It does not make sending a map to a vendor safe.
+
 Give each tool its own token, name it after the tool, and revoke it when you
 stop using that tool.
+
+### What a cloud token reads
+
+**Only places a person has checked.** A place an import wrote and nobody has
+looked at is withheld. So is a place charted before Atlas kept provenance, and
+a checked place that has changed since (an import added to it, say). Nothing about a withheld
+place is sent: not its name, not its state, not an event that names it, and a
+checked place that depends on it is listed without that dependency. The agent
+is told how many places are withheld, so it does not read your lab as smaller
+than it is, and Settings, Connections shows the same count before you create
+the token. To make a place readable, check it in the Desk (below).
+
+**A short list of fields.** For each place: its id, name, kind, zone, role,
+parent and dependencies, and whether it is planned. For each service: its
+name. For each road: its two ends and its kind. For each scheduled job: its
+name, how often it runs and whether it ran. No IP or MAC address, no URL, no
+hardware or firmware, no note or description, no monitor name, no rack, port,
+prefix or certificate, and no key Atlas does not know. A cloud agent cannot
+look a place up by its address.
+
+**Three things carry no review of their own.** A network's name is sent only
+when a readable place sits in it. A scheduled job is sent by its name, unless
+that name names a withheld place. The map's title is sent.
+
+**The same nine tools.** `atlas_health` names a service by its label and its
+place, and `atlas_events` names each row from the map as it is now, because
+the stored history carries monitor names and old names.
 
 ## Set it up
 
@@ -33,8 +72,10 @@ press **Turn on**. Turning it off again stops every tool at once and keeps the
 tokens. A deployment can hold it off with `ATLAS_AGENT_API=0`
 ([configuration](configuration.md)).
 
-Then create an API token on the same screen. It is shown once.
-[The API guide](api.md) explains what a token can and cannot see.
+Then create an API token on the same screen: choose **A local model or a
+script** or **A cloud AI tool**, and the screen shows the setup lines for that
+kind. The token is shown once. [The API guide](api.md) explains what a token
+can and cannot see.
 
 Settings, Connections also shows these lines filled in for your address.
 
@@ -45,7 +86,7 @@ URL:    https://atlas.example.net/api/v2/mcp
 Header: Authorization: Bearer atl_...
 ```
 
-**Claude Code** (cloud: what it reads goes to Anthropic)
+**Claude Code** (cloud: what it reads goes to Anthropic, so give it a cloud token)
 
 ```sh
 claude mcp add --transport http atlas https://atlas.example.net/api/v2/mcp \
@@ -130,6 +171,11 @@ the names of the people who edit the map are for admins.
 - `null`: it was charted before Atlas kept provenance. Who and when are not
   known.
 
+`changed_since_review: true` beside `reviewed: true` means the place has
+changed since a person checked it, most often because an import added to it.
+The review stands for what was there; what changed is a guess until someone
+looks again. The Desk lists such a place as waiting for a look.
+
 To review a place, open it in the Desk and press Save (you do not have to
 change anything), or press ✓ on its row in the Desk's list of places. The list
 can mark every place on screen at once, which is how a map older than this
@@ -159,7 +205,8 @@ whoever tripped them.
 
 ## What an agent cannot see
 
-The same limits as any token:
+A cloud token sees less than this list: see
+[What a cloud token reads](#what-a-cloud-token-reads). The limits on any token:
 
 - places marked for a group, and every route, job and event that names them;
 - account rosters;
