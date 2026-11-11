@@ -359,6 +359,13 @@ document.querySelectorAll('[data-scene]').forEach(btn => {
       setSceneActive('atlas');
       A.closeCard?.();
       if (A.PHONE) { A.deckTop?.(); return; }
+      // inside a region, home is the main map and not the middle of the region
+      // (owner, 2026-11-11): leave every level and stand centred on the whole map
+      if (A.inRegion?.()) {
+        if (A.DECK) A.setDeck(false, { remember: true });
+        A.leaveToMap();
+        return;
+      }
       if (A.DECK) { A.setDeck(false, { remember: true }); A.home(true); return; }
       if (!sceneWasUp && wasHome) { A.setDeck?.(true, { remember: true }); return; }
       A.home(true);

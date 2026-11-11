@@ -235,7 +235,8 @@ function buildCrumbs(r) {
   crumbs.innerHTML = parts.join('');
   crumbsBottom = crumbs.getBoundingClientRect().bottom || 0;
   for (const b of crumbs.querySelectorAll('button.rl-crumb')) {
-    b.addEventListener('click', () => leaveTo(b.dataset.to || null));
+    // the map's own name is the way home: the whole map, centred (owner, 2026-11-11)
+    b.addEventListener('click', () => leaveTo(b.dataset.to || null, { home: !b.dataset.to }));
   }
 }
 
@@ -356,8 +357,11 @@ function sessionHinted() {
   return false;
 }
 
-/* Leave to `targetId` (null = the main map), one level or several. */
-async function leaveTo(targetId) {
+/* Leave to `targetId` (null = the main map), one level or several. Zooming out
+   or Escape frames the region you left, so you see where you were. `home`
+   is for someone who asked for the map itself (its name in the breadcrumb, THE
+   ATLAS): they get it whole and centred. */
+async function leaveTo(targetId, { home: goHome = false } = {}) {
   if (!level || busy) return;
   busy = true;
   try {
@@ -370,10 +374,14 @@ async function leaveTo(targetId) {
     const art = target ? await loadArt(mapUrl(target.map)) : null;
     await crossing(() => {
       if (target) wear(target, art); else closeLens();
-      // frame the child we left, so you see where you were
-      Object.assign(A.cam, M.fitRect(leaving, A.MAPW, A.MAPH, innerWidth, innerHeight, PAD));
-      A.clampCam?.();
-      A.apply?.(false);
+      if (goHome && !target) {
+        A.home(false);
+      } else {
+        // frame the child we left, so you see where you were
+        Object.assign(A.cam, M.fitRect(leaving, A.MAPW, A.MAPH, innerWidth, innerHeight, PAD));
+        A.clampCam?.();
+        A.apply?.(false);
+      }
       prevK = A.cam.k;
       zoomingIn = false;
     });
@@ -411,6 +419,8 @@ A.regionFloor = () => {
   floorReached(gap > QUIET_MS);
 };
 A.inRegion = () => Boolean(level);
+/** From any depth, back to the main map, whole and centred (THE ATLAS, ui.js). */
+A.leaveToMap = () => leaveTo(null, { home: true });
 
 locator.addEventListener('click', () => leaveOne());
 locator.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); leaveOne(); } });

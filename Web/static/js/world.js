@@ -864,8 +864,6 @@ function focusService(i, fromRoad) {
   // the card is already open on this place — the split cannot exist otherwise.
   // Rebuilding it here tore down and reloaded its two Grafana vitals gauges
   // per satellite click, under an opaque service pane nobody could see through.
-  // The pane goes up BEFORE the un-minimize: expanding first would re-arm the
-  // parked vitals in the one tick where the pane hasn't covered them yet.
   A.showServiceDetail?.(host, link);   // highlightService finds the dot itself
   // A click on the DOT asks who this service is; a click on its ROAD asks where
   // it goes, and only the second draws (2026-08-11). showServiceDetail stopped
@@ -873,7 +871,6 @@ function focusService(i, fromRoad) {
   // side effect — and the pane's ◈ FOLLOW ITS ROAD is the same request made
   // after the fact.
   if (fromRoad) A.highlightService?.(host, link);
-  A.setCardMinimized?.(false);
 }
 
 /** Scatter a place into its services — idempotent, so the automatic split can
@@ -930,21 +927,15 @@ A.openConstellation = function openConstellation(id, { auto = false } = {}) {
   // for the automatic split too — without it a ring opened at focus zoom hangs
   // its outer satellites off the edge of the screen.
   const k = ringZoom();
-  if (auto) {
-    // the card stays up in this mode, so the ring has to be offset into the
-    // screen the card leaves free — the same anchoring focusNode does for a
-    // lone dot. Centring here would park half the satellites under 320px of
-    // parchment, which is exactly the complaint the ⁘ split's fold answers.
-    const a = A.focusAnchor?.(n.x, k);
-    if (a) { A.setCardSide?.(a.cardLeft); A.glideTo(n.x, n.y, k, a.x); }
-    else A.glideTo(n.x, n.y, k);
-    A.setCardMinimized?.(false);
-  } else {
-    A.glideTo(n.x, n.y, k);
-    // the ring is the subject now: the card folds to its headline so satellites
-    // near the screen's edge aren't hiding under 320px of parchment. A satellite
-    // click expands it again (focusService); the bar itself restores on click.
-    A.setCardMinimized?.(true);
+  // The card stays up, as it is, so the ring is offset into the screen the card
+  // leaves free: the same anchoring focusNode does for a lone dot. The ⁘ button
+  // used to fold the card to its headline instead (the old card was 320px of
+  // parchment); on the pull-tab card that hid the button just pressed, and the
+  // owner asked for the button to split and gather and nothing else (2026-11-11).
+  const a = A.focusAnchor?.(n.x, k);
+  if (a) { A.setCardSide?.(a.cardLeft); A.glideTo(n.x, n.y, k, a.x); }
+  else A.glideTo(n.x, n.y, k);
+  if (!auto) {
     const passing = entries.filter((e) => e.passing).length;
     A.showToast(`${n.name} split into ${entries.length} ${entries.length === 1 ? 'service' : 'services'}` +
       (passing ? ` (${passing} passing through)` : '') + ` — click a service or one of its routes to follow it.`);
@@ -958,7 +949,6 @@ A.toggleConstellation = function toggleConstellation(id) {
   // body.constellation in CSS, so there is nothing to redraw
   if (constellation && constellation.id === id) {
     A.collapseConstellation();
-    A.setCardMinimized?.(false);   // the ring is gathered — the card is the subject again
     return;
   }
   A.openConstellation(id);

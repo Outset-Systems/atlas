@@ -11,7 +11,7 @@
 
    Lifted out of ui.js whole; everything outside reaches
    it through `A`: openCard, closeCard, cardOpen, setCardSide,
-   setCardMinimized, showServiceDetail. Registered in atlas.js after ui.js. */
+   showServiceDetail. Registered in atlas.js after ui.js. */
 
 import { A, CFG, $, esc, host, glassAttrs, zoneById, nodeById, FALLBACK_HUE } from './config.js';
 import { say } from './words.js';
@@ -132,15 +132,24 @@ function paintTabs() {
 /* The drawer opens to exactly its pane — measured, not guessed — capped by the
    room the card reserved below its sheet (layoutCard). */
 function sizeDrawer() {
-  const panel = $('card-panel');
-  for (const [id, el] of Object.entries(PANES)) $(el).hidden = id !== drawer.open;
-  const h = drawer.open ? Math.min(panel.scrollHeight + 1, roomPx || panel.scrollHeight + 1) : 0;
+  const want = drawer.open ? paneHeight(drawer.open) : 0;
+  const h = Math.min(want, roomPx || want);
   card.style.setProperty('--drawer-h', `${h}px`);
+}
+
+/** Show one pane (null = none) and say how tall it wants to be. The pane's own
+    box is asked, not the panel's scroll height: the panel is as tall as the
+    drawer was a moment ago, and answers with that. */
+function paneHeight(id) {
+  for (const [pid, el] of Object.entries(PANES)) $(el).hidden = pid !== id;
+  return id ? $(PANES[id]).offsetHeight + 2 : 0;   // + the panel's hairline and a pixel of air
 }
 
 function pullTab(id) {
   drawer.open = drawer.open === id ? null : id;
   paintTabs();
+  if (drawer.open) stand.panes[drawer.open] = paneHeight(drawer.open);   // as it is now, not as first measured
+  standFor(drawer.open);   // a pane taller than the room below slides the card up to make it
   sizeDrawer();
 }
 
@@ -162,38 +171,52 @@ function addTab(id, count) {
 }
 
 /* ── where the card stands ───────────────────────────────────────────────────
-   Pinned by its TOP on a desktop window: the card's foot sits as low as it
-   always did (60px up) with the drawer SHUT AND its tallest pane's room
-   reserved, so a pull opens downward into space that was already the card's.
-   The top never rises past the chrome above it (`--card-clear`, per side, plus
-   the emblem's rise). On a short window the reserve is what is left, and the
-   drawer's pane scrolls past it. The ≤720px bottom sheet stays bottom-pinned
-   and its drawer grows upward. */
+   Pinned by its TOP on a desktop window, with the drawer SHUT and room below
+   for the DETAILS pane and no more (owner, 2026-11-11): the card stands low,
+   and Details opens downward into space that was already the card's. A taller
+   pane (Services, on a busy place) slides the card up by what it lacks, and
+   shutting it lets the card back down. The top never rises past the chrome
+   above it (`--card-clear`, per side, plus the emblem's rise); past that the
+   pane scrolls. The ≤720px bottom sheet stays bottom-pinned and its drawer
+   grows upward. */
 let roomPx = 0;
+/* what layoutCard measured, for standFor to stand the card by */
+const stand = { panes: {}, shut: 0, topMin: 0, rest: 0 };
+/** The pane the card keeps room for while its drawer is shut. */
+const RESTING_PANE = 'details';
 const narrow = () => window.matchMedia('(max-width: 720px)').matches;
 /* the pinned card may stand lower than the bottom-pinned one did (60px): its
    foot only ever meets the empty map, and every pixel goes to the drawer */
 const BOTTOM = 24, MIN_ROOM = 140;
 
-function tallestPane() {
-  const panel = $('card-panel');
-  let tallest = 0;
-  for (const id of drawer.tabs) {
-    for (const [pid, el] of Object.entries(PANES)) $(el).hidden = pid !== id;
-    tallest = Math.max(tallest, panel.scrollHeight + 1);
-  }
-  return tallest;
+/** Every tab's pane, as tall as it wants to be: {tab id: px}. */
+function measurePanes() {
+  const heights = {};
+  for (const id of drawer.tabs) heights[id] = paneHeight(id);
+  return heights;
+}
+
+/** Stand the card for the pane `id` (null = drawer shut): at rest unless that
+    pane needs more room than rest leaves, then as far up as it needs. */
+function standFor(id) {
+  if (narrow() || !card.classList.contains('anchored')) return;
+  const need = id ? stand.panes[id] || 0 : 0;
+  const top = Math.max(stand.topMin, Math.min(stand.rest, window.innerHeight - BOTTOM - stand.shut - need));
+  roomPx = Math.max(MIN_ROOM, Math.floor(window.innerHeight - BOTTOM - top - stand.shut) - 2);
+  card.style.setProperty('--card-top', `${Math.round(top)}px`);
+  card.style.setProperty('--drawer-room', `${Math.round(roomPx)}px`);
 }
 
 function layoutCard() {
   if (!card.classList.contains('visible') && card.getAttribute('aria-hidden') === 'true') return;
-  // only the full node view is the box to measure: a headline or a service
-  // pane would set the top from the wrong height (re-run on expand and Back)
-  if (card.classList.contains('minimized') || card.classList.contains('svc-open')) return;
+  // only the full node view is the box to measure: a service pane would set
+  // the top from the wrong height (re-run on Back)
+  if (card.classList.contains('svc-open')) return;
   const cs = getComputedStyle(card);
   const clear = parseFloat(cs.getPropertyValue('--card-clear')) || 174;
   const over = parseFloat(cs.getPropertyValue('--medal-over')) || 0;
-  const tallest = tallestPane();
+  stand.panes = measurePanes();
+  const tallest = Math.max(0, ...Object.values(stand.panes));
   // the sheet + tabs with the drawer shut
   const was = cs.getPropertyValue('--drawer-h');
   card.style.setProperty('--drawer-h', '0px');
@@ -203,13 +226,14 @@ function layoutCard() {
     card.classList.remove('anchored');
     roomPx = Math.max(MIN_ROOM, Math.min(tallest, window.innerHeight - clear - over - shut));
   } else {
-    const topMin = clear - 60 + over;   // the chrome above, as --card-clear has always measured it (from a 60px foot)
-    const top = Math.max(topMin, window.innerHeight - BOTTOM - shut - tallest);
-    roomPx = Math.max(MIN_ROOM, Math.floor(window.innerHeight - BOTTOM - top - shut) - 2);
-    card.style.setProperty('--card-top', `${Math.round(top)}px`);
+    stand.shut = shut;
+    stand.topMin = clear - 60 + over;   // the chrome above, as --card-clear has always measured it (from a 60px foot)
+    stand.rest = Math.max(stand.topMin,
+      window.innerHeight - BOTTOM - shut - (stand.panes[RESTING_PANE] || 0));
     card.classList.add('anchored');
+    standFor(drawer.open);
   }
-  card.style.setProperty('--drawer-room', `${Math.round(roomPx)}px`);
+  if (narrow()) card.style.setProperty('--drawer-room', `${Math.round(roomPx)}px`);
   sizeDrawer();
 }
 
@@ -226,7 +250,6 @@ document.fonts?.addEventListener?.('loadingdone', () => { if (A.cardOpen()) layo
 
 /* ── the card ────────────────────────────────────────────────────────────── */
 A.openCard = function openCard(n) {
-  setCardMinimized(false);   // a fresh selection always opens expanded
   const zone = zoneById(n.zone);
   const hue = zone ? zone.hue : FALLBACK_HUE;
   card.style.setProperty('--card-hue', hue);
@@ -550,27 +573,9 @@ A.cardOpen = () => card.classList.contains('visible');
 // closing the card with the × re-centers the survey (you were glided off-center to a node)
 $('btn-card-close').addEventListener('click', (e) => { e.stopPropagation(); A.closeCard(); A.recenter?.(true); });
 
-/* minimize (–) collapses the card to just its name; the × still closes and a
-   new selection reopens expanded (openCard resets it). (2026-07-20) */
-function setCardMinimized(on) {
-  const was = card.classList.contains('minimized');
-  card.classList.toggle('minimized', on);
-  const b = $('btn-card-min');
-  if (b) { b.title = on ? 'Expand' : 'Minimize'; b.setAttribute('aria-label', b.title); }
-  if (was && !on) layoutCard();   // measured while it was a headline? measure the card again
-}
-A.setCardMinimized = setCardMinimized;
-$('btn-card-min')?.addEventListener('click', (e) => {
-  e.stopPropagation();
-  setCardMinimized(!card.classList.contains('minimized'));
-});
-/* a click on the collapsed card (anywhere but its chrome) expands it again */
-card.addEventListener('click', (e) => {
-  if (!card.classList.contains('minimized')) return;
-  if (e.target.closest('.card-close') || e.target.closest('.card-min')
-      || e.target.closest('.card-out')) return;
-  setCardMinimized(false);
-});
+/* There is no minimize (owner, 2026-11-11): the pull-tab card with its drawer
+   shut is already the small card, and a headline-only state was one more
+   thing to get stuck in. × closes it. */
 
 /* ⊖ — pull back WITHOUT losing the place: zooms out around the selected
    marker so its roads come into frame and it stays put. Repeatable, and it

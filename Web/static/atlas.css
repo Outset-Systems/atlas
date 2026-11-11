@@ -1832,6 +1832,13 @@ body.scene-open #index-drawer { z-index: 986; }
    keeps its place while a drawer pulls down beneath it, with the drawer's room
    reserved below. Unmeasured, or on the ≤720px sheet, it stays bottom-pinned. */
 #card.anchored { top: var(--card-top); bottom: auto; max-height: calc(100vh - var(--card-top) - 24px); }
+/* it slides when a pane taller than its room is pulled, and back when that pane
+   is shut. Only while it is up, like `right` above: a card arriving does not
+   travel from where the last one stood. */
+#card.anchored.visible {
+  transition: opacity 300ms var(--glide), transform 380ms var(--glide), right 380ms var(--glide),
+              top 420ms var(--glide);
+}
 #card.card-left {
   --card-in: translateX(-34px) scale(0.985);
   right: calc(100vw - (var(--card-w) + var(--card-edge)));   /* left edge at --card-edge */
@@ -1876,26 +1883,22 @@ body.drawer-open .pth-panel { right: calc(5vw + var(--drawer-clear)); }
   box-shadow: 0 24px 60px rgba(0,0,0,0.55), 0 0 0 1px var(--c-edge);
   overflow: hidden;
 }
-#card.no-tabs .card-sheet, #card.minimized .card-sheet, #card.svc-open .card-sheet { border-radius: 4px; }
+#card.no-tabs .card-sheet, #card.svc-open .card-sheet { border-radius: 4px; }
 /* the top rule: the chrome, right; the emblem's corner, left */
 .card-top {
   height: 40px; flex-shrink: 0; display: flex; justify-content: flex-end; align-items: center;
   padding-right: 2px; border-bottom: 1px solid var(--c-hair);
 }
-.card-out, .card-min, .card-close {
+.card-out, .card-close {
   width: 40px; height: 40px; padding: 0; background: none; border: none; cursor: pointer;
   color: var(--card-ink-soft); display: flex; align-items: center; justify-content: center;
   transition: color 150ms;
 }
-.card-out svg, .card-min svg, .card-close svg {
+.card-out svg, .card-close svg {
   width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5;
   stroke-linecap: round; stroke-linejoin: round;
 }
-.card-out:hover, .card-min:hover, .card-close:hover { color: var(--card-ink); }
-.card-min .cm-box { display: none; }
-#card.minimized .card-min .cm-line { display: none; }
-#card.minimized .card-min .cm-box { display: inline; }
-#card.minimized .card-out { display: none; }   /* nothing to frame when it's a headline */
+.card-out:hover, .card-close:hover { color: var(--card-ink); }
 
 /* the body scrolls only when a place outgrows the window (the drawer has its
    own cap, below) */
@@ -2097,17 +2100,8 @@ body.constellation .card-split .cs-on { display: inline; }
   content: ""; position: absolute; left: 1px; right: 1px; top: -8px; height: 10px; z-index: -1;
   background: var(--paper-drawer);
 }
-#card.minimized .card-tabs, #card.svc-open .card-tabs,
-#card.minimized .card-drawer, #card.minimized .card-medallion,
+#card.svc-open .card-tabs,
 #card.svc-open .card-medallion { display: none; }   /* it would sit on the back link */
-
-/* minimized: just the headline; a click on it restores the card */
-#card.minimized { cursor: pointer; }
-#card.minimized .card-top { position: absolute; top: 0; right: 0; border: none; z-index: 2; }
-#card.minimized .card-lore, #card.minimized .card-strip, #card.minimized .card-cause,
-#card.minimized .card-actions, #card.minimized .card-parent, #card.minimized .card-svc { display: none; }
-#card.minimized .card-head { padding: 9px 90px 9px 18px; }
-#card.minimized h3 { font-size: 1.35rem; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ── Service detail sub-view (replaces the node view while it is up) ──────
    A FLOW child of `.card-inner` (2026-08-16): `#card.svc-open` hides the
@@ -4268,7 +4262,7 @@ body.style-bright #overlay.net-on .territory { fill-opacity: 0.16; stroke-opacit
 :is(
   /* buttons */
   .chrome, .sp-btn, .chron-btn, .chron-arrow, .chron-open, .chron-fs, .chron-info, .aw-go,
-  .band-arrow, .card-close, .card-min, .card-out, .card-link, .card-split, .csv-open,
+  .band-arrow, .card-close, .card-out, .card-link, .card-split, .csv-open,
   .csv-metrics, .csv-back, .idx-seek, .idx-search-clear, .embed-max-arrow,
   .ldg-close, .trb-close, .rel-close, .rel-map-btn, .rel-tool, .gl-tool, .gl-refuse-go,
   .cal-arrow, .cal-today, .gs-ack, .gs-copy, .gs-setup-toggle, .gs-add, .svc-pin, .rl-locator,
