@@ -576,7 +576,7 @@ body::after {
    seam-hiding cloud bank on screen, which lives entirely above the map's top
    edge while this floats over the table's northern quarter. */
 /* belongs to the realm's own picture, so another map style goes without */
-body.on-style #sky-island, body.on-style #sky-shadow, body.on-style #star-hide { display: none; }
+body.on-style #sky-island, body.on-style #sky-shadow { display: none; }
 #sky-island {
   position: absolute; pointer-events: none; z-index: 5;
   filter: drop-shadow(0 24px 18px rgba(5, 4, 2, 0.38));
@@ -743,12 +743,6 @@ body.depths #sky-realm { opacity: 0; visibility: hidden; }
 body.depths .fog-a, body.depths .fog-b { animation: none !important; }
 body.depths .mk:not(.depths-kin) .mk-ring { animation: none !important; }
 body.depths .mk.s-down::after { animation: none !important; opacity: 0.18; }
-/* (#star-hide no longer carries a backdrop-filter at all — see its rule above.
-   The Depths still darken the patch so it sits in the underworld's grade.) */
-body.depths #star-hide {
-  background: radial-gradient(ellipse at center,
-    rgba(20, 16, 12, 0.62) 0%, rgba(20, 16, 12, 0.5) 55%, rgba(20, 16, 12, 0) 100%);
-}
 body.depths .fog-a {
   background:
     radial-gradient(ellipse 40% 28% at 22% 32%, rgba(64, 200, 190, 0.10), transparent 70%),
@@ -1567,27 +1561,8 @@ body.scene-open #scenes-list {
    watchings' buttons are `.chron-btn` with a `.chron-fly-pop` tooltip; nothing
    has emitted `chron-fly` since. Removed 2026-08-21.) */
 
-/* the artist's star mark, smoothed back into the sand.
-
-   This used to be `backdrop-filter: blur(18px)`, which is an 18px GPU backdrop
-   readback **inside `#stage`** — the element that translates and scales on
-   every camera frame. It re-blurred a region of an 8 MB render every time the
-   map moved, to hide a mark that never moves in an image that never changes.
-   The file already knew: `body.depths #star-hide { backdrop-filter: none }`
-   sits under a comment titled "Depths flicker kill".
-
-   A soft radial wash in the sand tone does the same job — smudge a fixed spot
-   in a fixed picture — and costs nothing to paint or to scale. (2026-07-31) */
-#star-hide {
-  position: absolute; left: 89.4%; top: 83.1%; width: 8%; aspect-ratio: 1.4;
-  transform: translate(-50%, -50%); border-radius: 50%;
-  background: radial-gradient(ellipse at center,
-    rgba(150, 124, 90, 0.94) 0%,
-    rgba(150, 124, 90, 0.88) 42%,
-    rgba(150, 124, 90, 0.55) 70%,
-    rgba(150, 124, 90, 0) 100%);
-  z-index: 2; pointer-events: none;
-}
+/* (the artist's star mark on lab5 was hidden here by #star-hide until
+   2026-11-11; lab6 has no star, so the patch went with the old render.) */
 
 /* ── Network layer (routes) ─────────────────────────── */
 /* (#overlay's z-index: 4 sits on its base rule, by the stage) */
@@ -4150,7 +4125,7 @@ body.region-open #colophon { opacity: 0; }               /* the footer would sit
 body.region-open #viewport, body.rg-crossing #viewport { background: var(--abyss); }
 body.region-open #sky-realm, body.region-open #chronicle, body.region-open #void-fade,
 body.region-open #void, body.region-open #depths-realm, body.region-open #abyss,
-body.region-open #sky-island, body.region-open #sky-shadow, body.region-open #star-hide,
+body.region-open #sky-island, body.region-open #sky-shadow,
 body.region-open #btn-sky, body.region-open #btn-depths { display: none; }
 
 /* only the way back lives here; the map underneath takes the pointer */
