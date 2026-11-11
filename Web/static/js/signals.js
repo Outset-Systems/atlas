@@ -105,6 +105,7 @@ function apply(feed) {
   A.paintConstellationHealth?.();   // a split ring reddens where it stands
   A.paintDecoys?.();       // the decoy feed eyes follow the same poll
   A.paintRoutes?.();        // amber-in the roads that lead to trouble
+  A.paintFolds?.();         // a folded region's tab counts its hidden places by state
   A.refreshStonesScene?.(); // a stone that starts speaking lights up where it
                             // stands, even with the list already open — the
                             // scene where a stale "all quiet" is the worst lie
@@ -198,6 +199,7 @@ function goStatic(note) {
   A.signalsFeed = null;
   A.paintServiceHealth?.();   // clear service dots too
   A.paintRoutes?.();          // roads back to their resting VLAN colours
+  A.paintFolds?.();           // folded regions keep their count and drop the states
   A.paintDecoys?.();         // the eyes grey out — the watch cannot be heard
   paintDrift(null);           // drop the drift chip too
   if (colophon) {

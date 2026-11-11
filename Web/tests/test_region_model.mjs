@@ -8,7 +8,7 @@
    zoom-out means "leave". */
 
 import assert from 'node:assert/strict';
-import {
+import { foldedAt, homesAt, foldSummary, foldWords, carryTo, exitPoint, exitLabel, mergeExits,
   autoCandidate, carryRect, chainOf, childrenOf, clampLens, clampRect, coverage, fitContain,
   fitRect, hashWithRegion, pinchStep, placeOn, rectFromView, rectOnScreen, rectToChild,
   rectToParent, regionFromHash, shown, toChild, toParent, viewRect, zoomAround,
@@ -288,6 +288,197 @@ test('pinching out at the floor reports it — the cue to leave, as the wheel do
 test('fingers on the same spot do not divide by zero', () => {
   const r = pinchStep({ k: 2, x: 5, y: 5 }, P(10, 10), P(10, 10), P(20, 10), P(20, 10), 1, 6);
   near(r.factor, 1); near(r.cam.k, 2); near(r.cam.x, 15);
+});
+
+test('a folded region keeps the places that speak to nobody outside it', () => {
+  const regions = [
+    { id: 'island', x: 10, y: 10, w: 30, h: 60, fold: true },
+    { id: 'north', parent: 'island', x: 20, y: 0, w: 60, h: 40 },
+    { id: 'plain', x: 60, y: 10, w: 20, h: 20 },
+  ];
+  const at = {
+    gate: { x: 20, y: 20 }, core: { x: 22, y: 25 }, nas: { x: 15, y: 30 }, vault: { x: 30, y: 15 },
+    far: { x: 90, y: 50 }, hut: { x: 65, y: 15 }, shed: { x: 70, y: 20 },
+  };
+  const routes = [
+    { from: 'gate', to: 'core' }, { from: 'core', to: 'nas' },      // inside the island
+    { from: 'gate', to: 'far' },                                     // the island speaks to the world
+    { from: 'nas', to: 'vault' },                                    // both inside: neither speaks out
+    { from: 'hut', to: 'shed' }, { from: 'ghost', to: 'far' },      // an unfolded region; a place not drawn
+  ];
+  assert.deepEqual([...foldedAt(regions, null, at, routes)].sort(), ['core', 'nas', 'vault']);
+  assert.deepEqual(homesAt(regions, null, at),
+    { gate: 'island', core: 'island', nas: 'island', vault: 'island', hut: 'plain', shed: 'plain' });
+  // a road into ANOTHER region counts as speaking out, from both ends
+  assert.deepEqual([...foldedAt(regions, null, at, [{ from: 'nas', to: 'hut' }])].sort(), ['core', 'gate', 'vault']);
+  // no fold, no hiding; and the island's own map asks only its own children
+  assert.equal(foldedAt(regions.map((r) => ({ ...r, fold: false })), null, at, routes).size, 0);
+  assert.equal(foldedAt(regions, 'island', at, routes).size, 0);
+  assert.equal(foldedAt(regions, null, at, undefined).size, 4);
+});
+
+/* ── a folded region's tab: how many wait inside, and the worst of them ──── */
+
+const FOLD_REGIONS = [
+  { id: 'island', name: 'Island', map: 'i.webp', x: 0, y: 0, w: 50, h: 100, fold: true },
+  { id: 'plain', name: 'Plain', map: 'p.webp', x: 60, y: 0, w: 40, h: 100 },
+  { id: 'reef', name: 'Reef', map: 'r.webp', x: 52, y: 0, w: 6, h: 100, fold: true },
+];
+const FOLD_AT = {
+  gate: { x: 40, y: 50 }, core: { x: 10, y: 10 }, nas: { x: 20, y: 20 }, vault: { x: 30, y: 30 },
+  hut: { x: 70, y: 50 }, shed: { x: 80, y: 60 },
+};
+const FOLD_ROUTES = [{ from: 'gate', to: 'hut' }, { from: 'core', to: 'nas' }];
+
+test('foldSummary counts only what the fold hid, per folded region', () => {
+  const hidden = foldedAt(FOLD_REGIONS, null, FOLD_AT, FOLD_ROUTES);
+  const sum = foldSummary(FOLD_REGIONS, null, FOLD_AT, hidden, {});
+  assert.deepEqual(Object.keys(sum).sort(), ['island', 'reef']);   // the unfolded one is not listed
+  assert.equal(sum.island.count, 3);                               // gate is drawn here: not counted
+  assert.equal(sum.island.unknown, 3);
+  assert.equal(sum.island.worst, null);
+  assert.equal(sum.reef.count, 0);
+  assert.equal(foldWords(sum.island), '3 places');
+  assert.equal(foldWords(sum.reef), '');
+  assert.equal(foldWords(undefined), '');
+});
+
+test('foldSummary: the worst live state wins, and unknown is never an alarm', () => {
+  const hidden = new Set(['core', 'nas', 'vault']);
+  const s = (states) => foldSummary(FOLD_REGIONS, null, FOLD_AT, hidden, states).island;
+  assert.equal(s({ core: 'healthy', nas: 'healthy', vault: 'healthy' }).worst, null);
+  assert.equal(s({ core: 'healthy' }).unknown, 2);                 // no word is unknown, not healthy
+  assert.equal(s({ core: 'healthy' }).healthy, 1);
+  assert.equal(s({ core: 'maintenance', nas: 'slumbering' }).worst, 'maintenance');
+  assert.equal(s({ core: 'maintenance', nas: 'degraded' }).worst, 'degraded');
+  assert.equal(s({ core: 'maintenance', nas: 'degraded', vault: 'down' }).worst, 'down');
+  assert.equal(s({ core: 'slumbering' }).worst, null);             // asleep on purpose: words, no cue
+  assert.equal(s({ core: 'on fire' }).unknown, 3);                 // a word nobody taught it
+  assert.equal(s(undefined).unknown, 3);
+  // a state for a place that is drawn (gate) or hidden nowhere changes nothing
+  assert.equal(s({ gate: 'down', hut: 'down' }).worst, null);
+  assert.equal(foldWords(s({ core: 'down', nas: 'degraded', vault: 'degraded' })), '3 places, 1 down, 2 degraded');
+  assert.equal(foldWords(s({ core: 'maintenance', nas: 'slumbering' })), '3 places, 1 in maintenance, 1 slumbering');
+  const one = foldSummary(FOLD_REGIONS, null, FOLD_AT, new Set(['core']), { core: 'down' }).island;
+  assert.equal(foldWords(one), '1 place, 1 down');
+});
+
+test('foldSummary on a region map asks that map, and never hands back a name', () => {
+  const regions = [
+    { id: 'isle', name: 'Isle', map: 'i.webp', x: 0, y: 0, w: 100, h: 100 },
+    { id: 'cove', name: 'Cove', map: 'c.webp', parent: 'isle', x: 0, y: 0, w: 50, h: 50, fold: true },
+  ];
+  const at = { a: { x: 10, y: 10 }, b: { x: 20, y: 20 }, c: { x: 80, y: 80 } };
+  const hidden = foldedAt(regions, 'isle', at, [{ from: 'a', to: 'c' }]);
+  const sum = foldSummary(regions, 'isle', at, hidden, { b: 'down' });
+  assert.deepEqual(sum, { cove: { count: 1, down: 1, degraded: 0, maintenance: 0, slumbering: 0, healthy: 0, unknown: 0, worst: 'down' } });
+  assert.deepEqual(foldSummary(regions, null, at, hidden, { b: 'down' }), {});   // the main map has no folded child
+});
+
+/* ── exits: roads that leave the level ───────────────────────────────────── */
+
+test('carryTo is placeOn without the edges', () => {
+  // wherever placeOn answers, the two agree (pins and nesting included)
+  for (const [rid, node] of [
+    ['west', { id: 'a', x: 25, y: 40 }], ['north', { id: 'a', x: 25, y: 16 }],
+    ['port', { id: 'ship', x: 90, y: 90 }], ['port', { id: 'a', x: 25.9, y: 49.6 }],
+  ]) {
+    const on = placeOn(REGIONS, rid, node);
+    assert.ok(on, `${rid} holds ${node.id}`);
+    const c = carryTo(REGIONS, rid, node);
+    near(c.x, on.x); near(c.y, on.y);
+  }
+  // beyond the rectangle placeOn says null and carryTo says which way
+  assert.equal(placeOn(REGIONS, 'west', { id: 'b', x: 70, y: 40 }), null);
+  const out = carryTo(REGIONS, 'west', { id: 'b', x: 70, y: 40 });
+  near(out.x, 200); near(out.y, 50);
+  // through two rectangles: west (10,0,30,80) then north (20,0,60,40)
+  const deep = carryTo(REGIONS, 'north', { id: 'b', x: 70, y: 40 });
+  near(deep.x, 300); near(deep.y, 125);
+  // a pin on the parent is where the place IS on the parent, in or out of the child
+  const pinned = [...REGIONS.slice(0, 1).map((r) => ({ ...r, places: { b: { x: 90, y: 90 } } })), ...REGIONS.slice(1)];
+  const viaPin = carryTo(pinned, 'north', { id: 'b', x: 70, y: 40 });
+  near(viaPin.x, (90 - 20) / 60 * 100); near(viaPin.y, 225);
+  assert.equal(carryTo(REGIONS, 'nowhere', { id: 'b', x: 1, y: 1 }), null);
+  assert.equal(carryTo(REGIONS, 'west', { id: 'b' }), null);
+});
+
+test('exitPoint: where the line to a far place crosses the border', () => {
+  const p = (from, far) => exitPoint(from, far);
+  assert.deepEqual(p({ x: 50, y: 50 }, { x: 150, y: 50 }), { x: 100, y: 50 });    // east
+  assert.deepEqual(p({ x: 50, y: 50 }, { x: -50, y: 50 }), { x: 0, y: 50 });      // west
+  assert.deepEqual(p({ x: 50, y: 50 }, { x: 50, y: -10 }), { x: 50, y: 0 });      // north
+  assert.deepEqual(p({ x: 50, y: 50 }, { x: 50, y: 400 }), { x: 50, y: 100 });    // south
+  assert.deepEqual(p({ x: 50, y: 50 }, { x: 150, y: 150 }), { x: 100, y: 100 });  // the corner
+  const slant = p({ x: 60, y: 20 }, { x: 140, y: 60 });                           // leaves by the east side
+  near(slant.x, 100); near(slant.y, 40);
+  const steep = p({ x: 60, y: 80 }, { x: 80, y: 180 });                           // leaves by the south side
+  near(steep.x, 64); near(steep.y, 100);
+  // a far point on the map is not an exit; nor is nonsense
+  assert.equal(p({ x: 50, y: 50 }, { x: 70, y: 70 }), null);
+  assert.equal(p({ x: 50, y: 50 }, { x: 100, y: 100 }), null);
+  assert.equal(p({ x: 50, y: 50 }, { x: NaN, y: 0 }), null);
+  assert.equal(p(null, { x: 150, y: 50 }), null);
+  // a place standing on the border, heading out: the exit is where it stands
+  assert.deepEqual(p({ x: 100, y: 30 }, { x: 150, y: 90 }), { x: 100, y: 30 });
+  // every answer is on the border
+  for (const far of [{ x: 117.2, y: 44.3 }, { x: -3, y: 101 }, { x: 250, y: -80 }, { x: 40, y: 100.5 }]) {
+    const at = p({ x: 66, y: 22 }, far);
+    assert.ok(at.x >= 0 && at.x <= 100 && at.y >= 0 && at.y <= 100);
+    assert.ok([0, 100].some((e) => Math.abs(at.x - e) < 1e-9 || Math.abs(at.y - e) < 1e-9), JSON.stringify(at));
+  }
+});
+
+test('the demo island: the gateway road to the edge host leaves by the east side', () => {
+  // the rectangles and spots of hosted/demo-maps/Seven-Squabbling-Kingdoms.style.json
+  const regions = [
+    { id: 'big-island', name: 'The Big Island', map: 'i.webp', x: 11.5, y: 3.5, w: 25, h: 77, fold: true,
+      places: { gateway: { x: 66, y: 22 } } },
+    { id: 'cold-bit', name: 'The Cold Bit', map: 'n.webp', parent: 'big-island', x: 20, y: 2, w: 62, h: 37,
+      places: { gateway: { x: 68, y: 42 } } },
+  ];
+  const edge = { id: 'edge', x: 40.8, y: 37.6 };
+  assert.equal(placeOn(regions, 'big-island', edge), null);          // not on the island
+  const far = carryTo(regions, 'big-island', edge);
+  near(far.x, 117.2); near(far.y, (37.6 - 3.5) / 77 * 100);
+  const at = exitPoint(carryTo(regions, 'big-island', { id: 'gateway', x: 29, y: 27 }), far);
+  near(at.x, 100);
+  near(at.y, 22 + (far.y - 22) * (34 / 51.2));
+  // one level further in, the same host still lies east and a little south
+  const deep = exitPoint({ x: 68, y: 42 }, carryTo(regions, 'cold-bit', edge));
+  near(deep.x, 100);
+  assert.ok(deep.y > 42 && deep.y < 100);
+});
+
+test('mergeExits: one line where several leave a place by the same spot', () => {
+  const exits = [
+    { from: 'gw', to: 'edge', name: 'EDGE', at: { x: 100, y: 40 }, kind: 'wan' },
+    { from: 'gw', to: 'media', name: 'MEDIA', at: { x: 100, y: 42 }, kind: 'lan' },
+    { from: 'gw', to: 'app', name: 'APP', at: { x: 100, y: 43.5 }, kind: 'lan' },
+    { from: 'gw', to: 'wild', name: 'THE WILD', at: { x: 100, y: 41 }, kind: 'wan' },
+    { from: 'gw', to: 'edge', name: 'EDGE', at: { x: 100, y: 40 }, kind: 'mesh' },   // a second road to the same place
+    { from: 'gw', to: 'cam', name: 'CAMERAS', at: { x: 100, y: 80 }, kind: 'lan' },   // same side, far along it
+    { from: 'nas', to: 'edge', name: 'EDGE', at: { x: 100, y: 40 }, kind: 'lan' },    // another place: its own line
+    { from: 'gw', to: 'nope', name: 'NOPE' },                                         // no point, no line
+  ];
+  const got = mergeExits(exits);
+  assert.equal(got.length, 3);
+  const [a, b, c] = got;
+  assert.deepEqual(a.ids, ['edge', 'media', 'app', 'wild']);
+  assert.equal(a.label, 'EDGE, MEDIA +2');
+  assert.equal(a.to, 'edge');                       // a click goes to the first
+  assert.equal(a.kind, 'wan');                      // and the line is the first road's
+  assert.deepEqual(a.at, { x: 100, y: 40 });
+  assert.equal(b.label, 'CAMERAS');
+  assert.equal(c.from, 'nas'); assert.equal(c.label, 'EDGE');
+  // tolerance is a distance, and can be set
+  assert.equal(mergeExits(exits.slice(0, 2), 1).length, 2);
+  assert.equal(mergeExits([]).length, 0);
+  assert.equal(mergeExits(undefined).length, 0);
+  assert.equal(exitLabel(['A']), 'A');
+  assert.equal(exitLabel(['A', 'B']), 'A, B');
+  assert.equal(exitLabel(['A', 'B', 'C']), 'A, B +1');
+  assert.equal(exitLabel([]), '');
 });
 
 console.log(`\nregion-model: ${passed} passed`);

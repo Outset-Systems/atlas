@@ -350,8 +350,61 @@ function buildRoutes() {
     p.dataset.base = routeBaseHue(b);
     g.appendChild(p);
   }
+  buildExits(g);
   overlay.appendChild(g);
   A.paintRoutes();
+}
+
+/* Exits (2026-11-11): inside a region, a road to a place out on a map above
+   runs to the edge of the picture and is named there. regions.js says which
+   (`A.levelExits`: none on the main map), already merged where several leave
+   one place through the same spot. The line is the road's own `.route
+   route-<kind>` with `route-exit`, and carries the road's real from/to and
+   hue, so the feed's amber, the zone light and the layer toggle treat it as
+   the road it is. The name is a `.territory-tag`; a click goes to the far
+   place through `A.focusNode`, the one regions.js taught to leave the region. */
+function buildExits(g) {
+  const PAD = 14;                          // the name keeps this far inside the edge, map px
+  for (const ex of A.levelExits?.() || []) {
+    const a = nodeById(ex.from), far = nodeById(ex.to), dest = nodeById(ex.road?.to);
+    if (!a || !far || !dest || a.off_map) continue;
+    const x1 = a.x / 100 * A.MAPW, y1 = a.y / 100 * A.MAPH;
+    const x2 = ex.at.x / 100 * A.MAPW, y2 = ex.at.y / 100 * A.MAPH;
+    const p = document.createElementNS(SVGNS, 'path');
+    p.setAttribute('d', `M ${x1} ${y1} L ${x2} ${y2}`);
+    p.setAttribute('class', `route route-${esc(ex.kind)} route-exit`);
+    p.dataset.from = ex.road.from;
+    p.dataset.to = ex.road.to;
+    p.dataset.exit = ex.to;
+    p.dataset.base = routeBaseHue(dest);
+    g.appendChild(p);
+
+    const tag = document.createElementNS(SVGNS, 'text');
+    const east = ex.at.x >= 99.9, west = ex.at.x <= 0.1;
+    // the name reads inward from the edge it stands on, and stays on the picture
+    const anchor = east || (!west && ex.at.x > 85) ? 'end' : west || ex.at.x < 15 ? 'start' : 'middle';
+    const tx = east ? x2 - PAD : west ? x2 + PAD : x2;
+    const ty = Math.max(40, Math.min(A.MAPH - 16, ex.at.y <= 0.1 ? 40 : y2 - 12));
+    tag.setAttribute('x', String(tx));
+    tag.setAttribute('y', String(ty));
+    tag.setAttribute('class', 'territory-tag route-exit-tag');
+    tag.setAttribute('fill', routeBaseHue(far));
+    tag.style.textAnchor = anchor;
+    tag.dataset.to = ex.to;
+    tag.setAttribute('role', 'button');
+    tag.setAttribute('tabindex', '0');
+    const more = ex.ids.length - 1;
+    tag.setAttribute('aria-label', `Route out to ${ex.label.replace(/ \+\d+$/, '')}` +
+      (ex.ids.length > 2 ? ` and ${ex.ids.length - 2} more` : '') + `. Go to ${far.name}` +
+      (more ? ', the first of them.' : '.'));
+    tag.textContent = ex.label;
+    const go = (e) => { e.stopPropagation(); A.focusNode(ex.to); };
+    tag.addEventListener('click', go);
+    tag.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(e); }
+    });
+    g.appendChild(tag);
+  }
 }
 
 /** ONE colour language for the network layer (2026-07-11): a road takes the
@@ -1020,8 +1073,9 @@ A.toggleNet = function toggleNet(force) {
   if (!netOn) A.clearHighlight();   // which gathers any split too
   if (netOn && !forced) { A.closeCard?.(); A.recenter(true); }   // pull back so the whole web of roads is in frame
   if (netOn && !REDUCED) {
-    // living ink: each road draws itself from the gateway outward
-    overlay.querySelectorAll('path.route').forEach((p, i) => {
+    // living ink: each road draws itself from the gateway outward (an exit
+    // keeps its own dashes, which the inline dash here would overwrite)
+    overlay.querySelectorAll('path.route:not(.route-exit)').forEach((p, i) => {
       const L = p.getTotalLength();
       p.style.transition = 'none';
       p.style.strokeDasharray = String(L);
@@ -1087,8 +1141,18 @@ function applyOverrides() {
     n._realOff ??= Boolean(n.off_map);
     const at = level ? level[n.id] : drafted[n.id] || A.stylePlaces?.[n.id];
     n.off_map = n._realOff || Boolean(level && !at);
+    n._folded = false;
     const to = at || n._home;
     n.x = to.x; n.y = to.y;
+  }
+  if (level) return;               // a region's own list already left its folded places out
+  // the main map: a folded region keeps the places that speak to nobody outside it
+  const drawn = {};
+  for (const n of A.DATA.nodes) if (!n.off_map) drawn[n.id] = { x: n.x, y: n.y };
+  const hidden = A.foldedHere?.(drawn);
+  if (!hidden?.size) return;
+  for (const n of A.DATA.nodes) {
+    if (hidden.has(n.id)) { n.off_map = true; n._folded = true; }
   }
 }
 /** Where a place stands on the top-level map, whatever is on the stage now. */

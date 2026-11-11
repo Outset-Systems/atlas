@@ -1613,6 +1613,9 @@ body.constellation #overlay .territory-tag { opacity: 0.12; }
 /* the telemetry plane — logs + metrics flowing home to the monitoring host: faint teal threads */
 .route-telemetry { stroke-width: 1.4; opacity: 0; stroke: var(--sem-info); stroke-dasharray: 1 6; }
 #overlay.net-on path.route-telemetry { opacity: 0.42; }
+/* an exit: inside a region, a road to a place out on a map above runs to the
+   picture's edge. The road's own stroke, hue and strength, broken into dashes. */
+#overlay path.route-exit { stroke-dasharray: 10 9; }
 /* a planned place — charted but not yet built: dashed ring, dimmed, no breath */
 .mk.mk-planned .mk-dot { opacity: 0.6; }
 .mk.mk-planned .mk-ring { border-style: dashed; animation: none; }
@@ -2954,6 +2957,10 @@ body.pre #scenes-list { opacity: 0; pointer-events: none; }
   pointer-events: none;
 }
 #overlay.net-on .territory-tag { opacity: 0.95; }
+/* the name at the end of an exit is a territory tag you can follow */
+#overlay:not(.net-on) .route-exit-tag { visibility: hidden; }   /* not a tab stop while unseen */
+#overlay.net-on .route-exit-tag { pointer-events: all; cursor: pointer; }
+.route-exit-tag:focus-visible { outline: 2px solid var(--gilt-bright); outline-offset: 4px; }
 
 /* (`#net-legend` lived here. The legend paragraph was removed on 2026-07-12 —
    the territory edge tags and the worded ◈ button carry the explanation — but
@@ -4098,6 +4105,9 @@ body.constellation .mk.active .mk-dot { opacity: 0.35; }
 /* nudged off the frame's corner (out from under the chrome): it floats, so a full outline */
 .rg-frame.rg-nudged .rg-tab { border: 1px solid rgba(var(--gilt-rgb), 0.6); border-radius: 7px; }
 .rg-frame.rg-small .rg-name { display: none; }          /* too small on screen to read: the glyph alone */
+/* a folded region's tab counts what waits inside; the state dot is the cards' own */
+.rg-tab .svc-health { margin: 0; }
+.rg-frame.rg-small .rg-count { display: none; }          /* the glyph, and the dot when something is wrong */
 body.region-open #colophon { opacity: 0; }               /* the footer would sit on the detailed map */
 /* A region has edges, not a sky or Depths. Its map sits on the abyss colour. */
 body.region-open #viewport, body.rg-crossing #viewport { background: var(--abyss); }

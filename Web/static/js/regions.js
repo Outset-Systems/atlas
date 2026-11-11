@@ -120,9 +120,50 @@ function frameEl(r) {
   return el;
 }
 
+/* A folded region's tab says how many places wait inside and how the worst of
+   them is: `⤢ THE BIG ISLAND · 8 places ● 1 down`. Counts and states only,
+   never a name, and only of places this browser was sent. The dot is the
+   service-health dot the cards use. Painted in place (the button itself is
+   never rebuilt, so focus and hover survive a poll); signals.js calls this on
+   every feed, and with no feed every place is unknown and only the count shows.
+   A region without `fold` has no entry and its tab is left exactly as built. */
+function paintFolds() {
+  const here = level?.id ?? null;
+  const live = A.signalsFeed?.nodes || {};
+  const sum = foldNote && foldNote.levelId === here
+    ? M.foldSummary(regions(), here, foldNote.at, foldNote.hidden,
+      Object.fromEntries([...foldNote.hidden].map((id) => [id, live[id]?.state])))
+    : {};
+  for (const el of framesEl.children) {
+    const r = regionById(el.dataset.region);
+    const tab = el.querySelector('.rg-tab');
+    if (!r || !tab) continue;
+    for (const old of tab.querySelectorAll('.rg-count, .svc-health')) old.remove();
+    const s = sum[r.id];
+    const words = M.foldWords(s);
+    const open = `Open the detailed map of ${r.name}`;
+    if (!words) { tab.setAttribute('aria-label', open); continue; }
+    const [count, ...ills] = words.split(', ');
+    const span = (cls, text) => {
+      const x = document.createElement('span');
+      x.className = cls;
+      x.setAttribute('aria-hidden', 'true');
+      if (text) x.textContent = text;
+      tab.appendChild(x);
+    };
+    span('rg-count', `· ${count}`);
+    if (s.worst) span(`svc-health ${A.svcHealthClass?.[s.worst] || ''}`.trim());
+    if (ills.length) span('rg-count', ills.join(', '));
+    tab.setAttribute('aria-label',
+      `${open}. ${count} ${s.count === 1 ? 'waits' : 'wait'} inside${ills.length ? ', ' + ills.join(', ') : ''}.`);
+  }
+}
+A.paintFolds = paintFolds;
+
 function buildFrames() {
   framesEl.innerHTML = '';
   for (const r of M.childrenOf(regions(), level?.id ?? null)) framesEl.appendChild(frameEl(r));
+  paintFolds();
   syncFrames();
 }
 
@@ -210,6 +251,13 @@ function onMainMove(userMove) {
 /* ── a region on the stage ─────────────────────────────────────────────── */
 /** Where each place stands on region `r`, from where it stands on the map. */
 function placesFor(r) {
+  const out = standingOn(r);
+  for (const id of foldedHere(out, r.id)) delete out[id];   // a folded region inside this one keeps its own
+  return out;
+}
+
+/** Every place that stands on region `r`'s map, before any folding. */
+function standingOn(r) {
   const out = {};
   for (const n of nodes()) {
     if (n._realOff ?? n.off_map) continue;
@@ -219,6 +267,75 @@ function placesFor(r) {
   }
   return out;
 }
+
+/* A folded region (`fold` on it) draws, on its parent's map, only the places
+   that have a road to somewhere else there (region-model.js foldedAt). While
+   places are being moved everything is drawn, or a hidden one could not be
+   picked up. */
+const hiddenOn = (at, levelId) =>
+  (A.editMode ? new Set() : M.foldedAt(regions(), levelId, at, A.DATA?.routes));
+
+/* What the map on the stage folded away when it was last drawn, kept for the
+   frames' count: `at` is everything that stood there before the fold. */
+let foldNote = null;
+function foldedHere(at, levelId = level?.id ?? null) {
+  const hidden = hiddenOn(at, levelId);
+  foldNote = { levelId, at: { ...at }, hidden };
+  return hidden;
+}
+/** world.js asks, for the main map: which of these drawn places stay inside a region? */
+A.foldedHere = (at) => foldedHere(at, null);
+/** The region a place waits in on this level's map, or null: for the frame's count. */
+A.homesHere = (at) => M.homesAt(regions(), level?.id ?? null, at);
+
+/* ── exits: roads that leave the level ─────────────────────────────────────
+   Inside a region, a road from a place drawn here to one out on a map above
+   (the gateway's road to the internet) runs to the edge of the picture and is
+   named there. world.js buildRoutes draws what this returns: one entry per
+   line, `{from, to, ids, names, label, at, kind, road}`, with `from` the place
+   drawn here, `to` the first far place (the one a click goes to) and `at` the
+   border point in this map's percent. Only on a region; only for a far place
+   that is drawn on some map above this one, so a place the dataset keeps off
+   the map, or one folded away in a region elsewhere, gets no line. A place
+   folded inside a region ON this map lies within the picture, has a frame, and
+   exitPoint gives it nothing. The names are of places already in A.DATA.nodes. */
+function drawnAbove() {
+  const ids = new Set();
+  const main = {};
+  for (const n of nodes()) {
+    if (n._realOff ?? n.off_map) continue;
+    const { x, y } = A.mainPlace(n);
+    main[n.id] = { x, y };
+  }
+  const add = (at, levelId) => {
+    const hidden = hiddenOn(at, levelId);
+    for (const id of Object.keys(at)) if (!hidden.has(id)) ids.add(id);
+  };
+  add(main, null);
+  for (const r of M.chainOf(regions(), level.id).slice(0, -1)) add(standingOn(r), r.id);
+  return ids;
+}
+
+A.levelExits = () => {
+  const here = A.levelPlaces;
+  if (!level || !here) return [];
+  const byId = new Map(nodes().map((n) => [n.id, n]));
+  let above = null;
+  const raw = [];
+  for (const road of A.DATA?.routes || []) {
+    const a = here[road.from], b = here[road.to];
+    if (Boolean(a) === Boolean(b)) continue;            // both drawn here, or neither
+    const nearId = a ? road.from : road.to;
+    const far = byId.get(a ? road.to : road.from);
+    if (!far || far._realOff) continue;
+    above ??= drawnAbove();
+    if (!above.has(far.id)) continue;
+    const { x, y } = A.mainPlace(far);
+    const at = M.exitPoint(here[nearId], M.carryTo(regions(), level.id, { id: far.id, x, y }));
+    if (at) raw.push({ from: nearId, to: far.id, name: far.name, at, kind: road.kind, road });
+  }
+  return M.mergeExits(raw);
+};
 
 /* In a region the breadcrumb is chrome too: tabs clear it as well. */
 let crumbsBottom = 0;
@@ -449,10 +566,26 @@ A.zoomAt = (sx, sy, factor) => {
   mainZoomAt?.(sx, sy, factor);
 };
 
-/* A place that is not on this region is on the map: go there to show it. */
+/* A place that is not drawn on this level is drawn on another: go there to
+   show it. Up when this region does not hold it, down when a region on this
+   map keeps it folded away (search, a link, an index row all arrive here). */
 const mainFocus = A.focusNode;
+async function reveal(id) {
+  const n = nodes().find((x) => x.id === id);
+  if (!n || n._realOff) return;
+  for (let step = 0; step < 8; step++) {
+    const drawn = level ? Boolean(A.levelPlaces?.[id]) : !n.off_map;
+    if (drawn || busy) return;
+    const { x, y } = A.mainPlace(n);
+    const inside = M.childrenOf(regions(), level?.id ?? null)
+      .find((c) => M.placeOn(regions(), c.id, { id, x, y }));
+    if (inside) await enter(inside.id);
+    else if (level) await leaveTo(level.parent || null);
+    else return;
+  }
+}
 A.focusNode = async (id, ...rest) => {
-  if (level && !A.levelPlaces?.[id]) await leaveTo(null);
+  await reveal(id);
   mainFocus(id, ...rest);
 };
 
@@ -604,7 +737,10 @@ A.buildWorld = function buildWorldWithRegions() {
 /* The viewer changed the picture without a reload: another picture, other regions. */
 A.onStyleChange = () => {
   if (level) closeLens();
-  buildFrames();
+  // a folded region decides which places the map draws, so the places are
+  // drawn again; without one the frames are all that changed
+  if (regions().some((r) => r.fold === true)) A.buildWorld();
+  else buildFrames();
 };
 
 loadMaps();

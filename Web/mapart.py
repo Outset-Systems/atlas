@@ -213,6 +213,8 @@ def _style_region(raw):
                   url=url_of(filename, bundled), auto=raw.get("auto") is True)
     if raw.get("parent"):
         region["parent"] = str(raw["parent"])
+    if raw.get("fold") is True:
+        region["fold"] = True          # on its parent's map, only the places that speak outside it
     pins = _style_points(raw.get("places"))
     if pins:
         region["places"] = pins

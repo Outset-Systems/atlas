@@ -266,6 +266,9 @@ SECTIONS = {
             f("auto", "bool", label="Open by zooming", default=True,
               help="Zooming in until the rectangle fills the window opens it. "
                    "Off = only the frame's button opens it."),
+            f("fold", "bool", label="Fold on the parent map",
+              help="On the map this region sits on, draw only its places that have a route "
+                   "to somewhere outside it. The rest are drawn once you open the region."),
             f("places", "json", label="Pinned places",
               help="`{\"place-id\": {\"x\": 40, \"y\": 62}}` — where a place sits on THIS "
                    "map. Leave blank when the detailed map is a true enlargement: places "

@@ -62,6 +62,148 @@ export function placeOn(regions, regionId, node, _depth = 0) {
   return inside(q) ? q : null;
 }
 
+const within = (p, r) => p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
+
+/** Which child region of `levelId` each drawn place stands in, on this level's
+    map: `{ place id: region id }`. `at` is `{ id: {x, y} }`, everything drawn
+    here. Only the children are asked; a place outside them all is not listed. */
+export function homesAt(regions, levelId, at) {
+  const kids = childrenOf(regions, levelId);
+  const out = {};
+  for (const [id, p] of Object.entries(at || {})) {
+    const r = p && kids.find((k) => within(p, k));
+    if (r) out[id] = r.id;
+  }
+  return out;
+}
+
+/** The places a FOLDED child region keeps to itself on this level's map.
+
+    A region with `fold` is a country seen from far off: on its parent's map
+    only the places that have a road to somewhere else on that map are drawn,
+    and the rest wait inside. "Somewhere else" is a place drawn here that does
+    not stand in the same region. Returns a Set of the place ids to leave out.
+    A region without `fold` hides nothing, so an old map reads as it did. */
+export function foldedAt(regions, levelId, at, routes) {
+  const folds = new Set(childrenOf(regions, levelId).filter((r) => r.fold === true).map((r) => r.id));
+  if (!folds.size) return new Set();
+  const home = homesAt(regions, levelId, at);
+  const speaks = new Set();
+  for (const road of routes || []) {
+    const a = road?.from, b = road?.to;
+    if (!at[a] || !at[b] || home[a] === home[b]) continue;   // both drawn here, in different places
+    speaks.add(a); speaks.add(b);
+  }
+  const hidden = new Set();
+  for (const [id, region] of Object.entries(home)) {
+    if (folds.has(region) && !speaks.has(id)) hidden.add(id);
+  }
+  return hidden;
+}
+
+/* The states a place can be in that are worth a word on a folded region's tab,
+   worst first. `healthy` says nothing, and neither does a place nobody watches. */
+const FOLD_ILLS = ['down', 'degraded', 'maintenance', 'slumbering'];
+const FOLD_ALARMS = ['down', 'degraded', 'maintenance'];   // the ones that also get the cue
+
+/** What each FOLDED child region of `levelId` is keeping to itself, and how
+    those places are: `{ region id: { count, down, degraded, maintenance,
+    slumbering, healthy, unknown, worst } }`.
+
+    `at` is everything that stands on this level's map before folding
+    (`{ id: {x, y} }`), `hidden` the ids the fold left out (foldedAt's answer),
+    `states` the live feed's word for each place (`{ id: 'down' }`). A place
+    with no word, or a word this does not know, is `unknown`: never healthy,
+    never an alarm. `worst` is 'down', 'degraded' or 'maintenance', else null.
+    Ids only: no name of a hidden place is read here or handed back. */
+export function foldSummary(regions, levelId, at, hidden, states) {
+  const out = {};
+  for (const r of childrenOf(regions, levelId)) {
+    if (r.fold === true) {
+      out[r.id] = { count: 0, down: 0, degraded: 0, maintenance: 0, slumbering: 0, healthy: 0, unknown: 0, worst: null };
+    }
+  }
+  const home = homesAt(regions, levelId, at);
+  for (const id of hidden || []) {
+    const s = out[home[id]];
+    if (!s) continue;
+    s.count++;
+    const st = states ? states[id] : undefined;
+    if (st === 'healthy' || FOLD_ILLS.includes(st)) s[st]++;
+    else s.unknown++;
+  }
+  for (const s of Object.values(out)) s.worst = FOLD_ALARMS.find((st) => s[st] > 0) || null;
+  return out;
+}
+
+/** One region's summary in words: `8 places`, `8 places, 1 down`. '' when the
+    fold hides nothing. Healthy and unknown places are counted and not named. */
+export function foldWords(s) {
+  if (!s || !s.count) return '';
+  const said = { down: 'down', degraded: 'degraded', maintenance: 'in maintenance', slumbering: 'slumbering' };
+  const ills = FOLD_ILLS.filter((st) => s[st] > 0).map((st) => `${s[st]} ${said[st]}`);
+  return [`${s.count} ${s.count === 1 ? 'place' : 'places'}`, ...ills].join(', ');
+}
+
+/* ── exits: roads that leave the level ────────────────────────────────────── */
+
+/** Where `node` would stand on region `regionId`'s map if the map had no
+    edges: placeOn without the clip, so a place out on the parent map gets a
+    point beyond 0–100 that says which way it lies. Pins are honoured at every
+    level, as placeOn does; equal to placeOn wherever placeOn answers. */
+export function carryTo(regions, regionId, node, _depth = 0) {
+  if (_depth > 32) return null;
+  const r = (regions || []).find((x) => x.id === regionId);
+  if (!r || !node) return null;
+  const pin = r.places && typeof r.places === 'object' ? r.places[node.id] : null;
+  if (pin && Number.isFinite(pin.x) && Number.isFinite(pin.y)) return { x: pin.x, y: pin.y };
+  const above = r.parent
+    ? carryTo(regions, r.parent, node, _depth + 1)
+    : (Number.isFinite(node.x) && Number.isFinite(node.y) ? { x: node.x, y: node.y } : null);
+  if (!above || !(r.w > 0) || !(r.h > 0)) return null;
+  return toChild(r, above);
+}
+
+/** Where the straight line from `from` (a place on this map) to `far` (a point
+    beyond it) crosses the map's border, in percent. Null when `far` is on the
+    map (nothing leaves), or either point is not a point. */
+export function exitPoint(from, far) {
+  if (!from || !far || ![from.x, from.y, far.x, far.y].every(Number.isFinite)) return null;
+  if (inside(far)) return null;
+  const a = { x: Math.max(0, Math.min(100, from.x)), y: Math.max(0, Math.min(100, from.y)) };
+  const dx = far.x - a.x, dy = far.y - a.y;
+  let t = 1;
+  if (dx > 0) t = Math.min(t, (100 - a.x) / dx);
+  else if (dx < 0) t = Math.min(t, (0 - a.x) / dx);
+  if (dy > 0) t = Math.min(t, (100 - a.y) / dy);
+  else if (dy < 0) t = Math.min(t, (0 - a.y) / dy);
+  const hold = (v) => Math.max(0, Math.min(100, v));   // rounding must not push it off the edge
+  return { x: hold(a.x + dx * t), y: hold(a.y + dy * t) };
+}
+
+/** `EDGE`, `EDGE, MEDIA`, `EDGE, MEDIA +2`: at most two names, then a count. */
+export function exitLabel(names) {
+  const list = (names || []).filter(Boolean);
+  return list.slice(0, 2).join(', ') + (list.length > 2 ? ` +${list.length - 2}` : '');
+}
+
+/** Exits that leave ONE place through nearly the same spot become one line.
+    `exits` is `[{ from, to, name, at: {x, y}, … }]`; two belong together when
+    they share `from` and their border points are within `tol` percent. Each
+    group keeps its first exit's fields (so its point, kind and road), and adds
+    `ids` and `names` (in order, no place twice) and the `label` to draw. */
+export function mergeExits(exits, tol = 4) {
+  const groups = [];
+  for (const ex of exits || []) {
+    if (!ex || !ex.at) continue;
+    const g = groups.find((o) => o.from === ex.from && Math.hypot(o.at.x - ex.at.x, o.at.y - ex.at.y) <= tol);
+    if (!g) { groups.push({ ...ex, ids: [ex.to], names: [ex.name] }); continue; }
+    if (!g.ids.includes(ex.to)) { g.ids.push(ex.to); g.names.push(ex.name); }
+  }
+  for (const g of groups) g.label = exitLabel(g.names);
+  return groups;
+}
+
 /** The part of a map the window shows, in that map's percent. */
 export function viewRect(cam, mapW, mapH, vw, vh) {
   const sw = mapW * cam.k;
