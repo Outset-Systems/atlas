@@ -4093,8 +4093,15 @@ body.constellation .mk.active .mk-dot { opacity: 0.35; }
   transition: border-color 200ms ease, background-color 200ms ease;
 }
 .rg-frame:has(.rg-tab:hover), .rg-frame:has(.rg-tab:focus-visible) {
-  border-color: var(--gilt-bright);
+  border-color: var(--frame-ink, var(--gilt-bright));
   background-color: rgba(var(--gilt-rgb), 0.07);
+}
+/* the outline says how the places inside are faring (owner, 2026-11-11) */
+.rg-frame[data-state="down"] { --frame-ink: var(--sem-down); }
+.rg-frame[data-state="degraded"], .rg-frame[data-state="maintenance"] { --frame-ink: var(--sem-warn); }
+.rg-frame[data-state="healthy"] { --frame-ink: var(--sem-up); }
+.rg-frame[data-state]:has(.rg-tab:hover), .rg-frame[data-state]:has(.rg-tab:focus-visible) {
+  background-color: color-mix(in srgb, var(--frame-ink) 9%, transparent);
 }
 .rg-tab {
   position: absolute; left: 0; top: 0; pointer-events: auto; cursor: zoom-in;

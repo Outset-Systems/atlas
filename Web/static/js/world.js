@@ -1376,7 +1376,7 @@ function focusNode(id, glide = true, toggle = false) {
   else if (glide && !willSplit) {
     // the dot takes the share of the screen the card leaves free; when the
     // clamp can't grant it (east-edge places), the card crosses over instead
-    const k = Math.max(A.fitScale() * CFG.FOCUS_ZOOM, 1.4);
+    const k = A.focusScale();        // the scale the zoom ceiling is measured from
     const a = A.focusAnchor(n.x, k);
     A.setCardSide?.(a.cardLeft);
     A.glideTo(n.x, n.y, k, a.x);

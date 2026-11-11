@@ -134,10 +134,18 @@ function paintFolds() {
     ? M.foldSummary(regions(), here, foldNote.at, foldNote.hidden,
       Object.fromEntries([...foldNote.hidden].map((id) => [id, live[id]?.state])))
     : {};
+  // every region's outline wears the worst state among the places standing in
+  // it on this map, drawn or folded away: red, amber, or green when all that
+  // report are well. With nothing reporting it keeps the map's own gilt.
+  const homes = foldNote && foldNote.levelId === here ? M.homesAt(regions(), here, foldNote.at) : {};
+  const RANK = ['down', 'degraded', 'maintenance', 'healthy'];
   for (const el of framesEl.children) {
     const r = regionById(el.dataset.region);
     const tab = el.querySelector('.rg-tab');
     if (!r || !tab) continue;
+    const inside = Object.keys(homes).filter((id) => homes[id] === r.id).map((id) => live[id]?.state);
+    const state = RANK.find((s) => inside.includes(s));
+    if (state) el.dataset.state = state; else delete el.dataset.state;
     for (const old of tab.querySelectorAll('.rg-count, .svc-health')) old.remove();
     const s = sum[r.id];
     const words = M.foldWords(s);

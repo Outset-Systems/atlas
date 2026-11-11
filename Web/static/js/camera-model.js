@@ -44,6 +44,21 @@ export function fitScale(v) {
   return Math.max(v.vw / v.mapW, v.vh / v.mapH);
 }
 
+/** The scale a place is shown at when you go to it: `focusZoom` times the
+    survey, and never so far out that its name cannot be read. world.js glides
+    here on a click; the ceiling below is measured from it. */
+export function focusScale(v, focusZoom, floor = 1.4) {
+  return Math.max(fitScale(v) * focusZoom, floor);
+}
+
+/** THE ZOOM CEILING (owner, 2026-11-11): one press of + past the scale a
+    clicked place is shown at, and no further. Past that the art is only bigger
+    pixels and nothing new is drawn. `hard` is the old fixed ceiling, kept as a
+    bound on very large windows. */
+export function zoomCeiling(v, focusZoom, step, hard = Infinity) {
+  return Math.min(hard, focusScale(v, focusZoom) * step);
+}
+
 /** One spelling of the zoom clamp. `glideTarget`, `zoomTarget` and
     `focusAnchor` all PREDICT what `clampCam` will enforce, and a private copy
     in each is how a prediction and an enforcement start to disagree. */

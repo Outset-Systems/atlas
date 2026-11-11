@@ -15,7 +15,7 @@
    stop agreeing with each other. */
 
 import assert from 'node:assert/strict';
-import {
+import { focusScale, zoomCeiling,
   atSurveyOrBeyond, clampCam, clampK, fitScale, focusAnchor, glideTarget,
   homeTarget, minCamX, panFloor, sameView, skyFrame, zoomTarget,
 } from '../static/js/camera-model.js';
@@ -290,6 +290,21 @@ test('the anchor is always on screen, for every place on the map', () => {
       }
     }
   }
+});
+
+test('the zoom ceiling is one press of + past the scale a clicked place is shown at', () => {
+  const v = view(1280, 800);
+  const focus = focusScale(v, 2.1);
+  assert.equal(focus, Math.max(fitScale(v) * 2.1, 1.4));
+  const top = zoomCeiling(v, 2.1, 1.35, 4);
+  assert.ok(Math.abs(top - Math.min(4, focus * 1.35)) < 1e-9);
+  // from the focus scale, one + lands on the ceiling and a second changes nothing
+  const once = clampK(focus * 1.35, { ...v, kMax: top });
+  const twice = clampK(once * 1.35, { ...v, kMax: top });
+  assert.ok(Math.abs(once - top) < 1e-9 && twice === once);
+  // a small window still shows a place at a readable scale, and the old fixed ceiling still bounds a huge one
+  assert.equal(focusScale(view(300, 200), 2.1), 1.4);
+  assert.equal(zoomCeiling(view(9000, 6000), 2.1, 1.35, 4), 4);
 });
 
 console.log(`\n${passed} passed`);

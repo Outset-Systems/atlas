@@ -228,8 +228,14 @@ export function shown(view, r) {
   return area > 0 ? (ix * iy) / area : 0;
 }
 
-export const ENTER_AT = 0.75;    // the rectangle fills 75% of the window…
-export const REARM_BELOW = 0.5;  // …and must fall back under 50% before it can fire again
+/* 55%, down from 75% (owner, 2026-11-11). The zoom now stops one + past the
+   scale a clicked place is shown at, and at that ceiling a tall, narrow region
+   (an island a quarter of the map wide) fills about 63% of a wide window: 75%
+   could no longer be reached, so the region only opened from its tab. 55% is
+   above what a click on a place gives (about 52%), so going to a place does
+   not open the region around it; one + from there does. */
+export const ENTER_AT = 0.55;    // the rectangle fills 55% of the window…
+export const REARM_BELOW = 0.35; // …and must fall back under 35% before it can fire again
 
 /** The region zooming would open now, or null. Only regions drawn on this map
     (`parentId`), only those with `auto` not false, only one the window is

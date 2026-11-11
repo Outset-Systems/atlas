@@ -85,13 +85,17 @@ const narrowScreen = matchMedia('(max-width: 720px)');
     of it (the window, the map size, the zoom floor, the card token, the
     breakpoint) can change between one frame and the next. */
 function view() {
-  return {
+  const v = {
     vw: innerWidth, vh: innerHeight,
     mapW: A.MAPW, mapH: A.MAPH,
     kMin: cam.min, kMax: cam.max,
     voidDepth, skyNorth,
     cardSharePx: CARD_SHARE_PX, narrow: narrowScreen.matches,
   };
+  // the ceiling follows the window and the map on the stage: one + past the
+  // scale a clicked place is shown at (camera-model.js zoomCeiling)
+  cam.max = v.kMax = model.zoomCeiling(v, CFG.FOCUS_ZOOM, CFG.ZOOM_BTN, CFG.ZOOM_MAX);
+  return v;
 }
 
 /** Move the live camera onto a target the model computed. One place that
@@ -157,6 +161,8 @@ function home(gliding = true) {
 A.home = home;
 /** True when the camera already stands at home (THE ATLAS asks, ui.js). */
 A.atHome = () => model.sameView(A.cam, model.homeTarget(view(), placesMidX()));
+/** The scale a clicked place is shown at (world.js glides here). */
+A.focusScale = () => model.focusScale(view(), CFG.FOCUS_ZOOM);
 
 /** glide so map point (nx,ny in %) sits just above center at zoom k.
     `anchorX` (screen px) parks the point off-centre instead — the focus glide
@@ -251,10 +257,16 @@ viewport.addEventListener('pointerup', endDrag);
 viewport.addEventListener('pointercancel', endDrag);
 
 /* The wheel means two different things depending on how far out you already
-   are (2026-08-10): pushed in, it ZOOMS — wheel down pulls back, wheel up
-   pushes in, which is what a wheel does on every map anyone has used. Only once
-   the view is all the way out does it go back to TRAVELLING: sky above the
-   table, the Depths below it.
+   are (2026-08-10): pushed in, it PULLS BACK; all the way out, it
+   TRAVELS: sky above the table, the Depths below it.
+
+   Pushed in, both directions pull back (owner, 2026-11-11). The wheel is how
+   you move up and down this page, and a wheel that pushed in on the way up
+   kept you from ever reaching the sky without first finding the way out. So
+   either direction brings the map back to its centred survey, and from there
+   the same direction carries on travelling. Going closer is a deliberate act:
+   a click on a place, the + button or key, a double-click, a pinch (which
+   arrives as Ctrl+wheel and still zooms both ways).
 
    `model.atSurveyOrBeyond` is the gate, and it carries the story of why it
    compares against the SURVEY and not the camera's floor — the 2026-08-21 bug
@@ -264,16 +276,6 @@ viewport.addEventListener('pointercancel', endDrag);
    Both directions travel once out there, deliberately. Gating only the downward
    one would strand the Upper Deck: at full zoom-out, an upward wheel would
    push back in instead of rising, and the sky would be unreachable by wheel. */
-/** May the wheel move the view away from this edge? Asked of the clamp itself. */
-function canTravel() {
-  const y = cam.y;
-  cam.y -= 1;
-  clampCam();
-  const moved = cam.y !== y;
-  cam.y = y;
-  return moved;
-}
-
 viewport.addEventListener('wheel', (e) => {
   e.preventDefault();
   /* Moving the map puts the Index away (2026-08-11) — travelling and
@@ -282,13 +284,12 @@ viewport.addEventListener('wheel', (e) => {
      drawer's internal scrolling is untouched: it is a sibling of #viewport, not
      a child, and its wheel events never reach here. Re-open with ☰ or M. */
   A.toggleDrawer?.(false);
-  const zoomFactor = e.deltaY < 0 ? CFG.ZOOM_WHEEL : 1 / CFG.ZOOM_WHEEL;
   if (e.ctrlKey) {
-    // Ctrl+wheel always zooms, at any scale (and pinch-zoom on trackpads sends ctrlKey)
-    zoomAt(e.clientX, e.clientY, zoomFactor);
+    // Ctrl+wheel always zooms, both ways, at any scale (a trackpad pinch sends ctrlKey)
+    zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? CFG.ZOOM_WHEEL : 1 / CFG.ZOOM_WHEEL);
   } else if (!model.atSurveyOrBeyond(cam.k, view())) {
-    // pushed in past the survey → the wheel pulls back toward it
-    zoomAt(e.clientX, e.clientY, zoomFactor);
+    // pushed in past the survey → the wheel pulls back toward it, whichever way it turns
+    zoomAt(e.clientX, e.clientY, 1 / CFG.ZOOM_WHEEL);
   } else {
     // all the way out → travel up/down through the sky → table → Depths
     const y = cam.y;
@@ -296,13 +297,10 @@ viewport.addEventListener('wheel', (e) => {
     autoFrameSky();   // rising above the table gently recenters + frames the sky
     clampCam();
     apply(false);
-    // a region has no sky or Depths. Its top edge just stops (owner, 2026-11-01),
-    // its bottom edge arms leaving, and only a region with no room to travel at
-    // all still zooms in, or the wheel would do nothing there
-    if (A.inRegion?.() && cam.y === y) {
-      if (e.deltaY > 0) A.regionFloor();
-      else if (!canTravel()) zoomAt(e.clientX, e.clientY, zoomFactor);
-    }
+    // a region has no sky or Depths. Its top edge just stops (owner, 2026-11-01)
+    // and its bottom edge arms leaving. The wheel no longer pushes in anywhere,
+    // so at a region's top it does nothing.
+    if (A.inRegion?.() && cam.y === y && e.deltaY > 0) A.regionFloor();
   }
 }, { passive: false });
 

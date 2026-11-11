@@ -100,6 +100,14 @@ test('zooming in until the region is most of the window picks it', () => {
   assert.equal(pick?.id, 'west');
 });
 
+test('a tall narrow region opens at the zoom ceiling, and a click on a place inside it does not open it', () => {
+  // REGIONS.west is 30 wide. A window 47.6 wide and shorter than the region sees it as 63% of itself:
+  // what the ceiling gives a quarter-wide island on a 1280 window
+  assert.equal(autoCandidate(REGIONS, null, { x: 1.2, y: 10, w: 47.6, h: 40 })?.id, 'west');
+  // at the scale a clicked place is shown at, the same region is about half the window: not yet
+  assert.equal(autoCandidate(REGIONS, null, { x: -4, y: 10, w: 58, h: 40 }), null);
+});
+
 test('a region that is only part of the window does not open', () => {
   assert.equal(autoCandidate(REGIONS, null, { x: 0, y: 0, w: 100, h: 100 }), null);
 });
