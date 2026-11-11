@@ -80,9 +80,14 @@ def _candidate(key, shape, group, name, **rest):
             "ip": "—", "detail": "", "parent": None, **rest}
 
 
-def place(key, group, name, kind, role, *, ip="—", hw="", parent=None, scroll=None, detail=None):
+def place(key, group, name, kind, role, *, ip="—", hw="", parent=None, scroll=None, detail=None,
+          also=()):
+    """`also` is every other address the thing answers at (a gateway has one per
+    network). The map may know it by any of them; only `ip` is ever written."""
     row = _candidate(key, "place", group, name, kind=kind, role=clean(role), ip=ip, hw=clean(hw),
                      parent=parent, detail=clean(hw if detail is None else detail))
+    if also:
+        row["also"] = [a for a in also if _real_ip(a)]
     if isinstance(scroll, str) and scroll.strip():
         row["scroll"] = clean(scroll, 400)
     return row
@@ -181,12 +186,13 @@ class _Map:
                     self.tied.setdefault(link["kuma"], n.get("id"))
         for name, node_id in (((data.get("signals") or {}).get("kuma")) or {}).items():
             self.tied.setdefault(name, node_id)
-        self.by_origin, self.by_ip, self.by_name = {}, {}, {}
+        self.by_origin, self.by_ip, self.by_name, self.at_ip = {}, {}, {}, {}
         for n in self.nodes.values():
             if n.get("origin"):
                 self.by_origin[n["origin"]] = n
             if _real_ip(n.get("ip")):
                 self.by_ip[n["ip"]] = n
+                self.at_ip.setdefault(n["ip"], []).append(n)
             for name in (n.get("id"), n.get("name")):
                 if name:
                     self.by_name.setdefault(slugify(name), n)
@@ -197,21 +203,45 @@ class _Map:
         if row["key"] in self.by_origin:
             return CHARTED, self.by_origin[row["key"]]
         ip = _real_ip(row["ip"])
-        if ip and ip in self.by_ip:
-            return CHARTED, self.by_ip[ip]
+        held = ([ip] if ip else []) + list(row.get("also") or [])
+        for addr in held:
+            if addr in self.at_ip:
+                return CHARTED, self._the_one_at(addr, row)
         for name in _names_of(row["name"]):
             node = self.by_name.get(name)
             if node is None:
                 continue
             theirs = _real_ip(node.get("ip"))
-            return (CLASH if ip and theirs and ip != theirs else CHARTED), node
+            return (CLASH if ip and theirs and theirs not in held else CHARTED), node
         return NEW, None
 
+    def _the_one_at(self, addr, row):
+        """Several places can be drawn at one address: a machine, and the software
+        on it that someone gave a marker of its own. A candidate from a system
+        that lists machines is the one with its name, else the machine."""
+        there = self.at_ip[addr]
+        if len(there) == 1:
+            return there[0]
+        names = _names_of(row["name"])
+        for node in there:
+            if names & {slugify(node.get("id") or ""), slugify(node.get("name") or "")}:
+                return node
+        machines = [n for n in there if n.get("kind") in ("vm", "physical")]
+        return machines[0] if machines else self.by_ip[addr]
+
     def find_zone(self, row):
-        for z in self.zones:
-            if row["key"] == z.get("origin") or str(row["vlan"]) == str(z.get("vlan")) \
-                    or slugify(row["name"]) in (z.get("id"), slugify(z.get("name"))):
-                return z
+        """By what it was imported as, then by VLAN, then by name. The number is
+        what a network is; the name is what someone called it, and two systems
+        can disagree about that."""
+        vlan = row.get("vlan")
+        tests = (lambda z: bool(z.get("origin")) and row["key"] == z.get("origin"),
+                 lambda z: vlan not in (None, "") and z.get("vlan") not in (None, "")
+                 and str(vlan) == str(z.get("vlan")),
+                 lambda z: slugify(row["name"]) in (z.get("id"), slugify(z.get("name") or "")))
+        for test in tests:
+            for z in self.zones:
+                if test(z):
+                    return z
         return None
 
     def watched_by(self, row):
@@ -240,6 +270,8 @@ def annotate(candidates, data, ignored=()):
         if row["type"] == "zone":
             found = chart.find_zone(row)
             row["status"], row["matched"] = (CHARTED, found.get("id")) if found else (NEW, "")
+            if found and slugify(row["name"]) not in (found.get("id"), slugify(found.get("name") or "")):
+                row["note"] = f"The map calls this realm {found.get('name') or found.get('id')}."
         elif row["type"] == "place":
             row["status"], node = chart.find_place(row)
             row["matched"] = node.get("id") if node else ""

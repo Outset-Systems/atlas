@@ -3,7 +3,8 @@ says whether it is up, and both land on the same places.
 
 Every answer here is a fake, shaped from the UniFi Network Application's recorded
 answers (stat/device, stat/sta, rest/networkconf, self/sites) and from Kuma's own
-/metrics text. The refusals are the point, as in test_connection_review.py: a review
+/metrics text. The last section keeps the shape one real console answered with
+(2026-11-10), under invented names and addresses. The refusals are the point, as in test_connection_review.py: a review
 writes nothing, what lands comes from the system, a link needs both its ends, and
 no credential ever comes back to the browser.
 """
@@ -146,7 +147,8 @@ def test_an_api_key_reads_under_proxy_network_and_writes_nothing(realm, admin, n
     assert by[f"unifi:client/{PHONE}"]["group"] == "Wireless clients"
     assert f"unifi:client/{SW}" not in by, "a device listed as a client is still one thing"
     gets = [(m, u, kw) for m, u, kw in net.seen if m == "GET"]
-    assert gets and all("/proxy/network/api/s/default/" in u for _, u, _ in gets)
+    assert gets and all("/proxy/network/api/s/default/" in u or u.endswith("/proxy/network/api/self/sites")
+                        for _, u, _ in gets)
     assert all(kw["headers"]["X-API-KEY"] == "uk-topsecret" for _, _, kw in gets)
     assert all(kw.get("allow_redirects") is False for _, _, kw in net.seen)
     assert not [u for m, u, _ in net.seen if m == "POST"], "an API key needs no login"
@@ -369,3 +371,153 @@ def test_a_stored_unifi_password_never_goes_to_a_typed_address(realm, admin, net
                    json={"key": "unifi", "settings": {"ATLAS_UNIFI_URL": "https://evil.example"}})
     assert r.status_code == 400
     assert not [u for _, u, _ in net.seen if "evil" in u]
+
+
+# ── what a real console taught ───────────────────────────────────────────────
+# The shape of a UDM Pro SE's answers on Network 10.6. Every name, MAC and address
+# is invented; 203.0.113.0/24 is the documentation range, standing for a WAN address.
+R_GW, R_PDU = "aa:bb:cc:10:00:01", "aa:bb:cc:10:00:02"
+R_HOST, R_NAS = "f4:4d:30:00:00:10", "00:11:32:00:00:20"
+R_VM1, R_VM2 = "00:15:5d:00:00:31", "00:15:5d:00:00:32"
+REAL = {
+    "devices": [
+        {"mac": R_GW, "type": "udm", "model": "UDMPROSE", "name": "Front Door", "ip": "203.0.113.7",
+         "lan_ip": "10.50.1.1", "version": "6.0.17", "state": 1,
+         "network_table": [{"name": "Home", "ip": "10.50.1.1"}, {"name": "Servers", "ip": "10.50.40.1"}],
+         "lldp_table": [{"chassis_id": R_PDU, "local_port_idx": 7}],
+         "port_table": [{"port_idx": 6, "name": "Host", "up": True, "speed": 1000, "media": "GE"}]},
+        {"mac": R_PDU, "type": "usw", "model": "USPPDUP", "name": "Power Strip", "ip": "10.50.66.41",
+         "version": "7.2.123", "state": 1, "outlet_ac_power_consumption": "333.330",
+         "uplink": {"uplink_mac": R_GW, "type": "wire"},
+         "port_table": [{"port_idx": 1, "name": "Uplink", "up": True, "speed": 100, "media": "GE"}],
+         "outlet_table": [{"index": 1, "name": "Host", "relay_state": True, "outlet_power": "42.0"},
+                          {"index": 2, "name": "Fan", "relay_state": True, "outlet_power": "98.6"},
+                          {"index": 3, "name": "Outlet 3", "relay_state": False, "outlet_power": "0.000"}]},
+    ],
+    "clients": [
+        {"mac": R_HOST, "ip": "10.50.40.6", "name": "Big Iron", "is_wired": True, "sw_mac": R_GW, "sw_port": 6},
+        {"mac": R_VM1, "ip": "10.50.90.36", "name": "Old Name", "oui": "Microsoft Corporation",
+         "is_wired": True, "sw_mac": R_GW, "sw_port": 6},
+        {"mac": R_VM2, "ip": "10.50.40.21", "oui": "Microsoft Corporation", "is_wired": True,
+         "sw_mac": R_GW, "sw_port": 6},
+        {"mac": R_NAS, "ip": "10.50.40.15", "name": "Vault", "oui": "Synology", "is_wired": True,
+         "sw_mac": R_GW, "sw_port": 8},
+    ],
+    "networks": [
+        {"_id": "n-wan", "name": "Internet 1", "purpose": "wan"},
+        {"_id": "n-home", "name": "Home", "purpose": "corporate", "ip_subnet": "10.50.1.1/24"},
+        {"_id": "n-srv", "name": "Servers", "purpose": "corporate", "vlan_enabled": True, "vlan": 4,
+         "ip_subnet": "10.50.40.1/24"},
+        # the controller and the map disagree about which of these two is called what
+        {"_id": "n-9", "name": "Edge", "purpose": "guest", "vlan_enabled": True, "vlan": 9,
+         "ip_subnet": "10.50.9.1/24"},
+        {"_id": "n-90", "name": "Guests", "purpose": "corporate", "vlan_enabled": True, "vlan": 90,
+         "ip_subnet": "10.50.90.1/24"},
+    ],
+}
+REAL_MAP = {
+    "zones": [{"id": "servers", "name": "Servers", "vlan": 4, "subnet": "10.50.40.0/24"},
+              {"id": "guests", "name": "Guests", "vlan": 9, "subnet": "10.50.9.0/24"},
+              {"id": "edge", "name": "Edge", "vlan": 90, "subnet": "10.50.90.0/24"}],
+    "nodes": [
+        {"id": "front-door", "name": "FRONT-DOOR", "ip": "10.50.40.1", "kind": "network"},
+        {"id": "big-iron", "name": "BIG IRON", "ip": "10.50.40.6", "kind": "physical"},
+        # one machine, and two pieces of software on it drawn at the same address
+        {"id": "edge-host", "name": "EDGE-HOST", "ip": "10.50.90.36", "kind": "vm", "parent": "big-iron"},
+        {"id": "proxy", "name": "PROXY", "ip": "10.50.90.36", "kind": "network"},
+        {"id": "tunnel", "name": "TUNNEL", "ip": "10.50.90.36", "kind": "network"},
+    ],
+    "routes": [{"from": "front-door", "to": "big-iron", "kind": "vlan"}],
+}
+
+
+def _real_rows():
+    from importers import review as rv
+    from importers import unifi
+    cands, _notes = unifi.candidates(REAL)
+    return {r["key"]: r for r in rv.annotate(cands, REAL_MAP)}
+
+
+def test_a_gateway_is_charted_at_a_lan_address_never_its_wan_one():
+    got = _real_rows()
+    gw = got[f"unifi:device/{R_GW}"]
+    assert gw["ip"] == "10.50.1.1" and "10.50.40.1" in gw["also"]
+    assert (gw["status"], gw["matched"]) == ("charted", "front-door")     # known by another of its addresses
+    assert "203.0.113.7" not in json.dumps(list(got.values()))
+
+
+def test_a_gateway_with_no_network_list_keeps_the_address_it_gave():
+    from importers import unifi
+    rows, _ = unifi.candidates({"devices": [{"mac": R_GW, "type": "udm", "name": "Edge", "ip": "10.0.10.1"}]})
+    assert rows[0]["ip"] == "10.0.10.1" and "also" not in rows[0]
+
+
+def test_a_network_is_matched_by_its_vlan_before_its_name():
+    got = _real_rows()
+    nine, ninety = got["unifi:network/n-9"], got["unifi:network/n-90"]
+    assert (nine["matched"], ninety["matched"]) == ("guests", "edge")
+    assert "calls this realm Guests" in nine["note"] and "calls this realm Edge" in ninety["note"]
+    assert got["unifi:network/n-srv"]["note"] == ""
+
+
+def test_two_networks_with_no_vlan_are_not_one_network():
+    from importers import review as rv
+    chart = rv._Map({"zones": [{"id": "old", "name": "Old"}]})
+    assert chart.find_zone({"key": "k", "name": "New", "vlan": None}) is None
+
+
+def test_a_power_strip_is_not_a_switch():
+    pdu = _real_rows()[f"unifi:device/{R_PDU}"]
+    assert pdu["group"] == "Power" and pdu["role"].startswith("Power distribution")
+    assert "3 outlets" in pdu["hw"] and " W" not in pdu["hw"]           # a reading is not kept
+    assert "2 on · 333 W" in pdu["detail"]
+
+
+def test_a_hypervisors_guests_hang_off_it_and_bring_no_road_of_their_own():
+    got = _real_rows()
+    vm1, vm2, host = (got[f"unifi:client/{m}"] for m in (R_VM1, R_VM2, R_HOST))
+    assert vm1["parent"] == vm2["parent"] == f"unifi:client/{R_HOST}" and vm1["kind"] == "vm"
+    assert host["parent"] is None and host["kind"] == "unknown"
+    roads = [r for r in got.values() if r["type"] == "route"]
+    assert not any(m in r["key"] for r in roads for m in (R_VM1, R_VM2))
+    # the host's own cable is the road, and the map already has it
+    assert got[f"unifi:link/client/{R_HOST}~device/{R_GW}"]["status"] == "charted"
+    # a lone client on a port is nobody's guest, whatever its MAC
+    assert got[f"unifi:client/{R_NAS}"]["parent"] is None
+
+
+def test_of_several_places_at_one_address_a_client_is_the_machine():
+    assert _real_rows()[f"unifi:client/{R_VM1}"]["matched"] == "edge-host"
+
+
+def test_a_monitor_at_a_shared_address_lights_what_it_always_did():
+    from importers import review as rv
+    chart = rv._Map(REAL_MAP)
+    assert chart.watched_by({"host": "10.50.90.36", "name": "x"})["id"] == "tunnel"
+
+
+def test_a_wrong_site_on_a_one_site_controller_reads_that_site_and_says_so(realm, admin, net, monkeypatch):
+    monkeypatch.setitem(globals(), "SITES", _ok([{"name": "default", "desc": "Default"}]))
+    save(admin, {**UNIFI_KEY, "ATLAS_UNIFI_SITE": "Homelab"})
+    j = admin.post("/api/v2/admin/connections/test", headers=W, json={"key": "unifi"}).get_json()
+    assert j["ok"] and j["detail"].startswith("UniFi site default: 3 devices")
+    assert "no site called Homelab" in j["detail"]
+    told = unifi_review(admin)
+    assert any("no site called Homelab" in n for n in told["notes"]) and told["rows"]
+    assert not any("Homelab" in url for _, url, _ in net.seen)          # the typed word never met a path
+
+
+def test_a_pro_max_switch_is_still_a_switch():
+    from importers import unifi
+    rows, _ = unifi.candidates({"devices": [{"mac": R_GW, "type": "usw", "model": "USPM16", "name": "Max",
+                                             "ip": "10.0.10.2"}]})
+    assert rows[0]["group"] == "Switches"
+
+
+def test_clients_with_no_port_reported_are_nobodys_guests():
+    from importers import unifi
+    snap = {"devices": [{"mac": R_GW, "type": "udm", "name": "Edge", "ip": "10.0.10.1"}],
+            "clients": [{"mac": R_HOST, "ip": "10.0.10.6", "is_wired": True, "sw_mac": R_GW},
+                        {"mac": R_VM1, "ip": "10.0.10.7", "is_wired": True, "sw_mac": R_GW}]}
+    rows, _ = unifi.candidates(snap)
+    assert all(r.get("parent") is None for r in rows if r["type"] == "place")

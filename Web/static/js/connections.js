@@ -153,7 +153,8 @@ const FILTER_FROM = 12;   // below this a list is short enough to read
 const tickable = (r) => (r.status === 'new' || r.status === 'clash') && !r.blocked;
 
 function rowState(r, zones) {
-  if (r.status === 'charted') return `on the map as ${esc(r.matched)}`;
+  // a charted row can still disagree with the map about a name, and says so
+  if (r.status === 'charted') return `on the map as ${esc(r.matched)}${r.note ? `. ${esc(r.note)}` : ''}`;
   if (r.note) return esc(r.note);
   if (r.type === 'zone') return say('a new realm');
   if (r.type === 'service') return 'a service on its host';

@@ -25,8 +25,11 @@ read-only by the account they belong to:
                  reads, then a logout. A cloud account with MFA cannot sign in here.
 
 Written against the UniFi Network Application's answers as the community has
-recorded them. No controller has answered this code yet: the fake responses in
-tests/test_unifi.py are shaped from those records.
+recorded them, then corrected against one real console (a UDM Pro SE on Network
+10.6, 2026-11-10). What that reading taught is in the code below: a gateway
+reports its WAN address as its own, a power strip reports itself as a switch,
+and every guest of a hypervisor shows as a wired client on the hypervisor's
+port. The answers in tests/test_unifi.py keep that shape with invented names.
 """
 
 import ipaddress
@@ -45,7 +48,13 @@ DEFAULT_SITE = "default"
 #: Device types, as UniFi names them, and the heading each is listed under.
 _GROUPS = {"ugw": "Gateways", "udm": "Gateways", "uxg": "Gateways", "usw": "Switches",
            "uap": "Access points"}
-_ROLES = {"Gateways": "Gateway", "Switches": "Switch", "Access points": "Access point"}
+_ROLES = {"Gateways": "Gateway", "Switches": "Switch", "Access points": "Access point",
+          "Power": "Power distribution"}
+
+#: MAC prefixes hypervisors hand their guests: Hyper-V, KVM/QEMU, VMware (three),
+#: Proxmox, VirtualBox, Xen. A client with one of these is a guest of something.
+_VIRTUAL = ("00:15:5d", "52:54:00", "00:50:56", "00:0c:29", "00:05:69", "bc:24:11",
+            "08:00:27", "00:16:3e")
 
 #: Network purposes that are a segment of the LAN. `wan` and `remote-user-vpn` are not.
 _LAN = ("corporate", "guest", "vlan-only")
@@ -117,6 +126,87 @@ def _client_name(c):
             or f"{review.clean(c.get('oui')) or 'client'} {_mac(c.get('mac'))[-5:]}")
 
 
+def _lans(snapshot):
+    """Every LAN network's (gateway address, subnet), as the controller writes them."""
+    out = []
+    for n in snapshot.get("networks", []):
+        if n.get("purpose") not in _LAN:
+            continue
+        try:
+            face = ipaddress.ip_interface(str(n.get("ip_subnet") or "").strip())
+        except ValueError:
+            continue
+        out.append((str(face.ip), face.network))
+    return out
+
+
+def _inside(ip, lans):
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    return any(addr in net for _, net in lans)
+
+
+def _gateway_addresses(d, lans):
+    """(the address to chart, the others it answers at).
+
+    A gateway's `ip` is its WAN address, which is the one address of the site
+    that must not land on the map. It holds one address on every LAN network;
+    the map may know it by any of them. With no network list to judge by, the
+    device's own `lan_ip` or `ip` is taken as it was before."""
+    told = [a for a in (review.address(d.get("lan_ip")), review.address(d.get("ip"))) if a != "—"]
+    if not lans:
+        return (told[0] if told else "—"), []
+    held = [a for a in told if _inside(a, lans)]
+    for n in d.get("network_table") or []:
+        addr = review.address(n.get("ip")) if isinstance(n, dict) else "—"
+        if addr != "—" and _inside(addr, lans):
+            held.append(addr)
+    held += [gw for gw, _ in lans]
+    held = list(dict.fromkeys(held))
+    return (held[0], held[1:]) if held else ("—", [])
+
+
+def _is_power(d):
+    """A SmartPower strip reports type `usw`. Its model and its outlets say otherwise.
+    Not every `USP…` model: the Pro Max switches are `USPM…`."""
+    return str(d.get("model") or "").upper().startswith(("USPPDU", "USPRPS")) or bool(d.get("outlet_table"))
+
+
+def _outlets(d):
+    """("20 outlets", "6 on · 333 W") for a power strip, or ("", "")."""
+    table = [o for o in d.get("outlet_table") or [] if isinstance(o, dict)]
+    if not table:
+        return "", ""
+    live = sum(1 for o in table if o.get("relay_state"))
+    try:
+        watts = float(d.get("outlet_ac_power_consumption"))
+    except (TypeError, ValueError):
+        watts = None
+    now = f"{live} on" + (f" · {watts:.0f} W" if watts is not None else "")
+    return f"{len(table)} outlets", now
+
+
+def _hosts(snapshot, devices):
+    """{guest mac: host mac} for clients that sit behind another client's port.
+
+    A hypervisor and its guests all show as wired clients on one switch port.
+    When exactly one of them has a hardware MAC and the rest have a
+    hypervisor's, the one is the host. Anything less certain is left alone."""
+    by_port = {}
+    for c in snapshot.get("clients", []):
+        mac, sw = _mac(c.get("mac")), _mac(c.get("sw_mac"))
+        if mac and mac not in devices and c.get("is_wired") and sw in devices                 and c.get("sw_port") is not None:
+            by_port.setdefault((sw, c.get("sw_port")), []).append(mac)
+    out = {}
+    for macs in by_port.values():
+        real = [m for m in macs if not m.startswith(_VIRTUAL)]
+        if len(real) == 1 and len(macs) > 1:
+            out.update({m: real[0] for m in macs if m != real[0]})
+    return out
+
+
 def _networks(snapshot):
     """(zone rows, {network id: vlan})."""
     rows, vlan_of = [], {}
@@ -138,6 +228,7 @@ def _networks(snapshot):
 def candidates(snapshot):
     """(rows, notes)."""
     rows, vlan_of = _networks(snapshot)
+    lans = _lans(snapshot)
     devices = {}
     for d in snapshot.get("devices", []):
         mac = _mac(d.get("mac"))
@@ -156,16 +247,20 @@ def candidates(snapshot):
 
     for mac, d in devices.items():
         key = f"unifi:device/{mac}"
-        group = _GROUPS.get(d.get("type"), "Other UniFi gear")
+        group = "Power" if _is_power(d) else _GROUPS.get(d.get("type"), "Other UniFi gear")
         ports = d.get("port_table") or []
         model = review.clean(d.get("model_name") or d.get("model"))
-        bits = [b for b in (model, f"{len(ports)} ports" if ports else "",
+        outlets, drawing = _outlets(d) if group == "Power" else ("", "")
+        bits = [b for b in (model, outlets or (f"{len(ports)} ports" if ports else ""),
                             f"UniFi {review.clean(d.get('version'))}" if d.get("version") else "") if b]
         state = "online" if d.get("state") == 1 else "offline"
+        ip, also = (_gateway_addresses(d, lans) if group == "Gateways"
+                    else (review.address(d.get("ip")), []))
+        # what it draws right now is a reading, so it is shown and not kept
         rows.append(review.place(key, group, names[mac], "network",
                                  f"{_ROLES.get(group, 'UniFi device')} · from UniFi",
-                                 ip=review.address(d.get("ip")), hw=" · ".join(bits),
-                                 detail=" · ".join(bits + [state])))
+                                 ip=ip, also=also, hw=" · ".join(bits),
+                                 detail=" · ".join(b for b in bits + [drawing, state] if b)))
         up = d.get("uplink") or {}
         upstream = _mac(up.get("uplink_mac"))
         if upstream in devices:
@@ -190,6 +285,8 @@ def candidates(snapshot):
                                                                   speed or "down") if b)))
 
     wired = wireless = 0
+    host_of = _hosts(snapshot, devices)
+    client_names = {_mac(c.get("mac")): _client_name(c) for c in snapshot.get("clients", [])}
     for c in snapshot.get("clients", []):
         mac = _mac(c.get("mac"))
         if not mac or mac in devices:
@@ -198,8 +295,11 @@ def candidates(snapshot):
         on_wire = bool(c.get("is_wired"))
         wired += on_wire
         wireless += not on_wire
-        where = ""
-        if on_wire and _mac(c.get("sw_mac")) in devices:
+        where, host = "", host_of.get(mac)
+        if host:
+            # a guest: it hangs off its host, and the host's cable is the only road
+            where = f"a guest of {client_names[host]}"
+        elif on_wire and _mac(c.get("sw_mac")) in devices:
             where = f"port {c.get('sw_port')} of {names[_mac(c.get('sw_mac'))]}"
             link(key, f"unifi:device/{_mac(c.get('sw_mac'))}", f"on port {c.get('sw_port')}")
         elif not on_wire and _mac(c.get("ap_mac")) in devices:
@@ -207,10 +307,12 @@ def candidates(snapshot):
             link(key, f"unifi:device/{_mac(c.get('ap_mac'))}",
                  f"Wi-Fi {review.clean(c.get('essid'))}".strip())
         vendor = review.clean(c.get("oui"))
+        what = "virtual machine" if host else "wired client" if on_wire else "wireless client"
         rows.append(review.place(key, "Wired clients" if on_wire else "Wireless clients",
-                                 _client_name(c), "unknown",
-                                 f"{'wired' if on_wire else 'wireless'} client · from UniFi",
+                                 _client_name(c), "vm" if host else "unknown",
+                                 f"{what} · from UniFi",
                                  ip=review.address(c.get("ip")), hw=vendor,
+                                 parent=f"unifi:client/{host}" if host else None,
                                  detail=" · ".join(b for b in (vendor, where) if b)))
     rows += links.values()
 
@@ -297,33 +399,53 @@ class Controller:
             pass                               # the session times out on its own
 
 
-def _with_controller(base, creds, verify, ask):
+def _site(conn, typed):
+    """(the site to read, a sentence when that is not the one typed).
+
+    The controller is asked for its sites before anything typed goes into a
+    path. A wrong name on a controller with one site is read as that site, and
+    said: people type the console's name, and the site is nearly always
+    `default`. With more than one site a wrong name is refused, with the list."""
+    typed = (typed or "").strip() or DEFAULT_SITE
     try:
-        site_path(creds[0])
-    except ValueError as e:
-        raise Refused(str(e)) from e
+        sites = [s for s in conn.get("/api/self/sites") or [] if isinstance(s, dict)]
+    except Refused:
+        sites = []                             # a key that may not list sites: take it as typed
+    names = [s.get("name") for s in sites if SITE_OK.match(str(s.get("name") or ""))]
+    if not names or typed in names:
+        return typed, ""
+    shown = review.clean(typed, 64)
+    if len(names) == 1:
+        return names[0], (f"This controller has no site called {shown}. Its only site is "
+                          f"`{names[0]}`, so that is the one read here.")
+    listed = ", ".join(f"{s.get('name')} ({s.get('desc')})" for s in sites[:6])
+    raise Refused(f"This controller has no site called {shown}. It has: {listed}.")
+
+
+def _with_controller(base, creds, verify, ask):
     conn = Controller(base, creds, verify)
     try:
-        return ask(conn, creds[0] or DEFAULT_SITE)
+        site, said = _site(conn, creds[0])
+        try:
+            site_path(site)
+        except ValueError as e:
+            raise Refused(str(e)) from e
+        return ask(conn, site, said)
     finally:
         conn.close()
 
 
 def probe(base, creds, verify):
-    def ask(conn, site):
-        sites = conn.get("/api/self/sites") or []
-        names = [s.get("name") for s in sites if isinstance(s, dict)]
-        if site not in names:
-            listed = ", ".join(f"{s.get('name')} ({s.get('desc')})" for s in sites[:6]
-                               if isinstance(s, dict)) or "none"
-            raise Refused(f"This controller has no site called {site}. It has: {listed}.")
+    def ask(conn, site, said):
         devices = conn.get(f"/api/s/{site}/stat/device") or []
         clients = conn.get(f"/api/s/{site}/stat/sta") or []
         return (f"UniFi site {site}: {plural(len(devices), 'device')}, "
-                f"{plural(len(clients), 'client')} connected")
+                f"{plural(len(clients), 'client')} connected" + (f". {said}" if said else ""))
     return _with_controller(base, creds, verify, ask)
 
 
 def survey(base, creds, verify):
-    return _with_controller(base, creds, verify,
-                            lambda conn, site: candidates(fetch_snapshot(conn.get, site)))
+    def ask(conn, site, said):
+        rows, notes = candidates(fetch_snapshot(conn.get, site))
+        return rows, ([said] if said else []) + notes
+    return _with_controller(base, creds, verify, ask)
