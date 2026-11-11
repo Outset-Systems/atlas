@@ -85,7 +85,7 @@ Every name and address in these pictures is invented.
   Plain JavaScript, no build step.
 
 **Coming in v0.2:** a documented API and an MCP server, so scripts and AI
-agents can ask the map what is here, who charted it and whether a person has
+agents can ask the map what is here, when it was charted and whether a person has
 checked it, before they act. See [the API guide](docs/api.md) and
 [Atlas for AI agents](docs/mcp.md).
 

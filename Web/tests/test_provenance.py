@@ -398,3 +398,26 @@ def test_a_restored_file_keeps_its_stamps_only_when_the_operator_says_so():
     assert _mark(plain, "a")["reviewed"] is False and _mark(plain, "a")["source"] == "import-json"
     provenance.stamp({}, kept, None, "cli", "import-json", now="2026-11-10T09:00:00Z", trust=True)
     assert _mark(kept, "a") == {k: v for k, v in mark.items() if k != "anything_else"}
+
+
+def test_the_call_docs_mcp_md_shows_works_as_written(realm, token):
+    """docs/mcp.md gives one curl line: no `_meta`, no MCP headers, a token."""
+    client = realm.app.test_client()
+    r = client.post("/api/v2/mcp", headers={"Authorization": f"Bearer {token}"},
+                    json={"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                          "params": {"name": "atlas_impact", "arguments": {"place": "gateway"}}})
+    assert r.status_code == 200, r.get_json()
+    result = r.get_json()["result"]
+    assert result["isError"] is False
+    assert result["structuredContent"]["place"]["id"] == "gateway"
+    assert json.loads(result["content"][0]["text"]) == result["structuredContent"]
+    missing = client.post("/api/v2/mcp", headers={"Authorization": f"Bearer {token}"},
+                          json={"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+                                "params": {"name": "atlas_impact", "arguments": {"place": "nowhere"}}})
+    assert missing.get_json()["result"]["isError"] is True
+
+
+def test_an_agent_is_not_promised_names_it_never_gets():
+    import mcp_tools
+    assert "who charted" not in mcp_tools.INSTRUCTIONS
+    assert all("who charted" not in t["description"] for t in mcp_tools.TOOLS)
