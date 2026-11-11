@@ -1248,6 +1248,10 @@ body.editing-map.on-style .zone-label.dragging { cursor: grabbing; }
    outright so half-covered buttons can't take half-meant clicks. ☰ itself
    stays: it is the drawer's own toggle. */
 body.drawer-open .zoom-stack { opacity: 0; pointer-events: none; }
+/* Up in the Sky or down in the Depths there is no map under the pointer to zoom
+   or to draw roads on, so the map's own tools step back (owner, 2026-11-11).
+   THE ATLAS and its column stay: they are the way back. */
+body.in-sky .zoom-stack, body.depths .zoom-stack { opacity: 0; pointer-events: none; }
 /* Same corner, same rule (2026-08-15): ⚙ hangs off ☰ into the exact 42px the
    + button occupies — right 18/21, top `--crown-clear` for both — so the pair
    yields while the cluster is out and comes back when it goes. Found by
@@ -4073,15 +4077,17 @@ body.constellation .mk.active .mk-dot { opacity: 0.35; }
 }
 
 #region-frames { position: absolute; inset: 0; z-index: 7; pointer-events: none; }
+/* No line round the region at rest (owner, 2026-11-11): the tab says there is
+   somewhere to go, and a dashed box across the art broke the picture. The box
+   shows itself, solid, while the tab is under the pointer or has the focus. */
 .rg-frame {
   position: absolute; box-sizing: border-box; pointer-events: none;
-  border: calc(1.5px / var(--rk, 1)) dashed rgba(var(--gilt-rgb), 0.55);
+  border: calc(1.5px / var(--rk, 1)) solid transparent;
   border-radius: calc(6px / var(--rk, 1));
-  box-shadow: inset 0 0 0 calc(1px / var(--rk, 1)) rgba(0, 0, 0, 0.18);
   transition: border-color 200ms ease, background-color 200ms ease;
 }
 .rg-frame:has(.rg-tab:hover), .rg-frame:has(.rg-tab:focus-visible) {
-  border-color: var(--gilt-bright); border-style: solid;
+  border-color: var(--gilt-bright);
   background-color: rgba(var(--gilt-rgb), 0.07);
 }
 .rg-tab {

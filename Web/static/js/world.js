@@ -2,6 +2,7 @@
    floating vision orb, the network layer, and the Depths/sky transitions. */
 
 import { A, CFG, REDUCED, $, esc, zoneById, nodeById, FALLBACK_HUE, DRAG_END, postJSON } from './config.js';
+import { placeLabels } from './label-model.js';
 import { unproject } from './project.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
@@ -14,19 +15,41 @@ const markersEl = $('markers');
 const satsEl = $('satellites');
 
 /* ── Zone labels ─────────────────────────────────────── */
+/* On a map style a network's name stands beside the places it names, on this
+   level, wherever they are now (label-model.js): above the group, or on the
+   side that is clear of other places, other names and the roads. A network with
+   no place drawn here is not named here. A name dragged in Move places, or
+   pinned in the style's file, stays where it was put on the main map. */
+function autoZoneSpots() {
+  const at = {};
+  for (const n of A.DATA.nodes) if (!n.off_map) at[n.id] = { x: n.x, y: n.y };
+  const charPx = CFG.ZONE_LABEL_PX * 1.14;        // a Cinzel cap and its 0.42em of letterspacing
+  const groups = A.DATA.zones.map((z) => ({
+    id: z.id,
+    ids: A.DATA.nodes.filter((n) => n.zone === z.id && at[n.id]).map((n) => n.id),
+    hw: Math.max(3, String(z.name || '').length * charPx / A.MAPW * 50),
+    hh: CFG.ZONE_LABEL_PX * 1.9 / A.MAPH * 50,
+  }));
+  const roads = (A.DATA.routes || []).map((r) => [r.from, r.to]);
+  return placeLabels(groups, at, roads);
+}
+
 function buildZoneLabels() {
-  if (A.levelPlaces) return;      // zone names are placed on the realm's own map
+  const styled = onStyleArt();
+  if (A.levelPlaces && !styled) return;      // zone names are placed on the realm's own map
+  const auto = styled ? autoZoneSpots() : {};
   for (const z of A.DATA.zones) {
     // some VLANs keep their territory but drop the map text. The Depths never
     // draw theirs: the section below the map carries the name in its own heading.
-    // A style that places a zone means it to be read there, so it names it.
-    const at = A.styleDraft().zones[z.id] || A.styleZones?.[z.id];
-    if (!at && (z.hide_label || z.id === 'depths')) continue;
+    // A style names a network where it was pinned, else where its places are.
+    const pin = A.levelPlaces ? null : A.styleDraft().zones[z.id] || A.styleZones?.[z.id];
+    const at = pin || auto[z.id];
+    if (!at && (styled || z.hide_label || z.id === 'depths')) continue;
     const el = document.createElement('div');
     el.className = 'zone-label';
     // on a map style the network's names move with its places (Settings → Move places)
     el.addEventListener('pointerdown', (e) => {
-      if (!A.editMode || !onStyleArt()) return;
+      if (!A.editMode || !onStyleArt() || A.levelPlaces) return;   // a pin is the main map's
       let spot = null;
       dragOnMap(e, el, (p) => (spot = { x: Math.max(0, Math.min(100, p.x)), y: Math.max(-40, Math.min(140, p.y)) }),
         () => A.draftStyleSpot('zones', z.id, spot));
@@ -155,6 +178,7 @@ function updateShades(userMove) {
   if (inSky ? skyT < CFG.SKY_RELEASE : skyT > CFG.SKY_ENGAGE) {
     inSky = !inSky;
     $('btn-sky').classList.toggle('lit', inSky);
+    document.body.classList.toggle('in-sky', inSky);   // the map's own tools step back (atlas.css)
   }
   const offCentre = Math.abs((topImgY + bottomImgY) / 2 / A.MAPH - 0.5);
   if (onCentre ? offCentre > CFG.CENTRE_LEAVE : offCentre < CFG.CENTRE_ENTER) {

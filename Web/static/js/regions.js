@@ -269,11 +269,12 @@ function standingOn(r) {
 }
 
 /* A folded region (`fold` on it) draws, on its parent's map, only the places
-   that have a road to somewhere else there (region-model.js foldedAt). While
-   places are being moved everything is drawn, or a hidden one could not be
-   picked up. */
+   that have a road to somewhere else there (region-model.js foldedAt). That
+   holds while places are being moved too (owner, 2026-11-11): the map being
+   arranged is the map people will see, and a folded place is moved on the
+   region's own map, where it is drawn. */
 const hiddenOn = (at, levelId) =>
-  (A.editMode ? new Set() : M.foldedAt(regions(), levelId, at, A.DATA?.routes));
+  M.foldedAt(regions(), levelId, at, A.DATA?.routes);
 
 /* What the map on the stage folded away when it was last drawn, kept for the
    frames' count: `at` is everything that stood there before the fold. */
