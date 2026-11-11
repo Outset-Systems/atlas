@@ -313,30 +313,46 @@
 
 <!-- Ivory detail card -->
 <article id="card" class="card-left" aria-hidden="true">
-  <div class="card-bar"></div>
-  <!-- portrait + close pinned OUTSIDE the scroll area so the emblem/logo is
-       always visible even when a tall card scrolls (2026-07-12) -->
-  <div class="card-portrait" id="card-portrait">?</div>
-  <!-- pull back without losing the place: zooms out around whatever is
-       selected, so the roads around it come into frame (2026-07-31) -->
-  <button class="card-out" id="btn-card-out" title="Pull back — stay centred on this place">⊖</button>
-  <button class="card-min" id="btn-card-min" title="Minimize">–</button>
-  <button class="card-close" id="btn-card-close" title="Close (Esc)">×</button>
-  <div class="card-inner">
-    <div class="card-epi" id="card-epi">—</div>
-    <h3 id="card-name">—</h3>
-    <p class="card-lore" id="card-lore">—</p>
-    <div class="card-data" id="card-data"></div>
-    <!-- THE FORGE'S DAY: for the place rites ask (the GPU box), what turns next and
-         the door to THE CALENDAR. card.js fills it from rites[] and hides it
-         for every other place. -->
-    <div class="card-forge" id="card-forge" hidden></div>
-    <div class="card-vitals" id="card-vitals"></div>
-    <div class="card-links" id="card-links"></div>
-    <div class="card-scroll" id="card-scroll"></div>
-    <!-- service detail sub-view (slides over the node view) -->
-    <div class="card-svc" id="card-svc" hidden></div>
+  <!-- THE PULL-TAB CARD (2026-11-11): one sheet of parchment with the place's
+       emblem riding its top edge and its sections hanging below it as tabs.
+       A tab pulls its section down out of the sheet as a drawer. -->
+  <div class="card-medallion" id="card-portrait" aria-hidden="true"></div>
+  <div class="card-sheet">
+    <div class="card-top">
+      <!-- pull back without losing the place: zooms out around whatever is
+           selected, so the roads around it come into frame (2026-07-31) -->
+      <button class="card-out" id="btn-card-out" title="Pull back — stay centred on this place" aria-label="Pull back around this place"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M5 7h4M10.5 10.5L14 14"/></svg></button>
+      <button class="card-min" id="btn-card-min" title="Minimize" aria-label="Minimize"><svg viewBox="0 0 16 16" aria-hidden="true"><path class="cm-line" d="M4 8h8"/><rect class="cm-box" x="3.5" y="3.5" width="9" height="9" rx="1"/></svg></button>
+      <button class="card-close" id="btn-card-close" title="Close (Esc)" aria-label="Close"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+    </div>
+    <div class="card-inner">
+      <div class="card-node">
+        <header class="card-head">
+          <h3 id="card-name">—</h3>
+          <button class="card-parent" id="card-parent" hidden></button>
+        </header>
+        <p class="card-lore" id="card-lore">—</p>
+        <div class="card-strip" id="card-strip"></div>
+        <p class="card-cause" id="card-cause" hidden></p>
+        <div class="card-actions" id="card-actions"></div>
+        <!-- the drawer the tabs pull down; one pane shows at a time -->
+        <div class="card-drawer" id="card-drawer">
+          <div class="card-panel" id="card-panel" role="tabpanel">
+            <div class="card-pane card-links" id="card-links" data-pane="services" hidden></div>
+            <div class="card-pane card-vitals" id="card-vitals" data-pane="pulse" hidden></div>
+            <div class="card-pane card-data" id="card-data" data-pane="details" hidden></div>
+            <!-- THE FORGE'S DAY: for the place rites ask (the GPU box), what turns next
+                 and the door to THE CALENDAR. card.js fills it from rites[];
+                 every other place gets no SCHEDULE tab at all. -->
+            <div class="card-pane card-forge" id="card-forge" data-pane="schedule" hidden></div>
+          </div>
+        </div>
+      </div>
+      <!-- service detail sub-view (replaces the node view while it is up) -->
+      <div class="card-svc" id="card-svc" hidden></div>
+    </div>
   </div>
+  <div class="card-tabs" id="card-tabs" role="tablist" aria-label="Card sections"></div>
 </article>
 
 <!-- RACKS — each physical rack as an illuminated hardware elevation -->

@@ -155,8 +155,9 @@ def test_the_old_names_are_gone_from_the_scene_band():
     for word in ("ARMORY", "TRIBUTE", "LEDGER", "PATH"):
         assert f">{word}</button>" not in html
     card = (WEB / "static" / "js" / "card.js").read_text(encoding="utf-8")
-    assert "◈ ROUTE" in card and "◈ TOPOLOGY" in card
-    assert "◈ ROAD" not in card and "◈ PATH" not in card
+    # the pull-tab card (2026-11-11) draws its glyphs, so the words stand alone
+    assert "}Draw route</button>" in card and "}Topology</button>" in card
+    assert "ROAD" not in card and ">PATH" not in card and "◈ PATH" not in card
 
 
 def test_settings_are_grouped_in_plain_words():

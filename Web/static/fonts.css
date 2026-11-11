@@ -7,3 +7,12 @@
 @font-face { font-family: 'IM Fell English'; font-style: normal; font-weight: 400; font-display: swap; src: url('fonts/IMFellEnglish-400.woff2') format('woff2'); }
 @font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url('fonts/JetBrainsMono-400.woff2') format('woff2'); }
 @font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 600; font-display: swap; src: url('fonts/JetBrainsMono-600.woff2') format('woff2'); }
+/* The ivory card's own three (2026-11-11, the pull-tab card): EB Garamond for
+   names and lore, Libre Franklin for its labels and buttons, IBM Plex Mono for
+   addresses and numbers. Latin subsets; Garamond and Franklin are variable, so
+   one file carries every weight the card uses. */
+@font-face { font-family: 'EB Garamond'; font-style: normal; font-weight: 400 500; font-display: swap; src: url('fonts/EBGaramond-400-500.woff2') format('woff2'); }
+@font-face { font-family: 'EB Garamond'; font-style: italic; font-weight: 400; font-display: swap; src: url('fonts/EBGaramond-400i.woff2') format('woff2'); }
+@font-face { font-family: 'Libre Franklin'; font-style: normal; font-weight: 400 600; font-display: swap; src: url('fonts/LibreFranklin-400-600.woff2') format('woff2'); }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url('fonts/IBMPlexMono-400.woff2') format('woff2'); }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url('fonts/IBMPlexMono-500.woff2') format('woff2'); }

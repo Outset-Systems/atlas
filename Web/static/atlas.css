@@ -1696,12 +1696,6 @@ body.scene-open #index-drawer { z-index: 986; }
   padding: 20px 20px 14px; border-bottom: 1px solid var(--ink-line);
 }
 .drawer-title { font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.72rem; letter-spacing: 0.3em; color: var(--gilt); }
-.card-close {
-  position: absolute; top: 6px; right: 8px; color: var(--card-ink-soft);
-  background: none; border: none; font-size: 1.3rem;
-  cursor: pointer; line-height: 1; padding: 4px 8px; transition: color 150ms;
-}
-.card-close:hover { color: var(--gilt); }
 
 /* three tabs now that ⚙ has moved to the head — they share the width rather
    than sitting at their natural sizes and overflowing (2026-08-10) */
@@ -1780,202 +1774,416 @@ body.scene-open #index-drawer { z-index: 986; }
 .idx-name { font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.7rem; letter-spacing: 0.18em; }
 .idx-role { font-size: 0.78rem; color: var(--text-dim); margin-left: auto; text-align: right; max-width: 45%; }
 
-/* ── Ivory detail card ──────────────────────────────── */
-/* the detail card is a frosted parchment pane that slides in from the right edge
-   as it takes focus (was a blur-up); raised ABOVE the Index so it's never hidden
-   behind an open drawer. Translucent glass, but ≥0.9 alpha keeps the data legible. */
+/* ── The ivory card: THE PULL-TAB CARD (2026-11-11) ─────────────────────────
+   One sheet of parchment. The place's emblem rides its top edge (about a third
+   of it on the paper), its name, lore and a strip of vitals sit on the sheet,
+   and its sections — SERVICES, PULSE, DETAILS and, for a place the calendar
+   asks, SCHEDULE — hang from its foot as overlapping pull tabs. A tab pulls its
+   section down as a drawer in a slightly darker tone of the same paper; the
+   open tab is that same paper, so drawer and tab read as one sheet up to the
+   rule under the buttons. Designed on the Atlas Node Cards canvas (A × B).
+
+   It is OPAQUE now (was 91% parchment over a backdrop blur): the open tab and
+   the drawer overlap the sheet's edge to hide the seam, and translucent pieces
+   that overlap show as darker bands.
+
+   Its own type: EB Garamond (names, lore), Libre Franklin (labels, buttons),
+   IBM Plex Mono (addresses, numbers) — vendored in fonts.css. Its colours are
+   the THEMABLE tokens, so a map style still retints it; the drawer's tone and
+   the hairlines are mixed from them rather than spelled. */
 #card {
   /* width/right come from --card-w / --card-edge, the ONE definition camera.js's
      CARD_SHARE_PX and the .card-left calc below also read — so they can no
      longer drift and misaim the focus glide (ALIVE #19) */
   position: fixed; right: var(--card-edge); bottom: 60px; width: var(--card-w); z-index: 975;
-  /* The clearance rides a custom property because the two sides need different
-     ones since the control column moved to top-RIGHT (2026-08-15): a RIGHT-hand
-     card shares its edge with ☰ + the column, so it stops below the column's
-     foot — 60 bottom + (18 + 42 + 10 + 302 = 372 column, six buttons since the
-     decoy eye) + 12 gap = 444. A LEFT-hand card (.card-left, the default)
-     has a clear edge and only leaves air for the scene band: 60 + 90 = 150.
-     MUST TRACK `.zoom-stack` — its inset, gap, button size AND button count.
-     2026-08-15: the column dropped from SIX buttons to two (zoom only — every
-     other map tool moved into the cluster THE ATLAS reveals) and ☰ left this
-     corner for the scene band, so a right-hand card gets 214px of its height
-     back: 60 bottom + (64 `--crown-clear` + 2×42 + 10 gap = 158 column) +
-     12 gap = 230.
-     🔴 2026-08-18 — THE BURDEN SWAPPED SIDES. Zoom moved out of this corner to
-     hang under THE ATLAS, so a RIGHT-hand card no longer clears a column at
-     all: all that remains on this edge is ⚙ under ☰ (38px, hover-only), giving
-     60 + (64 + 38 = 102) + 12 = 174. The LEFT-hand card — which is the common
-     one — inherits the old arithmetic, because the zoom column is now over
-     THERE: see `.card-left`. Swapping the two numbers without reading this is
-     how the card silently grows under the buttons it is meant to clear. */
+  /* --card-clear: the room the chrome above the card needs, per side — see the
+     long note this block carried until 2026-11-11 (git history): a RIGHT-hand
+     card clears ⚙ under ☰, a LEFT-hand card (the default) clears the zoom
+     column under THE ATLAS. MUST TRACK `.zoom-stack`. */
   --card-clear: 174px;
-  max-height: calc(100vh - var(--card-clear));
-  background: color-mix(in srgb, var(--parchment) 91%, transparent);
-  color: var(--card-ink);
-  border-radius: 4px; overflow: visible;
-  backdrop-filter: blur(12px) saturate(1.15);
-  box-shadow: 0 24px 60px rgba(0,0,0,0.55), 0 0 0 1px rgba(var(--gilt-rgb),0.28);
-  /* THE CARD ENTERS FROM THE EDGE IT LANDS ON (2026-08-25 — reverses
-     the 2026-08-15 rule, the design notes decisions log).
-
-     From 2026-08-15 both sides flew in from the left on the argument that the
-     card is the map's annotation and should arrive from the same edge every
-     time. Asked for directly: a panel that slides in from the far side of the
-     screen and then parks on the near one reads as having been thrown across
-     the map. Coming from behind its own edge, it reads as being pulled out of
-     it — the shorter, quieter motion, and the one that matches where the eye
-     is already going (the dot the focus glide just anchored).
-
-     `--card-in` is the seam this was always meant to ride: it was minted for
-     exactly this flip, so the direction is one property per side and no rule
-     below has to out-specify `.visible`. The base value is the RIGHT-hand
-     entrance, because the base `#card` is the right-pinned card (`right:
-     var(--card-edge)`); `.card-left` flips it, and the ≤720px sheet — pinned
-     to the BOTTOM, not to either side — rises from below instead. Every case
-     is "from the edge it lands on"; none of them is a special case of it.
-
-     ⚑ `right` animates only while the card is up (`#card.visible` below), and
-     that is what makes the start point correct. With it here a hidden card that
-     changed sides slid across the whole screen as it arrived, which is how the
-     first click of every visit came in from the right (2026-11-01). */
+  /* how far the emblem rises above the sheet; the card's height budget pays it */
+  --medal: 60px; --medal-over: 40px;
+  --brass: #7A5C18; --brass-dark: #5A430F; --warn-ink: #8A4B14;
+  --paper: var(--parchment);
+  --paper-drawer: color-mix(in srgb, var(--parchment) 94%, var(--card-ink));
+  --paper-tab: color-mix(in srgb, var(--parchment) 88%, var(--card-ink));
+  --paper-tab-2: color-mix(in srgb, var(--parchment) 84%, var(--card-ink));
+  --c-hair: color-mix(in srgb, var(--card-ink) 14%, var(--parchment));
+  --c-edge: color-mix(in srgb, var(--card-ink) 26%, var(--parchment));
+  --f-name: 'EB Garamond', 'IM Fell English', Georgia, serif;
+  --f-ui: 'Libre Franklin', 'Alegreya Sans', sans-serif;
+  --f-data: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+  max-height: calc(100vh - var(--card-clear) - var(--medal-over));
+  display: flex; flex-direction: column;
+  color: var(--card-ink); font-family: var(--f-ui);
+  /* the glow is the card's network zone (--card-hue, set per place by card.js) */
+  filter: drop-shadow(0 0 1.5px color-mix(in srgb, var(--card-hue, var(--gilt)) 85%, transparent))
+          drop-shadow(0 0 26px color-mix(in srgb, var(--card-hue, var(--gilt)) 50%, transparent));
+  /* THE CARD ENTERS FROM THE EDGE IT LANDS ON (2026-08-25). `--card-in`
+     is per side: the base is the RIGHT-hand entrance, `.card-left` flips it,
+     the ≤720px sheet rises from below. ⚑ `right` animates only while the card
+     is up (`#card.visible`): a hidden card that changed sides would otherwise
+     slide across the whole screen as it arrived (2026-11-01). */
   opacity: 0; transform: var(--card-in, translateX(34px) scale(0.985));
   pointer-events: none;
   transition: opacity 300ms var(--glide), transform 380ms var(--glide);
 }
+/* pinned by its TOP once card.js has measured it (desktop only): the card then
+   keeps its place while a drawer pulls down beneath it, with the drawer's room
+   reserved below. Unmeasured, or on the ≤720px sheet, it stays bottom-pinned. */
+#card.anchored { top: var(--card-top); bottom: auto; max-height: calc(100vh - var(--card-top) - 24px); }
 #card.card-left {
   --card-in: translateX(-34px) scale(0.985);
-  right: calc(100vw - (var(--card-w) + var(--card-edge)));   /* right edge (card-w + edge = 344) from left ⇒ left edge at --card-edge (24) */
+  right: calc(100vw - (var(--card-w) + var(--card-edge)));   /* left edge at --card-edge */
   --card-clear: 282px;
 }
-/* the body scrolls when a place has a lot; the pinned portrait/close don't.
-   they need a higher z than the scroll body (a later sibling) or the body
-   paints over them and the ✕ stops taking clicks. */
-/* Tracks `#card`'s own max-height via the same custom property. The card is
-   `overflow: visible` so the pinned portrait/⊖/–/× can sit outside it — which
-   means a scroll body taller than its card does not get clipped, it SPILLS,
-   so the two limits must be the one value, per side. */
-.card-inner {
-  max-height: calc(100vh - var(--card-clear, 174px)); overflow-y: auto; overflow-x: hidden;
-  padding: 20px 20px 20px; position: relative;
-}
-#card .card-portrait, #card .card-close { z-index: 3; }
 #card.visible {
   opacity: 1; transform: none; pointer-events: auto;
   transition: opacity 300ms var(--glide), transform 380ms var(--glide), right 380ms var(--glide);
 }
 /* When the Index opens, only a card the Index would actually cover moves (Link).
-   The Index always docks right, so a RIGHT-hand card (right: 24px — its right
-   edge sits 24px from the screen edge, inside the 320px drawer) is under it and
-   slides clear; a LEFT-hand card (.card-left, the default since 2026-08-11)
-   already clears the drawer on any desktop width and stays put instead of
-   sliding across to hug the Index. `:not(.card-left)` is an exact proxy for
-   "would be covered", not an approximation of it. */
+   `:not(.card-left)` is an exact proxy for "would be covered". */
 body.drawer-open #card:not(.card-left) { right: 360px; }
-/* A scene keeps the Index open (2026-08-11), and the PANELS cede the drawer's
-   strip while the DIM does not (2026-08-16). The old rule pulled the whole
-   overlay's `right` to the drawer's edge, which un-dimmed the strip along
-   with un-covering it — a bright column of map glowing around the floating
-   Index inside an otherwise darkened screen. The wrappers stay `inset: 0` so
-   the dim runs everywhere (the drawer rises above it, see #index-drawer);
-   only the centred panel's ROOM shrinks, via padding on the flex wrapper.
-   The strip's one number is `--drawer-clear` (:root). */
+/* A scene keeps the Index open (2026-08-11); the PANELS cede the drawer's strip
+   while the DIM does not (2026-08-16) — its one number is `--drawer-clear`. */
 body.drawer-open #reliquary, body.drawer-open #tribute, body.drawer-open #ledger,
 body.drawer-open #calendar, body.drawer-open #seals,
 body.drawer-open #stones, body.drawer-open #annals, body.drawer-open #accounts,
 body.drawer-open #trust,
 body.drawer-open #settings { padding-right: calc(var(--drawer-clear) + 3vw); }
 body.drawer-open .pth-panel { right: calc(5vw + var(--drawer-clear)); }
-/* The edge case: when the pan clamp can't grant a focused dot the space
-   left of the card (east-edge places at focus zoom), the card crosses to the
-   left edge and the dot keeps the right share — the drawer shove, mirrored,
-   riding the same `right` transition. Stated as `right` (not `left`) so it
-   animates, and so `body.drawer-open` above outranks it (1-1-1 vs 1-1-0):
-   an open Index still shoves the card to its own left. */
-/* 🔴 150 → 230 on 2026-08-18: the zoom column moved under THE ATLAS, i.e. over
-   THIS edge. A left-hand card must now clear it exactly as a right-hand card
-   used to — 60 bottom + zoom foot 250 (zoom now sits BELOW the cluster:
-   64 `--crown-clear` + 92 offset + 2×42 + 10 gap = 250) + 12 = 322.
-   This is the DEFAULT side for the detail card, so getting it wrong is the
-   visible bug, not the edge case. MUST TRACK `.zoom-stack`. */
-/* 2026-09-02: the zoom column grew a third button (the network glyph, the owner),
-   so its foot moved 52px down: 64 + 92 + 3×42 + 2×10 = 302 ⇒ 60 + 302 + 12 = 374. */
 
-.card-bar { height: 3px; border-radius: 4px 4px 0 0; background: linear-gradient(90deg, var(--card-hue, var(--gilt)) 0%, rgba(var(--gilt-rgb), 0.12) 90%); }
-.card-portrait {
-  width: 54px; height: 54px; border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, var(--card-hue, #4E6E82), #1B2418 78%);
-  border: 2px solid var(--parchment);
-  box-shadow: 0 4px 14px rgba(0,0,0,0.35);
-  position: absolute; top: -24px; left: 20px;
+/* ── the emblem: a disc in the zone's ink, the place's own glyph in ivory ── */
+.card-medallion {
+  position: absolute; z-index: 4; left: 14px; top: calc(-1 * var(--medal-over));
+  width: var(--medal); height: var(--medal); border-radius: 50%;
+  background: color-mix(in srgb, var(--card-hue, #4E6E82) 50%, #000);
+  box-shadow: 0 0 0 2px var(--paper), 0 8px 14px rgba(0,0,0,0.45);
   display: flex; align-items: center; justify-content: center;
-  font-size: 1.5rem; line-height: 1;   /* emoji emblem, not a letter */
+  pointer-events: none;
 }
-.portrait-logo { width: 27px; height: 27px; display: block; }
-/* minimize button — sits just left of the × (2026-07-20) */
-.card-min {
-  position: absolute; top: 6px; right: 34px; color: var(--card-ink-soft);
-  background: none; border: none; cursor: pointer; font-size: 1.3rem;
-  line-height: 1; padding: 4px 8px; transition: color 150ms;
+.card-medallion::before {   /* the faint inner ring */
+  content: ""; position: absolute; inset: 4px; border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--paper) 45%, transparent);
 }
-.card-min:hover { color: var(--gilt); }
-#card .card-min { z-index: 3; }
-/* minimized: collapse to just the headline; a click on the bar restores it */
-#card.minimized { cursor: pointer; }
-#card.minimized .card-epi,
-#card.minimized .card-lore,
-#card.minimized .card-data,
-#card.minimized .card-vitals,
-#card.minimized .card-links,
-#card.minimized .card-scroll,
-#card.minimized .card-svc { display: none; }
-#card.minimized #card-name { margin-bottom: 0; }
-#card.minimized .card-inner { padding-bottom: 14px; }
-.card-epi {
-  text-align: right; font-family: 'Alegreya Sans', sans-serif; font-style: italic;
-  font-size: 0.78rem; letter-spacing: 0.04em;
-  color: var(--card-ink-soft); margin-bottom: 14px; min-height: 1em;
+.portrait-logo { width: 28px; height: 28px; display: block; position: relative; }
+
+/* ── the sheet ── */
+.card-sheet {
+  position: relative; z-index: 2; min-height: 0;
+  display: flex; flex-direction: column;
+  background: var(--paper); border-radius: 4px 4px 0 0;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.55), 0 0 0 1px var(--c-edge);
+  overflow: hidden;
 }
+#card.no-tabs .card-sheet, #card.minimized .card-sheet, #card.svc-open .card-sheet { border-radius: 4px; }
+/* the top rule: the chrome, right; the emblem's corner, left */
+.card-top {
+  height: 40px; flex-shrink: 0; display: flex; justify-content: flex-end; align-items: center;
+  padding-right: 2px; border-bottom: 1px solid var(--c-hair);
+}
+.card-out, .card-min, .card-close {
+  width: 40px; height: 40px; padding: 0; background: none; border: none; cursor: pointer;
+  color: var(--card-ink-soft); display: flex; align-items: center; justify-content: center;
+  transition: color 150ms;
+}
+.card-out svg, .card-min svg, .card-close svg {
+  width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.card-out:hover, .card-min:hover, .card-close:hover { color: var(--card-ink); }
+.card-min .cm-box { display: none; }
+#card.minimized .card-min .cm-line { display: none; }
+#card.minimized .card-min .cm-box { display: inline; }
+#card.minimized .card-out { display: none; }   /* nothing to frame when it's a headline */
+
+/* the body scrolls only when a place outgrows the window (the drawer has its
+   own cap, below) */
+.card-inner { min-height: 0; overflow-y: auto; overflow-x: hidden; position: relative; }
+.card-head { padding: 12px 18px 0; display: flex; flex-direction: column; gap: 2px; }
 #card h3 {
-  font-family: 'Cinzel', serif; font-weight: 700; font-size: 1rem;
-  letter-spacing: 0.2em; margin-bottom: 8px;
+  margin: 0 0 3px; font-family: var(--f-name); font-weight: 500; font-size: 1.85rem;
+  line-height: 1.05; letter-spacing: 0.09em; text-transform: uppercase; overflow-wrap: anywhere;
 }
-.card-lore { font-size: 0.9rem; line-height: 1.55; color: var(--card-ink-soft); margin-bottom: 12px; }
-.card-data {
-  font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: #6D6350;
-  border-top: 1px solid rgba(33,28,20,0.14); padding-top: 9px; margin-bottom: 6px;
-  display: flex; flex-direction: column; gap: 4px; font-variant-numeric: tabular-nums;
+.card-parent {
+  align-self: flex-start; min-height: 26px; margin-left: -4px; padding: 0 4px;
+  display: inline-flex; align-items: center; gap: 5px;
+  background: none; border: none; border-radius: 3px; cursor: pointer; text-align: left;
+  font-family: var(--f-ui); font-size: 0.78rem; color: var(--card-ink-soft);
 }
-/* two aligned columns so hosts with many services (the app host) read as a tidy grid */
-/* live vitals — CPU + RAM gauges on the node-exporter host cards */
-.card-vitals { margin-top: 12px; }
-.card-vitals[hidden] { display: none; }
+.card-parent b { color: var(--card-ink); font-weight: 600; letter-spacing: 0.08em; }
+.card-parent svg { width: 12px; height: 12px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+.card-parent:hover { background: var(--paper-drawer); }
+.card-parent[hidden] { display: none; }
+.card-lore {
+  margin: 9px 18px 0; font-family: var(--f-name); font-style: italic; font-size: 1rem;
+  line-height: 1.35; color: color-mix(in srgb, var(--card-ink) 82%, var(--parchment));
+}
+.card-lore:empty { display: none; }
+
+/* the strip — whichever of state / 30 days / updates the feed can vouch for */
+.card-strip {
+  margin: 12px 18px 0; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr);
+  border: 1px solid var(--c-hair); border-radius: 3px; background: var(--paper-drawer);
+}
+.card-strip:empty { display: none; }
+.cs-cell { padding: 7px 10px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.cs-cell + .cs-cell { border-left: 1px solid var(--c-hair); }
+.cs-label { font-size: 0.62rem; font-weight: 600; letter-spacing: 0.14em; color: var(--card-ink-soft); text-transform: uppercase; }
+.cs-value { font-size: 0.8rem; font-weight: 500; display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cs-value .svc-health { margin: 0; }
+.cs-value.mono { font-family: var(--f-data); }
+.cs-value.warn { color: var(--warn-ink); }
+.cs-value.stale { font-style: italic; }
+/* "it is down" is true but useless; "it is behind the hypervisor" is the thing
+   you act on (Web/dependencies.py) — so it gets a line of its own */
+.card-cause { margin: 8px 18px 0; font-size: 0.8rem; color: var(--warn-ink); }
+.card-cause[hidden] { display: none; }
+.card-cause strong { font-weight: 600; letter-spacing: 0.06em; }
+
+/* split / scroll — right above the tabs' drawer */
+.card-actions { margin: 10px 18px 14px; display: flex; gap: 8px; }
+.card-actions:empty { display: none; }
+.card-split {
+  flex: 1 1 auto; min-width: 0; height: 42px; padding: 0 10px;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  background: none; border: 1px solid var(--brass); border-radius: 3px; cursor: pointer;
+  color: var(--brass); font-family: var(--f-ui); font-size: 0.78rem; font-weight: 500; white-space: nowrap;
+  transition: background 150ms, color 150ms;
+}
+.card-split:hover { background: var(--paper-drawer); }
+body.constellation .card-split { background: var(--brass); color: var(--parchment); }
+.card-split .cs-on { display: none; }
+body.constellation .card-split .cs-off { display: none; }
+body.constellation .card-split .cs-on { display: inline; }
+.card-split svg, .card-scroll svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+.card-scroll { display: flex; border: 1px solid var(--c-hair); border-radius: 3px; overflow: hidden; flex: 0 0 auto; }
+.card-scroll > a, .card-scroll > button {
+  height: 40px; display: flex; align-items: center; gap: 7px; background: none; border: none;
+  color: var(--card-ink); font-family: var(--f-ui); font-size: 0.8rem; text-decoration: none; cursor: pointer;
+}
+.card-scroll > a { padding: 0 11px; }
+.card-scroll > button { width: 34px; justify-content: center; border-left: 1px solid var(--c-hair); color: var(--card-ink-soft); }
+.card-scroll > a:hover, .card-scroll > button:hover { background: var(--paper-drawer); }
+
+/* ── the drawer: pulled down by a tab, exactly as tall as its pane ── */
+.card-drawer {
+  height: var(--drawer-h, 0px); overflow: hidden; background: var(--paper-drawer);
+  transition: height 520ms cubic-bezier(0.2, 1.12, 0.32, 1);
+}
+.card-actions:empty + .card-drawer { margin-top: 14px; }   /* no buttons: the rule keeps its air */
+.card-panel {
+  border-top: 1px solid var(--c-hair); background: var(--paper-drawer);
+  max-height: var(--drawer-room, 60vh); overflow-y: auto; scrollbar-width: thin;
+}
+.card-pane { padding: 4px 0 10px; animation: card-unroll 360ms ease-out; }
+.card-pane[hidden] { display: none; }
+@keyframes card-unroll { from { opacity: 0; transform: translateY(-12px); } to { opacity: 1; transform: none; } }
+.cp-head {
+  height: 36px; display: flex; align-items: center; padding: 0 18px; margin: 0;
+  font-family: var(--f-ui); font-size: 0.68rem; font-weight: 600; letter-spacing: 0.16em;
+  text-transform: uppercase; color: var(--card-ink);
+}
+.cp-head .n { font-family: var(--f-data); font-weight: 400; letter-spacing: 0; color: var(--card-ink-soft); margin-left: 6px; }
+
+/* services: one full-width row each — long names wrap instead of clipping */
+.card-links { display: block; margin: 0; }
+.cd-rows { list-style: none; margin: 0; padding: 0 6px; }
+.cd-row {
+  width: 100%; min-height: 36px; display: flex; align-items: center; gap: 10px;
+  padding: 5px 10px; background: none; border: none; border-radius: 3px; cursor: pointer;
+  text-align: left; color: var(--card-ink); font-family: var(--f-ui);
+}
+.cd-row:hover { background: color-mix(in srgb, var(--card-ink) 6%, transparent); }
+.cd-row .svc-health { margin: 0; }
+.cd-label { flex: 1 1 auto; min-width: 0; font-size: 0.88rem; line-height: 1.25; }
+.cd-meta {
+  flex: 0 1 auto; max-width: 128px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: var(--f-data); font-size: 0.7rem; color: var(--card-ink-soft);
+}
+.cd-row svg { width: 13px; height: 13px; flex-shrink: 0; fill: none; stroke: var(--card-ink-soft); stroke-width: 1.5; stroke-linecap: round; }
+.cd-sub {
+  margin: 8px 18px 2px; font-family: var(--f-ui); font-size: 0.66rem; font-weight: 600;
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--card-ink-soft);
+}
+.cd-vassal .cd-label { letter-spacing: 0.04em; }
+
+/* pulse: two parchment tiles with a week of ink along their feet */
+.card-vitals .cv-row { display: flex; gap: 10px; padding: 0 18px; }
+.cv-note { margin: 8px 18px 0; font-size: 0.78rem; color: var(--card-ink-soft); }
+.cv-note .mono { font-family: var(--f-data); color: var(--card-ink); }
 .cv-head, .rel-ports-head {
   font-family: 'Cinzel', serif; font-size: 0.54rem; letter-spacing: 0.14em;
   text-transform: uppercase; color: var(--card-ink-soft); margin-bottom: 6px;
 }
 .cv-row { display: flex; gap: 8px; }
-/* v1.34.0 — the pulse is native ink now (was two Grafana iframes, .cv-panel).
-   Parchment tile: label, the number, and a week-long sparkline along the foot. */
+/* v1.34.0 — the pulse is native ink (was two Grafana iframes) */
 .cv-spark {
-  position: relative; flex: 1 1 0; min-width: 0; height: 68px;
-  border: 1px solid rgba(var(--gilt-rgb),0.3); border-radius: 4px;
-  background: var(--parchment-dim); overflow: hidden; padding: 7px 9px 0;
+  position: relative; flex: 1 1 0; min-width: 0; height: 72px;
+  border: 1px solid var(--c-hair); border-radius: 3px;
+  background: var(--paper); overflow: hidden; padding: 8px 10px 0;
 }
 .cv-spark-label {
-  display: block; font-family: 'Cinzel', serif; font-size: 0.5rem;
+  display: block; font-family: var(--f-ui); font-size: 0.62rem; font-weight: 600;
   letter-spacing: 0.14em; text-transform: uppercase; color: var(--card-ink-soft);
 }
 .cv-spark-now {
-  display: block; font-family: 'JetBrains Mono', monospace;
-  font-variant-numeric: tabular-nums; font-size: 1.05rem; font-weight: 600;
+  display: block; font-family: var(--f-data);
+  font-variant-numeric: tabular-nums; font-size: 1.25rem; font-weight: 500;
   color: var(--card-ink); line-height: 1.2;
 }
-.cv-spark-now em { font-style: normal; font-size: 0.7em; color: var(--card-ink-soft); }
+.cv-spark-now em { font-style: normal; font-size: 0.65em; color: var(--card-ink-soft); }
 .cv-spark-svg { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 26px; display: block; }
-.cv-spark-line { fill: none; stroke: var(--gilt); stroke-width: 1.6; }
-.cv-spark-fill { fill: rgba(var(--gilt-rgb), 0.16); }
+.cv-spark-line { fill: none; stroke: var(--brass); stroke-width: 1.4; }
+.cv-spark-fill { fill: color-mix(in srgb, var(--brass) 14%, transparent); }
 
-.card-links { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 10px; }
+/* details: the zone line, then a two-column ledger */
+.cd-zone {
+  margin: 0 18px 10px; display: flex; align-items: center; gap: 8px;
+  font-family: var(--f-name); font-style: italic; font-size: 1rem; color: var(--card-ink);
+}
+.cd-zone::before { content: ""; width: 18px; height: 4px; border-radius: 1px; flex-shrink: 0; background: var(--card-hue, var(--gilt)); }
+.cd-facts {
+  margin: 0 18px; display: grid; grid-template-columns: 74px minmax(0, 1fr); row-gap: 7px;
+  font-size: 0.78rem;
+}
+.cd-facts dt { color: var(--card-ink-soft); }
+.cd-facts dd { margin: 0; overflow-wrap: anywhere; }
+.cd-facts .mono { font-family: var(--f-data); font-size: 0.74rem; }
+.cd-facts .warn { color: var(--warn-ink); font-weight: 500; }
+.cd-facts .stale { font-style: italic; }
+
+/* ── the pull tabs: overlapping, the width of the sheet ── */
+.card-tabs { position: relative; z-index: 3; display: flex; align-items: flex-start; margin-top: -1px; }
+.card-tabs:empty { display: none; }
+.card-tab {
+  position: relative; flex: 1 1 0; min-width: 0; height: 36px;
+  padding: 2px 10px 0; margin-left: -14px;
+  display: flex; align-items: center; justify-content: center; gap: 5px;
+  background: none; border: none; cursor: pointer; white-space: nowrap;
+  font-family: var(--f-ui); font-size: 0.64rem; font-weight: 600; letter-spacing: 0.12em;
+  color: color-mix(in srgb, var(--card-ink) 80%, var(--parchment));
+  transition: height 260ms cubic-bezier(0.2, 1.3, 0.4, 1), padding 200ms ease-out, color 160ms;
+}
+.card-tab:first-child { margin-left: 0; }
+.card-tab .n { font-family: var(--f-data); font-weight: 400; letter-spacing: 0; color: var(--card-ink-soft); }
+/* the tab's paper: a trapezoid, narrowing toward the foot */
+.card-tab::before {
+  content: ""; position: absolute; inset: 0; z-index: -1;
+  background: var(--paper-tab); border: 1px solid var(--c-edge); border-top: none;
+  border-radius: 0 0 9px 9px;
+  transform: perspective(60px) rotateX(-7deg); transform-origin: top center;
+  box-shadow: inset 0 7px 7px -5px rgba(35,29,20,0.32), 0 6px 12px rgba(0,0,0,0.3);
+  transition: background 160ms, transform 200ms ease-out, box-shadow 200ms;
+}
+.card-tab:nth-child(even)::before { background: var(--paper-tab-2); }
+/* hover: the tab stretches DOWN from the sheet — it never leaves it */
+.card-tab:hover { z-index: 9; color: var(--card-ink); padding-top: 6px; }
+.card-tab:hover::before {
+  background: var(--paper-drawer);
+  transform: perspective(60px) rotateX(-7deg) scaleY(1.14);
+  box-shadow: 0 8px 14px rgba(0,0,0,0.35);
+}
+.card-tab:focus-visible { z-index: 9; outline: 2px solid var(--brass); outline-offset: -6px; }
+/* open: the drawer's own paper, one sheet with it — a strip of the same paper
+   reaches up past the sheet's edge so no hairline is left between them */
+.card-tab[aria-selected="true"] { z-index: 8; height: 42px; padding-top: 2px; color: var(--card-ink); }
+.card-tab[aria-selected="true"]::before,
+.card-tab[aria-selected="true"]:hover::before {
+  background: var(--paper-drawer); transform: perspective(60px) rotateX(-7deg);
+  box-shadow: 0 8px 14px rgba(0,0,0,0.28);
+}
+.card-tab[aria-selected="true"]::after {
+  content: ""; position: absolute; left: 1px; right: 1px; top: -8px; height: 10px; z-index: -1;
+  background: var(--paper-drawer);
+}
+#card.minimized .card-tabs, #card.svc-open .card-tabs,
+#card.minimized .card-drawer, #card.minimized .card-medallion,
+#card.svc-open .card-medallion { display: none; }   /* it would sit on the back link */
+
+/* minimized: just the headline; a click on it restores the card */
+#card.minimized { cursor: pointer; }
+#card.minimized .card-top { position: absolute; top: 0; right: 0; border: none; z-index: 2; }
+#card.minimized .card-lore, #card.minimized .card-strip, #card.minimized .card-cause,
+#card.minimized .card-actions, #card.minimized .card-parent, #card.minimized .card-svc { display: none; }
+#card.minimized .card-head { padding: 9px 90px 9px 18px; }
+#card.minimized h3 { font-size: 1.35rem; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ── Service detail sub-view (replaces the node view while it is up) ──────
+   A FLOW child of `.card-inner` (2026-08-16): `#card.svc-open` hides the
+   node view, so the card is exactly as tall as the service's content. */
+.card-svc {
+  position: relative; color: var(--card-ink); padding: 0 18px 16px;
+  display: flex; flex-direction: column; gap: 12px;
+  animation: svc-slide 260ms var(--glide);
+}
+@keyframes svc-slide { from { opacity: 0; transform: translateX(-18px); } to { opacity: 1; transform: none; } }
+.card-svc[hidden] { display: none; }
+#card.svc-open .card-node { display: none; }
+.csv-back {
+  align-self: stretch; margin: 0 -18px; padding: 0 12px; height: 40px;
+  display: flex; align-items: center; gap: 6px; background: none; border: none; border-bottom: 1px solid var(--c-hair);
+  cursor: pointer; text-align: left; font-family: var(--f-ui); font-size: 0.76rem; color: var(--card-ink-soft);
+}
+.csv-back b { color: var(--card-ink); font-weight: 600; letter-spacing: 0.08em; }
+.csv-back:hover { background: var(--paper-drawer); }
+.csv-back svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; }
+/* the svc view keeps the sheet's top rule for its back link, so the shared
+   chrome floats over that rule instead of taking a row of its own */
+#card.svc-open .card-top { position: absolute; top: 0; right: 0; border: none; z-index: 2; }
+#card.svc-open .card-out { display: none; }
+#card.svc-open .csv-back { padding-right: 90px; }
+.csv-epi { font-family: var(--f-ui); font-size: 0.78rem; color: var(--card-ink-soft); margin: 2px 0 0; }
+.csv-name {
+  margin: 0; font-family: var(--f-name); font-weight: 500; font-size: 1.75rem; line-height: 1.08;
+  display: flex; align-items: center; gap: 10px; color: var(--card-ink);
+}
+.csv-name .ldot { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 0 0 1px rgba(35,29,20,0.25); }
+.csv-state { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.csv-chip {
+  height: 26px; padding: 0 10px; display: inline-flex; align-items: center; gap: 7px;
+  border-radius: 13px; border: 1px solid var(--c-hair); background: var(--paper-drawer);
+  font-size: 0.76rem; font-weight: 500;
+}
+.csv-chip .svc-health { margin: 0; }
+.csv-chip.dim { font-style: italic; color: var(--card-ink-soft); font-weight: 400; }
+.csv-chip svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+.csv-desc {
+  margin: 0; font-family: var(--f-name); font-size: 1.02rem; line-height: 1.42;
+  color: color-mix(in srgb, var(--card-ink) 85%, var(--parchment));
+}
+.csv-desc strong { color: var(--card-ink); font-weight: 500; }
+.csv-route { padding-top: 10px; border-top: 1px solid var(--c-hair); }
+.csv-route h4 {
+  margin: 0 0 6px; font-family: var(--f-ui); font-size: 0.64rem; font-weight: 600;
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--card-ink-soft);
+}
+.csv-route ol { list-style: none; margin: 0; padding: 0; }
+.csv-route li { display: flex; align-items: center; gap: 12px; min-height: 24px; font-size: 0.78rem; font-weight: 500; letter-spacing: 0.08em; }
+.csv-route li::before { content: ""; width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--brass); box-sizing: border-box; flex-shrink: 0; }
+.csv-route li:last-child::before { background: var(--brass); }
+.csv-facts { margin: 0; display: grid; grid-template-columns: 74px minmax(0, 1fr); row-gap: 6px; font-size: 0.78rem; }
+.csv-facts dt { color: var(--card-ink-soft); }
+.csv-facts dd { margin: 0; font-family: var(--f-data); font-size: 0.74rem; overflow-wrap: anywhere; }
+.csv-actions { display: flex; flex-direction: column; gap: 8px; padding-top: 4px; }
+.csv-open {
+  height: 44px; display: flex; align-items: center; justify-content: center; gap: 8px;
+  background: var(--card-ink); color: var(--parchment); text-decoration: none; border-radius: 3px;
+  font-family: var(--f-ui); font-size: 0.8rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
+  overflow: hidden; white-space: nowrap; transition: background 200ms;
+}
+.csv-open:hover { background: color-mix(in srgb, var(--card-ink) 85%, var(--brass)); }
+.csv-twin { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.csv-metrics {
+  height: 42px; display: flex; align-items: center; justify-content: center; gap: 8px;
+  background: none; border: 1px solid var(--c-hair); border-radius: 3px; cursor: pointer;
+  color: var(--card-ink); font-family: var(--f-ui); font-size: 0.8rem;
+}
+.csv-metrics:hover { background: var(--paper-drawer); }
+.csv-metrics svg, .csv-open svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+
+/* `.card-link` is the shared button THE CALENDAR's pointer (SCHEDULE) and the
+   rack's ports still wear; the card's own rows are `.cd-row` now */
 .card-link {
   display: inline-flex; align-items: center; gap: 7px;
   background: var(--discover); color: #F9F5D7; text-decoration: none;
@@ -1986,91 +2194,6 @@ body.drawer-open .pth-panel { right: calc(5vw + var(--drawer-clear)); }
 }
 .card-link:hover { background: var(--discover-hover); box-shadow: 0 4px 16px rgba(31,59,46,0.5); }
 .card-link .svc-health { margin: 0; flex-shrink: 0; }
-
-/* the scroll row — copies the doc path */
-.card-scroll { margin-top: 12px; border-top: 1px solid rgba(33,28,20,0.14); padding-top: 9px; }
-.scroll-row {
-  display: flex; align-items: center; gap: 8px; width: 100%;
-  background: none; border: none; cursor: pointer; padding: 4px 2px;
-  text-align: left; border-radius: 3px;
-  transition: background 150ms;
-}
-.scroll-row:hover { background: rgba(var(--gilt-rgb), 0.12); }
-.scroll-glyph { font-size: 0.9rem; flex-shrink: 0; }
-.scroll-path {
-  font-family: 'JetBrains Mono', monospace; font-size: 0.62rem;
-  color: #6D6350; word-break: break-all; line-height: 1.4;
-}
-
-/* ── Service detail sub-view (replaces the node view while it is up) ──────
-   It was `position: absolute; inset: 0` — a sheet PAINTED OVER the node view,
-   which meant it inherited the node card's height: a service with two lines
-   of description floated in a parchment sheet sized for a host with fourteen
-   services and three paragraphs of lore (2026-08-16 — "so much blank
-   space on some of the services"). It is a FLOW child of `.card-inner` now:
-   `#card.svc-open` hides the node view's own children, so the card is exactly
-   as tall as the service's content, short for a short service and scrolling
-   through `.card-inner`'s existing cap for a long one.
-   The entrance always comes FROM THE LEFT — the same edge the card itself
-   enters from (v1.19.1), regardless of which side the card sits on; the
-   side-matched variant went with the absolute sheet. */
-.card-svc {
-  position: relative;
-  color: var(--card-ink);
-  display: flex; flex-direction: column;
-  animation: svc-slide 260ms var(--glide);
-}
-@keyframes svc-slide { from { opacity: 0; transform: translateX(-18px); } to { opacity: 1; transform: none; } }
-.card-svc[hidden] { display: none; }
-/* the flip: while the pane is up the node view's elements give up their room
-   (display, not opacity — a hidden node view must not hold the card open at
-   its own height, which was the whole complaint) */
-#card.svc-open .card-inner > :not(.card-svc) { display: none; }
-.csv-back {
-  align-self: flex-start; background: none; border: none; cursor: pointer;
-  font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.6rem; letter-spacing: 0.14em;
-  color: var(--card-ink-soft); padding: 2px 0 10px; transition: color 150ms;
-}
-.csv-back:hover { color: var(--gilt); }
-.csv-epi {
-  font-family: 'Alegreya Sans', sans-serif; font-style: italic; font-size: 0.76rem;
-  color: var(--card-ink-soft); margin-bottom: 6px;
-}
-.csv-name {
-  font-family: 'Cinzel', serif; font-weight: 700; font-size: 1rem; letter-spacing: 0.14em;
-  display: flex; align-items: center; gap: 9px; margin-bottom: 12px; color: var(--card-ink);
-}
-.csv-name .ldot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.csv-state { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
-.csv-state-t { font-family: 'Alegreya Sans', sans-serif; font-size: 0.9rem; color: var(--card-ink); }
-.csv-state-t.dim { color: var(--card-ink-soft); font-style: italic; }
-.csv-desc {
-  font-family: 'Alegreya Sans', sans-serif; font-size: 0.86rem; line-height: 1.5;
-  color: var(--card-ink-soft); margin: 6px 0 auto; padding-bottom: 12px;
-}
-.csv-desc strong { color: var(--card-ink); font-weight: 700; }
-/* ONE row (2026-08-15): OPEN IT HERE takes the width the two word-buttons
-   leave; nothing wraps, so the pane stays as short as its prose */
-.csv-actions { display: flex; flex-wrap: nowrap; align-items: stretch; gap: 6px; margin-top: 12px; }
-.csv-open {
-  flex: 1 1 auto; min-width: 0; text-align: center; white-space: nowrap;
-  background: var(--discover); color: #F9F5D7; text-decoration: none;
-  font-family: 'Cinzel', serif; font-size: 0.62rem; font-weight: 700; letter-spacing: 0.16em;
-  padding: 10px 10px 9px; border-radius: 2px; transition: background 200ms, box-shadow 200ms;
-}
-.csv-open:hover { background: var(--discover-hover); box-shadow: 0 4px 16px rgba(0,0,0,0.3); }
-.csv-metrics {
-  flex: 0 0 auto; white-space: nowrap;
-  background: none; border: 1px solid var(--discover); color: var(--discover); cursor: pointer;
-  font-family: 'Cinzel', serif; font-size: 0.62rem; font-weight: 700; letter-spacing: 0.16em;
-  padding: 10px 9px 9px; border-radius: 2px; transition: background 200ms, color 200ms;
-}
-.csv-metrics:hover { background: var(--discover); color: #F9F5D7; }
-/* (`.csv-close` lived here — the service sub-view's own ✕. The sub-view uses
-   `.csv-back` and the card's shared ✕ instead, and had stopped rendering one at
-   all; the rules matched nothing. It also referenced `--ink-dim`, a token that
-   does not exist in the palette. Removed 2026-07-31.) */
-.csv-url { font-family: 'JetBrains Mono', monospace; font-size: 0.6rem; color: var(--card-ink-soft); margin-top: 8px; word-break: break-all; }
 
 /* ── Index search box ───────────────────────────────── */
 .idx-search-wrap {
@@ -2231,8 +2354,6 @@ body.drawer-open .pth-panel { right: calc(5vw + var(--drawer-clear)); }
 #colophon.alarm { color: var(--sem-down); letter-spacing: 0.16em; }
 #colophon.silent { color: var(--ink-soft); }
 
-/* K5 — 'faith of the realm' uptime on the ivory card */
-.card-uptime { color: var(--discover); font-weight: 600; }
 
 /* ── Command palette — dark finding-glass, drawer idiom ── */
 #palette {
@@ -2609,6 +2730,9 @@ body.pre #scenes-list { opacity: 0; pointer-events: none; }
      place from 34px away rather than never having moved. */
   #card { transition: none; transform: none; }
   .card-svc { animation: none; }
+  /* the pull-tab card: the drawer, its tabs and its panes arrive, never travel */
+  .card-drawer, .card-tab, .card-tab::before { transition: none; }
+  .card-pane { animation: none; }
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -2855,31 +2979,6 @@ body.pre #scenes-list { opacity: 0; pointer-events: none; }
   box-shadow: 0 6px 24px rgba(0,0,0,0.5);
 }
 
-/* the card's vassal rows */
-.card-vassals-head {
-  font-family: 'IM Fell English', serif; font-style: italic;
-  font-size: 0.82rem; color: var(--card-ink-soft);
-  margin: 2px 0 4px; width: 100%;
-  grid-column: 1 / -1;   /* a heading rules both columns of .card-links, not one cell */
-}
-.card-vassal { opacity: 0.92; }
-
-/* pass-throughs: the services that cross a transit place (PANGOLIN, TAILSCALE,
-   CLOUDFLARE). Quieter than an owned service — the road is borrowed, not kept,
-   the same distinction .con-pass draws on the constellation's spokes. */
-.card-cross {
-  opacity: 0.92;
-  grid-column: 1 / -1;   /* a borrowed road carries its owner's name too, and
-                            "NEXTCLOUD (PUBLIC) · THE WILD" does not fit a 136px
-                            half-cell — these rows take the full width instead,
-                            which also tells them apart from the stalls above */
-}
-.card-cross .cross-label { overflow: hidden; text-overflow: ellipsis; }
-.card-cross .cross-from {
-  font-family: 'Alegreya Sans', sans-serif; font-weight: 400;
-  font-size: 0.62rem; letter-spacing: 0.02em; font-style: italic;
-  opacity: 0.62; margin-left: auto; padding-left: 6px; flex-shrink: 0;
-}
 
 /* ════════════════════════════════════════════════════════════════════════════
    2026-07-11d — clickable VLAN territories · void-bound roads · legend hues
@@ -3109,7 +3208,7 @@ body.pre #scenes-list { opacity: 0; pointer-events: none; }
    the vitals' dress — and the door. The button is a `.card-link` like the
    services below it, in the Discover pine, full width because it stands
    alone in its block. */
-.card-forge { margin-top: 10px; border-top: 1px solid rgba(33,28,20,0.14); padding-top: 8px; }
+.card-forge { padding: 10px 18px 12px; }   /* the SCHEDULE pane (2026-11-11) */
 .card-forge[hidden] { display: none; }
 .card-forge .cal-next { display: block; font-family: 'JetBrains Mono', monospace; font-size: 0.64rem; color: var(--card-ink-soft); margin: 0 0 7px; }
 .card-forge .cal-next b { color: var(--card-ink); font-weight: 600; }
@@ -3119,9 +3218,6 @@ body.pre #scenes-list { opacity: 0; pointer-events: none; }
   #calendar .ldg-list { --cal-name: 170px; --cal-meta: 130px; }
   .cal-gsub { display: none; }
 }
-.card-patches { color: var(--card-ink-soft); }
-.card-patches.warn { color: #a05e1f; font-weight: 600; }
-.card-patches.stale { font-style: italic; }
 
 /* ── THE ARMORY — hardware faceplates + drag-to-rearrange (2026-07-20) ── */
 /* (#rel-elevation's position/width now live on its base rule above) */
@@ -3312,38 +3408,6 @@ button.rel-port.selected {
    2026-07-31 — THE VIEWING GLASS · THE CONSTELLATION · the card's ⊖
    ════════════════════════════════════════════════════════════════════════════ */
 
-/* ── The card's third chrome button: pull back, stay on this place ─────────
-   Sits left of the – and the ×, in the same quiet ink, so the cluster reads as
-   one row of three rather than a new control bolted on. */
-.card-out {
-  position: absolute; top: 6px; right: 60px; color: var(--card-ink-soft);
-  background: none; border: none; cursor: pointer; font-size: 1.05rem;
-  line-height: 1; padding: 5px 8px; transition: color 150ms;
-}
-.card-out:hover { color: var(--gilt); }
-#card .card-out { z-index: 3; }
-#card.minimized .card-out { display: none; }   /* nothing to frame when it's a headline */
-
-/* ── ⁘ Split into its services ─────────────────────────────────────────────
-   Full width across the two-column service grid, in the outline voice of THE
-   PATH's buttons — it acts on the map, it doesn't open anything. */
-.card-split {
-  grid-column: 1 / -1;
-  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  background: none; border: 1px solid var(--discover); color: var(--discover);
-  cursor: pointer;
-  font-family: 'Cinzel', serif; font-size: 0.58rem; font-weight: 700; letter-spacing: 0.16em;
-  padding: 8px 10px 7px; border-radius: 2px;
-  transition: background 200ms, color 200ms;
-}
-.card-split:hover { background: var(--discover); color: #F9F5D7; }
-.card-split .cs-glyph { font-size: 0.9rem; line-height: 1; letter-spacing: 0; }
-body.constellation .card-split { background: var(--discover); color: #F9F5D7; }
-/* the split/gather label flips with the map's own state — no JS redraw, so
-   toggling never rebuilds the card (or its two live vitals gauges) */
-.card-split .cs-on { display: none; }
-body.constellation .card-split .cs-off { display: none; }
-body.constellation .card-split .cs-on { display: inline; }
 
 /* ── THE CONSTELLATION — a place scattered into its services ───────────────
    Satellites are ordinary markers at two-thirds scale with a mono label, so the

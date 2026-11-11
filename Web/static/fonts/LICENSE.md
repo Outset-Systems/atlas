@@ -10,6 +10,9 @@ the licence requires when the font files are redistributed.
 | Cinzel | `Cinzel-600/700.woff2` | Copyright 2012 The Cinzel Project Authors (https://github.com/NDISCOVER/Cinzel) |
 | IM Fell English | `IMFellEnglish-400.woff2`, `IMFellEnglish-400i.woff2` | Copyright (c) 2010 Igino Marini (www.iginomarini.com) |
 | JetBrains Mono | `JetBrainsMono-400/600.woff2` | Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono) |
+| EB Garamond | `EBGaramond-400-500.woff2`, `EBGaramond-400i.woff2` | Copyright 2017 The EB Garamond Project Authors (https://github.com/octaviopardo/EBGaramond12) |
+| Libre Franklin | `LibreFranklin-400-600.woff2` | Copyright 2015 The Libre Franklin Project Authors (https://github.com/impallari/Libre-Franklin) |
+| IBM Plex Mono | `IBMPlexMono-400/500.woff2` | Copyright © 2017 IBM Corp. with Reserved Font Name "Plex" |
 
 Each family keeps its Reserved Font Name as declared by its authors.
 
