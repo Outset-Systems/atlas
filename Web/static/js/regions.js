@@ -142,18 +142,17 @@ function paintFolds() {
     const s = sum[r.id];
     const words = M.foldWords(s);
     const open = `Open the detailed map of ${r.name}`;
+    // the tab is the region's name and nothing else (owner, 2026-11-11). What
+    // waits inside is a second row, shown while the tab is hovered or focused;
+    // trouble inside is said at rest by the tab's glow, in that state's colour.
+    if (s?.worst) tab.dataset.worst = s.worst; else delete tab.dataset.worst;
     if (!words) { tab.setAttribute('aria-label', open); continue; }
     const [count, ...ills] = words.split(', ');
-    const span = (cls, text) => {
-      const x = document.createElement('span');
-      x.className = cls;
-      x.setAttribute('aria-hidden', 'true');
-      if (text) x.textContent = text;
-      tab.appendChild(x);
-    };
-    span('rg-count', `· ${count}`);
-    if (s.worst) span(`svc-health ${A.svcHealthClass?.[s.worst] || ''}`.trim());
-    if (ills.length) span('rg-count', ills.join(', '));
+    const row = document.createElement('span');
+    row.className = 'rg-count';
+    row.setAttribute('aria-hidden', 'true');
+    row.textContent = words;
+    tab.appendChild(row);
     tab.setAttribute('aria-label',
       `${open}. ${count} ${s.count === 1 ? 'waits' : 'wait'} inside${ills.length ? ', ' + ills.join(', ') : ''}.`);
   }

@@ -474,9 +474,31 @@ function showServiceDetail(node, link) {
   const svcState = A.signalsFeed?.services?.[link.kuma]?.state;
   const hostState = A.signalsFeed?.nodes?.[node.id]?.state;
   const st = svcState || hostState;
+  /* The dot beside the name IS the live state now (owner, 2026-11-11). It was
+     the service's own hue, which on most services is green and read as a second
+     "answering" beside the chip that says it in words. The chip keeps the word
+     and drops its dot; with no live state the dot is the plain ink one. */
+  const dot = `<span class="svc-health ${st ? A.svcHealthClass[st] || '' : ''}" ` +
+    `title="${st ? esc(cap(HEALTH_LABEL[st] || st)) : 'No live state for this service'}"></span>`;
   const badge = st
-    ? `<span class="csv-chip"><span class="svc-health ${A.svcHealthClass[st] || ''}"></span>${esc(cap(HEALTH_LABEL[st] || st))}</span>`
+    ? `<span class="csv-chip">${esc(cap(HEALTH_LABEL[st] || st))}</span>`
     : `<span class="csv-chip dim">status unknown</span>`;
+  /* Updates: what the weekly patch survey says of the HOST, because that is
+     what the feed knows. Atlas has no per-service version to compare yet, and
+     the chip's title says so rather than implying one. */
+  const hostInfo = A.signalsFeed?.nodes?.[node.id];
+  let updates = '';
+  if (hostInfo && hostInfo.patches_pending != null) {
+    const n = hostInfo.patches_pending, sec = hostInfo.patches_security > 0 ? hostInfo.patches_security : 0;
+    const reboot = hostInfo.reboot_required > 0;
+    const words = n > 0
+      ? `${n} host update${n === 1 ? '' : 's'}${sec ? ` · ${sec} security` : ''}`
+      : reboot ? 'Host needs a restart' : 'Host up to date';
+    const told = `From the weekly patch survey of ${node.name}` +
+      `${n > 0 && reboot ? ', which also needs a restart' : ''}. ` +
+      'Atlas does not yet know this service\'s own version.';
+    updates = `<span class="csv-chip${n > 0 || reboot ? ' warn' : ''}" title="${esc(told)}">${esc(words)}</span>`;
+  }
   const group = link.require_group
     ? `<span class="csv-chip" title="Only this group may open it">${ICON.lock}${esc(link.require_group)} only</span>` : '';
   const roleShort = (node.role || '').split('·')[0].trim();
@@ -493,8 +515,8 @@ function showServiceDetail(node, link) {
   svc.innerHTML =
     `<button class="csv-back" id="csv-back" title="Back to ${esc(node.name)}">${ICON.back}Back to <b>${esc(node.name)}</b></button>` +
     `<div><p class="csv-epi">A service of ${esc(node.name)}${zone ? ' · ' + esc(zone.name) : ''}</p>` +
-    `<h3 class="csv-name"><span class="ldot" style="background:${esc(link.hue)}"></span>${esc(link.label)}</h3></div>` +
-    `<div class="csv-state">${badge}${group}</div>` +
+    `<h3 class="csv-name">${dot}${esc(link.label)}</h3></div>` +
+    `<div class="csv-state">${badge}${updates}${group}</div>` +
     `<p class="csv-desc">${desc
       ? esc(desc)
       : `Hosted on <strong>${esc(node.name)}</strong>${roleShort ? ` — ${esc(roleShort)}` : ''}, ` +
