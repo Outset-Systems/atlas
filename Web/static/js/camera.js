@@ -206,7 +206,7 @@ A.zoomAt = zoomAt;
    Capture the pointer only once a real drag starts: capturing on pointerdown
    retargets the eventual click to the viewport and markers never receive it. */
 let drag = null, vel = { x: 0, y: 0 }, inertiaRAF = 0;
-A.lastWasDrag = false;
+let lastWasDrag = false;
 
 viewport.addEventListener('pointerdown', (e) => {
   if (e.button !== 0) return;
@@ -239,10 +239,10 @@ viewport.addEventListener('pointermove', (e) => {
 
 function endDrag() {
   if (!drag) return;
-  A.lastWasDrag = drag.moved;
+  lastWasDrag = drag.moved;
   drag = null;
   viewport.classList.remove('dragging');
-  if (A.lastWasDrag && !REDUCED) {
+  if (lastWasDrag && !REDUCED) {
     const decay = () => {
       vel.x *= CFG.INERTIA_DECAY; vel.y *= CFG.INERTIA_DECAY;
       if (Math.abs(vel.x) + Math.abs(vel.y) < 0.5) return;
@@ -315,7 +315,7 @@ function autoFrameSky() {
 
 /* background click closes the card (but never right after a pan) */
 viewport.addEventListener('click', () => {
-  if (A.lastWasDrag) { A.lastWasDrag = false; return; }
+  if (lastWasDrag) { lastWasDrag = false; return; }
   A.closeCard?.();
 });
 

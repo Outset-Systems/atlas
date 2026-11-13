@@ -33,6 +33,7 @@ import os
 import re
 
 import settings
+import theme as _theme
 from jsonio import write_bytes_atomic, write_json_atomic
 
 log = logging.getLogger("atlas.data.mapart")
@@ -84,6 +85,14 @@ SIGNATURES = (
     (b"GIF89a", "gif"),
 )
 
+#: The `Content-Type` each format `sniff` can name is served with.
+MIMETYPES = {
+    "png": "image/png",
+    "jpg": "image/jpeg",
+    "gif": "image/gif",
+    "webp": "image/webp",
+}
+
 #: The default, and what an unconfigured map still shows.
 #:
 #: WEBP since 2026-07-31. The render was a 2048² **RGBA** PNG — an alpha channel
@@ -99,7 +108,6 @@ SIGNATURES = (
 #: carries no `?v=` cache-buster (the design notes 2026-07-24). The `.webp` itself was
 #: re-encoded in place from lossless to q=95 within the same unreleased version,
 #: so no deployment ever saw the first one.
-import theme as _theme
 
 # The bundled backdrop when a dataset names none: the theme's (THE THEME, v1.48.0).
 DEFAULT = _theme.T["map_art"]
@@ -165,6 +173,25 @@ def url_of(name, bundled):
     return f"static/map/{name}" if bundled else f"map-art/{name}"
 
 
+def read_upload(name):
+    """`(blob, kind)` for the uploaded render `name`, as `/map-art/<name>`
+    serves it: `(None, None)` when no such upload can be read, and
+    `(blob, None)` when the file is there and its bytes are not a raster image
+    `sniff` knows. Bundled art is not looked at; static/ serves that."""
+    safe = safe_name(name)
+    if not safe:
+        return None, None
+    path = os.path.join(settings.MAPS_DIR, safe)
+    if not os.path.isfile(path):
+        return None, None
+    try:
+        with open(path, "rb") as handle:
+            blob = handle.read()
+    except OSError:
+        return None, None
+    return blob, sniff(blob[:16])
+
+
 def _style_points(raw):
     """{id: {x, y}} from a sidecar's `places` or `zones`, well-formed entries only."""
     if not isinstance(raw, dict):
@@ -183,7 +210,7 @@ def _style_points(raw):
 
 #: Where the card's emblems live; a sidecar may only name one that is there.
 ICONS_DIR = os.path.join(settings.HERE, "static", "icons")
-_ICON_SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
+_ICON_SLUG = _theme.SLUG_RE
 
 
 def _style_logos(raw):
@@ -234,6 +261,27 @@ def _style_words(raw):
     return out
 
 
+def _sidecar_name(render):
+    """The sidecar's filename for the render named `render`."""
+    return render.rsplit(".", 1)[0] + STYLE_SUFFIX
+
+
+class _NotAnObject(ValueError):
+    """A sidecar that parsed as JSON and is not an object."""
+
+
+def _read_sidecar(path):
+    """The sidecar at `path`, as the dict it holds. Raises OSError when the
+    file cannot be read and ValueError when it is not JSON; a sidecar that
+    parses and is not an object raises `_NotAnObject`, a ValueError a caller
+    can tell from the other."""
+    with open(path, encoding="utf-8") as handle:
+        raw = json.load(handle)
+    if not isinstance(raw, dict):
+        raise _NotAnObject("not an object")
+    return raw
+
+
 def style(name):
     """What the sidecar beside render `name` says, as {label, regions}; an
     empty answer when there is no sidecar or it cannot be read. A broken
@@ -241,16 +289,13 @@ def style(name):
     safe = safe_name(name)
     if not safe:
         return {}
-    filename = safe.rsplit(".", 1)[0] + STYLE_SUFFIX
+    filename = _sidecar_name(safe)
     for directory in (BUNDLED_DIR, settings.MAPS_DIR):
         path = os.path.join(directory, filename)
         if not os.path.isfile(path):
             continue
         try:
-            with open(path, encoding="utf-8") as handle:
-                raw = json.load(handle)
-            if not isinstance(raw, dict):
-                raise ValueError("not an object")
+            raw = _read_sidecar(path)
         except (OSError, ValueError) as e:
             log.warning("map style %s is unreadable: %s", filename, e)
             return {}
@@ -283,7 +328,7 @@ def save_layout(name, body):
     path, bundled = resolve(safe) if safe else (None, False)
     if not path:
         raise ValueError("no such map image")
-    filename = safe.rsplit(".", 1)[0] + STYLE_SUFFIX
+    filename = _sidecar_name(safe)
     if bundled or os.path.isfile(os.path.join(BUNDLED_DIR, filename)):
         raise ValueError("this map style is built into the Atlas, so its layout is part of the image")
     if not isinstance(body, dict):
@@ -292,12 +337,11 @@ def save_layout(name, body):
     raw = {}
     if os.path.isfile(target):
         try:
-            with open(target, encoding="utf-8") as handle:
-                raw = json.load(handle)
+            raw = _read_sidecar(target)
+        except _NotAnObject:
+            raise ValueError(f"the sidecar {filename} is not an object, so it was left alone") from None
         except (OSError, ValueError) as e:
             raise ValueError(f"the sidecar {filename} cannot be read, so it was left alone: {e}") from e
-        if not isinstance(raw, dict):
-            raise ValueError(f"the sidecar {filename} is not an object, so it was left alone")
     written = 0
     for key in ("places", "zones"):
         points = _style_points(body.get(key))
@@ -383,7 +427,6 @@ def save(name, blob):
         raise ValueError(f"'{safe}' is the name of a render built into the Atlas — "
                          f"pick another, or the built-in one would always win")
 
-    os.makedirs(settings.MAPS_DIR, exist_ok=True)
     path = os.path.join(settings.MAPS_DIR, safe)
     write_bytes_atomic(path, blob)          # never a half-written backdrop, never a lost one
     log.info("map art %s stored (%s, %d bytes)", safe, kind, len(blob))

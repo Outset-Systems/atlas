@@ -34,7 +34,7 @@ from .common import ensure_uncharted as _ensure_uncharted
 # The HTTP half lives in netbox_client so the relay can import it without the
 # DB stack; re-exported here so `from importers.netbox import ...` still works.
 from .netbox_client import (  # noqa: F401
-    USER_AGENT, NetBoxClient, NetBoxError, fetch_snapshot,
+    NetBoxClient, NetBoxError, fetch_snapshot,
 )
 
 # zone hue palette for auto-created zones (existing zone hues are hand-picked)

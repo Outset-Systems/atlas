@@ -1,9 +1,9 @@
-/* Atlas — THE decoy feed WATCH: the decoys drawn where they
+/* Atlas — THE DECOY WATCH: the decoys drawn where they
    stand, as a map layer.
 
    THE DECOYS scene answers "what stones exist and which has spoken" as
    a LIST; this layer answers the map's own version of that question — WHERE
-   the watch is. Toggled like the network layer (👁 in the control column, G),
+   the watch is. Toggled with G, or the 👁 among the tools THE ATLAS drops on hover,
    it opens an eye over every place a stone guards: teal and quiet when the
    stone is silent, amber when stirred, alarm-red and pulsing when one is
    SPEAKING, and grey when the watch itself cannot be heard. Places outside

@@ -204,6 +204,55 @@ export function mergeExits(exits, tol = 4) {
   return groups;
 }
 
+/** Every place that stands on region `id`'s map, before any folding:
+    `{ place id: {x, y} }` in that map's percent. `spots` is where each place
+    that is drawn at all stands on the main map (`{ id: {x, y} }`). */
+export function standingOn(regions, id, spots) {
+  const out = {};
+  for (const [pid, p] of Object.entries(spots || {})) {
+    const at = placeOn(regions, id, { id: pid, x: p.x, y: p.y });
+    if (at) out[pid] = at;
+  }
+  return out;
+}
+
+/** The places drawn on some map above region `levelId`: the main map and each
+    region on the way down to it, less what each of those maps folds away. A
+    Set of place ids. `spots` as standingOn takes it. */
+export function drawnAbove(regions, levelId, spots, routes) {
+  const ids = new Set();
+  const add = (at, onId) => {
+    const hidden = foldedAt(regions, onId, at, routes);
+    for (const id of Object.keys(at)) if (!hidden.has(id)) ids.add(id);
+  };
+  add(spots, null);
+  for (const r of chainOf(regions, levelId).slice(0, -1)) add(standingOn(regions, r.id, spots), r.id);
+  return ids;
+}
+
+/** The roads that leave region `levelId`'s map: one entry per line,
+    `{from, to, ids, names, label, at, kind, road}` (mergeExits' answer).
+    `here` is what is drawn on this map (`{ id: {x, y} }`), `spots` where every
+    drawn place stands on the main map, `names` each place's name by id. A road
+    counts when one end is drawn here and the other is drawn on a map above. */
+export function exitsFor(regions, levelId, here, spots, names, routes) {
+  let above = null;
+  const raw = [];
+  for (const road of routes || []) {
+    const a = here[road.from], b = here[road.to];
+    if (Boolean(a) === Boolean(b)) continue;            // both drawn here, or neither
+    const nearId = a ? road.from : road.to;
+    const farId = a ? road.to : road.from;
+    const spot = Object.hasOwn(spots, farId) ? spots[farId] : null;
+    if (!spot) continue;                                // no such place, or one kept off the map
+    above ??= drawnAbove(regions, levelId, spots, routes);
+    if (!above.has(farId)) continue;
+    const at = exitPoint(here[nearId], carryTo(regions, levelId, { id: farId, x: spot.x, y: spot.y }));
+    if (at) raw.push({ from: nearId, to: farId, name: names[farId], at, kind: road.kind, road });
+  }
+  return mergeExits(raw);
+}
+
 /** The part of a map the window shows, in that map's percent. */
 export function viewRect(cam, mapW, mapH, vw, vh) {
   const sw = mapW * cam.k;
@@ -234,7 +283,7 @@ export function shown(view, r) {
    could no longer be reached, so the region only opened from its tab. 55% is
    above what a click on a place gives (about 52%), so going to a place does
    not open the region around it; one + from there does. */
-export const ENTER_AT = 0.55;    // the rectangle fills 55% of the window…
+const ENTER_AT = 0.55;   // the rectangle fills 55% of the window…
 export const REARM_BELOW = 0.35; // …and must fall back under 35% before it can fire again
 
 /** The region zooming would open now, or null. Only regions drawn on this map

@@ -21,7 +21,7 @@
 import { A, CFG } from './config.js';
 import * as THREE from './vendor/three.module.js';
 import { OrbitControls } from './vendor/OrbitControls.js';
-import { UH, RACK_W, LED_BY_STATE, faceplate, ledSpot, rackDepthMm, setRackTheme } from './rack-model.js';
+import { UH, RACK_W, LED_BY_STATE, crownOf, faceplate, ledSpot, rackDepthMm, setRackTheme } from './rack-model.js';
 setRackTheme(CFG.THEME);   // THE THEME (v1.48.0)
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -348,8 +348,7 @@ function enter({ container, model, ledStateFor, onPick, onHover, onTurn, onLost 
   rig.controls = controls;
 
   // selection: default to the crown vessel (parity with the 2D view)
-  const crown = model.devices.find((d) => d.slot && d.slot.node === 'hypervisor')
-    || model.devices[0];
+  const crown = crownOf(model.devices);
 
   const pickAt = (e) => {
     const rect = renderer.domElement.getBoundingClientRect();
@@ -403,7 +402,6 @@ function enter({ container, model, ledStateFor, onPick, onHover, onTurn, onLost 
     controls.update();
     renderer.render(scene, camera);
   };
-  rig.clock = clock;
   tick();
   return true;
 }

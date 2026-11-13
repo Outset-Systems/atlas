@@ -4,20 +4,24 @@ Where the live signals come from, a real test of each, and a read-only list of
 every setting. Split out of `admin.py` (2026-11-09); same blueprint, same gate.
 """
 
+import glob
 import logging
 import os
+import re
 
-from flask import jsonify, request
+from flask import jsonify
 
 import settings
 from context import atlas
-from security import actor, write_refusal
+from security import actor
 
-
-log = logging.getLogger("atlas.api.v2")
-from .admin import (  # noqa: E402
+from . import _body, admin
+from .admin import (
     _probe_allowed, _secret_stays_home, _valid_url, admin_bp,
 )
+from .auth import write_required
+
+log = logging.getLogger("atlas.api.v2")
 
 
 # ── THE SOURCES — integration settings (v1.37.0) ─────────────────────────────
@@ -26,9 +30,8 @@ def _hub_state():
     last time — so the form shows the truth beside the settings."""
     try:
         hub = atlas().signals
-        feed = hub._cache or {}
-        return {"enabled": list(getattr(hub, "enabled", [])),
-                "last": dict(feed.get("sources") or {})}
+        last = hub.last_sources()
+        return {"enabled": list(getattr(hub, "enabled", [])), "last": last}
     except Exception:  # noqa: BLE001 — a form must never 500 over a status line
         return {"enabled": [], "last": {}}
 
@@ -100,18 +103,16 @@ _SECRETISH = ("KEY", "SECRET", "PASSWORD", "TOKEN")
 
 
 def _known_env_names():
-    """Every environment variable settings.py (and the two secret readers)
-    consult, found by reading the source — so a knob added tomorrow shows up
+    """Every environment variable the app consults, found by reading the
+    source: every double-quoted name in the modules beside settings.py and
+    under `api/`, plus the lists below — so a knob added tomorrow shows up
     without anyone remembering to register it."""
-    import glob as _glob
-    import re as _re
     import integrations
     import auth_config
-    import settings as _settings
     names = set()
-    web = os.path.dirname(os.path.abspath(_settings.__file__))
-    pattern = _re.compile(r'"((?:ATLAS|PROMETHEUS)_[A-Z0-9_]+|HUB_URL)"')
-    for path in _glob.glob(os.path.join(web, "*.py")) + _glob.glob(os.path.join(web, "api", "**", "*.py"), recursive=True):
+    web = os.path.dirname(os.path.abspath(settings.__file__))
+    pattern = re.compile(r'"((?:ATLAS|PROMETHEUS)_[A-Z0-9_]+|HUB_URL)"')
+    for path in glob.glob(os.path.join(web, "*.py")) + glob.glob(os.path.join(web, "api", "**", "*.py"), recursive=True):
         try:
             with open(path, encoding="utf-8") as fh:
                 names |= set(pattern.findall(fh.read()))
@@ -189,17 +190,15 @@ def deployment_view():
 
 
 @admin_bp.route("/integrations/test", methods=["POST"])
+@write_required
 def integrations_test():
     """Probe ONE source with the values as typed (unsaved) — a blank key means
     'the one in force', so a stored secret can be tested without retyping it, at
     the address it was saved with and nowhere else."""
-    refusal = write_refusal()
-    if refusal:
-        return refusal
     if not _probe_allowed(actor()):
         return jsonify({"ok": False, "error": "Too many tests in a minute — wait a moment."}), 429
     import integrations
-    body = request.get_json(silent=True) or {}
+    body = _body()
     kind = str(body.get("kind") or "").strip().lower()
     if kind not in _PROBE_FIELDS:
         return jsonify({"ok": False, "error": f"not a source that can be tested: {kind!r}"}), 400
@@ -222,19 +221,19 @@ def integrations_test():
         if path and not integrations.valid_decoys_path(path):
             return jsonify({"ok": False, "error": "ATLAS_DECOYS_PATH must be an absolute "
                                                   "path like /api/stones."}), 400
-    # the path only when one was typed: `_probe(kind, url, key)` stays the call shape
-    ok, detail = _probe(kind, url, key, path=path) if path else _probe(kind, url, key)
+    # the path only when one was typed: `_probe(kind, url, key)` stays the call shape.
+    # Asked through `admin`, the name the probe is reached by everywhere else.
+    ok, detail = (admin._probe(kind, url, key, path=path) if path
+                  else admin._probe(kind, url, key))
     log.info("v2: source test %s by %s: ok=%s", kind, actor(), ok)
     return jsonify({"ok": ok, "detail": detail if ok else "", "error": "" if ok else detail})
 
 
 @admin_bp.route("/integrations", methods=["POST"])
+@write_required
 def integrations_save():
-    refusal = write_refusal()
-    if refusal:
-        return refusal
     import integrations
-    proposed = (request.get_json(silent=True) or {}).get("settings") or {}
+    proposed = _body().get("settings") or {}
     unknown = [k for k in proposed if k not in integrations.ALLOWED]
     if unknown:
         return jsonify({"error": f"not an integration setting: {unknown[0]}"}), 400
@@ -290,7 +289,7 @@ def integrations_save():
     log.info("v2: integration settings changed by %s", actor())
     # the hub rebuilds on its next poll (it watches the file's mtime); make it now
     try:
-        atlas().signals._refresh_adapters()
+        atlas().signals.reload()
     except Exception:  # noqa: BLE001 — the next poll will
         pass
     return jsonify({"ok": True, "settings": described, "hub": _hub_state()})

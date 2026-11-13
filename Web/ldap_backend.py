@@ -2,8 +2,9 @@
 
 The hosted Atlas does not sit behind the Hub, so it cannot inherit the Hub's
 AD identity headers; when a directory is wanted, this module binds to it
-directly, the same way the Hub itself does. Everything is environment
-configuration, nothing is hard-coded:
+directly, the same way the Hub itself does. Every setting is read from the
+saved Settings file first and the environment second (`_cfg`), nothing is
+hard-coded:
 
     ATLAS_AUTH_BACKENDS        CSV, order = try order. "local" (default),
                                "ldap", or "local,ldap". ldap is only live when
@@ -73,17 +74,25 @@ def _cfg(name, default="", overrides=None):
     return (auth_config.get(name) or os.environ.get(name) or default).strip()
 
 
+def _order(value):
+    """A configured backend list as lowercase names, in order, blanks dropped."""
+    return [b.strip().lower() for b in value.split(",") if b.strip()]
+
+
+def is_ldaps(url):
+    """True for an `ldaps://` URL, the only scheme a bind may use."""
+    return url.lower().startswith("ldaps://")
+
+
 def enabled():
-    backends = [b.strip().lower() for b in
-                _cfg("ATLAS_AUTH_BACKENDS", "local").split(",")]
+    backends = _order(_cfg("ATLAS_AUTH_BACKENDS", "local"))
     return ("ldap" in backends and bool(_cfg("ATLAS_LDAP_URL"))
             and bool(_cfg("ATLAS_LDAP_BASE_DN")))
 
 
 def backends():
     """The configured try-order, filtered to what is actually usable."""
-    order = [b.strip().lower() for b in
-             _cfg("ATLAS_AUTH_BACKENDS", "local").split(",") if b.strip()]
+    order = _order(_cfg("ATLAS_AUTH_BACKENDS", "local"))
     return [b for b in order if b == "local" or (b == "ldap" and enabled())]
 
 
@@ -152,7 +161,7 @@ def _group_list(value):
     return [p.strip() for p in value.split(sep) if p.strip()]
 
 
-def _matches(group_dns, configured, base_dn):
+def _matches(group_dns, configured):
     """True if any honoured group DN matches a configured name or full DN.
 
     Accepts either form in the config: a bare CN (`atlas-admins`, matched against
@@ -191,32 +200,9 @@ def _real_connect(url, upn, password, timeout, ca_file=None):
                       receive_timeout=timeout)
 
 
-def authenticate(username, password, overrides=None):
-    """Bind as the user. Returns (ok, info) where info carries
-    username/display_name/email/groups/is_admin. Never raises on a wrong
-    password — (False, {}) — but DOES raise on misconfiguration (bad URL
-    scheme), because that must fail loudly at the first login attempt, not
-    read as one more wrong password forever.
-
-    `overrides` binds against proposed settings without applying them (the
-    SETTINGS page's "test"); see `_cfg`.
-    """
-    url = _cfg("ATLAS_LDAP_URL", overrides=overrides)
-    base_dn = _cfg("ATLAS_LDAP_BASE_DN", overrides=overrides)
-    if not url.lower().startswith("ldaps://"):
-        raise ValueError("ATLAS_LDAP_URL must be ldaps:// — plaintext LDAP "
-                         "carries the user's password and is refused.")
-    username = (username or "").strip()
-    # An empty password to an AD simple bind is an ANONYMOUS bind, and it
-    # SUCCEEDS. Without this check, a blank password would log in as anyone.
-    if not username or not (password or "").strip():
-        return False, {}
-    if not re.match(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$", username):
-        return False, {}
-
-    domain = _cfg("ATLAS_LDAP_UPN_DOMAIN", overrides=overrides) or _upn_domain(base_dn)
-    timeout = int(_cfg("ATLAS_LDAP_TIMEOUT", "5", overrides=overrides) or 5)
-    upn = f"{username}@{domain}"
+def _bind(url, upn, password, timeout, overrides=None):
+    """Bind as `upn`. Returns (True, conn), or (False, None) when the directory
+    refused the bind. A ValueError is misconfiguration and is raised."""
     try:
         if _connect_fn:                      # test seam: unchanged 4-arg shape
             conn = _connect_fn(url, upn, password, timeout)
@@ -228,8 +214,13 @@ def authenticate(username, password, overrides=None):
     except Exception:
         # Wrong password, unreachable DC, expired account — all one answer.
         # The audit row (written by the caller) records that it was ldap.
-        return False, {}
+        return False, None
+    return True, conn
 
+
+def _lookup(conn, base_dn, username, upn):
+    """The bound account's (memberOf DNs, display name, mail), or None when
+    the directory does not name exactly one account. Unbinds either way."""
     try:
         from ldap3 import SUBTREE
     except ImportError:  # test seam in play; real ldap3 absent
@@ -256,7 +247,7 @@ def authenticate(username, password, overrides=None):
         if not conn.entries or len(conn.entries) > 1:
             # More than one match means the directory cannot tell us who bound;
             # guessing is exactly the confusion this filter exists to end.
-            return False, {}
+            return None
         entry = conn.entries[0]
         raw_groups = list(entry.memberOf.values) if entry.memberOf else []
         display = str(entry.displayName) if entry.displayName else username
@@ -266,13 +257,49 @@ def authenticate(username, password, overrides=None):
             conn.unbind()
         except Exception:
             pass
+    return raw_groups, display, email
+
+
+def authenticate(username, password, overrides=None):
+    """Bind as the user. Returns (ok, info) where info carries
+    username/display_name/email/groups/is_admin. Never raises on a wrong
+    password — (False, {}) — but DOES raise on misconfiguration (bad URL
+    scheme), because that must fail loudly at the first login attempt, not
+    read as one more wrong password forever.
+
+    `overrides` binds against proposed settings without applying them (the
+    SETTINGS page's "test"); see `_cfg`.
+    """
+    url = _cfg("ATLAS_LDAP_URL", overrides=overrides)
+    base_dn = _cfg("ATLAS_LDAP_BASE_DN", overrides=overrides)
+    if not is_ldaps(url):
+        raise ValueError("ATLAS_LDAP_URL must be ldaps:// — plaintext LDAP "
+                         "carries the user's password and is refused.")
+    username = (username or "").strip()
+    # An empty password to an AD simple bind is an ANONYMOUS bind, and it
+    # SUCCEEDS. Without this check, a blank password would log in as anyone.
+    if not username or not (password or "").strip():
+        return False, {}
+    if not re.match(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$", username):
+        return False, {}
+
+    domain = _cfg("ATLAS_LDAP_UPN_DOMAIN", overrides=overrides) or _upn_domain(base_dn)
+    timeout = int(_cfg("ATLAS_LDAP_TIMEOUT", "5", overrides=overrides) or 5)
+    upn = f"{username}@{domain}"
+    bound, conn = _bind(url, upn, password, timeout, overrides)
+    if not bound:
+        return False, {}
+    found = _lookup(conn, base_dn, username, upn)
+    if found is None:
+        return False, {}
+    raw_groups, display, email = found
 
     scope = (_cfg("ATLAS_LDAP_GROUP_SCOPE", "base", overrides=overrides) or "base").lower()
     group_dns = _in_scope(raw_groups, base_dn, scope)
     groups = [_cn(dn) for dn in group_dns]
 
     access = _group_list(_cfg("ATLAS_LDAP_ACCESS_GROUPS", overrides=overrides))
-    if access and not _matches(group_dns, access, base_dn):
+    if access and not _matches(group_dns, access):
         return False, {}
     admin_groups = _group_list(_cfg("ATLAS_LDAP_ADMIN_GROUPS", envnames.env("ATLAS_ADMIN_GROUP"),
                                     overrides=overrides))
@@ -281,5 +308,5 @@ def authenticate(username, password, overrides=None):
         "display_name": display,
         "email": email,
         "groups": groups,
-        "is_admin": _matches(group_dns, admin_groups, base_dn),
+        "is_admin": _matches(group_dns, admin_groups),
     }

@@ -27,11 +27,12 @@ than a full token's in three ways, each enforced here and nowhere else:
 `seal` then takes a second pass over every answer and drops any key that names a
 withheld kind of thing, in case a tool builds one some other way.
 
-Three things carry no review of their own. A network is given only when a place
+Four things carry no review of their own. A network is given only when a place
 this view holds sits in it, since an import can chart a network and a network
-of nothing but withheld places says what they are. A scheduled job is given by
-its name, and left out when that name names a withheld place. The map's title
-is given.
+of nothing but withheld places says what they are. A route is given unless one
+of its ends is a withheld place, which the same scrubbing drops. A scheduled
+job is given by its name, and left out when that name names a withheld place.
+The map's title is given.
 
 What still leaves: the names of checked places and services, what they are for,
 how they connect and whether they are well. This reduces what a cloud tool

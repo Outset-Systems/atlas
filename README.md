@@ -48,7 +48,9 @@ Every name and address in these pictures is invented.
   between them, and the services each one runs. Pan, zoom, search with `/`,
   and open any place for its details.
 - **Live health.** Markers turn with the state Uptime Kuma reports, and a UniFi
-  controller can report what is connected right now. Prometheus and Loki fill
+  controller can report what is connected right now. With no monitoring at
+  all, Atlas can check the service URLs you charted itself: it asks only what
+  is on the map, so it still never scans. Prometheus and Loki fill
   the place cards' vitals and charts. A source that goes down only removes its
   markers; the map keeps working.
 - **Know what a person checked.** Every place records when it was charted,

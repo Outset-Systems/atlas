@@ -3,6 +3,7 @@
    to glide there / open it. The biggest daily-use win, zero dependencies. */
 
 import { A, CFG, $, esc, host, zoneById, FALLBACK_HUE } from './config.js';
+import { rank } from './palette-model.js';
 
 let root, input, listEl;
 let items = [];       // full searchable index: {kind, label, sub, hue, run}
@@ -42,29 +43,10 @@ function buildIndex() {
   }
 }
 
-/** Subsequence fuzzy match with a light score (contiguous + word-start win). */
-function score(hay, q) {
-  if (!q) return 0;
-  let hi = 0, s = 0, streak = 0;
-  for (const ch of q) {
-    const at = hay.indexOf(ch, hi);
-    if (at === -1) return -1;              // not a subsequence → drop
-    if (at === hi) streak++; else streak = 0;
-    s += 1 + streak * 2 + (at === 0 || hay[at - 1] === ' ' ? 3 : 0);
-    hi = at + 1;
-  }
-  return s;
-}
-
 function render() {
   const q = input.value.trim().toLowerCase();
-  shown = (q
-    ? items.map((it) => ({ it, sc: score(it.hay, q) }))
-        .filter((r) => r.sc >= 0)
-        .sort((a, b) => b.sc - a.sc || a.it.label.length - b.it.label.length)
-        .map((r) => r.it)
-    : items.slice()                        // empty query → everything (places first)
-  ).slice(0, CFG.PALETTE_MAX);
+  // a subsequence fuzzy match, best first; an empty query is everything (places first)
+  shown = rank(items, q, CFG.PALETTE_MAX);
   active = 0;
 
   listEl.innerHTML = shown.length

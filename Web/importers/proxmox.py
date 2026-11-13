@@ -103,7 +103,7 @@ def candidates(snapshot):
                                  detail=f"{hw} · {g.get('status') or 'unknown'}"))
     notes = []
     if silent:
-        notes.append(f"{silent} running guest{'' if silent == 1 else 's'} did not report an address. "
+        notes.append(f"{plural(silent, 'running guest')} did not report an address. "
                      "That takes the QEMU guest agent, and a role that may read it.")
     return rows, notes
 

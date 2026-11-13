@@ -13,9 +13,10 @@
    it through `A`: openCard, closeCard, cardOpen, setCardSide,
    showServiceDetail. Registered in atlas.js after ui.js. */
 
-import { A, CFG, $, esc, host, glassAttrs, zoneById, nodeById, FALLBACK_HUE } from './config.js';
+import { A, CFG, $, esc, host, glassAttrs, svcKey, zoneById, nodeById, FALLBACK_HUE } from './config.js';
 import { say } from './words.js';
 import { calendarPointerHTML } from './calendar.js';
+import * as M from './card-model.js';
 
 const card = $('card');
 
@@ -42,14 +43,10 @@ const ICON = {
    clamp to 0–100: these are percentages, and one bad sample must not rescale
    the week. */
 function sparkHTML(label, series, nowVal) {
-  const pts = (series || []).filter((p) => Number.isFinite(p?.[1]));
+  const w = 160, h = 40;
+  const line = M.sparkPoints(series, w, h);
   let svg = '';
-  if (pts.length > 1) {
-    const w = 160, h = 40;
-    const t0 = pts[0][0], t1 = pts[pts.length - 1][0];
-    const xs = (t) => ((t - t0) / Math.max(1, t1 - t0)) * w;
-    const ys = (v) => h - (Math.min(100, Math.max(0, v)) / 100) * h;
-    const line = pts.map((p) => `${xs(p[0]).toFixed(1)},${ys(p[1]).toFixed(1)}`).join(' ');
+  if (line) {
     svg = `<svg class="cv-spark-svg" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true">` +
       `<polygon class="cv-spark-fill" points="0,${h} ${line} ${w},${h}"></polygon>` +
       `<polyline class="cv-spark-line" points="${line}"></polyline></svg>`;
@@ -78,15 +75,7 @@ async function copyText(text) {
    and the note is the rest of the path, without `.md`. With no root
    configured, ask Obsidian to find the note by its absolute path instead —
    which works only where the vault is registered at that same path. */
-function obsidianHref(scroll) {
-  const root = String(CFG.SCROLL_ROOT || '');
-  if (root && scroll.toLowerCase().startsWith(root.toLowerCase())) {
-    const vault = root.replace(/[\\/]+$/, '').split(/[\\/]/).pop();
-    const file = scroll.slice(root.length).replace(/^[\\/]+/, '').replace(/\\/g, '/').replace(/\.md$/i, '');
-    if (vault && file) return `obsidian://open?vault=${encodeURIComponent(vault)}&file=${encodeURIComponent(file)}`;
-  }
-  return `obsidian://open?path=${encodeURIComponent(scroll)}`;
-}
+const obsidianHref = (scroll) => M.obsidianHref(scroll, String(CFG.SCROLL_ROOT || ''));
 
 /* ── the emblem ──────────────────────────────────────────────────────────── */
 /* -> static/icons/<slug>.svg, drawn ivory on a disc in the zone's ink. A map
@@ -249,8 +238,9 @@ document.fonts?.ready?.then(() => { if (A.cardOpen()) layoutCard(); });
 document.fonts?.addEventListener?.('loadingdone', () => { if (A.cardOpen()) layoutCard(); });
 
 /* ── the card ────────────────────────────────────────────────────────────── */
-A.openCard = function openCard(n) {
-  const zone = zoneById(n.zone);
+/* A.openCard fills the card one section at a time, each from its own function,
+   in the order they stand here. */
+function fillHead(n, zone) {
   const hue = zone ? zone.hue : FALLBACK_HUE;
   card.style.setProperty('--card-hue', hue);
   setPortrait(n);
@@ -267,10 +257,11 @@ A.openCard = function openCard(n) {
     parentBtn.innerHTML = `${esc(cap(say('vassal')))} of <b>${esc(parent.name)}</b>${ICON.chev}`;
     parentBtn.onclick = (e) => { e.stopPropagation(); A.focusNode(parent.id); };
   }
+}
 
+function fillStrip(info) {
   /* THE STRIP — only what the feed can vouch for: no cell for a number nobody
      reported, and no strip at all when the watchers are silent. */
-  const info = A.signalsFeed?.nodes?.[n.id];
   const cells = [];
   if (info?.state) {
     cells.push(['State', `<span class="svc-health ${A.svcHealthClass?.[info.state] || ''}"></span>` +
@@ -279,17 +270,16 @@ A.openCard = function openCard(n) {
   // K5 — "faith of the realm": 30-day uptime
   if (typeof info?.uptime_30d === 'number') cells.push(['30 days', `${info.uptime_30d.toFixed(2)}%`, 'mono']);
   // the patch survey (weekly, via Prometheus) — absent when the watchers can't see it
-  const pi = info;
   let patchLine = '';
-  if (pi && pi.patches_pending != null) {
-    const age = pi.patch_surveyed ? (Date.now() / 1000 - pi.patch_surveyed) / 86400 : null;
+  if (info && info.patches_pending != null) {
+    const age = info.patch_surveyed ? (Date.now() / 1000 - info.patch_surveyed) / 86400 : null;
     const stale = age != null && age > 8;
-    const warn = pi.patches_security > 0 || pi.reboot_required > 0;
-    const short = `${pi.patches_pending}${pi.patches_security > 0 ? ` · ${pi.patches_security} security` : ''}`;
+    const warn = info.patches_security > 0 || info.reboot_required > 0;
+    const short = `${info.patches_pending}${info.patches_security > 0 ? ` · ${info.patches_security} security` : ''}`;
     cells.push(['Updates', esc(short), `${warn ? 'warn' : ''}${stale ? ' stale' : ''}`]);
-    const bits = [`${pi.patches_pending} waiting`];
-    if (pi.patches_security > 0) bits.push(`${pi.patches_security} of them security`);
-    if (pi.reboot_required > 0) bits.push('asks for a rebirth');
+    const bits = [`${info.patches_pending} waiting`];
+    if (info.patches_security > 0) bits.push(`${info.patches_security} of them security`);
+    if (info.reboot_required > 0) bits.push('asks for a rebirth');
     patchLine = `<dt>Updates</dt><dd class="${warn ? 'warn' : ''}${stale ? ' stale' : ''}"` +
       ` title="weekly patch survey${age != null ? ` · surveyed ${Math.round(age)}d ago` : ''}">` +
       `${esc(bits.join(', '))}${stale ? ' — the survey is stale' : ''}</dd>`;
@@ -310,15 +300,17 @@ A.openCard = function openCard(n) {
       `<strong>${esc(causeNode ? causeNode.name : info.cause)}</strong>` +
       (viaNode ? ` (via ${esc(viaNode.name)})` : '');
   }
+  return patchLine;
+}
 
+function fillActions(n, entries) {
   /* SPLIT / SCROLL, right above the drawer.
      ⁘ THE CONSTELLATION — scatter this place's services onto the map as their
      own dots so each one's roads can be read separately (2026-07-31).
      Both labels are rendered; body.constellation in CSS decides which shows,
-     so neither this card nor world.js ever redraws the button to flip it.
+     so neither this card nor constellation.js ever redraws the button to flip it.
      Existence = own links + pass-throughs (A.serviceEntriesFor — the same list
      the split rings), so a pure transit place like PANGOLIN still offers ⁘. */
-  const entries = A.serviceEntriesFor?.(n.id) || [];
   let actions = '';
   if (entries.length) {
     actions += `<button class="card-split" id="btn-card-split" title="Draw each service as its own dot, with the routes it uses">` +
@@ -334,7 +326,9 @@ A.openCard = function openCard(n) {
   $('card-actions').innerHTML = actions;
   $('btn-card-split')?.addEventListener('click', (e) => { e.stopPropagation(); A.toggleConstellation?.(n.id); });
   $('btn-card-scroll-copy')?.addEventListener('click', (e) => { e.stopPropagation(); copyText(n.scroll); });
+}
 
+function fillServices(n, entries) {
   /* ── SERVICES: guests first, then its own stalls, then what only passes ── */
   const links = n.links || [];
   // vassals: nodes that name this place as parent (the hypervisor's VMs) — clicking
@@ -348,12 +342,7 @@ A.openCard = function openCard(n) {
     `${meta ? `<span class="cd-meta">${meta}</span>` : ''}${ICON.chev}</button></li>`;
   /* the row's quiet second word: just the port when the service answers on this
      place itself (by its address or its own name), else the host it answers at */
-  const metaFor = (url) => {
-    const h = host(url).replace(/\/.*$/, '');
-    const [name, port] = h.split(':');
-    const own = name === n.ip || name.split('.')[0].toLowerCase() === String(n.id).toLowerCase();
-    return esc(own ? (port ? `:${port}` : '') : h);
-  };
+  const metaFor = (url) => esc(M.serviceMeta(host(url), n));
   let svcHTML = '';
   if (vassals.length) {
     svcHTML += `<p class="cd-sub">${say('its vassals')}</p><ul class="cd-rows">` +
@@ -363,13 +352,14 @@ A.openCard = function openCard(n) {
   if (links.length) {
     svcHTML += `<p class="cp-head">Services<span class="n">${links.length}</span></p><ul class="cd-rows">` +
       links.map((l, i) => row(`data-svc="${i}"`,
-        `<span class="svc-health"${l.kuma ? ` data-kuma="${esc(l.kuma)}"` : ''}></span>`,
+        `<span class="svc-health" data-kuma="${esc(svcKey(l, n.id))}"></span>`,
         esc(l.label), metaFor(l.url))).join('') + '</ul>';
   }
   if (crossing.length) {
     svcHTML += `<p class="cd-sub">what crosses here</p><ul class="cd-rows">` +
       crossing.map((en, i) => row(`data-cross="${i}"`,
-        `<span class="svc-health"${en.link.kuma ? ` data-kuma="${esc(en.link.kuma)}"` : ''}></span>`,
+        // keyed by the place the service lives on, not the one it crosses
+        `<span class="svc-health" data-kuma="${esc(svcKey(en.link, en.host.id))}"></span>`,
         esc(en.link.label), esc(en.host.name))).join('') + '</ul>';
   }
   const linksEl = $('card-links');
@@ -398,7 +388,9 @@ A.openCard = function openCard(n) {
     });
   }
   A.paintServiceHealth?.(card);   // K4 — colour the new dots from the current feed
+}
 
+function fillDetails(n, zone, patchLine) {
   /* ── DETAILS: the zone line, then the ledger of facts ── */
   const facts = [];
   if (n.ip && n.ip !== '—') facts.push(`<dt>Address</dt><dd class="mono">${esc(n.ip)}</dd>`);
@@ -409,8 +401,7 @@ A.openCard = function openCard(n) {
     // and the copy keep the full path. The root is a deployment value
     // (ATLAS_SCROLL_ROOT), not a constant.
     const root = CFG.SCROLL_ROOT.toLowerCase();
-    const shown = (root && n.scroll.toLowerCase().startsWith(root) ? n.scroll.slice(root.length) : n.scroll)
-      .replace(/\.md$/i, '');
+    const shown = (M.scrollTail(n.scroll, root) ?? n.scroll).replace(/\.md$/i, '');
     facts.push(`<dt>Scroll</dt><dd class="mono">${esc(shown)}</dd>`);
   }
   const zoneLine = zone ? `${zone.name} · ${n.role || ''}`.replace(/ · $/, '') : (n.role || '');
@@ -418,7 +409,9 @@ A.openCard = function openCard(n) {
     (zoneLine ? `<p class="cd-zone">${esc(zoneLine)}</p>` : '') +
     (facts.length ? `<dl class="cd-facts">${facts.join('')}</dl>` : '');
   addTab('details');
+}
 
+function fillSchedule(n) {
   /* ── SCHEDULE: THE FORGE'S DAY (v1.40.0 → part of THE CALENDAR in v1.45.0).
      A place other rites ask for its model — the GPU box — says what turns next and
      offers the door to THE CALENDAR. Every other place gets no tab at all.
@@ -432,7 +425,11 @@ A.openCard = function openCard(n) {
       A.closeAllScenes?.(); A.setSceneActive?.('calendar'); A.openCalendar?.();
     });
   }
+}
 
+/* `info` is the feed's word on the place as its card opened: a late answer
+   reads that one, not whatever the feed says by then. */
+function loadPulse(n, info) {
   /* ── PULSE: the card draws its OWN pulse (v1.34.0) — the server asks
      Prometheus (`/api/v2/vitals`, ATLAS_PROM_URL) and the card paints
      sparklines. No pulse (endpoint absent, host unknown to Prometheus, scribe
@@ -455,6 +452,19 @@ A.openCard = function openCard(n) {
       })
       .catch(() => {});
   }
+}
+
+A.openCard = function openCard(n) {
+  const zone = zoneById(n.zone);
+  fillHead(n, zone);
+  const info = A.signalsFeed?.nodes?.[n.id];
+  const patchLine = fillStrip(info);
+  const entries = A.serviceEntriesFor?.(n.id) || [];
+  fillActions(n, entries);
+  fillServices(n, entries);
+  fillDetails(n, zone, patchLine);
+  fillSchedule(n);
+  loadPulse(n, info);
 
   paintTabs();
   $('card-svc').hidden = true;   // always land on the node view
@@ -471,7 +481,7 @@ A.openCard = function openCard(n) {
 function showServiceDetail(node, link) {
   if (!link) return;
   const svc = $('card-svc');
-  const svcState = A.signalsFeed?.services?.[link.kuma]?.state;
+  const svcState = A.signalsFeed?.services?.[svcKey(link, node.id)]?.state;
   const hostState = A.signalsFeed?.nodes?.[node.id]?.state;
   const st = svcState || hostState;
   /* The dot beside the name IS the live state now (owner, 2026-11-11). It was

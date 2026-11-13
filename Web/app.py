@@ -1,6 +1,6 @@
 """Atlas — the cinematic sand-table map of the lab.
 
-The suite-contract Flask app (dual-mode auth, `/api/status`, `/data`
+The suite-contract Flask app (four auth modes, `/api/status`, `/data`
 persistence). This module used to be the whole backend; it is now the factory
 that assembles it, because a 600-line module whose configuration was read at
 import time could not be tested twice in one process — which is exactly why
@@ -16,6 +16,7 @@ What lives where now:
     overlays.py    positions.json / rack.json merged over the truth
     security.py    who may write, and proof the request came from us
     views.py       the page, the map art and the staged reports
+    reports.py     what the staged reports say, and the two bound as one
     auth_routes.py the sign-in page and the first-run bootstrap
     api/status.py  /api/status — the fleet card contract, kept
     api/v2/        every other HTTP workstation: reads, feeds, probes, the beat,
@@ -48,21 +49,24 @@ import envnames  # noqa: E402
 import ingest  # noqa: E402
 import labdata  # noqa: E402
 import mapart  # noqa: E402
+import metrics  # noqa: E402
 import overlays as overlays_mod  # noqa: E402
 import settings  # noqa: E402
 import theme  # noqa: E402
 import views  # noqa: E402
 from context import AtlasContext  # noqa: E402
 from redaction import redact_for_groups  # noqa: E402
-from hub_auth.auth import AUTH_MODE  # noqa: E402
 from signals import build_hub_from_env  # noqa: E402
 
 # ── The logger tree ──────────────────────────────────────────────────────────
 # Every module logs to `atlas.<layer>.<module>`, so a level can be set for one
 # layer instead of for the whole app:
 #
-#   atlas.web    the pages and what serves them      app, views, embeddable
-#   atlas.api    the HTTP surfaces                   v2 (one logger), status
+#   atlas.web    the pages and what serves them      app, views, embeddable,
+#                                                    metrics, theme
+#   atlas.api    the HTTP surfaces                   v2 (one logger for the
+#                                                    blueprint, v2.mcp under
+#                                                    it), manifest, tokens
 #   atlas.auth   who may pass, and what proves it    gate, routes, config,
 #                                                    accounts, crypto, security
 #   atlas.data   the dataset and what shapes it      dataset, labdata, overlays,
@@ -70,8 +74,11 @@ from signals import build_hub_from_env  # noqa: E402
 #   atlas.io     how bytes reach disk intact         jsonio, filelock
 #   atlas.live   what the lab is doing right now     signals, ingest, events,
 #                                                    heartbeats, discovery,
-#                                                    maintenance, dependencies
-#   atlas.settings   cross-cutting; deliberately in no layer
+#                                                    maintenance, dependencies,
+#                                                    integrations, tripwires,
+#                                                    whois, annalist, demo
+#   atlas.settings   cross-cutting; deliberately in no layer (settings and
+#                    envnames share it)
 #
 # It used to be 18 modules on a flat "atlas" and 9 on ad-hoc dotted children
 # (`atlas.auth_config` a SIBLING of `atlas.auth`, not a child), which meant
@@ -99,12 +106,6 @@ if settings.LOG_LEVELS_REJECTED:
 # imported them; nothing did (2026-08-21 survey, repo-wide grep).
 from validation import validate as _validate  # noqa: E402,F401
 
-# The one settings alias the tests still read (`atlas_app.DATA_BACKEND` in
-# test_store / test_api_v2_sites_scoping). Eight siblings — APP_KEY, APP_NAME,
-# APP_VERSION, ACCENT_COLOR, PORT, DATA_PATH, DEFAULT_DATA_PATH, SITE_SLUG —
-# had no reader anywhere (2026-11-01 repo-wide grep) and are gone; read
-# `settings.<NAME>` directly.
-DATA_BACKEND = settings.DATA_BACKEND
 # (EMBED_HOSTS alias removed 2026-09-03: the glass knobs are live via
 #  settings.embed_hosts(); a boot-time copy here would be the one that disagrees)
 
@@ -117,7 +118,7 @@ def _warn_about_posture(writable):
     a routable interface. Now that the same instance can also be *edited*, the
     warning has to say so.
     """
-    if AUTH_MODE != "standalone" or settings.ALLOW_INSECURE:
+    if settings.auth_mode() != "standalone" or settings.ALLOW_INSECURE:
         return
     log.warning(
         "SECURITY: running in STANDALONE mode — NO authentication. The whole map "
@@ -174,7 +175,7 @@ def _generated_session_key(key_file):
 
 
 def _configure_sessions(app):
-    """Cookie sessions exist only in accounts mode (every other mode is
+    """Cookie sessions exist only in accounts and hybrid modes (the other two are
     cookie-less). The signing key must be STABLE across restarts and shared by
     all gunicorn workers, or each restart/worker logs everyone out:
     ATLAS_SECRET_KEY env wins, then ATLAS_SECRET_KEY_FILE (file-mounted
@@ -204,16 +205,15 @@ def _configure_sessions(app):
     app.config["SESSION_COOKIE_SECURE"] = not settings.INSECURE_COOKIES
 
 
-def create_app():
-    """Build a configured Atlas. One per process in production; the tests
-    build several, which is the point of it being a function."""
-    app = Flask(__name__)
+def _install_proxy_and_limits(app):
+    """The proxy fix, the request size cap with its 413, and the version the
+    app carries in its config."""
     # 🔴 THE ATLAS NEVER SEES ITS OWN FRONT DOOR. TLS is terminated upstream
     # (tls-proxy, and Traefik beyond it) and the Hub proxies /atlas/ over
     # plain http on the compose network, so without this Flask computes
     # `request.host_url` as "http://…" while the browser is on https. The
-    # routes that read `host_url` as their OWN origin — /api/embeddable and
-    # /api/whois, which compare it against a target before making an outbound
+    # routes that read `host_url` as their OWN origin — /api/v2/embeddable and
+    # /api/v2/whois, which compare it against a target before making an outbound
     # request — must see the real scheme, or their same-origin reasoning is
     # done against the wrong string.
     #
@@ -251,10 +251,12 @@ def create_app():
     def _too_large(_error):
         return jsonify({"error": "that request is too large"}), 413
 
-    app.config["APP_NAME"] = settings.APP_NAME
     app.config["APP_VERSION"] = settings.APP_VERSION
-    app.config["ACCENT_COLOR"] = settings.ACCENT_COLOR
 
+
+def _build_context():
+    """The per-app objects the blueprints share (context.py), built for the
+    backend and site the settings name."""
     reader = labdata.build(settings.DATA_BACKEND,
                            data_path=settings.DATA_PATH,
                            default_path=settings.DEFAULT_DATA_PATH,
@@ -264,7 +266,7 @@ def create_app():
                                 default_path=settings.DEFAULT_DATA_PATH,
                                 site=settings.SITE_SLUG,
                                 revisions_dir=settings.REVISIONS_DIR)
-    app.extensions["atlas"] = AtlasContext(
+    return AtlasContext(
         reader=reader,
         store=store,
         overlays=overlays_mod.build(settings.POSITIONS_PATH, settings.RACK_PATH),
@@ -274,6 +276,10 @@ def create_app():
         site=settings.SITE_SLUG,
     )
 
+
+def _install_gate(app):
+    """Sessions where the mode has them, then metrics, then the gate, in that
+    order."""
     # Auth first. The relay ingest surface is exempt from the Hub session gate
     # (a push agent has no session, so its per-site bearer token is the whole
     # credential); the prefix is exempt whether or not ingest is enabled,
@@ -291,7 +297,6 @@ def create_app():
     # scraper has no session — and gates ITSELF on a bearer token, answering
     # 404 when none is configured. The hooks it installs must wrap every
     # request, gate included, so it registers before the gate does.
-    import metrics
     app.config["METRICS_ENABLED"] = metrics.init_app(app)
     session_gate = atlas_auth.require_atlas_auth(
         exempt_paths=list(api_v2.EXEMPT_PATHS) + [metrics.METRICS_PATH],
@@ -306,7 +311,14 @@ def create_app():
         return None if api_tokens.current() else session_gate()
 
     app.before_request(_gate)
+    # What a token read is written down after the answer is built (token_log.py):
+    # the line needs the answer's size and hash, and a refusal's reason.
+    app.after_request(api_tokens.log_read)
 
+
+def _register_blueprints(app):
+    """The sign-in page where the mode has sessions, then the pages, the
+    unversioned status paths and the API."""
     if atlas_auth.sessions_enabled():
         import auth_routes
         app.register_blueprint(auth_routes.bp)
@@ -314,7 +326,9 @@ def create_app():
 
     app.register_blueprint(views.bp)
     # /api/status — the fleet card contract the Hub and Kuma probe on every
-    # app. The ONE unversioned API path kept at the v1 removal (v1.41.0).
+    # app, kept at the v1 removal (v1.41.0). The same blueprint serves
+    # /api/manifest, the second unversioned API path (the builder is
+    # /api/v2/manifest's).
     app.register_blueprint(api_status.bp)
     # The API. One blueprint, always mounted; the surfaces that exist only in
     # some postures (sites: db; ingest: db + opt-in; accounts: sessions) fence
@@ -325,19 +339,23 @@ def create_app():
         ingest.announce(api_v2.INGEST_URL_PREFIX)
     app.config["API_V2_ENABLED"] = api_v2.init_app(app)
 
+
+def _install_template_context(app):
+    """What every template can read without being handed it."""
     @app.context_processor
     def _inject():
         return {
-            "app_name": app.config["APP_NAME"],
-            # pre-auth pages use this instead — see settings.APP_BRAND
+            # the name pre-auth pages wear — see settings.APP_BRAND
             "app_brand": settings.APP_BRAND,
             # THE THEME (v1.48.0): every lab-specific word in the templates
             "theme": theme.T,
-            "accent_color": app.config["ACCENT_COLOR"],
-            "hub_url": settings.hub_url(),
             "v": settings.APP_VERSION,   # cache-buster for static asset URLs
         }
 
+
+def _install_security_headers(app):
+    """The response headers, and the `frame-src` list they carry. The memo is
+    a closure, so each app keeps its own."""
     # The floor: 'self' + the configured embed hosts, dataset or no dataset.
     # THE GLASS knobs are live since v1.38.2 (integrations.py, group "glass"):
     # the floor and the memo both key on the hosts value in force, so a change
@@ -420,7 +438,18 @@ def create_app():
         )
         return resp
 
-    _warn_about_posture(settings.writes_enabled() and store.writable())
+
+def create_app():
+    """Build a configured Atlas. One per process in production; the tests
+    build several, which is the point of it being a function."""
+    app = Flask(__name__)
+    _install_proxy_and_limits(app)
+    context = app.extensions["atlas"] = _build_context()
+    _install_gate(app)
+    _register_blueprints(app)
+    _install_template_context(app)
+    _install_security_headers(app)
+    _warn_about_posture(settings.writes_enabled() and context.store.writable())
     return app
 
 

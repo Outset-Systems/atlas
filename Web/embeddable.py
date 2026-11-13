@@ -26,8 +26,8 @@ back to a new tab if the pane never paints. A refusal we are sure of is worth a
 straight jump to the tab; a refusal we guessed at is worth an attempt.
 
 Nothing here ever probes a URL the client names. `verdict()` is only ever
-reached through `/api/embeddable`, which refuses any URL that is not already in
-the dataset — the prober is not an open fetcher wearing the app's network
+reached through `/api/v2/embeddable`, which refuses any URL that is not already
+in the dataset — the prober is not an open fetcher wearing the app's network
 position.
 """
 
@@ -82,8 +82,8 @@ def urls_of(data):
     """Every outward address the map offers, in dataset order, deduplicated.
 
     One list, because both consumers want the same one: the CSP wants their
-    origins, and `/api/embeddable` wants to know whether a URL it was handed is
-    one of ours before it will go and knock on it.
+    origins, and `/api/v2/embeddable` wants to know whether a URL it was handed
+    is one of ours before it will go and knock on it.
     """
     seen, out = set(), []
 

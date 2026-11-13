@@ -7,12 +7,13 @@ front-end treats an absent feed as the v1.0.0 static behaviour ("the watchers ar
 
 Architecture: one small adapter per source, each exposing `fetch() -> dict`
 with a hard 3s timeout and a guarantee never to raise. `SignalsHub` merges the enabled
-adapters into one cached feed (30s TTL) that `/api/signals` serves and the front-end polls.
+adapters into one cached feed (30s TTL) that `/api/v2/signals` serves and the front-end polls.
 
-Sources are chosen by env so going live is config-only:
+Sources are chosen in the settings file first (`integrations.py`), then by
+env, so going live is config-only:
 
     ATLAS_SIGNALS_SOURCES   comma list: "static", "kuma", "prometheus", "unifi",
-                            "relay", "deception" (default: "" = none)
+                            "checks", "relay", "deception" (default: "" = none)
     ATLAS_SIGNALS_FILE      static/mock feed path (default /data/signals.json)
     ATLAS_SITE              site slug the "relay" source reads (default "default")
     ATLAS_KUMA_URL          e.g. http://edge:3001
@@ -43,7 +44,9 @@ DEGRADED = "degraded"    # amber
 DOWN = "down"            # slow red pulse
 SLUMBERING = "slumbering"  # grey (e.g. The standby host, intentionally off)
 MAINTENANCE = "maintenance"  # planned quiet — Kuma's own state 3
-_VALID_STATES = frozenset((HEALTHY, DEGRADED, DOWN, SLUMBERING, MAINTENANCE))
+#: Every marker state. `events` and the feed coercion below read this one set.
+NODE_STATES = frozenset((HEALTHY, DEGRADED, DOWN, SLUMBERING, MAINTENANCE))
+_VALID_STATES = NODE_STATES
 
 # ── decoy voices (the decoy feed) ─────────────────────────────────────────────
 # A DIFFERENT vocabulary from the marker states above, on purpose. A stone is
@@ -54,7 +57,9 @@ _VALID_STATES = frozenset((HEALTHY, DEGRADED, DOWN, SLUMBERING, MAINTENANCE))
 SILENT = "silent"        # nothing has touched it
 STIRRED = "stirred"      # touched recently, below the escalation line
 SPEAKING = "speaking"    # a live trip — the one time the quiet map raises its voice
-_VALID_STONE_STATES = frozenset((SILENT, STIRRED, SPEAKING))
+#: Every decoy voice. `tripwires` reads this one set too.
+STONE_STATES = frozenset((SILENT, STIRRED, SPEAKING))
+_VALID_STONE_STATES = STONE_STATES
 
 _TIMEOUT = 3.0  # hard per-source timeout; a slow source must never stall the feed
 
@@ -77,6 +82,10 @@ class _Adapter:
     """Base: a named source that yields a partial feed and never raises."""
 
     name = "adapter"
+
+    def use_map(self, data):
+        """Take what this source needs from the dataset. Called with the
+        dataset before each feed read; most sources need nothing from it."""
 
     def _fetch(self):  # pragma: no cover - overridden
         return {}
@@ -145,10 +154,9 @@ def demo_feed_path():
 class KumaAdapter(_Adapter):
     """Uptime-Kuma metrics/status → node & service states.
 
-    Live wiring lands in Wave 2 (needs a Kuma API key + monitors). Until then this
-    adapter is exercised via StaticFileAdapter; when configured it makes a real,
-    fully fail-silent HTTP call. It never imports at module load so a missing
-    `requests` in some minimal image can't break the app.
+    Live (the wiring was Wave 2): given a Kuma URL and an API key it makes a
+    real, fully fail-silent HTTP call. It never imports at module load so a
+    missing `requests` in some minimal image can't break the app.
     """
 
     name = "kuma"
@@ -158,6 +166,9 @@ class KumaAdapter(_Adapter):
         self.api_key = api_key
         self.monitor_map = monitor_map or {}
         self.verify = verify
+
+    def use_map(self, data):
+        self.monitor_map = monitor_map(data)
 
     def _fetch(self):
         import requests  # local import: optional dep, never at module load
@@ -197,17 +208,15 @@ class DeceptionAdapter(_Adapter):
 
     name = "deception"
 
-    def __init__(self, url, read_key, key_header=None, path=None):
+    def __init__(self, url, read_key):
         import envnames
         self.url = url.rstrip("/")
         self.read_key = read_key
-        self.key_header = key_header or envnames.env("ATLAS_DECOYS_KEY_HEADER")
-        if path is None:
-            import integrations
-            path = integrations.decoys_path()
+        self.key_header = envnames.env("ATLAS_DECOYS_KEY_HEADER")
+        import integrations
         # TRIPWIRES: one source among several, and its roster path is the
         # operator's (ATLAS_DECOYS_PATH, default /api/stones).
-        self.path = path
+        self.path = integrations.decoys_path()
 
     def _fetch(self):
         if not self.read_key:
@@ -302,9 +311,9 @@ class RelayAdapter(_Adapter):
 
     name = "relay"
 
-    def __init__(self, site_slug, max_age=RELAY_MAX_AGE):
+    def __init__(self, site_slug):
         self.site_slug = site_slug
-        self.max_age = max_age
+        self.max_age = RELAY_MAX_AGE
 
     def _fetch(self):
         payload, age = _latest_relay(self.site_slug)
@@ -320,8 +329,9 @@ class RelayAdapter(_Adapter):
 class PrometheusAdapter(_Adapter):
     """Whitelisted PromQL → plaque numbers & sparklines.
 
-    Never a free-form proxy: only the queries in `_PROM_QUERIES` are ever issued.
-    Live wiring is Wave 2 (needs one UDM rule the app host→the monitoring host:9090).
+    Never a free-form proxy: only the queries in `_PROM_QUERIES` and
+    `_PATCH_QUERIES` are ever issued. Live (the wiring was Wave 2); it needs
+    only a route from the app to the Prometheus address.
     """
 
     name = "prometheus"
@@ -339,9 +349,12 @@ class PrometheusAdapter(_Adapter):
         "patch_surveyed": "patch_survey_timestamp_seconds",
     }
 
-    def __init__(self, url, ip_map=None):
+    def __init__(self, url):
         self.url = url.rstrip("/")
-        self.ip_map = ip_map or {}   # "10.0.20.5" -> node id (set from the dataset)
+        self.ip_map = {}   # "10.0.20.5" -> node id (set from the dataset)
+
+    def use_map(self, data):
+        self.ip_map = ip_map(data)
 
     def _query(self, q):
         import requests
@@ -407,6 +420,9 @@ class UniFiAdapter(_Adapter):
         """{mac: node id}, {ip: node id} and the node ids Kuma already watches."""
         self._places = (dict(by_mac or {}), dict(by_ip or {}), frozenset(watched or ()))
 
+    def use_map(self, data):
+        self.set_places(*unifi_places(data))
+
     def _fetch(self):
         by_mac, by_ip, watched = self._places
         if not (by_mac or by_ip):
@@ -454,6 +470,249 @@ class UniFiAdapter(_Adapter):
         return {"nodes": {nid: {"state": state} for nid, state in states.items()}}
 
 
+#: The built-in checks' limits: how many charted addresses one round asks, how
+#: many at once, how long the whole round may take, how long a stored round is
+#: served before a new one, and the age past which a stored round is not served.
+CHECKS_MAX_TARGETS = 200
+CHECKS_WORKERS = 8
+CHECKS_BUDGET = 8.0
+CHECKS_FRESH = 60.0
+CHECKS_MAX_AGE = 300.0
+CHECKS_FILE = "checks.json"
+
+
+def service_key(node_id, link):
+    """The feed key of one service link: the Kuma monitor it names, else
+    `<place id>/<label>`. The page computes the same key (`svcKey` in
+    config.js), which is how a built-in check finds its dot."""
+    return link.get("kuma") or f"{node_id}/{link.get('label') or ''}"
+
+
+def _check_url(value):
+    """The address a built-in check asks for a charted URL, or None when the URL
+    is not an absolute http(s) one with a host. Any `user:pass@` and the query
+    string are left off: a check sends no credentials, and a key charted as
+    `?token=` is one. The path is kept, because a service may only answer at
+    the page that was charted."""
+    if not isinstance(value, str):
+        return None
+    raw = value.strip()
+    if not raw.lower().startswith(("http://", "https://")):
+        return None
+    import redaction                      # local import: it needs the web stack
+    from urllib.parse import urlsplit
+    url = redaction.bare_url(raw)         # scheme, host, port and path only
+    try:
+        if not urlsplit(url).hostname:
+            return None
+    except ValueError:
+        return None
+    return url
+
+
+def _check_one(url):
+    """Ask one charted address once: (state, milliseconds).
+
+    Any answer below 500 is `healthy`: a sign-in wall or a redirect still means
+    the service is up. 500 and above is `degraded`. No connection, or no answer
+    in time, is `down`. Anything else that stops the request (an address that
+    cannot be asked at all) is no state: it says nothing about the service.
+
+    The certificate is not verified on purpose: a service with a self-signed
+    certificate is still up, and the request carries no credentials to protect.
+    The body is never read and no redirect is followed.
+    """
+    import requests  # local import: optional dep, never at module load
+
+    start = time.monotonic()
+    resp, state = None, None
+    try:
+        resp = requests.get(url, timeout=_TIMEOUT, allow_redirects=False, verify=False,
+                            stream=True, headers={"User-Agent": "Atlas-check"})
+        state = HEALTHY if resp.status_code < 500 else DEGRADED
+    except (requests.ConnectionError, requests.Timeout):
+        state = DOWN
+    except Exception as e:  # noqa: BLE001 - one bad address never stops the round
+        log.debug("checks: one address could not be asked (%s)", type(e).__name__)
+    finally:
+        if resp is not None:
+            try:
+                resp.close()
+            except Exception:  # noqa: BLE001 - closing is a courtesy
+                pass
+    return state, int(round((time.monotonic() - start) * 1000))
+
+
+class ChecksAdapter(_Adapter):
+    """Built-in checks: does each charted service URL answer?
+
+    A fallback for an install with no monitoring of its own, and deliberately
+    small. Three rules keep it inside what the map promises:
+
+    * Only a charted address is ever asked: the `url` of a service link on a
+      place. Nothing is discovered, no port is tried, no range is walked.
+    * Kuma is the authority where it watches. A link that names a monitor is
+      not asked, and a place a monitor is mapped to gets no marker state here.
+    * No answer inside the round's budget is unknown, never down.
+
+    Two gunicorn workers share one stored round (`checks.json` beside the
+    dataset) and a lock, so the charted addresses are asked once a minute and
+    not once per worker.
+    """
+
+    name = "checks"
+
+    def __init__(self, path=None, budget=CHECKS_BUDGET, fresh=CHECKS_FRESH,
+                 max_age=CHECKS_MAX_AGE):
+        self.path = path                  # None = beside the dataset, read at each fetch
+        self.budget = budget
+        self.fresh = fresh
+        self.max_age = max_age
+        self._data = None                 # the dataset, once the feed has handed it over
+        self._over = 0                    # the target count the cap was last logged for
+
+    def use_map(self, data):
+        # called before every feed read, cached ones too: keep it, work it out later
+        self._data = data
+
+    @staticmethod
+    def _targets(data):
+        """[(key, place id, address)] for every link a check may ask."""
+        out, seen = [], set()
+        for node in data.get("nodes") or []:
+            if not isinstance(node, dict) or not node.get("id") or node.get("planned"):
+                continue
+            for link in node.get("links") or []:
+                if not isinstance(link, dict) or link.get("planned") or link.get("kuma"):
+                    continue
+                url = _check_url(link.get("url"))
+                key = service_key(node["id"], link)
+                if url and key not in seen:
+                    seen.add(key)
+                    out.append((key, node["id"], url))
+        return out
+
+    def _stored(self, path):
+        """(the stored round, its age in seconds), or (None, None) when there is
+        none that can be read."""
+        try:
+            with open(path, encoding="utf-8") as fh:
+                raw = json.load(fh)
+            age = time.time() - float(raw["at"])
+        except (OSError, ValueError, KeyError, TypeError):
+            return None, None
+        if age < 0:                       # written by a clock that has since gone back
+            return None, None
+        feed = _coerce_feed(raw)
+        return {"services": feed.get("services", {}), "nodes": feed.get("nodes", {})}, age
+
+    @staticmethod
+    def _charted(result, targets, watched):
+        """A stored round cut to what the map charts now: a link removed, or a
+        place a monitor was tied to since the round, is no longer reported."""
+        keys = {key for key, _, _ in targets}
+        places = {nid for _, nid, _ in targets} - watched
+        return {"services": {k: v for k, v in result["services"].items() if k in keys},
+                "nodes": {k: v for k, v in result["nodes"].items() if k in places}}
+
+    def _probe(self, targets, watched):
+        """Ask every target once, in a small pool, inside the budget."""
+        import warnings
+        from concurrent.futures import ThreadPoolExecutor, wait
+
+        import requests  # noqa: F401 - fail here, once, when it is missing
+        from urllib3.exceptions import InsecureRequestWarning
+
+        if len(targets) > CHECKS_MAX_TARGETS:
+            if self._over != len(targets):
+                self._over = len(targets)
+                log.warning("checks: %d service addresses are charted; asking the first %d",
+                            len(targets), CHECKS_MAX_TARGETS)
+            targets = targets[:CHECKS_MAX_TARGETS]
+
+        # Start somewhere else each round. With a fixed order, a run of addresses
+        # that time out at the head of the list spends the whole budget every
+        # time and the ones behind them are never asked.
+        start = int(time.time() // max(self.fresh, 1)) % len(targets)
+        targets = targets[start:] + targets[:start]
+        pool = ThreadPoolExecutor(max_workers=CHECKS_WORKERS, thread_name_prefix="atlas-check")
+        try:
+            # Not verifying a certificate makes urllib3 warn on every request.
+            # The filter is set here, in the calling thread, and only while the
+            # round runs, so every other request in the app keeps its warning.
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", InsecureRequestWarning)
+                asked = {pool.submit(_check_one, url): key for key, _, url in targets}
+                done, _ = wait(asked, timeout=self.budget)
+        finally:
+            # never wait for a slow address: what has not answered is unknown
+            pool.shutdown(wait=False, cancel_futures=True)
+
+        services = {}
+        for future in done:
+            try:
+                state, ms = future.result()
+            except Exception:  # noqa: BLE001 - a check that broke says nothing
+                continue
+            if state:
+                services[asked[future]] = {"state": state, "ms": ms}
+
+        answered = {}
+        for key, nid, _ in targets:
+            if key in services and nid not in watched:
+                answered.setdefault(nid, []).append(services[key]["state"])
+        nodes = {}
+        for nid, states in answered.items():
+            if all(s == HEALTHY for s in states):
+                nodes[nid] = {"state": HEALTHY}
+            elif all(s == DOWN for s in states):
+                nodes[nid] = {"state": DOWN}
+            else:
+                nodes[nid] = {"state": DEGRADED}
+        return {"services": services, "nodes": nodes}
+
+    def _fetch(self):
+        data = self._data
+        if not isinstance(data, dict):
+            return {}                     # no dataset yet: nothing to say, nothing to store
+        targets = self._targets(data)
+        if not targets:
+            return {"nodes": {}}          # it ran, and the map charts nothing to ask
+        watched = {nid for nid in monitor_map(data).values() if nid}
+        path = self.path or os.path.join(settings.DATA_DIR, CHECKS_FILE)
+
+        stored, age = self._stored(path)
+        if stored is not None and age < self.fresh:
+            return self._charted(stored, targets, watched)
+
+        import filelock
+        import jsonio
+        try:
+            with filelock.exclusive(filelock.lock_for(path), timeout=0):
+                # another worker may have finished a round while this one looked
+                stored, age = self._stored(path)
+                if stored is not None and age < self.fresh:
+                    return self._charted(stored, targets, watched)
+                result = self._probe(targets, watched)
+                try:
+                    jsonio.write_json_atomic(path, {"at": time.time(), **result},
+                                             keep_backup=False)
+                except OSError as e:
+                    log.warning("checks: the round could not be stored (%s)", type(e).__name__)
+                return result
+        except OSError as e:
+            # A data directory that cannot be written (read-only mount): there is
+            # no round to share, so this worker asks for itself.
+            log.debug("checks: no shared round here (%s); asking without one", type(e).__name__)
+            return self._probe(targets, watched)
+        except filelock.LockTimeout:
+            # Another worker is asking right now. Its last round stands meanwhile,
+            # unless it is so old that the worker holding the lock must be stuck.
+            if stored is not None and age <= self.max_age:
+                return self._charted(stored, targets, watched)
+            return {}
+
+
 # Kuma monitor_status values → Atlas marker states (0 down · 1 up · 2 pending · 3 maint)
 _KUMA_STATE = {0: DOWN, 1: HEALTHY, 2: DEGRADED, 3: MAINTENANCE}
 
@@ -490,6 +749,13 @@ def monitor_map(data):
                 out.setdefault(name, node.get("id"))
     out.update((data.get("signals") or {}).get("kuma") or {})
     return out
+
+
+def ip_map(data):
+    """{address: place id} from a dataset: which place a Prometheus `instance`
+    belongs to."""
+    return {n["ip"]: n["id"] for n in data.get("nodes", [])
+            if n.get("ip") and n["ip"] != "—"}
 
 
 def unifi_places(data):
@@ -557,6 +823,22 @@ def _parse_kuma_metrics(text, monitor_map):
     return out
 
 
+def _states_only(section, valid):
+    """One section of a feed ({id: info}) with junk dropped: an entry that is
+    not a dict goes, and a `state` that is not one of `valid` is left off the
+    entry while the rest of it is kept."""
+    clean = {}
+    for key, info in section.items():
+        if not isinstance(info, dict):
+            continue
+        state = info.get("state")
+        entry = {k: v for k, v in info.items() if k != "state"}
+        if state in valid:
+            entry["state"] = state
+        clean[key] = entry
+    return clean
+
+
 def _coerce_feed(raw):
     """Normalise an arbitrary payload into the canonical feed shape, dropping junk.
 
@@ -569,16 +851,7 @@ def _coerce_feed(raw):
     out = {}
     nodes = raw.get("nodes")
     if isinstance(nodes, dict):
-        clean = {}
-        for nid, info in nodes.items():
-            if not isinstance(info, dict):
-                continue
-            state = info.get("state")
-            entry = {k: v for k, v in info.items() if k != "state"}
-            if state in _VALID_STATES:
-                entry["state"] = state
-            clean[nid] = entry
-        out["nodes"] = clean
+        out["nodes"] = _states_only(nodes, _VALID_STATES)
     services = raw.get("services")
     if isinstance(services, dict):
         out["services"] = {
@@ -586,20 +859,11 @@ def _coerce_feed(raw):
         }
     stones = raw.get("stones")
     if isinstance(stones, dict):
-        clean = {}
-        for sid, info in stones.items():
-            if not isinstance(info, dict):
-                continue
-            state = info.get("state")
-            entry = {k: v for k, v in info.items() if k != "state"}
-            # Same rule as nodes: an unrecognised voice is DROPPED, not passed
-            # through. The front-end swaps a CSS class on this value, so a junk
-            # state would render an unstyled marker — a stone that is neither
-            # visibly quiet nor visibly shouting, which is the worst of both.
-            if state in _VALID_STONE_STATES:
-                entry["state"] = state
-            clean[sid] = entry
-        out["stones"] = clean
+        # Same rule as nodes: an unrecognised voice is DROPPED, not passed
+        # through. The front-end swaps a CSS class on this value, so a junk
+        # state would render an unstyled marker — a stone that is neither
+        # visibly quiet nor visibly shouting, which is the worst of both.
+        out["stones"] = _states_only(stones, _VALID_STONE_STATES)
     metrics = raw.get("metrics")
     if isinstance(metrics, dict):
         out["metrics"] = {
@@ -659,6 +923,17 @@ class SignalsHub:
         self._cache = None
         return True
 
+    def reload(self):
+        """Rebuild now if the settings file has moved, without waiting for the
+        next poll. Says whether it did."""
+        return self._refresh_adapters()
+
+    def last_sources(self):
+        """How each source answered the last time the feed was built
+        ({name: "ok" or "silent"}), or {} before the first build."""
+        feed = self._cache or {}
+        return dict(feed.get("sources") or {})
+
     @property
     def enabled(self):
         return [a.name for a in self.adapters]
@@ -704,21 +979,58 @@ class SignalsHub:
             return fresh
 
 
-def _unifi_adapter(integrations):
-    """The `unifi` source from the UniFi connection's saved address and
-    credential, or None (said in the log) when either is missing."""
-    url = integrations.get("ATLAS_UNIFI_URL")
-    if not url:
-        log.warning("unifi source requested but ATLAS_UNIFI_URL unset — skipping")
-        return None
+def _kuma_adapter(url):
+    import integrations
+    return KumaAdapter(url, _read_secret("ATLAS_KUMA_API_KEY"),
+                       verify=not integrations.flag("ATLAS_KUMA_INSECURE", False))
+
+
+def _prometheus_adapter(url):
+    return PrometheusAdapter(url)
+
+
+def _deception_adapter(url):
+    return DeceptionAdapter(url, _read_secret("ATLAS_DECOYS_KEY"))
+
+
+def _unifi_adapter(url):
+    """The `unifi` source from the UniFi connection's saved credential, or None
+    (said in the log) when it has none."""
     import connections
-    from importers import unifi
-    creds = connections.credentials("unifi", integrations.get)
-    if not unifi.SYSTEM["ready"](creds):
+    _, creds, insecure = connections.saved("unifi")
+    if not connections.ready("unifi", creds):
         log.warning("unifi source requested but the UniFi connection has no credential "
                     "(an API key, or a user and its password) — skipping")
         return None
-    return UniFiAdapter(url, creds, verify=not connections.insecure("unifi", integrations.get))
+    return UniFiAdapter(url, creds, verify=not insecure)
+
+
+def _checks_adapter(_url=None):
+    """The `checks` source. It has no address of its own: it asks the ones the
+    map charts."""
+    return ChecksAdapter()
+
+
+#: The sources that are built by name: source -> builder(url). Which setting
+#: holds that URL is `integrations.SOURCE_NEEDS`; a source that is not listed
+#: there (`checks`) needs none. What each adapter needs from the dataset is
+#: pushed later, by `api.v2.feeds._apply_kuma_map`.
+_BUILDERS = {"kuma": _kuma_adapter, "prometheus": _prometheus_adapter,
+             "deception": _deception_adapter, "unifi": _unifi_adapter,
+             "checks": _checks_adapter}
+
+
+def _from_url(name, integrations):
+    """The adapter for a source in `_BUILDERS`, or None (said in the log) when
+    its URL is unset."""
+    need = integrations.SOURCE_NEEDS.get(name)
+    if need is None:
+        return _BUILDERS[name](None)       # a source with no address of its own
+    url = integrations.get(need)
+    if not url:
+        log.warning("%s source requested but %s unset — skipping", name, need)
+        return None
+    return _BUILDERS[name](url)
 
 
 def make_adapters():
@@ -735,37 +1047,18 @@ def make_adapters():
         if name == "static":
             adapters.append(StaticFileAdapter(
                 os.environ.get("ATLAS_SIGNALS_FILE", "/data/signals.json")))
-        elif name == "kuma":
-            url = integrations.get("ATLAS_KUMA_URL")
-            if url:
-                adapters.append(KumaAdapter(url, _read_secret("ATLAS_KUMA_API_KEY"),
-                                            verify=not integrations.flag("ATLAS_KUMA_INSECURE", False)))
-            else:
-                log.warning("kuma source requested but ATLAS_KUMA_URL unset — skipping")
         elif name == "relay":
             adapters.append(RelayAdapter(settings.SITE_SLUG))
-        elif name == "deception":
-            url = integrations.get("ATLAS_DECOYS_URL")
-            if url:
-                adapters.append(DeceptionAdapter(
-                    url, _read_secret("ATLAS_DECOYS_KEY")))
-            else:
-                log.warning("deception source requested but ATLAS_DECOYS_URL "
-                            "unset — skipping")
-        elif name == "unifi":
+        elif name in _BUILDERS:
             try:
-                adapter = _unifi_adapter(integrations)
+                adapter = _from_url(name, integrations)
             except Exception as e:  # noqa: BLE001 — a source that cannot be built is skipped, never fatal
+                if name != "unifi":
+                    raise                  # only the unifi build is guarded
                 log.warning("unifi source could not be built (%s) — skipping", type(e).__name__)
                 adapter = None
             if adapter is not None:
-                adapters.append(adapter)   # place maps pushed by api.v2.feeds._apply_kuma_map
-        elif name == "prometheus":
-            url = integrations.get("ATLAS_PROM_URL")
-            if url:
-                adapters.append(PrometheusAdapter(url))   # ip_map pushed by api.v2.feeds._apply_kuma_map
-            else:
-                log.warning("prometheus source requested but ATLAS_PROM_URL unset — skipping")
+                adapters.append(adapter)
         else:
             log.warning("unknown signals source %r — ignoring", name)
     log.info("signals: %d source(s) enabled: %s", len(adapters),

@@ -6,11 +6,13 @@ redaction-shaped body (the dataset, the feeds) deliberately is not (§5 H2 —
 mirror of it would be a second one).
 
 One deviation from the framework note, recorded here and in the plan: models
-are applied INSIDE handlers (`Model.model_validate` + the v1 error body on
-failure) rather than through `@api.validate` decorators, because spectree's
-auto-rejection would answer with its own envelope where parity demands v1's
-exact `{"error": …}` sentence. The decorators can come at cutover, when the v1
-body stops being the contract.
+are applied INSIDE handlers (`Model.model_validate` + a one-sentence
+`{"error": …}` body on failure) rather than through `@api.validate`
+decorators. That began as parity: spectree's auto-rejection would have
+answered with its own envelope where v1's exact sentence was the contract. v1
+was removed in v1.41.0 and the decorators did not follow; spectree was dropped
+from the requirements, never imported, and the sentence is what the front end
+shows.
 """
 
 from pydantic import RootModel

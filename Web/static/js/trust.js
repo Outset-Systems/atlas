@@ -30,7 +30,7 @@
 import { A, $, esc } from './config.js';
 import { makeScene } from './scene.js';
 
-let root, listEl, headEl;
+let listEl, headEl;
 let loaded = null;          // the last good payload; a reopen should not blank
 let failure = null;
 let absent = false;         // this build carries no trust map: normal, not a fault
@@ -38,9 +38,9 @@ let absent = false;         // this build carries no trust map: normal, not a fa
 /* Loudest first. These are the map's existing semantic tokens — no new
    colours (the design notes: reuse the zone hues, gold stays rare). */
 const LEVEL = {
-  critical: { rank: 0, cls: 'tr-critical', word: 'critical' },
-  warn: { rank: 1, cls: 'tr-warn', word: 'worth fixing' },
-  note: { rank: 2, cls: 'tr-note', word: 'noted' },
+  critical: { cls: 'tr-critical', word: 'critical' },
+  warn: { cls: 'tr-warn', word: 'worth fixing' },
+  note: { cls: 'tr-note', word: 'noted' },
 };
 const levelOf = (f) => LEVEL[f && f.level] || LEVEL.note;
 
@@ -187,8 +187,7 @@ A.openTrust = open;
 A.closeTrust = close;
 
 A.buildTrustScene = function buildTrustScene() {
-  root = scene.mount();
-  if (!root) return;
+  if (!scene.mount()) return;
   listEl = $('tr-list');
   headEl = $('tr-head');
 };

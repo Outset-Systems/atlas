@@ -37,7 +37,7 @@ import heartbeats
 import security
 import settings
 
-from . import bp
+from . import _body, bp
 
 log = logging.getLogger("atlas.api.v2")
 
@@ -69,7 +69,7 @@ def rite_beat(key):
         log.warning("v2: refused a beat for %s: bad token", key[:64])
         return jsonify({"error": "bad or missing beat token"}), 403
 
-    body = request.get_json(silent=True) or {}
+    body = _body()
     try:
         beat = heartbeats.record_beat(
             key,

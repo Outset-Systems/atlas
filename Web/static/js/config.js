@@ -215,6 +215,12 @@ export const isMixed = (abs) => location.protocol === 'https:' && /^http:\/\//i.
     this way — one definition, so a future tweak isn't a five-file grep. */
 export const host = (u) => String(u ?? '').replace(/^https?:\/\//, '');
 
+/** The live feed's key for one service link: the Kuma monitor it names, else
+    `<place id>/<label>`. The server spells the same rule (signals.service_key),
+    so a link with no monitor still finds the state a built-in check gave it.
+    `nodeId` is the place the link is charted on, not the card that is open. */
+export const svcKey = (link, nodeId) => link?.kuma || `${nodeId}/${link?.label || ''}`;
+
 /** the attribute string that routes an anchor through THE VIEWING GLASS
     (glass.js's delegated capture listener). One author for the contract —
     six surfaces emit it, and hand-copying it is how THE INDEX shipped with

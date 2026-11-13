@@ -2,9 +2,10 @@
 
 It replaced the original unversioned routes group by group, each proven
 against the old one before the switch; the old routes were removed in
-v1.41.0. What remains outside it is `/api/status` (`api/status.py` — the
-fleet card contract the Hub and Kuma probe on every app) and the pages
-(`views.py`, `auth_routes.py`).
+v1.41.0. What remains outside it is the two unversioned paths in
+`api/status.py` (`/api/status`, the fleet card contract the Hub and Kuma probe
+on every app, and `/api/manifest`, the app manifest at the address the Hub
+reads) and the pages (`views.py`, `auth_routes.py`).
 
 The blueprint NAME is the namespace: every endpoint here is `api_v2.<name>` —
 or `api_v2.<child>.<name>` for the four NESTED surfaces (`admin`, `ingest`,
@@ -25,7 +26,7 @@ What v2 does NOT do, on purpose:
   the url map is identical in every mode.
 """
 
-from flask import Blueprint
+from flask import Blueprint, request
 
 URL_PREFIX = "/api/v2"
 
@@ -35,12 +36,14 @@ bp = Blueprint("api_v2", __name__, url_prefix=URL_PREFIX)
 #: Hub can probe it, and `/api/v2/health` — the same payload — must too.
 HEALTH_PATH = URL_PREFIX + "/health"
 
-#: Exact paths under v2 that the app-wide gate lets through unauthenticated.
-#: Deliberately a tuple of literals: adding to it is a security decision that
-#: should show up in a diff of this file, not be computed.
 #: The app manifest (APP_MANIFEST.md): answers anonymously with the card +
 #: auth shape only; the schedule (the rites) needs a signed-in viewer.
 MANIFEST_PATH = URL_PREFIX + "/manifest"
+
+#: Exact paths the app-wide gate lets through unauthenticated: two under v2,
+#: and the manifest's unversioned address (`api/status.py`).
+#: Deliberately a tuple written out here: adding to it is a security decision
+#: that should show up in a diff of this file, not be computed.
 EXEMPT_PATHS = (HEALTH_PATH, MANIFEST_PATH, "/api/manifest")
 
 #: The relay ingest workstation: exempt BY PREFIX in `create_app` — a push agent
@@ -56,6 +59,13 @@ def init_app(app):
     other posture flags — always on; v2 has no mode it is absent in."""
     app.register_blueprint(bp)
     return True
+
+
+def _body():
+    """The request's JSON body, or `{}` when there is none, it is not JSON, or
+    it is a falsy value (`null`, `0`, `[]`). Any other body that is JSON but
+    not an object comes back as it is."""
+    return request.get_json(silent=True) or {}
 
 
 # Route modules attach to `bp` at import, and that import happens HERE — at

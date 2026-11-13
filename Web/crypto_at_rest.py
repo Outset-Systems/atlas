@@ -1,4 +1,5 @@
-"""Symmetric at-rest encryption for the accounts store's TOTP secrets.
+"""Symmetric at-rest encryption for the accounts store's TOTP secrets and the
+saved source keys (`integrations.py`).
 
 Protects a compromised disk/backup, not the running app — verifying a TOTP
 code needs the plaintext secret, so this is not end-to-end encryption. Same
@@ -14,8 +15,9 @@ ATLAS_ENCRYPTION_KEY_FILE is set but unreadable or empty, that is a failed
 mount and it raises `KeyUnavailable` rather than quietly generating a
 different key somewhere the operator is not backing up.
 
-`cryptography` is imported lazily — deployments that never enable accounts
-mode (file-mode-behind-Hub, the homelab default) never need it installed.
+`cryptography` is imported lazily — a deployment needs it installed once an
+account enrolls a second factor (accounts or hybrid mode) or a source key is
+saved, in any mode.
 """
 
 import logging

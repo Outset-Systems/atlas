@@ -1,6 +1,7 @@
 """gunicorn hooks for the Atlas (v1.42.0).
 
-One job: tell prometheus_client's multiprocess registry when a worker dies,
+Two jobs. `post_worker_init` (v1.46.0) starts the annalist in each worker.
+`child_exit` tells prometheus_client's multiprocess registry when a worker dies,
 so its per-process files stop counting. Without this a worker that was
 replaced (a boot failure, a `--max-requests` recycle, an OOM kill) keeps its
 last gauge values in the scrape forever — `atlas_signals_source_ok` stays 1

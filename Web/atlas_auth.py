@@ -78,7 +78,7 @@ def hub_claims():
     forged `X-Remote-User: link` + `X-Remote-Groups: atlas-admins` request that
     this docstring describes as the thing to prevent into unauthenticated
     admin: `require_atlas_auth` lets any request with hub claims straight
-    through, and `is_admin()` reads atlas-admins out of them.
+    through, and `current_groups()` reads atlas-admins out of them.
 
     It fails closed instead. A hybrid instance whose secret is missing loses
     Hub SSO and everyone signs in through `/auth/login` — visibly degraded
@@ -129,14 +129,6 @@ def session_source():
     if hybrid_mode() and hub_claims():
         return "hub"
     return ""
-
-
-def _idle_seconds():
-    return settings.SESSION_IDLE_S
-
-
-def _abs_seconds():
-    return settings.SESSION_ABS_S
 
 
 def _is_trusted(host):
@@ -192,8 +184,8 @@ def _session_account():
         if (acc and acc.get("active")
                 and session.get("_epoch") == acc.get("session_epoch", 0)):
             now = time.time()
-            if (now - session.get("_seen", 0) <= _idle_seconds()
-                    and now - session.get("_start", 0) <= _abs_seconds()):
+            if (now - session.get("_seen", 0) <= settings.SESSION_IDLE_S
+                    and now - session.get("_start", 0) <= settings.SESSION_ABS_S):
                 session["_seen"] = now
                 acct = acc
     g._atlas_acct = acct
@@ -238,8 +230,9 @@ def require_atlas_auth(exempt_paths=None, exempt_prefixes=None):
     exact = set(DEFAULT_EXEMPT) | set(exempt_paths or []) | {"/auth/login"}
     prefixes = list(exempt_prefixes or ["/static/"])
     # The login flow itself must be reachable signed-out; each /api/v2/auth
-    # route (api/v2/accounts_v2.py) enforces its own same-origin + session-
-    # state requirements, so the prefix is exempt here and gated there.
+    # route (api/v2/accounts_v2.py, accounts_admin.py) enforces its own
+    # same-origin + session-state requirements, so the prefix is exempt here
+    # and gated there.
     prefixes.append("/api/v2/auth/")
     base_check = require_hub_or_standalone(
         exempt_paths=exempt_paths, exempt_prefixes=exempt_prefixes)
@@ -302,7 +295,7 @@ def current_account():
 
 def current_groups():
     """The viewer's clearance groups, or None when the caller is not in
-    accounts mode (callers then fall through to their existing logic).
+    accounts or hybrid mode (callers then fall through to their existing logic).
 
     ⚠ ADMIN_GROUP ("atlas-admins") is a magic sentinel: `redaction.sees_everything`
     treats its presence in the set as full clearance + write authority. In
@@ -335,14 +328,3 @@ def current_groups():
     if acc.get("is_admin"):
         grps.add(ADMIN_GROUP)
     return grps
-
-
-def is_admin() -> bool:
-    acc = _session_account()
-    if acc:
-        return bool(acc.get("is_admin"))
-    if hybrid_mode():
-        claims = hub_claims()
-        if claims:
-            return ADMIN_GROUP in _hub_groups(claims)
-    return False

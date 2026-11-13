@@ -154,11 +154,6 @@ export const Editor = {
   },
 
   /* ── THE ANNALS ────────────────────────────────────────────────────── */
-  events(limit = 150, unackedOnly = false) {
-    const q = new URLSearchParams({ limit: String(limit) });
-    if (unackedOnly) q.set('unacked', '1');
-    return fetch(`api/v2/events?${q}`, { cache: 'no-store' }).then((r) => r.json());
-  },
   ackEvent(id, note) { return post(`events/${id}/ack`, { note }); },
 
   /* ── The base render ───────────────────────────────────────────────── */

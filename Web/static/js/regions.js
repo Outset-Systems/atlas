@@ -46,8 +46,8 @@ const onOtherStyle = () => {
   const art = chosenStyle();
   return Boolean(art) && art !== realmArt;
 };
-A.onOtherStyle = onOtherStyle;   // world.js: a drag here belongs to the style's sidecar
-/* A style's regions wear this browser's unsaved pins too (world.js A.styleDraft). */
+A.onOtherStyle = onOtherStyle;   // places.js: a drag here belongs to the style's sidecar
+/* A style's regions wear this browser's unsaved pins too (places.js A.styleDraft). */
 const regions = () => {
   if (!onOtherStyle()) return datasetRegions();
   const drafted = A.styleDraft?.().regions || {};
@@ -59,10 +59,11 @@ const regions = () => {
 const regionById = (id) => regions().find((r) => r.id === id);
 const nodes = () => A.DATA?.nodes || [];
 const baseTitle = () => styleName() || String(A.DATA?.meta?.title || 'The map').replace(/ Atlas$/, '');
+let MAPS_BY_NAME;                // the maps list by name, once it has answered
 const mapUrl = (name) => {
   // bundled art lives in static/map, uploads behind /map-art — the maps list
   // says which; until it answers, try bundled first and fall back on error
-  const known = A.MAPS_BY_NAME?.[name];
+  const known = MAPS_BY_NAME?.[name];
   return known ? known.url : `static/map/${encodeURIComponent(name)}`;
 };
 
@@ -90,11 +91,11 @@ async function loadMaps() {
 /** Take a maps list in; true when a style is on. A layout save hands its
     answer here too, and the region on the stage stays open for it. */
 function useMaps(maps) {
-  A.MAPS_BY_NAME = Object.fromEntries(maps.map((m) => [m.name, m]));
+  MAPS_BY_NAME = Object.fromEntries(maps.map((m) => [m.name, m]));
   realmArt = maps.find((m) => m.default)?.name || null;
   styleRegions = new Map(maps.map((m) => [m.name, m.regions || []]));
   // region art is not in the gallery, so the list carries its address here
-  for (const art of [...styleRegions.values()].flat()) A.MAPS_BY_NAME[art.map] ??= art;
+  for (const art of [...styleRegions.values()].flat()) MAPS_BY_NAME[art.map] ??= art;
   if (!chosenStyle()) return false;
   refreshStyle(maps.find((m) => m.name === chosenStyle()));
   return true;
@@ -258,21 +259,20 @@ function onMainMove(userMove) {
 /* ── a region on the stage ─────────────────────────────────────────────── */
 /** Where each place stands on region `r`, from where it stands on the map. */
 function placesFor(r) {
-  const out = standingOn(r);
+  const out = M.standingOn(regions(), r.id, mainSpots());   // every place on its map, before any folding
   for (const id of foldedHere(out, r.id)) delete out[id];   // a folded region inside this one keeps its own
   return out;
 }
 
-/** Every place that stands on region `r`'s map, before any folding. */
-function standingOn(r) {
-  const out = {};
+/** Where every place that is drawn at all stands on the main map: `{ id: {x, y} }`. */
+function mainSpots() {
+  const spots = {};
   for (const n of nodes()) {
     if (n._realOff ?? n.off_map) continue;
     const { x, y } = A.mainPlace(n);
-    const at = M.placeOn(regions(), r.id, { id: n.id, x, y });
-    if (at) out[n.id] = at;
+    spots[n.id] = { x, y };
   }
-  return out;
+  return spots;
 }
 
 /* A folded region (`fold` on it) draws, on its parent's map, only the places
@@ -291,58 +291,26 @@ function foldedHere(at, levelId = level?.id ?? null) {
   foldNote = { levelId, at: { ...at }, hidden };
   return hidden;
 }
-/** world.js asks, for the main map: which of these drawn places stay inside a region? */
+/** places.js asks, for the main map: which of these drawn places stay inside a region? */
 A.foldedHere = (at) => foldedHere(at, null);
-/** The region a place waits in on this level's map, or null: for the frame's count. */
-A.homesHere = (at) => M.homesAt(regions(), level?.id ?? null, at);
 
 /* ── exits: roads that leave the level ─────────────────────────────────────
    Inside a region, a road from a place drawn here to one out on a map above
    (the gateway's road to the internet) runs to the edge of the picture and is
-   named there. world.js buildRoutes draws what this returns: one entry per
+   named there. roads.js buildRoutes draws what this returns: one entry per
    line, `{from, to, ids, names, label, at, kind, road}`, with `from` the place
    drawn here, `to` the first far place (the one a click goes to) and `at` the
    border point in this map's percent. Only on a region; only for a far place
    that is drawn on some map above this one, so a place the dataset keeps off
    the map, or one folded away in a region elsewhere, gets no line. A place
    folded inside a region ON this map lies within the picture, has a frame, and
-   exitPoint gives it nothing. The names are of places already in A.DATA.nodes. */
-function drawnAbove() {
-  const ids = new Set();
-  const main = {};
-  for (const n of nodes()) {
-    if (n._realOff ?? n.off_map) continue;
-    const { x, y } = A.mainPlace(n);
-    main[n.id] = { x, y };
-  }
-  const add = (at, levelId) => {
-    const hidden = hiddenOn(at, levelId);
-    for (const id of Object.keys(at)) if (!hidden.has(id)) ids.add(id);
-  };
-  add(main, null);
-  for (const r of M.chainOf(regions(), level.id).slice(0, -1)) add(standingOn(r), r.id);
-  return ids;
-}
-
+   exitPoint gives it nothing. The names are of places already in A.DATA.nodes.
+   The working out is region-model.js exitsFor. */
 A.levelExits = () => {
   const here = A.levelPlaces;
   if (!level || !here) return [];
-  const byId = new Map(nodes().map((n) => [n.id, n]));
-  let above = null;
-  const raw = [];
-  for (const road of A.DATA?.routes || []) {
-    const a = here[road.from], b = here[road.to];
-    if (Boolean(a) === Boolean(b)) continue;            // both drawn here, or neither
-    const nearId = a ? road.from : road.to;
-    const far = byId.get(a ? road.to : road.from);
-    if (!far || far._realOff) continue;
-    above ??= drawnAbove();
-    if (!above.has(far.id)) continue;
-    const { x, y } = A.mainPlace(far);
-    const at = M.exitPoint(here[nearId], M.carryTo(regions(), level.id, { id: far.id, x, y }));
-    if (at) raw.push({ from: nearId, to: far.id, name: far.name, at, kind: road.kind, road });
-  }
-  return M.mergeExits(raw);
+  const names = Object.fromEntries(nodes().map((n) => [n.id, n.name]));
+  return M.exitsFor(regions(), level.id, here, mainSpots(), names, A.DATA?.routes);
 };
 
 /* In a region the breadcrumb is chrome too: tabs clear it as well. */
@@ -606,7 +574,7 @@ A.pinDrag = function pinDrag(e, mk, n) {
   e.stopPropagation(); e.preventDefault();
   mk.setPointerCapture(e.pointerId);
   mk.classList.add('dragging');
-  // world.js's reading of the pointer, which also sees through a tilted table
+  // places.js's reading of the pointer, which also sees through a tilted table
   const toPct = (ev) => A.screenToPct(ev.clientX, ev.clientY);
   let last = null;
   const move = (ev) => {

@@ -128,6 +128,12 @@ def _touched(ops, before, was, now_ids):
     return named, renamed, checked
 
 
+def _mark(node):
+    """A place's stamp when it holds one, else None. An empty stamp is a stamp."""
+    mark = node.get(KEY) if isinstance(node, dict) else None
+    return mark if isinstance(mark, dict) else None
+
+
 def _own(node):
     """The stamp a file carries for a place, cut down to what a stamp may hold."""
     mark = node.get(KEY)
@@ -215,19 +221,18 @@ NAMES = ("charted_by", "changed_by", "reviewed_by")
 def for_viewer(nodes):
     """Take the names out, in place, for a reader who may not see the whole map."""
     for node in nodes or []:
-        mark = node.get(KEY) if isinstance(node, dict) else None
-        if isinstance(mark, dict):
+        mark = _mark(node)
+        if mark is not None:
             node[KEY] = {k: v for k, v in mark.items() if k not in NAMES}
 
 
 def describe(node):
     """A place's stamp as a reader is told it. Never raises, never invents."""
-    mark = node.get(KEY) if isinstance(node, dict) else None
-    if not isinstance(mark, dict):
+    mark = _mark(node)
+    if mark is None:
         return {"reviewed": None,
                 "note": "Charted before the map kept provenance. Who and when are not known."}
-    out = {k: str(mark[k]) for k in ("charted_by", "charted_at", "source", "changed_by", "changed_at",
-                                     "reviewed_by", "reviewed_at") if mark.get(k)}
+    out = {k: str(mark[k]) for k in FIELDS if mark.get(k)}
     out["reviewed"] = mark.get("reviewed") if isinstance(mark.get("reviewed"), bool) else None
     if out["reviewed"] is False:
         out["note"] = "Written by an import and not yet checked by a person. Treat as unconfirmed."
@@ -237,6 +242,18 @@ def describe(node):
         out["note"] = ("Reviewed by a person, and it has changed since. "
                        "Treat what changed as unconfirmed.")
     return out
+
+
+def unchecked(node):
+    """True when words on this place were written by an import and no person has
+    looked at them since: the place was never reviewed, or it was and an import
+    has changed it. False for a place charted before the map kept provenance,
+    because nothing says where its words came from.
+
+    Used to mark such words in what an agent is given (`mcp_tools.py`): a
+    device's own name or a container's label is text its owner chose, and a
+    model should be able to tell it from text a person approved."""
+    return _mark(node) is not None and not settled(node)
 
 
 def settled(node):
@@ -255,8 +272,8 @@ def settled(node):
     the view an API token for a cloud tool gets (`cloud_view.py`). A stamp with
     no `reviewed_at` proves nothing, so it does not count.
     """
-    mark = node.get(KEY) if isinstance(node, dict) else None
-    if not isinstance(mark, dict) or mark.get("reviewed") is not True:
+    mark = _mark(node)
+    if mark is None or mark.get("reviewed") is not True:
         return False
     reviewed_at = str(mark.get("reviewed_at") or "")
     if not reviewed_at or mark.get(UNSEEN) is True:
@@ -270,8 +287,8 @@ def summary(nodes):
     counts = {"reviewed": 0, "unreviewed": 0, "unknown": 0}
     oldest_unreviewed = newest_change = None
     for node in nodes or []:
-        mark = node.get(KEY) if isinstance(node, dict) else None
-        if not isinstance(mark, dict) or not isinstance(mark.get("reviewed"), bool):
+        mark = _mark(node)
+        if mark is None or not isinstance(mark.get("reviewed"), bool):
             counts["unknown"] += 1
         elif mark["reviewed"]:
             counts["reviewed"] += 1
@@ -280,7 +297,7 @@ def summary(nodes):
             at = str(mark.get("charted_at") or "")
             if at and (oldest_unreviewed is None or at < oldest_unreviewed):
                 oldest_unreviewed = at
-        changed = str(mark.get("changed_at") or "") if isinstance(mark, dict) else ""
+        changed = str(mark.get("changed_at") or "") if mark is not None else ""
         if changed and (newest_change is None or changed > newest_change):
             newest_change = changed
     return {**counts, "oldest_unreviewed": oldest_unreviewed, "newest_change": newest_change}

@@ -2,9 +2,11 @@
    seal and its emblem), the admin's ledgers (USERS, SIGN-INS), and THE
    DIRECTORY (which directory may sign people in). Lifted out of ui.js whole.
    One inbound arrow — ui.js's settings tab calls
-   `A.renderSettingsSections` — and every other tie is through `A`
-   (`A.showToast`, `A.applySettingsFolds`); the block referenced no other ui.js
-   local. Registered in atlas.js after ui.js. */
+   `A.renderSettingsSections`, which draws every Settings section in panel
+   order. CONNECTIONS is one of them and lives in connections.js, imported
+   below; every other tie is through `A` (`A.showToast`,
+   `A.applySettingsFolds`, `A.repaintSignals`). Registered in atlas.js after
+   ui.js. */
 
 import { A, CFG, $, esc, themeText, WRITE_HEADERS, postJSON } from './config.js';
 import { renderConnections } from './connections.js';
@@ -423,7 +425,7 @@ async function renderDeployment() {
    force came from. Keys are write-only: the form never learns a stored one,
    only that one is set; TEST with a blank key asks with the one in force. */
 const SRC_FIELDS = [
-  ['ATLAS_SIGNALS_SOURCES', 'Live sources (comma-separated)', 'kuma,prometheus,unifi,deception'],
+  ['ATLAS_SIGNALS_SOURCES', 'Live sources (comma-separated)', 'kuma,prometheus,unifi,checks,deception'],
   ['ATLAS_PROM_URL', 'Prometheus URL', 'http://prometheus:9090'],
   ['ATLAS_LOKI_URL', 'Loki URL', 'http://loki:3100'],
   ['ATLAS_KUMA_URL', 'Uptime-Kuma URL', 'http://kuma:3001'],
@@ -449,7 +451,9 @@ async function renderSources(pending = readIntegrations()) {
     `<button class="sp-sub" type="button">DATA SOURCES <span class="sp-sub-plain">· health, metrics and logs</span></button>
      <div class="sp-sec-body">
      <div class="acct-note">Where the map gets its health, metrics, logs and tripwires. Test a source before
-       you save. Leave a field blank to use the deployment value. Live now: ${state}.</div>
+       you save. Leave a field blank to use the deployment value. Built-in checks (add
+       checks to the live sources): asks the service URLs on your map; nothing else.
+       Live now: ${state}.</div>
      ${rows}
      <div class="sp-actions src-tests">
        ${SRC_TESTS.map(([k, name]) => `<button class="sp-btn" data-test="${k}">Test ${esc(name)}</button>`).join('')}

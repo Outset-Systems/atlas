@@ -8,6 +8,7 @@
    and the colophon whispers "the watchers are silent" — never an error. */
 
 import { A, CFG, $, esc, themeText } from './config.js';
+import { tally, colophonText } from './signals-model.js';
 
 const STATE_CLASS = { degraded: 's-degraded', down: 's-down', slumbering: 's-slumber', maintenance: 's-maint' };
 // A place that is down *behind* something else that is down keeps its red — it
@@ -70,8 +71,6 @@ A.paintServiceHealth = function paintServiceHealth(rootEl) {
 function apply(feed) {
   A.signalsFeed = feed;
   const nodes = feed?.nodes || {};
-  let dark = 0;            // faults that are their own cause
-  let caused = 0;          // faults explained by one of those
   const darkNames = [];
 
   for (const mk of markersEl().children) {
@@ -90,16 +89,16 @@ function apply(feed) {
     if (info.state === 'down') {
       if (info.cause) {
         // a consequence: still red, but not its own alarm
-        caused++;
         mk.classList.add(CAUSED_CLASS);
         mk.title = `behind ${info.cause}`;
       } else {
-        dark++;
         const label = mk.querySelector('.mk-label');
         if (label) darkNames.push(label.textContent);
       }
     }
   }
+  // `dark`: faults that are their own cause; `caused`: faults explained by one of those
+  const { dark, caused } = tally([...markersEl().children].map((mk) => mk.dataset.id), nodes);
 
   A.paintServiceHealth();   // K4 — refresh per-service dots
   A.paintConstellationHealth?.();   // a split ring reddens where it stands
@@ -118,20 +117,9 @@ function apply(feed) {
   // CAUSES, not craters: "the gateway fell, and nine places with it" is one
   // thing to go and fix, where "ten places are dark" is ten.
   if (colophon) {
-    if (dark > 0) {
-      // "it" or "them" follows the number of CAUSES, not of consequences:
-      // one dead hypervisor with six vassals behind *it*, not behind *them*.
-      const behind = caused
-        ? ` — ${caused} place${caused === 1 ? '' : 's'} behind ${dark === 1 ? 'it' : 'them'}`
-        : '';
-      colophon.textContent = dark === 1
-        ? `⚠ ${darkNames[0]} has gone dark${behind}`
-        : `⚠ ${dark} places are dark${behind}`;
-      colophon.classList.add('alarm');
-    } else if (caused > 0) {
-      // every fault is explained by something that is no longer faulted —
-      // rare, but saying nothing at all would be wrong
-      colophon.textContent = `⚠ ${caused} place${caused === 1 ? '' : 's'} still unreachable`;
+    const warning = colophonText(dark, caused, darkNames[0]);
+    if (warning) {
+      colophon.textContent = warning;
       colophon.classList.add('alarm');
     } else {
       colophon.textContent = COLOPHON_DEFAULT;
@@ -253,11 +241,4 @@ A.startSignals = function startSignals() {
   if (!CFG.SIGNALS_POLL_MS) return;   // polling disabled
   poll();                             // first read immediately
   setInterval(poll, CFG.SIGNALS_POLL_MS);
-};
-
-/** Uptime string for the card (K5), or '' when unknown. */
-A.nodeUptime = function nodeUptime(id) {
-  const info = A.signalsFeed?.nodes?.[id];
-  if (!info || typeof info.uptime_30d !== 'number') return '';
-  return `${info.uptime_30d.toFixed(2)}% · 30d`;
 };

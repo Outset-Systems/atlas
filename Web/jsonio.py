@@ -140,12 +140,12 @@ def write_json_atomic(path, obj, indent=2, keep_backup=True, newline=True):
 def write_bytes_atomic(path, blob):
     """`write_json_atomic`'s guarantee for a binary file (an uploaded render).
 
-    `mapart.store` hand-rolled this with a FIXED `<path>.part` temp name and a
+    `mapart.save` hand-rolled this with a FIXED `<path>.part` temp name and a
     bare `os.replace` — exactly the two things this module exists to fix: two
     admins uploading renders of the same name at once built the same temp file
     (the 8-concurrent-writers failure above), and a transient sharing
     violation lost the upload outright instead of retrying. No `.bak` and no
-    `copystat`: a render is overwritten only by an upload under its own name,
+    `copymode`: a render is overwritten only by an upload under its own name,
     and that is the operator's stated intent.
     """
     directory = os.path.dirname(path)

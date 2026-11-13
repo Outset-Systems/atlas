@@ -3,9 +3,10 @@
 The two reads the map itself lives on. The bodies are dynamic and
 redaction-shaped, so they are NOT modelled: `schema.py`'s catalogue is the
 source of truth for the dataset, and a pydantic mirror of it would be a second
-one. They are plain Flask views. Redaction,
-`Vary`, cache-control and the `lab-data` ETag/304 come from the shared
-helpers (`redaction.py`, `context.py`).
+one. They are plain Flask views. Redaction, `Vary` and cache-control come
+from `redaction.py`. The `lab-data` ETag is put together here, from the stamps
+and tags `context.py` and `redaction.py` hand back, and the 304 is werkzeug's
+`make_conditional`.
 """
 
 import hashlib
@@ -15,7 +16,7 @@ from flask import jsonify, make_response, request
 
 import settings
 from context import atlas
-from redaction import redact_for_groups, vary_on_viewer
+from redaction import private_no_cache, redact_for_groups
 
 from . import bp
 
@@ -40,10 +41,9 @@ def lab_data():
     # workers would mint two ETags for one body and every If-None-Match missed
     tags = hashlib.sha1((group_tag + overlay_tag).encode("utf-8")).hexdigest()[:8]
     resp.set_etag(f"{settings.APP_VERSION}-{mtime}-{stamps}-{tags}")
-    # `private` + `Vary` (below): a shared cache must never hand one viewer's
+    # `private` + `Vary`: a shared cache must never hand one viewer's
     # redacted dataset — or an admin's unredacted one — to the next.
-    resp.headers["Cache-Control"] = "private, no-cache"
-    vary_on_viewer(resp)
+    private_no_cache(resp)
     if problems:
         resp.headers["X-Atlas-Data-Problems"] = str(len(problems))
     return resp.make_conditional(request)
@@ -53,8 +53,7 @@ def lab_data():
 def maps_list():
     """Every base render this Atlas can be drawn on, with its theme if charted."""
     resp = make_response(jsonify({"maps": maps_for_viewer()}))
-    resp.headers["Cache-Control"] = "private, no-cache"
-    return vary_on_viewer(resp)
+    return private_no_cache(resp)
 
 
 def maps_for_viewer():

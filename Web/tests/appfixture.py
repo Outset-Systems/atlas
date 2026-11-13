@@ -12,9 +12,9 @@ nobody reads.
 Reloading `settings` re-reads the environment, and the freshly built app picks
 it up, so two suites with different backends can share a process.
 
-The historic module-level names on `app` are refreshed too, because the
-existing tests assert on them (`atlas_app.DATA_BACKEND`, `INGEST_ENABLED`,
-`_signals`).
+The historic module-level names on `app` are gone. The handle `fresh_app`
+returns carries the ones the existing tests assert on
+(`atlas_app.DATA_BACKEND`, `INGEST_ENABLED`, `_signals`).
 """
 
 import importlib
@@ -56,9 +56,12 @@ def fresh_app(**env):
     # full suite is green while the pair, run in the other order, loses 24 tests.
     # (Found 2026-08-21.)
     #
-    # `app.py` takes a FROM-import of that name (`from hub_auth.auth import
-    # AUTH_MODE`), which binds a copy that a reload of the source module cannot
-    # reach — hence reloading `app` too, and in this order.
+    # `app.py` took a FROM-import of that name until 2026-11-12 (`from
+    # hub_auth.auth import AUTH_MODE`), a copy that a reload of the source
+    # module could not reach — hence reloading `app` too, and in this order.
+    # It asks `settings.auth_mode()` now. The reload of `app` stays: it re-runs
+    # the module's import-time work (the logger levels, the module-level `app`)
+    # against the settings reloaded above.
     from hub_auth import auth as hub_auth_mod
     importlib.reload(hub_auth_mod)
 
@@ -69,17 +72,14 @@ def fresh_app(**env):
         store.reset_engine_for_tests()
 
     import app as app_module
-    importlib.reload(app_module)          # re-takes its `from ... import AUTH_MODE`
+    importlib.reload(app_module)          # re-runs its import-time work (see above)
     flask_app = app_module.create_app()
     context = flask_app.extensions["atlas"]
     return SimpleNamespace(
         app=flask_app,
-        module=app_module,
         DATA_BACKEND=settings.DATA_BACKEND,
-        SITE_SLUG=settings.SITE_SLUG,
         _lab=context.reader,
         _signals=context.signals,
-        _store=context.store,
         INGEST_ENABLED=flask_app.config["INGEST_ENABLED"],
     )
 

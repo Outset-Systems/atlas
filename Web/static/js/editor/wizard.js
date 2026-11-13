@@ -14,7 +14,8 @@
 import { A, $, esc } from '../config.js';
 import Editor from './store.js';
 import { buildForm, makeEl as el } from './form.js';
-import { openDesk, reviewCsv, LEASE_HELP } from './panel.js';
+import { openDesk } from './panel.js';
+import { reviewCsv, LEASE_HELP } from './survey.js';
 import { suggestNetworks, firstImport } from './wizard-model.js';
 
 let root, bodyEl, stepEl;

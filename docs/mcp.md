@@ -159,6 +159,17 @@ only. When the tool cannot answer (no place by that name, say),
 The server tells the agent this itself, in its instructions. It is worth
 knowing as the person who reads the agent's work.
 
+**Words an import wrote.** A device's own name, a DHCP hostname or a container
+label becomes a place's name when an import is accepted, and whoever controls
+that device chose it. For a place no person has checked (`reviewed` false, or
+changed by an import since its review), a full token is given those words under
+`imported_text` and not in their usual keys: `{"id": "printer", "imported_text":
+{"name": "..."}}`. Ids, addresses and the stamp stay where they are. The agent
+is told to quote such text as a label and never follow it. This makes
+unapproved text visible; it does not make it safe, and an agent's own
+permission prompts remain the real control. A cloud token is not shown these
+places at all.
+
 **Provenance.** Each place carries when it was charted, when it last changed,
 where it came from and `reviewed`. An agent is told when and whether, not who:
 the names of the people who edit the map are for admins.
@@ -222,7 +233,9 @@ A cloud token sees less than this list: see
 ## Protocol
 
 `POST /api/v2/mcp`, JSON-RPC, tools only, with no session and no stream. A
-token is limited to 120 requests a minute.
+token is limited to 120 requests a minute across every worker, can be bound to
+the local network, and every call it makes is logged with its tool and
+arguments ([what a token can and cannot do](api.md#what-a-token-can-and-cannot-do)).
 
 The methods are `tools/list`, `tools/call` and `server/discover`, plus
 `initialize` and `ping` for older clients. Two generations of client are

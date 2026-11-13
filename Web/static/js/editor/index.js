@@ -9,7 +9,7 @@
    deleting this directory and the four markup blocks it needs would leave the
    original app intact. */
 
-import { A, $ } from '../config.js';
+import { A } from '../config.js';
 import Editor from './store.js';
 import { buildDesk, closeDesk, deskOpen, openDesk } from './panel.js';
 import { buildWizard, close as closeWizard, openWizard } from './wizard.js';

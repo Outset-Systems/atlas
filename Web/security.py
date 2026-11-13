@@ -41,8 +41,8 @@ def same_origin_refusal():
     """The reason this request is not from the Atlas's own page, or None.
 
     The two browser-side checks above, and nothing about who is asking: the
-    accounts surface (`auth_routes`) needs exactly this much on routes that
-    run BEFORE there is an identity (the login POST itself), and the editor
+    accounts surface (`api/v2/accounts_v2.py`) needs exactly this much on routes
+    that run BEFORE there is an identity (the login POST itself), and the editor
     needs it in front of its admin check. One implementation, so the app has
     one answer to "what proves a request came from us" — it used to have two
     (a per-session token on the sign-in routes, this header everywhere else).
@@ -60,6 +60,16 @@ def same_origin_refusal():
     return None
 
 
+def sees_whole_map():
+    """True when the caller may see the whole map."""
+    return sees_everything(viewer_groups())
+
+
+def admins_only():
+    """The refusal an admins-only surface answers, as `(json, status)`."""
+    return fail(403, "admins only")
+
+
 def write_refusal():
     """The reason this write must not proceed, or None if it may.
 
@@ -74,8 +84,8 @@ def write_refusal():
     if refusal:
         return refusal
 
-    if not sees_everything(viewer_groups()):
-        return fail(403, "admins only")
+    if not sees_whole_map():
+        return admins_only()
 
     return None
 

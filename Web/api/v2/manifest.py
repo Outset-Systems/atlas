@@ -30,14 +30,11 @@ import outset_calendar
 import outset_manifest as om
 import settings
 from context import atlas
-from redaction import redact_for_groups, vary_on_viewer
+from redaction import no_store, redact_for_groups
 
 from . import bp
 
 log = logging.getLogger("atlas.api.manifest")
-
-MANIFEST_PATH = "/api/manifest"
-V2_MANIFEST_PATH = bp.url_prefix + "/manifest"
 
 _DAY = re.compile(r"\b(mon|tue|wed|thu|fri|sat|sun)[a-z]*\b", re.I)
 _HHMM = re.compile(r"\b(\d{1,2}):(\d{2})\b")
@@ -130,7 +127,7 @@ def _auth():
     return om.auth("own-login", honours_hub_claims=False, accounts="none")
 
 
-def build(now=None):
+def build():
     ctx = atlas()
     try:
         data, _, _ = ctx.dataset()
@@ -146,7 +143,7 @@ def build(now=None):
         auth=_auth(),
         schedule=om.schedule(tz="UTC", blocks=_blocks(rites), chains=[],
                              run_endpoint=None, toggle_endpoint=None,
-                             now=(now or dt.datetime.now(dt.timezone.utc)).isoformat(timespec="seconds")),
+                             now=dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")),
         lanes=[],
         usage=om.usage(None, "The Atlas calls no model; the rites chart other apps' calls."))
 
@@ -161,8 +158,7 @@ def _is_operator():
 def manifest_response():
     doc = build()
     resp = make_response(jsonify(doc if _is_operator() else om.public_view(doc)))
-    resp.headers["Cache-Control"] = "no-store"
-    return vary_on_viewer(resp)
+    return no_store(resp)
 
 
 @bp.route("/manifest")
@@ -182,12 +178,12 @@ def calendar_day():
     own = outset_calendar.day_view([{"key": settings.APP_KEY, "manifest": build()}], day)
     hub = hub_url()
     if not hub:
-        return _nostore(jsonify({**own, "fleet": False, "hub": None}))
+        return no_store(jsonify({**own, "fleet": False, "hub": None}))
     import requests
     import hub_auth.auth as ka
     token = ka.mint_token("svc:" + settings.APP_KEY)
     if not token:
-        return _nostore(jsonify({**own, "fleet": False, "hub": hub,
+        return no_store(jsonify({**own, "fleet": False, "hub": hub,
                                  "hub_error": "no fleet secret configured (ATLAS_HUB_SECRET)"}))
     try:
         r = requests.get(f"{hub}/api/calendar", params={"day": day.isoformat(), "actual": "0"},
@@ -196,12 +192,7 @@ def calendar_day():
         view = r.json()
         if not isinstance(view, dict) or "planned" not in view:
             raise ValueError("not a calendar view")
-        return _nostore(jsonify({**view, "fleet": True, "hub": hub}))
+        return no_store(jsonify({**view, "fleet": True, "hub": hub}))
     except Exception as e:                                     # noqa: BLE001
         log.warning("calendar: the Hub did not answer (%s); drawing our own rites", e)
-        return _nostore(jsonify({**own, "fleet": False, "hub": hub, "hub_error": str(e)[:200]}))
-
-
-def _nostore(resp):
-    resp.headers["Cache-Control"] = "no-store"
-    return vary_on_viewer(resp)
+        return no_store(jsonify({**own, "fleet": False, "hub": hub, "hub_error": str(e)[:200]}))

@@ -1,11 +1,13 @@
 /* Atlas — TOPOLOGY (was THE PATH): the realm, tier by tier
    (2026-07-11, broken back out of the Ledger and rebuilt SolarWinds-NPM-style):
 
-     tier 0  THE WILD · CLOUDFLARE          (the world beyond)
-     tier 1  the gateway               (the one road in)
-     tier 2  network gear + physical hosts   (iron)
-     tier 3  the vassal VMs                  (parent: hypervisor — NetBox
+     tier 0  the world beyond                (two places, by id)
+     tier 1  the ways in                     (four places, by id)
+     tier 2  network gear + physical hosts   (everything else)
+     tier 3  the guests                      (any place with a `parent` — NetBox
                                               virtualization model)
+
+   Which ids those are, the layout and the edges are path-model.js's.
 
    Edges come from routes[] plus parent containment; nodes and edges take live
    health from the signals feed on every open. Click a node → fly to it on the
@@ -13,46 +15,13 @@
 
 import { A, $, esc, zoneById, FALLBACK_HUE } from './config.js';
 import { say } from './words.js';
+import { chainPairs, edgesOf, layout, servicesCrossing } from './path-model.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 let root, svg, nodesEl, legendEl;
 
 let tracedEdge = null;   // "<a> <b>" of the hop currently being traced, or null
 let lastFocus = null;    // the service-card view to return to when a trace is released
-
-/** Every charted service road that crosses a given hop, each with the WHOLE
-    road it belongs to.
-
-    A road is `[the service's host, ...link.path]` — the same chain `open()`
-    lights when a service card hands one over, built the same way here so the
-    two can never disagree about where a road begins. A hop is crossed when the
-    chain names both ends CONSECUTIVELY: an unordered "contains both" would
-    claim Jellyfin crosses gateway→pangolin, two stops that are on its road
-    but not adjacent on it, and a picture that cannot tell "next to" from
-    "somewhere along" is the starburst this whole chain drawing replaced.
-
-    Direction is not checked. The edge is drawn once for a pair, and traffic on
-    it is answered in both directions; a road that runs b→a still runs over this
-    hop. Services with no charted `path` are skipped rather than guessed at —
-    39 of the realm's 49 have none, and inventing roads for them would fill the
-    map with lines nobody surveyed. */
-function servicesCrossing(a, b) {
-  const out = [];
-  for (const n of A.DATA.nodes || []) {
-    for (const link of n.links || []) {
-      const hops = Array.isArray(link.path) ? link.path.filter(Boolean) : [];
-      if (!hops.length) continue;
-      const chain = [n.id, ...hops];
-      for (let i = 0; i < chain.length - 1; i++) {
-        if ((chain[i] === a && chain[i + 1] === b) || (chain[i] === b && chain[i + 1] === a)) {
-          out.push({ host: n, link, chain });
-          break;                       // a road crossing a hop twice is still one road
-        }
-      }
-    }
-  }
-  return out;
-}
 
 /** Light every road that crosses this hop, end to end — not just the hop.
     Clicking one segment of Jellyfin's road should show you the whole of it
@@ -67,10 +36,7 @@ function traceEdge(a, b, crossing) {
   const litNodes = new Set(), litPairs = new Set();
   for (const { chain } of crossing) {
     for (const id of chain) litNodes.add(id);
-    for (let i = 0; i < chain.length - 1; i++) {
-      litPairs.add(`${chain[i]} ${chain[i + 1]}`);
-      litPairs.add(`${chain[i + 1]} ${chain[i]}`);
-    }
+    for (const pair of chainPairs(chain)) litPairs.add(pair);
   }
   for (const p of svg.querySelectorAll('.pth-edge')) {
     const on = litPairs.has(`${p.dataset.a} ${p.dataset.b}`);
@@ -117,13 +83,6 @@ function releaseTrace() {
   if (lastFocus) open(lastFocus.focusId, lastFocus.reachIds, lastFocus.serviceLabel);
 }
 
-function tierOf(n) {
-  if (n.id === 'the-wild' || n.id === 'cloudflare') return 0;
-  if (['gateway', 'traefik', 'tailscale', 'pangolin'].includes(n.id)) return 1;  // the ways in
-  if (n.parent) return 3;
-  return 2;                       // physical iron + remaining network gear
-}
-
 function build() {
   // off_map places are charted but not drawn — and THE PATH is a drawing.
   // Filtering here is enough for the roads too: the edge loop below requires
@@ -132,15 +91,7 @@ function build() {
   const feed = A.signalsFeed?.nodes || {};
 
   // lay tiers out on a normalized 100×100 grid
-  const tiers = [[], [], [], []];
-  for (const n of nodes) tiers[tierOf(n)].push(n);
-  const TIER_Y = [8, 30, 55, 82];
-  const pos = {};
-  tiers.forEach((tier, t) => {
-    tier.forEach((n, i) => {
-      pos[n.id] = { x: (100 * (i + 1)) / (tier.length + 1), y: TIER_Y[t] };
-    });
-  });
+  const { tiers, pos } = layout(nodes);
 
   // Tell the CSS how many columns the busiest tier needs, so the table can be
   // sized to the REALM rather than to the window. These x's are percentages of
@@ -152,13 +103,7 @@ function build() {
   root.style.setProperty('--pth-cols', String(Math.max(...tiers.map((t2) => t2.length), 1)));
 
   // edges: routes[] + parent containment (drawn quieter)
-  const edges = [];
-  for (const r of A.DATA.routes || []) {
-    if (pos[r.from] && pos[r.to]) edges.push({ a: r.from, b: r.to, kind: r.kind || 'road' });
-  }
-  for (const n of nodes) {
-    if (n.parent && pos[n.parent]) edges.push({ a: n.parent, b: n.id, kind: 'vassal' });
-  }
+  const edges = edgesOf(A.DATA.routes, nodes, pos);
 
   svg.setAttribute('viewBox', '0 0 100 100');
   svg.setAttribute('preserveAspectRatio', 'none');
@@ -179,7 +124,7 @@ function build() {
     // stroke, drawn after so it sits above its own ink but paints nothing.
     // A hop nobody's road crosses gets no twin at all: an inert cursor is a
     // truer signal than a pointer that promises something and then shrugs.
-    const crossing = servicesCrossing(e.a, e.b);
+    const crossing = servicesCrossing(A.DATA.nodes, e.a, e.b);
     if (!crossing.length) continue;
     const hit = document.createElementNS(SVGNS, 'path');
     hit.setAttribute('d', d);
@@ -255,11 +200,7 @@ function open(focusId, reachIds, serviceLabel) {
     // service happened to live on one of them, and a five-hop road showed as
     // one lit edge and four orphaned dots.
     const chain = Array.isArray(reachIds) ? [focusId, ...reachIds] : [focusId];
-    const consecutive = new Set();
-    for (let i = 0; i < chain.length - 1; i++) {
-      consecutive.add(`${chain[i]}\0${chain[i + 1]}`);
-      consecutive.add(`${chain[i + 1]}\0${chain[i]}`);
-    }
+    const consecutive = chainPairs(chain, '\0');
     for (const p of svg.querySelectorAll('.pth-edge')) {
       const { a, b } = p.dataset;
       if ((a === focusId && reach.has(b)) || (b === focusId && reach.has(a))

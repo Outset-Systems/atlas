@@ -321,8 +321,8 @@ export function layoutDay(rites, { dow = new Date().getUTCDay() } = {}) {
   /* `today` is set AFTER the meetings are found, because `meetings` marks the
      very block objects the strip draws — set it first and the outline would
      land on a copy nobody paints. */
-  for (const lane of all) { lane.dow = dow; lane.today = lane.days.has(dow) ? lane.blocks : []; }
-  return { dow, groups, lanes: all, hits: groups.flatMap((g) => g.hits),
+  for (const lane of all) { lane.today = lane.days.has(dow) ? lane.blocks : []; }
+  return { groups, lanes: all, hits: groups.flatMap((g) => g.hits),
            drawn: all.filter((l) => l.today.length || l.every) };
 }
 
@@ -352,4 +352,59 @@ export function nextTurning(lanes, now = new Date()) {
     if (best) return best;   // the first day with a candidate holds the soonest one
   }
   return null;
+}
+
+/* ── the phrases beside the day ───────────────────────────────────────────── */
+
+/** An expected interval in seconds, as the row says it: weeks, days, hours,
+    else minutes. '' when there is none. */
+export function every(seconds) {
+  if (!seconds) return '';
+  if (seconds % 604800 === 0) return `every ${seconds / 604800}w`;
+  if (seconds % 86400 === 0) return `every ${seconds / 86400}d`;
+  if (seconds % 3600 === 0) return `every ${seconds / 3600}h`;
+  return `every ${Math.round(seconds / 60)}m`;
+}
+
+/** The row's clock, in one short phrase. The surveyor's own `when` can run to
+    a paragraph ("04:00 CDT the download host + the media host · 08:00 UTC the edge · 10:00 UTC
+    The app host") and a 200px column truncates it into something no more checkable
+    than a guess — so the column carries the clock this page actually DREW and
+    the prose rides in the row's title, one hover away. A clock read out of that
+    prose wears a dotted rule (`.cal-row.read`) to say which. Hours are UTC and
+    the axis says so once, so no row repeats it. */
+export function clockPhrase(lane) {
+  if (lane.every) return lane.every % 60 === 0 ? `every ${lane.every / 60}h` : `every ${lane.every} min`;
+  if (!lane.blocks.length) return 'no hour charted';
+  const at = fmtClock(lane.blocks[0].start);
+  if (lane.hourly) {
+    return `hourly at :${String(lane.blocks[0].start % 60).padStart(2, '0')}`
+      + (lane.window ? ` · ${fmtClock(lane.window.from)}–${fmtClock(lane.window.to)}` : '');
+  }
+  if (lane.ghost) return `${at} · its own date`;
+  const days = lane.daysLabel || (lane.cadence === 'weekly' ? dayName([...lane.days][0]) : '');
+  return days ? `${days} ${at}` : at;
+}
+
+/** Minutes from now, in the largest two units that matter. */
+export function inWords(min) {
+  if (min < 60) return `${min}m`;
+  const h = Math.floor(min / 60), m = min % 60;
+  if (h < 24) return m ? `${h}h ${m}m` : `${h}h`;
+  const d = Math.floor(h / 24);
+  return `${d}d ${h % 24}h`;
+}
+
+/** A verdict that means the rite has stopped turning. */
+export const isSilent = (verdict) => ['missed', 'failed'].includes(verdict);
+
+/** What `nextTurning` found, in the three parts a sentence about it needs:
+    its clock, the weekday when that is not today (else ''), and how long
+    until then. Plain text — the caller escapes and joins. */
+export function nextParts(next, now) {
+  return {
+    clock: fmtClock(next.start),
+    day: next.dayOffset ? dayName(now.getUTCDay() + next.dayOffset) : '',
+    wait: inWords(next.inMin),
+  };
 }

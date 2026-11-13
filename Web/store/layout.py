@@ -15,20 +15,25 @@ import math
 
 from sqlalchemy import select
 
+from layoutgrid import (  # noqa: F401
+    BAND_CENTER_X as _BAND_CENTER_X,
+    BAND_LABEL_X as _BAND_LABEL_X,
+    BAND_STEP as _BAND_STEP,
+    BAND_TOP as _BAND_TOP,
+    GRID_COLS as _GRID_COLS,
+    GRID_STEP as _GRID_STEP,
+    X_MAX as _X_MAX,
+    X_MIN as _X_MIN,
+    Y_MAX as _Y_MAX,
+    Y_MIN as _Y_MIN,
+    clamp as _clamp,
+    grid_slot as _grid_slot,
+)
+
 from .models import Node, Zone
 
-_GRID_COLS = 5
-_GRID_STEP = 7.0
-_BAND_TOP = 14.0
-_BAND_STEP = 17.0
-_BAND_LABEL_X = 12.0
-_BAND_CENTER_X = 50.0
-_X_MIN, _X_MAX = 2.0, 98.0
-_Y_MIN, _Y_MAX = -38.0, 138.0
-
-
-def _clamp(v, lo, hi):
-    return max(lo, min(hi, v))
+# The numbers and the grid live in `layoutgrid.py`, which needs no database.
+# They keep their old private names here for the modules that import them.
 
 
 def _ring_radius(count):
@@ -87,10 +92,7 @@ def auto_layout(session, site):
                         if n.zone_slug == zone_slug and n.slug in positions
                         and n not in group)
             for i, n in enumerate(group):
-                slot = taken + i
-                col, row = slot % _GRID_COLS, slot // _GRID_COLS
-                n.x = _clamp(ax + (col - (_GRID_COLS - 1) / 2) * _GRID_STEP, _X_MIN, _X_MAX)
-                n.y = _clamp(ay + row * _GRID_STEP, _Y_MIN, _Y_MAX)
+                n.x, n.y = _grid_slot(ax, ay, taken + i)
                 positions[n.slug] = (n.x, n.y)
 
     def ring(parent_slug, children):

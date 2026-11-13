@@ -1,8 +1,8 @@
 """Atlas DB backbone (Atlas for Teams, Phase 1 — the design notes).
 
-Only imported when ATLAS_DATA_BACKEND=db. File mode never touches this
-package, so the homelab edition runs unchanged even without SQLAlchemy
-installed — that is the "no new code path executes" bar.
+Only queried when ATLAS_DATA_BACKEND=db. Importing `connections` loads this
+package whatever the backend, though, so SQLAlchemy has to be installed in
+file mode too.
 
 Schema management: Alembic migrations (Web/migrations) are the deployment
 path; `init_db()` (create_all) is for tests and throwaway dev databases.
@@ -14,18 +14,8 @@ from contextlib import contextmanager
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from .labdata import dump_labdata, get_site, load_labdata, restamp, site_stamp  # noqa: F401
-from .models import (  # noqa: F401
-    Base,
-    Node,
-    NodeLink,
-    ObservedNode,
-    Route,
-    SignalSnapshot,
-    Site,
-    SiteToken,
-    Zone,
-)
+from .labdata import dump_labdata, load_labdata, restamp, site_stamp  # noqa: F401
+from .models import Base, Node, Site, Zone  # noqa: F401
 
 DEFAULT_DB_URL = "sqlite:////data/atlas.db"
 

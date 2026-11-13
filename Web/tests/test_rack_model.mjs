@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 import {
   UH, RACK_W, KIND_HUE, ledColor, slug, isEmpty, topU, slotKey, uLabel,
   kindOf, setRackTheme, buildDevices, buildRear, fits, faceplate, ledSpot,
-  depthMm, rackDepthMm, KIND_DEPTH_MM,
+  depthMm, rackDepthMm, KIND_DEPTH_MM, crownOf, peerNode,
 } from '../static/js/rack-model.js';
 
 let passed = 0;
@@ -245,6 +245,36 @@ test('a storage faceplate shows four bays a row', () => {
   const bays = (size) => faceplate({ kind: 'storage', size }, '').match(/fp-bay/g).length;
   assert.equal(bays(1), 4);
   assert.equal(bays(2), 8);
+});
+
+test('a rack opens on the crown when it holds it, else on its first vessel', () => {
+  const dev = (node, key) => ({ key, slot: node ? { node } : { name: key } });
+  const first = dev('', 'patch'), crown = dev('hypervisor', 'crown'), other = dev('host-b', 'b');
+  assert.equal(crownOf([first, other, crown]), crown);
+  assert.equal(crownOf([first, other]), first);
+  assert.equal(crownOf([]), undefined);
+  const twin = dev('hypervisor', 'twin');
+  assert.equal(crownOf([other, crown, twin]), crown, 'the first of two wins');
+  // a device with no slot is passed over, not tripped on
+  assert.equal(crownOf([{ key: 'bare' }, crown]), crown);
+});
+
+test('a port peer is a charted place when it names one whole, case-blind', () => {
+  const nodes = [{ id: 'core-switch', name: 'CORE SWITCH' }, { id: 'host-a', name: 'Host A' }, { id: 'bare' }];
+  assert.equal(peerNode(nodes, 'core-switch'), nodes[0]);
+  assert.equal(peerNode(nodes, 'Core Switch'), nodes[0], 'by name');
+  assert.equal(peerNode(nodes, 'HOST-A'), nodes[1], 'by id, any case');
+  assert.equal(peerNode(nodes, 'BARE'), nodes[2], 'a place with no name still matches by id');
+  assert.equal(peerNode(nodes, 'host-a port 3'), undefined, 'prose around the name is not a match');
+  assert.equal(peerNode(nodes, ''), '', 'blank text asks nothing');
+});
+
+test('the compute and forge faceplates wear their kind\'s hue', () => {
+  assert.equal(KIND_HUE.forge, '#C0714E');
+  assert.equal(KIND_HUE.compute, '#C9A554');
+  assert.ok(faceplate({ kind: 'forge', size: 2 }, '').includes('#C0714E'));
+  assert.ok(faceplate({ kind: 'compute', size: 2 }, '').includes('#C9A554'));
+  assert.ok(!faceplate({ kind: 'compute', size: 2 }, '').includes('#C0714E'));
 });
 
 console.log(`rack-model: ${passed} passed`);

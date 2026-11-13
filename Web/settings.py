@@ -1,7 +1,7 @@
 """The Atlas's configuration knobs, read in one place.
 
 Most were scattered through the app as bare `os.environ` reads; collecting them
-here is not tidying for its own sake: `/api/admin/settings` shows an operator
+here is not tidying for its own sake: `/api/v2/admin/deployment` shows an operator
 which are actually in force, and the first-run wizard needs to know whether this
 deployment can be written to at all before it offers to write.
 
@@ -29,12 +29,13 @@ import ipaddress
 import logging
 import os
 
+import envnames  # NAMES THAT CHANGED (v1.48.0): ATLAS_AUTH_MODE and friends
+import theme as _theme   # THE THEME (v1.48.0): the realm's words live in themes/*.json
+
 
 log = logging.getLogger("atlas.settings")
 
 APP_KEY = "atlas"
-import envnames  # NAMES THAT CHANGED (v1.48.0): ATLAS_AUTH_MODE and friends
-import theme as _theme   # THE THEME (v1.48.0): the realm's words live in themes/*.json
 
 APP_NAME = _theme.T["app_name"]
 # The name the door wears, before anyone has been let in. APP_NAME is the
@@ -45,7 +46,7 @@ APP_NAME = _theme.T["app_name"]
 # a public door (atlas.example.com) and again for the hosted edition, where
 # one login page fronts many realms and must not leak which one you asked for.
 APP_BRAND = os.environ.get("ATLAS_BRAND", "").strip() or "The Atlas"
-APP_VERSION = "0.2.0-dev.13"
+APP_VERSION = "0.2.0-dev.14"
 ACCENT_COLOR = "#C9A554"
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -243,7 +244,7 @@ _DEMO_LINK = os.environ.get("ATLAS_DEMO_LINK", "").strip()
 DEMO_LINK = _DEMO_LINK if _DEMO_LINK.startswith("https://") and " " not in _DEMO_LINK else ""
 
 # ── Accounts, sessions, ingest — knobs read once at startup ──────────────────
-# Collected here so /api/admin/settings has one honest source; each was a bare
+# Collected here so /api/v2/admin/deployment has one honest source; each was a bare
 # os.environ read in its own module before. Consumers reference `settings.X`, so
 # a `fresh_app` reload of this module re-resolves them (the test contract). The
 # two that a test flips AFTER the app is built stay LIVE functions instead —
@@ -258,15 +259,6 @@ LOGIN_WINDOW_S = int(os.environ.get("ATLAS_LOGIN_WINDOW_MIN", "15")) * 60
 SESSION_IDLE_S = int(os.environ.get("ATLAS_SESSION_IDLE_MIN", "60")) * 60
 SESSION_ABS_S = int(os.environ.get("ATLAS_SESSION_ABS_HOURS", "12")) * 3600
 
-# 1 in every deployment we run: tls-proxy is the only thing that APPENDS
-# X-Forwarded-For, on both roads in (its own vhost, and the Hub — which
-# forwards the header untouched rather than adding a hop). It stayed unset,
-# and therefore 0, until 2026-09-09; the audit trail looked right only because
-# ProxyFix was quietly rewriting remote_addr with its own x_for default. See
-# app.py. 0 remains correct for a deployment with nothing in front.
-# X-Forwarded-For hops to trust (atlas_auth.client_ip) — a HOP COUNT, not a
-# boolean; 0 trusts only the socket peer. See client_ip for why it counts from
-# the right.
 # The reverse proxies whose X-Forwarded-For this app believes, BY ADDRESS —
 # tls-proxy and the Hub, whose container IPs are PINNED in the internal host's
 # compose (172.19.255.7 / .9) so they can be named here at all.
@@ -377,24 +369,29 @@ def whois_enabled():
 def auth_config():
     """Who the viewer is, and what this instance can actually offer them.
 
-    The three modes differ in kind, not degree, so the front-end must be told
+    The four modes differ in kind, not degree, so the front-end must be told
     which one it is rather than guessing — and it draws nothing it cannot act
     on:
 
       * `hub`        — the Hub owns the session and did the signing in.
-                       There is no Atlas-side session to end, and `auth_routes`
-                       is not even registered (app.py), so `/api/auth/*` 404s
-                       here. The viewer gets their name, and no sign-out.
+                       There is no Atlas-side session to end: `auth_routes`
+                       is not even registered (app.py) and `/api/v2/auth/*`
+                       404s here. The viewer gets their name, and no sign-out.
       * `accounts`   — a real Atlas session. Name, admin, MFA state, and a
-                       sign-out, which needs the CSRF token `/api/auth/logout`
-                       enforces (the Hub's own meta-tag precedent, 2026-05-17).
+                       sign-out, which needs the `X-Atlas-Write` header
+                       `/api/v2/auth/logout` enforces (it replaced the
+                       per-session CSRF token, which followed the Hub's own
+                       meta-tag precedent, 2026-05-17).
+      * `hybrid`     — the Hub's signed identity when it is present, an Atlas
+                       session when it is not. `session` says which, and a
+                       sign-out is offered only for the Atlas session.
       * `standalone` — no gate and no identity; there is nothing to show.
 
     Resolved per request (`client_config` is called from `views.index`), and
     imported lazily because settings is the base layer the auth modules sit on
     top of — by request time every one of them is loaded, so there is no cycle.
     """
-    mode = (envnames.env("ATLAS_AUTH_MODE") or "standalone").lower().strip()
+    mode = auth_mode()
     out = {"mode": mode, "user": "", "admin": False, "mfa": False,
            "session": "", "source": "", "emblem": "", "canSignOut": False}
     if mode == "standalone":
@@ -426,8 +423,9 @@ def auth_config():
 def hub_url():
     """Where the Hub lives, per request: its forwarded header, else the env.
 
-    ONE spelling, used by both the template inject (app.py) and client_config
-    — the header name and the fallback must never drift between the two.
+    ONE spelling of the header name and the fallback. `client_config` reads
+    it; the template inject in app.py did too, until its `hub_url` variable,
+    which no template read, was removed.
     """
     from flask import request   # request-time only; settings imports early
     given = request.headers.get("X-Hub-URL")

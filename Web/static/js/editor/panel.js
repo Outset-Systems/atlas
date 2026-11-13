@@ -6,22 +6,30 @@
    OF CHANGES (who altered what, and the way back).
 
    Nothing here knows what a rack slot or a rite *is*. If it looks like it
-   handles twelve kinds of thing, it handles one kind of thing twelve times. */
+   handles twelve kinds of thing, it handles one kind of thing twelve times.
+
+   This file is the chrome, the table, the form and the routing. THE SURVEY is
+   survey.js, the change log is changes.js, the backdrop gallery and the region
+   rectangle are form-extras.js, and what they all share — notices, the save
+   wrapper, and the `desk` handle they reach this panel through — is
+   desk-kit.js. */
 
 import { A, $, esc } from '../config.js';
 import { say } from '../words.js';
-import Editor, { EditorError } from './store.js';
+import Editor from './store.js';
 import { buildForm, makeEl as el } from './form.js';
 import { standing, sentence, waiting } from './standing.js';
+import { VIRTUAL, desk, iconBtn, notice, problemList, run } from './desk-kit.js';
+import { drawSurvey } from './survey.js';
+import { drawChanges } from './changes.js';
+import { drawMapArt, seatRegionView } from './form-extras.js';
 
 let root, sideEl, bodyEl, titleEl, subEl;
-let active = 'nodes';
 let booted = false;
 
-const VIRTUAL = {
-  survey: { label: 'THE SURVEY', lore: 'strangers on the wire, not yet charted' },
-  changes: { label: 'THE CHRONICLE OF CHANGES', lore: 'every alteration, and the way back' },
-};
+/* What the panel's other files reach it through (desk-kit.js): the head, the
+   router and the way in. The body element joins them in buildDesk. */
+Object.assign(desk, { setHead, show, open: openDesk });
 
 /* ── chrome ───────────────────────────────────────────────────────────── */
 
@@ -35,7 +43,7 @@ function drawSidebar() {
   for (const key of Editor.sectionKeys()) {
     const section = Editor.section(key);
     const count = section.kind === 'object' ? '' : String(Editor.entries(key).length);
-    const btn = el('button', `dsk-nav${key === active ? ' on' : ''}`,
+    const btn = el('button', `dsk-nav${key === desk.active ? ' on' : ''}`,
       `<span class="dsk-nav-name">${esc(section.plural.toUpperCase())}</span>` +
       `<span class="dsk-nav-n">${count}</span>`);
     btn.addEventListener('click', () => show(key));
@@ -43,44 +51,11 @@ function drawSidebar() {
   }
   sideEl.append(el('div', 'dsk-nav-rule'));
   for (const [key, meta] of Object.entries(VIRTUAL)) {
-    const btn = el('button', `dsk-nav${key === active ? ' on' : ''}`,
+    const btn = el('button', `dsk-nav${key === desk.active ? ' on' : ''}`,
       `<span class="dsk-nav-name">${esc(meta.label)}</span><span class="dsk-nav-n" ` +
       `id="dsk-n-${key}"></span>`);
     btn.addEventListener('click', () => show(key));
     sideEl.append(btn);
-  }
-}
-
-function notice(message, kind = 'info') {
-  return el('div', `dsk-notice dsk-notice-${kind}`, esc(message));
-}
-
-function problemList(err) {
-  const box = el('div', 'dsk-notice dsk-notice-bad');
-  box.append(el('div', 'dsk-notice-head', esc(err.message || 'that could not be saved')));
-  const problems = err.problems || [];
-  if (problems.length && problems[0] !== err.message) {
-    box.append(el('ul', 'dsk-problems',
-      problems.map((p) => `<li>${esc(p)}</li>`).join('')));
-  }
-  return box;
-}
-
-async function run(action, okMessage) {
-  try {
-    const result = await action();
-    if (okMessage !== false) {
-      A.showToast?.(okMessage || (result?.changed || []).join(' · ') || 'Saved.');
-    }
-    return result;
-  } catch (err) {
-    if (err instanceof EditorError && err.status === 409) {
-      A.showToast?.(err.message);
-      await Editor.reload();
-      show(active);
-      return null;
-    }
-    throw err;
   }
 }
 
@@ -262,13 +237,6 @@ function reviewNotice(entries, section, tbody) {
   return box;
 }
 
-function iconBtn(glyph, title, onClick, kind) {
-  const btn = el('button', `dsk-icon${kind ? ' dsk-icon-' + kind : ''}`, glyph);
-  btn.title = title;
-  btn.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
-  return btn;
-}
-
 /* ── the form ─────────────────────────────────────────────────────────── */
 
 function drawForm(key, entry, ref) {
@@ -348,142 +316,6 @@ function drawObjectForm(key, section) {
   if (key === 'meta') drawMapArt(form);
 }
 
-/** THE BACKDROP — choose or upload the picture the map is drawn on.
-    Selecting writes the filename into the form's own map_image field rather
-    than saving behind the user's back, so one Save still means one write and
-    the change log still gets one row. */
-async function drawMapArt(form) {
-  const wrap = el('div', 'dsk-mapart');
-  wrap.append(el('div', 'dsk-mapart-head',
-    '<strong>THE BACKDROP</strong><span>the picture the map is drawn on — '
-    + 'places are positioned in fractions of it, so swapping keeps every marker '
-    + 'where it is</span>'));
-  const gallery = el('div', 'dsk-mapart-grid');
-  const errors = el('div', 'dsk-form-errors');
-  wrap.append(errors, gallery);
-  bodyEl.append(wrap);
-
-  // Which tile reads as chosen when `map_image` is blank is the *server's*
-  // default, not a filename typed in here. This was hard-coded to one lab's
-  // render, so changing the shipped backdrop silently highlighted a tile that
-  // no longer existed — the same trap the deployment notes records for the Grafana base
-  // and the vault root. `/api/v2/admin/map-art` has always returned `default`.
-  let fallback = '';
-  const current = () => (form.get('map_image') || '').trim() || fallback;
-
-  async function paint(images) {
-    gallery.innerHTML = '';
-    for (const img of images) {
-      const chosen = img.name === current();
-      const src = img.bundled ? `static/map/${img.name}` : `map-art/${img.name}`;
-      const tile = el('button', `dsk-mapart-tile${chosen ? ' on' : ''}`,
-        `<img src="${esc(src)}" alt="" loading="lazy">
-         <span class="dsk-mapart-name">${esc(img.name)}</span>
-         <span class="dsk-mapart-meta">${img.bundled ? 'built in'
-           : `${Math.max(1, Math.round(img.bytes / 1024))} KB`}</span>`);
-      tile.type = 'button';
-      tile.addEventListener('click', () => {
-        form.set('map_image', img.name);
-        paint(images);
-      });
-      if (!img.bundled) {
-        // iconBtn already stops the click reaching the tile behind it
-        const drop = iconBtn('✕', `Delete ${img.name}`, async () => {
-          errors.innerHTML = '';
-          try {
-            const res = await Editor.deleteMapArt(img.name);
-            if (current() === img.name) form.set('map_image', '');
-            paint(res.images);
-          } catch (err) { errors.append(problemList(err)); }
-        }, 'bad');
-        drop.classList.add('dsk-mapart-drop');
-        tile.append(drop);
-      }
-      gallery.append(tile);
-    }
-  }
-
-  const picker = el('div', 'dsk-mapart-upload');
-  const input = el('input', 'dsk-mapart-file');
-  input.type = 'file';
-  input.accept = 'image/png,image/jpeg,image/gif,image/webp';
-  input.addEventListener('change', async () => {
-    const file = input.files?.[0];
-    if (!file) return;
-    errors.innerHTML = '';
-    try {
-      const res = await Editor.uploadMapArt(file, file.name);
-      form.set('map_image', res.name);
-      paint(res.images);
-    } catch (err) { errors.append(problemList(err)); }
-    input.value = '';
-  });
-  picker.append(el('span', 'dsk-mapart-hint',
-    'PNG, JPEG, GIF or WEBP. SVG is refused — it can carry script.'), input);
-  wrap.append(picker);
-
-  try {
-    const res = await Editor.mapArt();
-    fallback = res.default || '';
-    paint(res.images || []);
-  } catch (err) {
-    errors.append(problemList(err));
-  }
-}
-
-/** REGIONS — "use the current view": fill the rectangle from what the map
-    behind the Desk shows, instead of typing four percentages. The Desk opens
-    over the map without moving it, so the view is the one you left: frame
-    the area, open the Desk, press. The map it reads is the open region's
-    detailed map when one is open (carried onto the "Inside" map through the
-    rectangles between them), else the main map — regions.js does the
-    reading (`A.regionViewFor`), region-model.js the maths. Nothing is saved;
-    the four fields change and one Save writes them, as with the backdrop. */
-function seatRegionView(form) {
-  const anchor = form.row('x');
-  if (!anchor) return;
-  const row = el('div', 'dsk-field dsk-field-wide');   // a heading for the four fields, not a fifth
-  const btn = el('button', 'dsk-btn dsk-btn-sm', 'Use the current view');
-  btn.type = 'button';
-  const help = el('span', 'dsk-help');
-  help.setAttribute('aria-live', 'polite');
-
-  const read = () => {
-    const parentId = String(form.get('parent') || '');
-    const parent = parentId ? Editor.entries('regions').find((r) => r.id === parentId) : null;
-    const onto = parentId ? `the detailed map of ${parent?.name || parentId}` : 'the main map';
-    const view = A.regionViewFor?.(parentId) || null;
-    const source = !view ? 'the map'
-      : view.fromLens ? `the detailed map of ${view.from}` : 'the main map';
-    let title = `Fill Left, Top, Width and Height with what ${source} behind the editor shows now`;
-    if (view && !view.direct) {
-      title += `, carried onto ${onto} through its rectangle` +
-        (parentId ? `. To frame it on that map itself, open ${parent?.name || parentId} first` : '');
-    }
-    return { view, onto, source, title: title + '.' };
-  };
-  const retitle = () => { btn.title = read().title; };
-  btn.addEventListener('pointerenter', retitle);
-  btn.addEventListener('focus', retitle);
-  btn.addEventListener('click', () => {
-    const { view, onto, source } = read();
-    if (!view) { help.textContent = 'The map is not drawn yet.'; return; }
-    if (!view.rect) {
-      help.textContent = `The view shows none of ${onto}. Close the editor, frame the area, and open it again.`;
-      return;
-    }
-    const { x, y, w, h } = view.rect;
-    form.set('x', x); form.set('y', y); form.set('w', w); form.set('h', h);
-    help.textContent = `From ${source}: ${w} × ${h} % at ${x}, ${y}. Save to keep it.`;
-  });
-  retitle();
-  help.textContent = 'Frame the area on the map before opening the editor, then fill the rectangle from it.';
-  const hold = el('div');
-  hold.append(btn);
-  row.append(el('span', 'dsk-label', 'The rectangle'), hold, help);
-  anchor.before(row);
-}
-
 async function duplicate(key, entry) {
   const section = Editor.section(key);
   const copy = JSON.parse(JSON.stringify(entry));
@@ -549,262 +381,10 @@ async function confirmDelete(key, entry, ref) {
   bodyEl.append(errors, bar);
 }
 
-/* ── the change log ───────────────────────────────────────────────────── */
-
-async function drawChanges() {
-  setHead(VIRTUAL.changes.label, VIRTUAL.changes.lore);
-  bodyEl.innerHTML = '';
-  const { revisions, kept } = await Editor.revisions();
-  if (!revisions.length) {
-    bodyEl.append(notice('Nothing has been changed in the map editor yet.'));
-    return;
-  }
-  bodyEl.append(el('div', 'dsk-bar',
-    `<span class="dsk-bar-sub">The last ${kept} changes can be undone; older ones are ` +
-    `remembered but their snapshots have been pruned.</span>`));
-
-  const list = el('div', 'dsk-revs');
-  for (const rev of revisions) {
-    const row = el('div', 'dsk-rev');
-    row.append(el('span', 'dsk-rev-when', `${esc(rev.at)}`));
-    row.append(el('span', 'dsk-rev-who', esc(rev.actor)));
-    row.append(el('span', 'dsk-rev-what',
-      (rev.summary || []).map((s) => esc(s)).join(' · ') + (rev.note ? ` — ${esc(rev.note)}` : '')));
-    if (rev.revertable) {
-      const undo = el('button', 'dsk-btn dsk-btn-sm', 'Undo to here');
-      undo.title = `Put the map back to how it was before change #${rev.id}`;
-      undo.addEventListener('click', async () => {
-        undo.disabled = true;
-        try {
-          await run(() => Editor.revert(rev.id), 'The map is back to how it was.');
-          show('changes');
-        } catch (err) {
-          bodyEl.prepend(problemList(err));
-          undo.disabled = false;
-        }
-      });
-      row.append(undo);
-    } else {
-      row.append(el('span', 'dsk-dim', 'pruned'));
-    }
-    list.append(row);
-  }
-  bodyEl.append(list);
-}
-
-/* ── the discovery inbox ──────────────────────────────────────────────── */
-
-/** Where a newcomer's router keeps its leases. Shared with the first survey. */
-export const LEASE_HELP =
-  'Or your router\'s DHCP leases — the devices that asked it for an address, with the ' +
-  'names they gave themselves. Copy the file and paste it whole: ' +
-  '<code>/var/dhcpd/var/db/dhcpd.leases</code> on pfSense or OPNsense, ' +
-  '<code>kea-leases4.csv</code> where they run Kea, <code>/etc/pihole/dhcp.leases</code> ' +
-  'on Pi-hole, <code>/tmp/dhcp.leases</code> on OpenWrt, or on Windows Server ' +
-  '<code>Get-DhcpServerv4Lease -ScopeId 10.0.0.0 | ConvertTo-Csv</code>.';
-
-async function drawSurvey() {
-  setHead(VIRTUAL.survey.label, VIRTUAL.survey.lore);
-  bodyEl.innerHTML = '';
-
-  const { observed, undocumented } = await Editor.discovery();
-  const badge = $('dsk-n-survey');
-  if (badge) badge.textContent = undocumented ? String(undocumented) : '';
-
-  bodyEl.append(el('div', 'dsk-bar',
-    `<span class="dsk-bar-sub">The Atlas never probes the network itself. Run a sweep ` +
-    `where you already have the rights, or copy your router's DHCP leases, and hand it ` +
-    `the result.</span>`));
-
-  // a connected system that can say what is on the network: one press, no paste
-  let observers = [];
-  try {
-    observers = (await Editor.connections()).systems.filter((s) => s.observes && s.configured);
-  } catch { /* not an admin of Connections, or it did not load: the paste box still works */ }
-  for (const sys of observers) {
-    const read = el('button', 'dsk-btn', `Read ${esc(sys.name)}`);
-    read.title = 'Everything connected now, filed here beside a scan. Nothing is charted.';
-    read.addEventListener('click', async () => {
-      read.disabled = true;
-      try {
-        const res = await Editor.observe(sys.key);
-        if (!res.ok) throw new Error(res.error || 'It did not answer.');
-        A.showToast?.(`${res.seen} seen by ${res.source} · ${res.new} new to the survey.`);
-        show('survey');
-      } catch (err) {
-        bodyEl.append(problemList(err));
-      } finally { read.disabled = false; }
-    });
-    bodyEl.append(read);
-  }
-
-  const paste = el('details', 'dsk-drop');
-  paste.innerHTML = `<summary>Bring in a survey (nmap XML) or DHCP leases</summary>` +
-    `<p class="dsk-help">A sweep, on a machine that can see the segment:<br>` +
-    `<code>nmap -sn -oX - 192.0.2.0/24</code><br>A ping sweep is enough — a port scan is ` +
-    `not required and not advised on someone else's network.</p>` +
-    `<p class="dsk-help">${LEASE_HELP}</p>`;
-  const area = el('textarea', 'dsk-input dsk-area dsk-mono');
-  area.rows = 5;
-  area.placeholder = '<?xml version="1.0"?><nmaprun …>   or a lease file';
-  const go = el('button', 'dsk-btn dsk-btn-go', 'File this survey');
-  go.addEventListener('click', async () => {
-    if (!area.value.trim()) return;
-    go.disabled = true;
-    try {
-      const res = await Editor.fileSurvey(area.value);
-      A.showToast?.(res.format
-        ? `${res.seen} ${res.format} leases · ${res.new} new to the survey.`
-        : `${res.seen} answered · ${res.new} new to the survey.`);
-      area.value = '';
-      show('survey');
-    } catch (err) {
-      paste.append(problemList(err));
-    } finally { go.disabled = false; }
-  });
-  paste.append(area, go);
-  bodyEl.append(paste);
-
-  if (!observed.length) {
-    bodyEl.append(notice('Nothing surveyed yet.'));
-    return;
-  }
-
-  const chosen = new Set();
-  const boxes = [];
-  const table = el('table', 'dsk-table');
-  table.innerHTML = '<thead><tr><th class="dsk-th-pick"></th><th>Address</th><th>Name</th>' +
-    '<th>Vendor</th><th>Open ports</th><th>Looks like</th><th>' + say('Realm') + '</th><th>State</th>' +
-    '<th class="dsk-th-act"></th></tr></thead>';
-  // a first survey is often dozens of strangers: one box takes them all
-  const all = el('input', 'dsk-check');
-  all.type = 'checkbox';
-  all.title = 'Choose every uncharted device';
-  all.setAttribute('aria-label', 'Choose every uncharted device');
-  table.querySelector('.dsk-th-pick').append(all);
-  const sync = () => {
-    chart.disabled = chosen.size === 0;
-    chart.textContent = chosen.size ? `Chart ${chosen.size} of these ›` : 'Chart the chosen ›';
-    const open = boxes.filter((b) => !b.box.disabled);
-    all.checked = open.length > 0 && open.every((b) => b.box.checked);
-    all.disabled = open.length === 0;
-  };
-  all.addEventListener('change', () => {
-    for (const { box, key } of boxes) {
-      if (box.disabled) continue;
-      box.checked = all.checked;
-      all.checked ? chosen.add(key) : chosen.delete(key);
-    }
-    sync();
-  });
-  const tbody = el('tbody');
-  for (const row of observed) {
-    const tr = el('tr', row.ignored ? 'dsk-dim-row' : '');
-    const pick = el('td', 'dsk-td-pick');
-    const box = el('input', 'dsk-check');
-    box.type = 'checkbox';
-    box.disabled = !row.undocumented || row.ignored;
-    boxes.push({ box, key: row.key });
-    box.addEventListener('change', () => {
-      box.checked ? chosen.add(row.key) : chosen.delete(row.key);
-      sync();
-    });
-    pick.append(box);
-    tr.append(pick);
-    tr.append(el('td', '', `<span class="dsk-mono">${esc(row.ip || row.mac || '—')}</span>`));
-    tr.append(el('td', '', esc(row.hostname || '—')));
-    tr.append(el('td', '', esc(row.vendor || '—')));
-    tr.append(el('td', '', esc((row.ports || []).map((p) => p.port).slice(0, 8).join(' ') || '—')));
-    // a suggestion, with its reason on hover; the draft says it again
-    const guess = row.suggestion;
-    const looks = el('td', '', guess
-      ? `${esc(guess.role)} <span class="dsk-dim">${esc(guess.kind)}</span>` : '—');
-    if (guess) looks.title = `A guess: ${guess.because}. Check it when you chart it.`;
-    tr.append(looks);
-    tr.append(el('td', '', esc(row.suggested_zone || '—')));
-    const seenBy = row.source ? ` <span class="dsk-dim">· ${esc(row.source)}</span>` : '';
-    tr.append(el('td', '', row.ignored
-      ? '<span class="dsk-dim">silenced</span>'
-      : row.undocumented
-        ? `<span class="dsk-warn">uncharted</span>${seenBy}`
-        : `<span class="dsk-ok">charted as ${esc(row.matched_node)}</span>`));
-    const act = el('td', 'dsk-td-act');
-    act.append(iconBtn(row.ignored ? '👁' : '🚫',
-      row.ignored ? 'Bring it back into the survey' : "Silence it — I don't want this charted",
-      async () => {
-        await Editor.decide([row.key], row.ignored ? 'unignore' : 'ignore');
-        show('survey');
-      }));
-    tr.append(act);
-    tbody.append(tr);
-  }
-  table.append(tbody);
-  bodyEl.append(table);
-
-  const bar = el('div', 'dsk-formbar');
-  const chart = el('button', 'dsk-btn dsk-btn-go', 'Chart the chosen ›');
-  chart.addEventListener('click', () => draftReview([...chosen]));
-  bar.append(chart);
-  bodyEl.append(bar);
-  sync();
-}
-
-/** The review step: drafts are shown and corrected before anything is written. */
-async function draftReview(keys) {
-  const { nodes } = await Editor.draftsFrom(keys);
-  drawDrafts(nodes, `${nodes.length} place${nodes.length === 1 ? '' : 's'} from the survey`,
-    'A survey can say a thing answered, not what it is: each lands as <code>unknown</code> ' +
-    'unless its maker or its own name suggests a type, and then its role line says why. ' +
-    say('Check those, give them names and realms now, or later.'));
-}
-
-function drawDrafts(nodes, headline, caveat) {
-  setHead('CHART THESE PLACES', 'nothing is written until you say so');
-  bodyEl.innerHTML = '';
-  if (!nodes.length) { bodyEl.append(notice('Nothing to chart.')); return; }
-  bodyEl.append(el('div', 'dsk-bar', `<span class="dsk-bar-sub">${esc(headline)}. ` +
-    (caveat || 'Correct anything that came through wrong, then chart them.') + `</span>`));
-
-  const forms = nodes.map((node) => {
-    const wrap = el('details', 'dsk-draft');
-    wrap.open = nodes.length <= 3;
-    wrap.append(el('summary', '', `${esc(node.name)} <span class="dsk-mono">${esc(node.ip)}</span>`));
-    const form = buildForm('nodes', node);
-    wrap.append(form.el);
-    bodyEl.append(wrap);
-    return form;
-  });
-
-  const errors = el('div', 'dsk-form-errors');
-  const bar = el('div', 'dsk-formbar');
-  const cancel = el('button', 'dsk-btn', 'Not yet');
-  cancel.addEventListener('click', () => show('survey'));
-  const go = el('button', 'dsk-btn dsk-btn-go', `Chart ${forms.length}`);
-  go.addEventListener('click', async () => {
-    errors.innerHTML = '';
-    let ops;
-    try {
-      ops = forms.map((f) => ({ op: 'insert', section: 'nodes', body: f.read() }));
-    } catch (err) { errors.append(notice(err.message, 'bad')); return; }
-    go.disabled = true;
-    try {
-      // One batch: either every discovered place lands or none does, so a
-      // typo in the fourth doesn't leave three half-charted strangers.
-      await run(() => Editor.apply(ops, 'charted from a survey', 'survey'));
-      show('nodes');
-    } catch (err) {
-      errors.append(problemList(err));
-      go.disabled = false;
-    }
-  });
-  bar.append(cancel, go);
-  bodyEl.append(errors, bar);
-}
-
 /* ── routing ──────────────────────────────────────────────────────────── */
 
 async function show(key) {
-  active = key;
+  desk.active = key;
   drawSidebar();
   bodyEl.scrollTop = 0;
   try {
@@ -846,7 +426,7 @@ export async function openDesk(sectionKey) {
   try {
     await Editor.loadRepairs();
   } catch { /* the repairs endpoint is admin-only and may legitimately fail */ }
-  await show(sectionKey || active);
+  await show(sectionKey || desk.active);
 }
 
 export function closeDesk() {
@@ -859,20 +439,12 @@ export function deskOpen() {
   return root?.classList.contains('open') ?? false;
 }
 
-/** Offer the drafts from a pasted CSV — used by the first-run wizard. */
-export async function reviewCsv(text) {
-  const { nodes } = await Editor.importCsv(text);
-  await openDesk();
-  drawDrafts(nodes, `${nodes.length} place${nodes.length === 1 ? '' : 's'} from your list`,
-    'Positions default to the middle of the map — drag them where they belong afterwards, ' +
-    'or set them here.');
-}
-
 export function buildDesk() {
   root = $('desk');
   if (!root) return;
   sideEl = $('dsk-nav');
   bodyEl = $('dsk-body');
+  desk.body = bodyEl;
   titleEl = $('dsk-title');
   subEl = $('dsk-sub');
   $('dsk-close')?.addEventListener('click', () => { closeDesk(); A.recenter?.(true); });

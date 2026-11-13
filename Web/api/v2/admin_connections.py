@@ -8,16 +8,18 @@ import logging
 
 from flask import jsonify, request
 
-import dataset as ds
 import discovery
+import token_log
 from context import atlas
-from security import actor, write_refusal
+from security import actor
 
+from . import _body
+from .admin import (
+    _commit, _probe_allowed, _read, _secret_stays_home, _valid_url, admin_bp,
+)
+from .auth import write_required
 
 log = logging.getLogger("atlas.api.v2")
-from .admin import (  # noqa: E402
-    _commit, _fail, _probe_allowed, _secret_stays_home, _valid_url, admin_bp,
-)
 
 
 # ── CONNECTIONS: API tokens and the systems an Atlas can be pointed at ───────
@@ -35,21 +37,39 @@ def tokens_get():
         standing = cloud_view.standing(atlas().dataset()[0])
     except (OSError, ValueError):
         standing = None
+    # the address this Atlas sees the admin at, said where a binding is chosen: if
+    # it is a proxy's and not their own, "the local network" means less than it says
+    import atlas_auth
+    seen = atlas_auth.client_ip()
     return jsonify({"tokens": api_tokens.listing(), "lifetimes": list(api_tokens.LIFETIMES),
                     "default_days": api_tokens.DEFAULT_DAYS, "access": api_tokens.access(),
-                    "profiles": kinds, "cloud_view": standing})
+                    "profiles": kinds, "cloud_view": standing,
+                    "you": {"ip": seen, "local": api_tokens.allowed_from({"networks": [api_tokens.LAN]}, seen)},
+                    "log_days": token_log.keep_days()})
+
+
+@admin_bp.route("/tokens/reads")
+def tokens_reads():
+    """What tokens read, newest first: `?token=<id>` for one, `?limit=` up to 500.
+    Admins only, like everything on this blueprint. The lines outlive the token:
+    revoking one does not erase what it read."""
+    try:
+        limit = int(request.args.get("limit", 100))
+    except ValueError:
+        return jsonify({"error": "limit must be a number"}), 400
+    token = (request.args.get("token") or "").strip()[:16] or None
+    return jsonify({"reads": token_log.rows(token=token, limit=max(1, min(limit, 500))),
+                    "keep_days": token_log.keep_days()})
 
 
 @admin_bp.route("/tokens/access", methods=["POST"])
+@write_required
 def tokens_access():
     """The switch for agent access as a whole: `{"on": true|false}`. Off refuses
     every token at once and keeps them; on is refused while the deployment says
     `ATLAS_AGENT_API=0`."""
-    refusal = write_refusal()
-    if refusal:
-        return refusal
     import api_tokens
-    body = request.get_json(silent=True) or {}
+    body = _body()
     if not isinstance(body.get("on"), bool):
         return jsonify({"error": "Send on: true or on: false."}), 422
     try:
@@ -60,29 +80,26 @@ def tokens_access():
 
 
 @admin_bp.route("/tokens", methods=["POST"])
+@write_required
 def tokens_issue():
-    refusal = write_refusal()
-    if refusal:
-        return refusal
     import api_tokens
-    body = request.get_json(silent=True) or {}
+    body = _body()
     try:
         # a client from before the kinds existed sends none, and gets what it always got
+        # and one that says nothing about networks is bound to the local one: the
+        # narrower answer is the default, `"networks": null` asks for any address
         record, raw = api_tokens.issue(body.get("name"), body.get("days"), actor(),
-                                       profile=body.get("profile", api_tokens.FULL))
+                                       profile=body.get("profile", api_tokens.FULL),
+                                       networks=body.get("networks", api_tokens.LAN))
     except ValueError as e:
         return jsonify({"error": str(e)}), 422
     # the only time the plaintext exists outside the caller's hands
-    resp = jsonify({"ok": True, "token": record, "secret": raw})
-    resp.headers["Cache-Control"] = "no-store"
-    return resp
+    return jsonify({"ok": True, "token": record, "secret": raw})
 
 
 @admin_bp.route("/tokens/<tid>", methods=["DELETE"])
+@write_required
 def tokens_revoke(tid):
-    refusal = write_refusal()
-    if refusal:
-        return refusal
     import api_tokens
     if not api_tokens.revoke(tid, actor()):
         return jsonify({"error": "no such token"}), 404
@@ -96,18 +113,16 @@ def connections_get():
 
 
 @admin_bp.route("/connections/test", methods=["POST"])
+@write_required
 def connections_test():
     """One read-only call to one system, with the values as typed. A blank secret
     means the one in force, so a stored key can be tested without retyping it, at
     the address it was saved with and nowhere else."""
-    refusal = write_refusal()
-    if refusal:
-        return refusal
     if not _probe_allowed(actor()):
         return jsonify({"ok": False, "error": "Too many tests in a minute. Wait a moment."}), 429
     import connections
     import integrations
-    body = request.get_json(silent=True) or {}
+    body = _body()
     key = str(body.get("key") or "").strip().lower()
     if not connections.known(key):
         return jsonify({"ok": False, "error": "not a system that can be tested"}), 400
@@ -133,10 +148,7 @@ def _survey(key):
     """What a system knows, read with its SAVED settings. A review takes nothing
     typed, so there is no address here for `moves_secret` to judge."""
     import connections
-    import integrations
-    url = integrations.get(connections.field(key, "url")[0])
-    creds = connections.credentials(key, integrations.get)
-    return connections.survey(key, url, creds, connections.insecure(key, integrations.get))
+    return connections.survey(key, *connections.saved(key))
 
 
 def _review_key(body):
@@ -146,15 +158,13 @@ def _review_key(body):
 
 
 @admin_bp.route("/connections/review", methods=["POST"])
+@write_required
 def connections_review():
     """Discovery and the results list, in one read-only pass. Nothing is written:
     the rows go to a person, who ticks what to add."""
-    refusal = write_refusal()
-    if refusal:
-        return refusal
     if not _probe_allowed(actor()):
         return jsonify({"ok": False, "error": "Too many requests in a minute. Wait a moment."}), 429
-    key = _review_key(request.get_json(silent=True) or {})
+    key = _review_key(_body())
     if key is None:
         return jsonify({"ok": False, "error": "not a system that can be reviewed"}), 400
     from importers import review
@@ -162,10 +172,9 @@ def connections_review():
     log.info("v2: connection review %s by %s: ok=%s", key, actor(), ok)
     if not ok:
         return jsonify({"ok": False, "error": answer})
-    try:
-        data, stamp = atlas().store.read()
-    except ds.RejectedError as e:
-        return _fail(e, 409)
+    data, stamp, refusal = _read(atlas())
+    if refusal:
+        return refusal
     candidates, notes = answer
     return jsonify({"ok": True, "stamp": stamp, "notes": notes,
                     "rows": review.annotate(candidates, data, discovery.ignored()),
@@ -173,44 +182,15 @@ def connections_review():
                               for z in data.get("zones", []) or []]})
 
 
-@admin_bp.route("/discovery/connection", methods=["POST"])
-def discovery_connection():
-    """What a connected system sees on the network now, filed into THE SURVEY
-    beside a scan and a lease file. Saved settings only, so there is no address
-    here for a stored credential to be sent to. Nothing is charted."""
-    refusal = write_refusal()
-    if refusal:
-        return refusal
-    if not _probe_allowed(actor()):
-        return jsonify({"ok": False, "error": "Too many requests in a minute. Wait a moment."}), 429
-    import connections
-    import integrations
-    key = str((request.get_json(silent=True) or {}).get("key") or "").strip().lower()
-    if not connections.observes(key):
-        return jsonify({"ok": False, "error": "not a system that can be read for the survey"}), 400
-    url = integrations.get(connections.field(key, "url")[0])
-    creds = connections.credentials(key, integrations.get)
-    ok, answer = connections.observe(key, url, creds, connections.insecure(key, integrations.get))
-    log.info("v2: survey from %s by %s: ok=%s", key, actor(), ok)
-    if not ok:
-        return jsonify({"ok": False, "error": answer})
-    hosts, note = answer
-    new = discovery.record(hosts, atlas().backend, atlas().site)
-    return jsonify({"ok": True, "source": connections.label(key), "seen": len(hosts), "new": new,
-                    "note": note})
-
-
 @admin_bp.route("/connections/import", methods=["POST"])
+@write_required
 def connections_import():
     """Write the ticked rows through the store, so they land in the change log and
     can be undone. The system is read again first: what is written is what it says
     now, and a browser can only choose among those rows, not supply them."""
-    refusal = write_refusal()
-    if refusal:
-        return refusal
     if not _probe_allowed(actor()):
         return jsonify({"ok": False, "error": "Too many requests in a minute. Wait a moment."}), 429
-    body = request.get_json(silent=True) or {}
+    body = _body()
     key, picks = _review_key(body), body.get("picks")
     if key is None:
         return jsonify({"ok": False, "error": "not a system that can be reviewed"}), 400
@@ -222,10 +202,9 @@ def connections_import():
     if not ok:
         return jsonify({"ok": False, "error": answer}), 502
     ctx = atlas()
-    try:
-        data, stamp = ctx.store.read()
-    except ds.RejectedError as e:
-        return _fail(e, 409)
+    data, stamp, refusal = _read(ctx)
+    if refusal:
+        return refusal
     rows = review.annotate(answer[0], data, discovery.ignored())
     name = connections.label(key)
     fallback = str(body.get("zone") or "")

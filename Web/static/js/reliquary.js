@@ -1,7 +1,7 @@
 /* Atlas — RACKS (was THE ARMORY, THE RELIQUARY): each physical rack as an
    illuminated front-elevation with hardware-accurate engraved faceplates. Every
    vessel sits in a true U-slot; in Rearrange mode you can drag one to a free slot
-   and Save the layout (persisted server-side via /api/rack, exactly like the map's
+   and Save the layout (persisted server-side via api/v2/rack, exactly like the map's
    moved dots). Rebuilt 2026-07-20. Titled by place since 2026-10-31:
    `Server room — Rack A`, with a picker when the lab charts more than one.
    The rack model + faceplate art moved to rack-model.js 2026-08-23 so the 3D
@@ -10,9 +10,9 @@
 import { A, CFG, $, esc, glassAttrs, nodeById, FALLBACK_HUE, DRAG_END, postJSON } from './config.js';
 import { makeScene } from './scene.js';
 import {
-  UH, KIND_HUE, ledColor, uLabel, slotKey, setRackTheme,
+  UH, KIND_HUE, ledColor, uLabel, setRackTheme,
   buildDevices as modelBuildDevices, buildRear, fits as modelFits, faceplate as modelFaceplate,
-  rackList, rackTitle, inRack,
+  rackList, rackTitle, inRack, crownOf, peerNode,
 } from './rack-model.js';
 setRackTheme(CFG.THEME);   // THE THEME (v1.48.0): which lab names are the gateway / the forge
 
@@ -119,7 +119,7 @@ function render() {
     attachDrag(el, d);
     elevEl.appendChild(el);
   }
-  const crown = devices.find((d) => d.slot.node === 'hypervisor') || devices[0];
+  const crown = crownOf(devices);
   if (crown) {
     const cel = elevEl.querySelector(`.rel-dev[data-key="${crown.key}"]`);
     if (cel) cel.classList.add('active');
@@ -213,9 +213,7 @@ function showDetail(d) {
       const i = ports[Number(pb.dataset.port)];
       const z = A.DATA.zones.find((zz) => String(zz.vlan) === String(i.vlan));
       const peerText = String(i.peer || '').trim();
-      const peerN = peerText && A.DATA.nodes.find((nn) =>
-        nn.id.toLowerCase() === peerText.toLowerCase() ||
-        String(nn.name || '').toLowerCase() === peerText.toLowerCase());
+      const peerN = peerNode(A.DATA.nodes, peerText);
       const bits = [
         `port ${esc(i.name)}`,
         esc(i.kind || 'rj45'),

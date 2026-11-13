@@ -5,7 +5,7 @@ since the hand-edited era: **warnings, not rejections**. A hand-edited dataset
 should still render as much as possible, but every deviation must be visible
 in the log and in `/api/status` so an edit never breaks the map silently.
 
-`strict=True` flips that for one caller only — `store/dataset.py`, which
+`strict=True` flips that for one caller only — `dataset.py`, which
 refuses a *write* that would introduce problems. A human editing JSON gets
 warnings; a form submission gets a refusal, because there a refusal is
 actionable and the map on disk stays good.
@@ -48,29 +48,22 @@ def _ids(data, section_key):
 
 def _check_refs(problems, label, section_key, entry, known):
     """Every dangling reference in one entry."""
-    for path, target in schema.refs_of(section_key):
-        if "." in path:                      # a reference inside a sub-object
-            outer, inner = path.split(".", 1)
-            for i, sub in enumerate(entry.get(outer) or []):
+    for path, inner, target, _ in schema.ref_fields(section_key):
+        if inner is not None:                # a reference inside a sub-object
+            for i, sub in enumerate(entry.get(path) or []):
                 if not isinstance(sub, dict):
                     continue
-                for val in _as_list(sub.get(inner)):
+                for val in schema.as_list(sub.get(inner)):
                     if val and val not in known.get(target, set()):
                         problems.append(
-                            f"{label}: {outer}[{i}] reaches unknown "
+                            f"{label}: {path}[{i}] reaches unknown "
                             f"{target.rstrip('s')} {val!r}")
             continue
-        for val in _as_list(entry.get(path)):
+        for val in schema.as_list(entry.get(path)):
             if val and val not in known.get(target, set()):
                 # "unknown zone 'x'" / "unknown host 'y'" — the field name reads
                 # better than the target section in every case we have.
                 problems.append(f"{label}: unknown {path} {val!r}")
-
-
-def _as_list(value):
-    if value is None:
-        return []
-    return value if isinstance(value, list) else [value]
 
 
 # Kinds whose address is a claim on the wire. A `network` place is often a

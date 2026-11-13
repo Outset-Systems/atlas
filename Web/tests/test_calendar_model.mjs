@@ -16,6 +16,7 @@ import {
   DAY_MIN, parseClock, parseDays, parseWindow, inWindow, toneOf, laneOf,
   clockOf, daysOf, everyOf, meetings, layoutForge, layoutDay,
   nextTurning, fmtClock, dayName,
+  every, clockPhrase, inWords, isSilent, nextParts,
 } from '../static/js/calendar-model.js';
 
 let passed = 0;
@@ -264,6 +265,67 @@ test('layoutForge is unchanged — the card pointer still asks the old question'
   assert.deepEqual(lanes.map((l) => l.name), ['Scout', 'Brief', 'Chain', 'Review', 'Scoring']);
   assert.deepEqual(unclocked.map((l) => l.name), ['Benchmarks']);
   assert.equal(hits.length, 0);
+});
+
+test('an expected interval reads in its largest whole unit', () => {
+  assert.equal(every(0), '');
+  assert.equal(every(undefined), '');
+  assert.equal(every(604800), 'every 1w');
+  assert.equal(every(1209600), 'every 2w');
+  assert.equal(every(86400), 'every 1d');
+  assert.equal(every(172800), 'every 2d');
+  assert.equal(every(3600), 'every 1h');
+  assert.equal(every(21600), 'every 6h');
+  assert.equal(every(900), 'every 15m');
+  assert.equal(every(5400), 'every 90m', 'an hour and a half is not a whole hour');
+  assert.equal(every(100), 'every 2m', 'rounded to the minute');
+});
+
+test('the clock phrase says the clock the page drew', () => {
+  const phrase = (rite) => clockPhrase(laneOf(rite));
+  assert.equal(phrase({ name: 'Brief', at: '13:00' }), '13:00');
+  assert.equal(phrase({ name: 'Chain', at: '13:45', days: 'Mon–Fri' }), 'Mon–Fri 13:45');
+  assert.equal(phrase({ name: 'Export', cadence: 'weekly', when: 'Sun 03:00' }), 'Sun 03:00');
+  assert.equal(phrase({ name: 'Scoring', at: ':35' }), 'hourly at :35');
+  assert.equal(phrase({ name: 'Scoring', at: ':05', between: '13:00–01:00' }), 'hourly at :05 · 13:00–01:00');
+  assert.equal(phrase({ name: 'Vault Copy', cadence: 'monthly', when: '1st, 02:00' }), '02:00 · its own date');
+  assert.equal(phrase({ name: 'Pulse', cadence: 'continuous', when: 'every 5 min' }), 'every 5 min');
+  assert.equal(phrase({ name: 'Sweep', cadence: 'continuous', when: 'every 2 hours' }), 'every 2h');
+  assert.equal(phrase({ name: 'Tick', cadence: 'continuous', when: 'every 90 min' }), 'every 90 min');
+  assert.equal(phrase({ name: 'Scribes', cadence: 'continuous', when: 'on every save' }), 'no hour charted');
+  assert.equal(phrase({ name: 'Benchmarks' }), 'no hour charted');
+});
+
+test('minutes from now, in words', () => {
+  assert.equal(inWords(0), '0m');
+  assert.equal(inWords(59), '59m');
+  assert.equal(inWords(60), '1h');
+  assert.equal(inWords(390), '6h 30m');
+  assert.equal(inWords(1439), '23h 59m');
+  assert.equal(inWords(1440), '1d 0h');
+  assert.equal(inWords(1441), '1d 0h', 'minutes are dropped once there are days');
+  assert.equal(inWords(3 * 1440 + 5 * 60 + 7), '3d 5h');
+});
+
+test('silent is missed or failed, and nothing else', () => {
+  assert.ok(isSilent('missed'));
+  assert.ok(isSilent('failed'));
+  for (const v of ['kept', 'late', 'awaited', 'unwatched', undefined, '']) assert.ok(!isSilent(v), String(v));
+});
+
+test('the next turning, in the parts a sentence needs', () => {
+  const { lanes } = layoutForge(RITES, 'gpu-box');
+  const wed = new Date(Date.UTC(2026, 8, 9, 13, 10));
+  assert.deepEqual(nextParts(nextTurning(lanes, wed), wed), { clock: '13:35', day: '', wait: '25m' });
+  // Saturday 23:59Z: the next block is on Sunday, so the day is named
+  const satNight = new Date(Date.UTC(2026, 8, 12, 23, 59));
+  const next = nextTurning(lanes, satNight);
+  assert.ok(next.dayOffset > 0);
+  assert.deepEqual(nextParts(next, satNight),
+    { clock: fmtClock(next.start), day: dayName(6 + next.dayOffset), wait: inWords(next.inMin) });
+  assert.equal(nextParts(next, satNight).day, 'Sun');
+  // a week out wraps round to the same weekday's name
+  assert.equal(nextParts({ start: 0, dayOffset: 7, inMin: 10080 }, satNight).day, 'Sat');
 });
 
 console.log(`\n${passed} passed`);

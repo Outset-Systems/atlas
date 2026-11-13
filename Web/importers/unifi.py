@@ -195,7 +195,8 @@ def _hosts(snapshot, devices):
     by_port = {}
     for c in snapshot.get("clients", []):
         mac, sw = _mac(c.get("mac")), _mac(c.get("sw_mac"))
-        if mac and mac not in devices and c.get("is_wired") and sw in devices                 and c.get("sw_port") is not None:
+        if (mac and mac not in devices and c.get("is_wired") and sw in devices
+                and c.get("sw_port") is not None):
             by_port.setdefault((sw, c.get("sw_port")), []).append(mac)
     out = {}
     for macs in by_port.values():
@@ -241,7 +242,7 @@ def _on_ports(snapshot, devices, names, host_of, client_names):
             continue
         n = guests.get(mac, 0)
         add(_mac(c.get("sw_mac")), c.get("sw_port"),
-            client_names[mac] + (f" and {n} guest{'' if n == 1 else 's'}" if n else ""))
+            client_names[mac] + (f" and {plural(n, 'guest')}" if n else ""))
     return {k: ", ".join(v)[:120] for k, v in heard.items()}
 
 
@@ -401,7 +402,7 @@ class _Reading:
             out.append(f"The controller would not list its {part}, so this review has none.")
         total = self.wired + self.wireless
         if total:
-            out.append(f"{total} client{'' if total == 1 else 's'} connected now "
+            out.append(f"{plural(total, 'client')} connected now "
                        f"({self.wired} wired, {self.wireless} wireless). A client that is off is not listed.")
         return out
 

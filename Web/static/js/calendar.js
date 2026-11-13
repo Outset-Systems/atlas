@@ -32,6 +32,7 @@ import { say } from './words.js';
 import { makeScene } from './scene.js';
 import {
   DAY_MIN, layoutDay, layoutForge, nextTurning, fmtClock, dayName,
+  every, clockPhrase, isSilent, nextParts,
 } from './calendar-model.js';
 
 const pct = (min) => `${(min / DAY_MIN * 100).toFixed(3)}%`;
@@ -64,14 +65,6 @@ function when(r) {
   return elapsed((Date.now() - then.getTime()) / 1000);
 }
 
-function every(seconds) {
-  if (!seconds) return '';
-  if (seconds % 604800 === 0) return `every ${seconds / 604800}w`;
-  if (seconds % 86400 === 0) return `every ${seconds / 86400}d`;
-  if (seconds % 3600 === 0) return `every ${seconds / 3600}h`;
-  return `every ${Math.round(seconds / 60)}m`;
-}
-
 /* The sentence the row is actually for. */
 function told(r) {
   const last = r.last;
@@ -89,34 +82,6 @@ function told(r) {
     default:
       return 'not timed';
   }
-}
-
-/** The row's clock, in one short phrase. The surveyor's own `when` can run to
-    a paragraph ("04:00 CDT the download host + the media host · 08:00 UTC the edge · 10:00 UTC
-    The app host") and a 200px column truncates it into something no more checkable
-    than a guess — so the column carries the clock this page actually DREW and
-    the prose rides in the row's title, one hover away. A clock read out of that
-    prose wears a dotted rule (`.cal-row.read`) to say which. Hours are UTC and
-    the axis says so once, so no row repeats it. */
-function clockPhrase(lane) {
-  if (lane.every) return lane.every % 60 === 0 ? `every ${lane.every / 60}h` : `every ${lane.every} min`;
-  if (!lane.blocks.length) return 'no hour charted';
-  const at = fmtClock(lane.blocks[0].start);
-  if (lane.hourly) {
-    return `hourly at :${String(lane.blocks[0].start % 60).padStart(2, '0')}`
-      + (lane.window ? ` · ${fmtClock(lane.window.from)}–${fmtClock(lane.window.to)}` : '');
-  }
-  if (lane.ghost) return `${at} · its own date`;
-  const days = lane.daysLabel || (lane.cadence === 'weekly' ? dayName([...lane.days][0]) : '');
-  return days ? `${days} ${at}` : at;
-}
-
-function inWords(min) {
-  if (min < 60) return `${min}m`;
-  const h = Math.floor(min / 60), m = min % 60;
-  if (h < 24) return m ? `${h}h ${m}m` : `${h}h`;
-  const d = Math.floor(h / 24);
-  return `${d}d ${h % 24}h`;
 }
 
 /* ── the day, drawn ───────────────────────────────────────────────────────── */
@@ -196,7 +161,7 @@ function groupHTML(group, ctx) {
     ? (nodeById(group.place)?.name || group.place.toUpperCase())
     : null;
   const drawn = group.lanes.filter((l) => l.today.length || l.every).length;
-  const silent = group.lanes.filter((l) => ['missed', 'failed'].includes(l.rite.verdict)).length;
+  const silent = group.lanes.filter((l) => isSilent(l.rite.verdict)).length;
   let count = `${group.lanes.length} ${say(group.lanes.length === 1 ? 'rite' : 'rites')}`;
   if (group.kind !== 'listed') count += ` · ${drawn} on this day`;
   if (group.kind === 'forge') {
@@ -210,8 +175,9 @@ function groupHTML(group, ctx) {
   if (group.kind === 'forge') {
     const next = nextTurning(group.lanes.filter((l) => l.blocks.length), ctx.now);
     if (next) {
-      const at = `${fmtClock(next.start)}Z${next.dayOffset ? ` ${dayName(ctx.now.getUTCDay() + next.dayOffset)}` : ''}`;
-      foot.push(`<span class="cal-next">next · <b>${esc(next.lane.name)}</b> at ${esc(at)} · in ${inWords(next.inMin)}</span>`);
+      const { clock, day, wait } = nextParts(next, ctx.now);
+      const at = `${clock}Z${day ? ` ${day}` : ''}`;
+      foot.push(`<span class="cal-next">next · <b>${esc(next.lane.name)}</b> at ${esc(at)} · in ${wait}</span>`);
     }
     if (group.hits.length) {
       foot.push(`<span class="cal-hits">${group.hits.slice(0, 3).map((h) =>
@@ -246,9 +212,10 @@ export function calendarPointerHTML(node, rites, { now = new Date() } = {}) {
   if (!lanes.length && !unclocked.length) return '';
   const n = lanes.length + unclocked.length;
   const next = nextTurning(lanes, now);
+  const { clock, day, wait } = next ? nextParts(next, now) : {};
   const line = next
-    ? `next · <b>${esc(next.lane.name)}</b> at ${esc(fmtClock(next.start))}Z` +
-      `${next.dayOffset ? ` ${esc(dayName(now.getUTCDay() + next.dayOffset))}` : ''} · in ${inWords(next.inMin)}`
+    ? `next · <b>${esc(next.lane.name)}</b> at ${esc(clock)}Z` +
+      `${day ? ` ${esc(day)}` : ''} · in ${wait}`
     : `${n} ${say(n === 1 ? 'rite' : 'rites')} ask it, none with a clock`;
   return `<div class="cv-head">${say('the forge')}'s day · utc</div>` +
     `<span class="cal-next">${line}</span>` +
@@ -274,7 +241,7 @@ function paint() {
   const ctx = { now, today, nowMin: now.getUTCHours() * 60 + now.getUTCMinutes() };
 
   if (headEl) {
-    const bad = RITES.filter((r) => ['missed', 'failed'].includes(r.verdict)).length;
+    const bad = RITES.filter((r) => isSilent(r.verdict)).length;
     const waiting = RITES.filter((r) => r.verdict === 'awaited').length;
     const verdict = bad
       ? `<span class="cal-alarm">${bad} ${say(`${bad > 1 ? 'rites have' : 'rite has'} stopped turning`)}</span>`

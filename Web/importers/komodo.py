@@ -44,7 +44,7 @@ def candidates(snapshot, base):
         info, stack_id = stack.get("info") or {}, stack.get("id")
         server = info.get("server_id")
         services = len(info.get("services") or [])
-        detail = f"{review.clean(info.get('state')) or 'unknown'} · {services} service{'' if services == 1 else 's'}"
+        detail = f"{review.clean(info.get('state')) or 'unknown'} · {plural(services, 'service')}"
         rows.append(review.service(
             f"komodo:stack/{stack_id}", "Stacks", stack.get("name"),
             f"{base}/stacks/{quote(str(stack_id), safe='')}",

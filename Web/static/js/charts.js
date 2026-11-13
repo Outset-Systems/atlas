@@ -29,7 +29,7 @@ let chartLib = null;
 
 /** The vendored Chart.js UMD, once. A classic <script> rather than an import
     because the build defines `window.Chart` instead of exporting a module. */
-export function loadChartJs() {
+function loadChartJs() {
   if (window.Chart) return Promise.resolve(window.Chart);
   if (chartLib) return chartLib;
   let v = '';
@@ -47,7 +47,7 @@ export function loadChartJs() {
 // ── ink ─────────────────────────────────────────────────────────────────
 /** The region's chart tokens, read off the element so a figure inside
     #abyss and one inside #chronicle each get their own viewer's ink. */
-export function chartInk(el) {
+function chartInk(el) {
   const s = getComputedStyle(el || document.documentElement);
   const v = (name, fb) => (s.getPropertyValue(name) || '').trim() || fb;
   return {
@@ -84,7 +84,7 @@ function scaled(n, units, base) {
   return (n < 0 ? '-' : '') + (x >= 100 || i === 0 ? Math.round(x) : x.toFixed(1)) + ' ' + units[i];
 }
 /** One value in its unit — the same rendering on axis, tooltip, tile and twin. */
-export function fmt(unit, v) {
+function fmt(unit, v) {
   if (v === null || v === undefined || !Number.isFinite(v)) return '—';
   switch (unit) {
     case 'pct': return (v === 0 ? '0' : Math.abs(v) < 10 ? v.toFixed(1) : String(Math.round(v))) + '%';
@@ -257,7 +257,7 @@ const note = (msg) => `<div class="chart-note">${esc(msg)}</div>`;
 /** The numbers twin (rule 3). A table stays a table; a figure becomes one row
     per series — now, min, max, mean over the window — which is what a reader
     who cannot tell two hues apart actually needs from it. */
-export function twinHTML(payload) {
+function twinHTML(payload) {
   if (!payload) return note('nothing to show');
   if (payload.kind === 'table') return tableHTML(payload);
   const series = payload.series || [];

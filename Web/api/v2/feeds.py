@@ -30,24 +30,18 @@ log = logging.getLogger("atlas.api.v2")
 
 # ── The signals feed's machinery ─────────────────────────────────────────────
 def _apply_kuma_map(ctx):
-    """Push the hand-editable Kuma monitor→node map from the dataset onto the
-    live adapter, so `signals.kuma` drives which monitor lights which marker
-    and hot-reloads with the dataset."""
+    """Push what each live adapter needs from the dataset onto it: the
+    hand-editable Kuma monitor→node map, so `signals.kuma` drives which monitor
+    lights which marker; the address→node map for Prometheus; the places for
+    UniFi. All of it hot-reloads with the dataset."""
     try:
         data, _, _ = ctx.dataset()
     except (OSError, ValueError):
         return
-    import signals
-    monitor_map = signals.monitor_map(data)
-    ip_map = {n["ip"]: n["id"] for n in data.get("nodes", [])
-              if n.get("ip") and n["ip"] != "—"}
     for adapter in getattr(ctx.signals, "adapters", []):
-        if getattr(adapter, "name", "") == "kuma":
-            adapter.monitor_map = monitor_map
-        elif getattr(adapter, "name", "") == "prometheus":
-            adapter.ip_map = ip_map
-        elif getattr(adapter, "name", "") == "unifi":
-            adapter.set_places(*signals.unifi_places(data))
+        use_map = getattr(adapter, "use_map", None)
+        if use_map is not None:
+            use_map(data)     # each adapter takes its own (signals.py)
 
 
 def _label_for(ctx):
@@ -79,10 +73,12 @@ def _drift(ctx, feed):
         data, _, _ = ctx.dataset()
     except (OSError, ValueError):
         return None
-    charted = {link["kuma"]
+    # a link with no monitor is charted under its own key, which is what a
+    # built-in check reports it by: its result is not an uncharted monitor
+    import signals
+    charted = {signals.service_key(node.get("id"), link)
                for node in data.get("nodes", [])
-               for link in (node.get("links") or [])
-               if link.get("kuma")}
+               for link in (node.get("links") or [])}
     ignore = set(((data.get("signals") or {}).get("drift_ignore")) or [])
     uncharted = sorted(n for n in services if n not in charted and n not in ignore)
     return {"count": len(uncharted), "uncharted": uncharted}

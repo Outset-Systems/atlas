@@ -41,7 +41,7 @@ import re
 from urllib.parse import urlsplit
 
 import discovery
-from store.layout import _BAND_LABEL_X, _BAND_STEP, _BAND_TOP, _Y_MAX
+from layoutgrid import BAND_LABEL_X, BAND_STEP, BAND_TOP, Y_MAX
 
 from .common import UNCHARTED_SLUG, UNCHARTED_ZONE, UNKNOWN_ZONE_FIELDS, slugify
 
@@ -514,8 +514,8 @@ def _zone_body(row, scratch):
         slug = f"vlan-{row['vlan']}"
     return {"id": slug, "name": row["name"], "vlan": row["vlan"], "subnet": row["subnet"],
             "hue": row["hue"], "lore": "Newly surveyed ground.", "origin": row["key"],
-            "label_x": _BAND_LABEL_X,
-            "label_y": min(_BAND_TOP + _BAND_STEP * len(scratch["zones"]), _Y_MAX)}
+            "label_x": BAND_LABEL_X,
+            "label_y": min(BAND_TOP + BAND_STEP * len(scratch["zones"]), Y_MAX)}
 
 
 def _drafts(places, by_key, scratch, label, fallback):

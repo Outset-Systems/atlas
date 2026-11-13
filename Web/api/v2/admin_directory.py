@@ -29,7 +29,7 @@ def auth_settings():
         "settings": auth_config.effective(),
         "sources": auth_config.sources(),
         "allowed": list(auth_config.ALLOWED),
-        "mode": settings.auth_config().get("mode", ""),
+        "mode": settings.auth_mode(),
         "ldap_ready": ldap_backend.enabled(),
         "backends": ldap_backend.backends(),
         "local_admin_exists": _local_admin_exists(),
@@ -70,7 +70,7 @@ def auth_settings_test():
     return jsonify({"ok": bool(ok), "is_admin": is_admin_result,
                     "groups": info.get("groups") or [],
                     "display_name": info.get("display_name") or "",
-                    "error": "" if ok else (info.get("error") or "That account could not sign in.")})
+                    "error": "" if ok else "That account could not sign in."})
 
 
 @admin_bp.route("/auth", methods=["POST"])
@@ -79,6 +79,7 @@ def auth_settings_save():
     if refusal:
         return refusal
     import auth_config
+    import ldap_backend
     proposed = (request.get_json(silent=True) or {}).get("settings") or {}
     unknown = [k for k in proposed if k not in auth_config.ALLOWED]
     if unknown:
@@ -88,15 +89,14 @@ def auth_settings_save():
         return (str(proposed.get(key, "") or "").strip()
                 or os.environ.get(key, "") or "").strip()
 
-    backends = [b.strip().lower() for b in (in_force("ATLAS_AUTH_BACKENDS") or "local").split(",")
-                if b.strip()]
+    backends = ldap_backend._order(in_force("ATLAS_AUTH_BACKENDS") or "local")
     if not any(b in ("local", "ldap") for b in backends):
         return jsonify({"error": "At least one sign-in backend (local or ldap) must stay enabled."}), 422
     url = in_force("ATLAS_LDAP_URL")
     if "ldap" in backends:
         if not url or not in_force("ATLAS_LDAP_BASE_DN"):
             return jsonify({"error": "The directory needs both a URL and a base DN."}), 422
-        if not url.lower().startswith("ldaps://"):
+        if not ldap_backend.is_ldaps(url):
             return jsonify({"error": "Only ldaps:// is accepted — a plaintext bind "
                                      "would put every password on the wire."}), 422
 
@@ -115,7 +115,6 @@ def auth_settings_save():
     except (ValueError, OSError) as e:
         return jsonify({"error": f"could not save: {e}"}), 500
     log.info("v2: directory settings changed by %s", actor())
-    import ldap_backend
     return jsonify({"ok": True, "settings": effective,
                     "sources": auth_config.sources(),
                     "backends": ldap_backend.backends(),

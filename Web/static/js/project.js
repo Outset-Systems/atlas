@@ -85,7 +85,7 @@ export function tiltInverse(sx, sy, t = TILT) {
    Flat is the overwhelmingly common case and must cost nothing: every entry
    point below short-circuits to identity before touching geometry. */
 
-export const isTilted = () =>
+const isTilted = () =>
   typeof document !== 'undefined' && document.body.classList.contains('tilted');
 
 function originPx() {
@@ -102,13 +102,5 @@ export function unproject(sx, sy) {
   if (!isTilted()) return { x: sx, y: sy, scale: 1 };
   const { ox, oy } = originPx();
   const p = tiltInverse(sx - ox, sy - oy);
-  return { x: ox + p.x, y: oy + p.y, scale: p.scale };
-}
-
-/** PLANE point → SCREEN (client) point. Identity when flat. */
-export function project(px, py) {
-  if (!isTilted()) return { x: px, y: py, scale: 1 };
-  const { ox, oy } = originPx();
-  const p = tiltForward(px - ox, py - oy);
   return { x: ox + p.x, y: oy + p.y, scale: p.scale };
 }

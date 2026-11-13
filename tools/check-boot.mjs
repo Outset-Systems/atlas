@@ -38,3 +38,37 @@ for (const [file, text] of Object.entries(src)) {
     process.exitCode = 1;
   }
 }
+
+/* The same question for the whole folder, not only the bootstrap: every plain
+   `A.x(` call must have an `A.x =` somewhere. Modules reach each other through
+   `A` and nothing checks the name, so a function that is moved or renamed and
+   leaves a caller behind fails only when that caller runs. A guarded call
+   (`A.x?.()`) says it can be absent and is not counted. Subfolders are read
+   too, vendor code is not, and a name in a comment does not count as a call. */
+function walk(dir) {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+    if (e.isDirectory()) return e.name === 'vendor' ? [] : walk(`${dir}/${e.name}`);
+    return e.name.endsWith('.js') ? [`${dir}/${e.name}`] : [];
+  });
+}
+const uncommented = (text) => text
+  .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
+  .replace(/(^|[^:'"`\\])\/\/.*$/gm, '$1');
+const tree = walk(DIR).map((path) => [path.slice(DIR.length + 1), uncommented(readFileSync(path, 'utf8'))]);
+const defined = new Set();
+for (const [, text] of tree) {
+  for (const m of text.matchAll(/(?<![\w.$])A\.(\w+)\s*(?:\?\?|\|\|)?=(?!=)/g)) defined.add(m[1]);
+}
+const undefinedCalls = [];
+for (const [file, text] of tree) {
+  for (const m of text.matchAll(/(?<![\w.$])A\.(\w+)\(/g)) {
+    if (!defined.has(m[1])) undefinedCalls.push(`${file}: A.${m[1]}()`);
+  }
+}
+if (undefinedCalls.length) {
+  console.log('✗ CALLED ON A BUT NEVER SET:');
+  for (const line of [...new Set(undefinedCalls)]) console.log(`    ${line}`);
+  process.exitCode = 1;
+} else {
+  console.log(`✓ every A.x( call in the folder has an A.x = (${defined.size} names set)`);
+}

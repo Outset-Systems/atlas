@@ -40,7 +40,8 @@ log = logging.getLogger("atlas.live.maintenance")
 
 REPEATS = ("none", "daily", "weekly", "monthly")
 
-#: How far ahead "upcoming" looks when annotating a window.
+#: Bounds the walk that settles a repeating window on its current occurrence
+#: (`occurrence`): at most this many steps and four more, then it reads as ended.
 HORIZON_DAYS = 60
 
 
@@ -208,6 +209,29 @@ def under_repair(now=None):
         if state == "active":   # "invalid" deliberately suppresses nothing
             ids.update(str(n) for n in (window.get("nodes") or []))
     return ids
+
+
+def problems(windows):
+    """What is wrong with a list of windows about to be saved, one sentence
+    each: an entry that is not an object, a field the schema refuses, an id
+    used twice, a window that ends before it starts. Empty when it can be saved."""
+    import schema
+    found = []
+    seen = set()
+    for i, window in enumerate(windows):
+        if not isinstance(window, dict):
+            found.append(f"window #{i + 1}: not an object")
+            continue
+        label = window.get("id") or f"#{i + 1}"
+        found += [f"window {label}: {p}"
+                  for p in schema.check_entry("maintenance", window, strict=True)]
+        if window.get("id") in seen:
+            found.append(f"window {label}: duplicate id")
+        seen.add(window.get("id"))
+        state, _s, _e = occurrence(window)
+        if state == "invalid":
+            found.append(f"window {label}: it ends before it starts")
+    return found
 
 
 def save(windows, actor="unknown"):

@@ -8,7 +8,7 @@ anonymous door. The document itself is built in `openapi.py`.
 from flask import Response
 
 import openapi
-from redaction import vary_on_viewer
+from redaction import private_no_cache
 
 from . import bp
 
@@ -18,5 +18,4 @@ def openapi_document():
     resp = Response(openapi.dumps(), mimetype="application/json")
     # Revalidated every time, like the map's own reads: a browser that kept a copy
     # would hand it to a later request with no sign-in at all (seen 2026-11-09).
-    resp.headers["Cache-Control"] = "private, no-cache"
-    return vary_on_viewer(resp)
+    return private_no_cache(resp)

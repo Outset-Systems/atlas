@@ -1,7 +1,7 @@
-/* Replays world.js's three build guards against the live dataset, so "check the
-   map" is a measurement rather than a squint. Mirrors buildMarkers (skip
-   off_map), buildRoutes (both endpoints must resolve and be drawn) and
-   buildTerritories (hull needs 3+ members on the table). */
+/* Replays the map's three build guards against the live dataset, so "check the
+   map" is a measurement rather than a squint. Mirrors world.js's buildMarkers
+   (skip off_map), and roads.js's buildRoutes (both endpoints must resolve and
+   be drawn) and buildTerritories (hull needs 3+ members on the table). */
 import { readFileSync } from 'node:fs';
 
 const D = JSON.parse(readFileSync(new URL('../Data/lab-data.json', import.meta.url), 'utf8'));

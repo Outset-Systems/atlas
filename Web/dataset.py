@@ -8,10 +8,10 @@ write through.
 Three things make it safe enough to put behind a button:
 
 **Ops, not documents.** A save is a list of small typed operations
-(`upsert` / `delete` / `insert` / `move`), never "here is the whole
-file". That is what makes a change describable in the log, reversible, and
-checkable field by field — and it means a buggy client can't blank the map by
-POSTing `{}`.
+(`upsert` / `delete` / `insert` / `move` / `review`), never "here is the
+whole file". That is what makes a change describable in the log, reversible,
+and checkable field by field — and it means a buggy client can't blank the
+map by POSTing `{}`.
 
 **Strict before it lands.** `validation.validate(..., strict=True)` runs on
 the *result*, and a write that would introduce problems is refused whole. The
@@ -135,33 +135,26 @@ def dependents(data, section_key, entry_id):
         other = schema.get(other_key)
         if other["kind"] != "list":
             continue
-        for path, target in schema.refs_of(other_key):
+        for name, inner, target, _ in schema.ref_fields(other_key):
             if target != section_key:
                 continue
             for i, entry in enumerate(data.get(other_key) or []):
                 if not isinstance(entry, dict):
                     continue
-                if "." in path:
-                    outer, inner = path.split(".", 1)
+                if inner is not None:
                     hit = any(
-                        isinstance(sub, dict) and entry_id in _as_list(sub.get(inner))
-                        for sub in (entry.get(outer) or []))
+                        isinstance(sub, dict) and entry_id in schema.as_list(sub.get(inner))
+                        for sub in (entry.get(name) or []))
                 else:
-                    hit = entry_id in _as_list(entry.get(path))
+                    hit = entry_id in schema.as_list(entry.get(name))
                 if hit:
                     out.append({
                         "section": other_key,
                         "index": i,
-                        "field": path,
+                        "field": name if inner is None else f"{name}.{inner}",
                         "label": _entry_label(other_key, entry, i),
                     })
     return out
-
-
-def _as_list(value):
-    if value is None:
-        return []
-    return value if isinstance(value, list) else [value]
 
 
 def _entry_label(section_key, entry, index):
@@ -187,7 +180,8 @@ def _cascade_delete(data, section_key, entry_id):
         other = schema.get(other_key)
         if other["kind"] != "list":
             continue
-        refs = [(p, t) for p, t in schema.refs_of(other_key) if t == section_key]
+        refs = [(name, inner) for name, inner, target, _ in schema.ref_fields(other_key)
+                if target == section_key]
         if not refs:
             continue
         kept = []
@@ -196,15 +190,14 @@ def _cascade_delete(data, section_key, entry_id):
                 kept.append(entry)
                 continue
             drop = False
-            for path, _ in refs:
-                fld = schema.field(other_key, path.split(".")[0])
-                if "." in path:
-                    outer, inner = path.split(".", 1)
-                    for sub in entry.get(outer) or []:
+            for path, inner in refs:
+                fld = schema.field(other_key, path)
+                if inner is not None:
+                    for sub in entry.get(path) or []:
                         if isinstance(sub, dict) and inner in sub:
-                            sub[inner] = [v for v in _as_list(sub[inner]) if v != entry_id]
+                            sub[inner] = [v for v in schema.as_list(sub[inner]) if v != entry_id]
                     continue
-                if entry.get(path) == entry_id or entry_id in _as_list(entry.get(path)):
+                if entry.get(path) == entry_id or entry_id in schema.as_list(entry.get(path)):
                     if fld and fld.get("required"):
                         drop = True
                     elif isinstance(entry.get(path), list):
@@ -252,6 +245,109 @@ def _place_section(data, section_key):
     data.update(rebuilt)
 
 
+def _apply_review(data, op, s):
+    # "A person has checked this place." It changes nothing on the place;
+    # the stamp is written by provenance.stamp, which reads this same op.
+    section_key = op.get("section")
+    if section_key != provenance.SECTION:
+        raise RejectedError(f"only a place can be marked as checked, not a {s['singular']}")
+    index = _find_index(data, section_key, op.get("id")) if isinstance(op.get("id"), str) else -1
+    if index < 0:
+        raise RejectedError(f"{section_key}: there is no such place to mark as checked")
+    return f"checked {s['noun']} {_entry_label(section_key, data[section_key][index], index)}"
+
+
+def _refuse_url_credentials(section_key, body):
+    """Refuse what is being saved if a URL in it carries a user name or password.
+    Asked of the op's own body, so it never blocks an unrelated edit of a map
+    that already holds one (2026-11-12; see `schema.carries_credentials`)."""
+    if schema.carries_credentials(body):
+        raise RejectedError(f"{section_key}: {schema.URL_CREDENTIALS}")
+
+
+def _apply_object(data, op, s):
+    """An op on a section that is one mapping (`meta`): only `upsert` means anything."""
+    kind, section_key = op.get("op"), op.get("section")
+    if kind != "upsert":
+        raise RejectedError(f"{section_key} can only be updated, not {kind}ed")
+    body = op.get("body")
+    if not isinstance(body, dict):
+        raise RejectedError(f"{section_key}: body must be an object")
+    _refuse_url_credentials(section_key, body)
+    merged = dict(data.get(section_key) or {})
+    merged.update(body)
+    data[section_key] = merged
+    return f"updated {s['singular']}"
+
+
+def _apply_upsert(data, op, s, entries):
+    """`upsert` and `insert`: change the entry the op names, or add a new one."""
+    kind, section_key = op.get("op"), op.get("section")
+    body = op.get("body")
+    if not isinstance(body, dict):
+        raise RejectedError(f"{section_key}: body must be an object")
+    _refuse_url_credentials(section_key, body)
+    index = -1 if kind == "insert" else _target_index(data, op)
+    # An edit sends only the fields that changed, so its name comes from the
+    # entry already on file — not from the patch, which may carry no name.
+    label = _entry_label(section_key,
+                         entries[index] if index >= 0 else body,
+                         index if index >= 0 else len(entries))
+    if index >= 0:
+        # Merge, don't replace: keys the editor doesn't know about are the
+        # dataset's business, not the form's. An explicit
+        # null is how a form says "clear this optional field", which is a
+        # different intention from not mentioning it at all.
+        merged = dict(entries[index])
+        merged.update(body)
+        for key, value in body.items():
+            if value is None:
+                merged.pop(key, None)
+        entries[index] = merged
+        return f"changed {s['noun']} {label}"
+    entries.append(body)
+    return f"added {s['noun']} {label}"
+
+
+def _apply_delete(data, op, s, entries):
+    section_key = op.get("section")
+    index = _target_index(data, op)
+    if index < 0:
+        raise RejectedError(f"{section_key}: nothing to remove")
+    entry = entries.pop(index)
+    label = _entry_label(section_key, entry, index)
+    note = ""
+    if op.get("cascade") and s["id_field"]:
+        removed = _cascade_delete(data, section_key, entry.get(s["id_field"]))
+        if removed:
+            note = f" (and {len(removed)} thing{'s' if len(removed) != 1 else ''} that pointed at it)"
+    return f"removed {s['noun']} {label}{note}"
+
+
+def _apply_move(data, op, s, entries):
+    section_key = op.get("section")
+    index = _target_index(data, op)
+    if index < 0:
+        raise RejectedError(f"{section_key}: nothing to move")
+    try:
+        to = max(0, min(len(entries) - 1, int(op.get("to"))))
+    except (TypeError, ValueError):
+        raise RejectedError(f"{section_key}: 'to' must be a position")
+    entry = entries.pop(index)
+    entries.insert(to, entry)
+    return f"moved {s['noun']} {_entry_label(section_key, entry, to)}"
+
+
+#: The ops that work on a list section's entries. `review` and the one-mapping
+#: sections are answered before this table is read.
+_LIST_OPS = {
+    "upsert": _apply_upsert,
+    "insert": _apply_upsert,
+    "delete": _apply_delete,
+    "move": _apply_move,
+}
+
+
 def _apply_one(data, op):
     """Apply a single op in place. Returns a human sentence describing it."""
     kind = op.get("op")
@@ -262,82 +358,20 @@ def _apply_one(data, op):
     s = _section_or_reject(section_key)
 
     if kind == provenance.REVIEW:
-        # "A person has checked this place." It changes nothing on the place;
-        # the stamp is written by provenance.stamp, which reads this same op.
-        if section_key != provenance.SECTION:
-            raise RejectedError(f"only a place can be marked as checked, not a {s['singular']}")
-        index = _find_index(data, section_key, op.get("id")) if isinstance(op.get("id"), str) else -1
-        if index < 0:
-            raise RejectedError(f"{section_key}: there is no such place to mark as checked")
-        return f"checked {s['noun']} {_entry_label(section_key, data[section_key][index], index)}"
+        return _apply_review(data, op, s)
 
     if s["kind"] == "object":
-        if kind != "upsert":
-            raise RejectedError(f"{section_key} can only be updated, not {kind}ed")
-        body = op.get("body")
-        if not isinstance(body, dict):
-            raise RejectedError(f"{section_key}: body must be an object")
-        merged = dict(data.get(section_key) or {})
-        merged.update(body)
-        data[section_key] = merged
-        return f"updated {s['singular']}"
+        return _apply_object(data, op, s)
 
     _place_section(data, section_key)
     entries = data[section_key]
     if not isinstance(entries, list):
         raise RejectedError(f"{section_key} is not a list in this dataset")
 
-    if kind in ("upsert", "insert"):
-        body = op.get("body")
-        if not isinstance(body, dict):
-            raise RejectedError(f"{section_key}: body must be an object")
-        index = -1 if kind == "insert" else _target_index(data, op)
-        # An edit sends only the fields that changed, so its name comes from the
-        # entry already on file — not from the patch, which may carry no name.
-        label = _entry_label(section_key,
-                             entries[index] if index >= 0 else body,
-                             index if index >= 0 else len(entries))
-        if index >= 0:
-            # Merge, don't replace: keys the editor doesn't know about are the
-            # dataset's business, not the form's. An explicit
-            # null is how a form says "clear this optional field", which is a
-            # different intention from not mentioning it at all.
-            merged = dict(entries[index])
-            merged.update(body)
-            for key, value in body.items():
-                if value is None:
-                    merged.pop(key, None)
-            entries[index] = merged
-            return f"changed {s['noun']} {label}"
-        entries.append(body)
-        return f"added {s['noun']} {label}"
-
-    if kind == "delete":
-        index = _target_index(data, op)
-        if index < 0:
-            raise RejectedError(f"{section_key}: nothing to remove")
-        entry = entries.pop(index)
-        label = _entry_label(section_key, entry, index)
-        note = ""
-        if op.get("cascade") and s["id_field"]:
-            removed = _cascade_delete(data, section_key, entry.get(s["id_field"]))
-            if removed:
-                note = f" (and {len(removed)} thing{'s' if len(removed) != 1 else ''} that pointed at it)"
-        return f"removed {s['noun']} {label}{note}"
-
-    if kind == "move":
-        index = _target_index(data, op)
-        if index < 0:
-            raise RejectedError(f"{section_key}: nothing to move")
-        try:
-            to = max(0, min(len(entries) - 1, int(op.get("to"))))
-        except (TypeError, ValueError):
-            raise RejectedError(f"{section_key}: 'to' must be a position")
-        entry = entries.pop(index)
-        entries.insert(to, entry)
-        return f"moved {s['noun']} {_entry_label(section_key, entry, to)}"
-
-    raise RejectedError(f"unknown operation {kind!r}")
+    handler = _LIST_OPS.get(kind)
+    if handler is None:
+        raise RejectedError(f"unknown operation {kind!r}")
+    return handler(data, op, s, entries)
 
 
 def apply_ops(data, ops):
@@ -369,8 +403,8 @@ def content_stamp(data):
 class DatasetStore:
     """Shared machinery. Subclasses supply `_load` and `_save`."""
 
-    #: where snapshots and the journal live
     def __init__(self, revisions_dir, site="default"):
+        #: where snapshots and the journal live
         self.revisions_dir = revisions_dir
         self.site = site
 
@@ -416,9 +450,13 @@ class DatasetStore:
         restored the wrong state. Measured, not theorized — see
         tests/test_concurrency.py.
         """
+        return self._locked(self._apply_locked, ops, actor, expect, note, origin)
+
+    def _locked(self, fn, *args):
+        """Run one read-modify-write under the lock every writer contends on."""
         try:
             with exclusive(self._lock_path()):
-                return self._apply_locked(ops, actor, expect, note, origin)
+                return fn(*args)
         except LockTimeout as e:
             raise BusyError(str(e)) from e
 
@@ -456,8 +494,32 @@ class DatasetStore:
     def _snapshot_path(self, revision_id):
         return os.path.join(self.revisions_dir, f"{self.site}-r{revision_id:05d}.json")
 
+    def _journal(self):
+        """Every entry in the journal, newest first. Reads the one file and
+        touches no snapshot, which is all the next id and the pruning need."""
+        out = []
+        try:
+            with open(self._journal_path(), encoding="utf-8") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        out.append(json.loads(line))
+                    except ValueError:
+                        continue
+        except OSError:
+            return []
+        out.reverse()
+        for entry in out:
+            # A line that is not an entry, or whose id cannot name a snapshot,
+            # stops every reader here, before anything is written, as it did
+            # when each of them went through `revisions()`.
+            self._snapshot_path(entry.get("id", 0))
+        return out
+
     def _next_revision_id(self):
-        entries = self.revisions()
+        entries = self._journal()
         return (entries[0]["id"] + 1) if entries else 1
 
     def _record(self, before, actor, summaries, ops, note):
@@ -489,7 +551,7 @@ class DatasetStore:
         return revision_id
 
     def _prune(self):
-        entries = self.revisions(limit=None)
+        entries = self._journal()
         for old in entries[KEEP_REVISIONS:]:
             path = self._snapshot_path(old["id"])
             try:
@@ -502,23 +564,12 @@ class DatasetStore:
         """The change log, newest first. Entries whose snapshot has been
         pruned are still listed — the *record* of a change outlives the
         ability to undo it, and saying so is better than hiding it."""
-        out = []
-        try:
-            with open(self._journal_path(), encoding="utf-8") as fh:
-                for line in fh:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        out.append(json.loads(line))
-                    except ValueError:
-                        continue
-        except OSError:
-            return []
-        out.reverse()
+        out = self._journal()
+        if limit is not None:
+            out = out[:limit]
         for entry in out:
             entry["revertable"] = os.path.exists(self._snapshot_path(entry.get("id", 0)))
-        return out if limit is None else out[:limit]
+        return out
 
     def revert(self, revision_id, actor="unknown", expect=None):
         """Put the map back to how it was before `revision_id`.
@@ -528,14 +579,14 @@ class DatasetStore:
         a revert is a read-modify-write like any other. `expect` refuses it if the
         map has moved on: an Undo beside one import must not take later edits too.
         """
-        try:
-            with exclusive(self._lock_path()):
-                return self._revert_locked(revision_id, actor, expect)
-        except LockTimeout as e:
-            raise BusyError(str(e)) from e
+        return self._locked(self._revert_locked, revision_id, actor, expect)
 
     def _revert_locked(self, revision_id, actor, expect=None):
-        if expect and expect != content_stamp(self._load()):
+        # One load serves both the stamp check and the revert. It happens here
+        # only when there is a stamp to check, so a revert without one still
+        # hears about a pruned snapshot before an unreadable dataset.
+        before = self._load() if expect else None
+        if expect and expect != content_stamp(before):
             raise ConflictError("the map has changed since then — use the change log "
                                 "in the Desk to see what would be undone")
         snapshot = read_json(self._snapshot_path(int(revision_id)))
@@ -547,7 +598,8 @@ class DatasetStore:
         if problems:
             raise RejectedError(
                 [f"that older version no longer validates: {p}" for p in problems[:5]])
-        before = self._load()
+        if before is None:
+            before = self._load()
         provenance.restamp_revert(before, snapshot, actor)
         summary = [f"reverted to the state before revision {revision_id}"]
         new_id = self._record(before, actor, summary,

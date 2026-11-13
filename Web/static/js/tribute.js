@@ -6,7 +6,7 @@
 import { A, $, esc, zoneById, nodeById, FALLBACK_HUE } from './config.js';
 import { makeScene } from './scene.js';
 
-let root, vesselEl, sumEl, listEl, cpuVesselEl, cpuSumEl, built = false;
+let vesselEl, sumEl, listEl, cpuVesselEl, cpuSumEl, built = false;
 
 const nameOf = (id) => { const n = nodeById(id); return n ? n.name : id.toUpperCase(); };
 
@@ -103,8 +103,7 @@ A.openTribute = open;
 A.closeTribute = close;
 
 A.buildTributeScene = function buildTributeScene() {
-  root = scene.mount();
-  if (!root) return;
+  if (!scene.mount()) return;
   vesselEl = $('trb-vessel');
   sumEl = $('trb-summary');
   cpuVesselEl = $('trb-vessel-cpu');

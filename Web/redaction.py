@@ -19,7 +19,7 @@ import hub_auth.auth as auth
 import schema
 from hub_auth.auth import get_remote_groups, verify_token
 
-import envnames  # noqa: E402
+import envnames
 
 ADMIN_GROUP = envnames.env("ATLAS_ADMIN_GROUP")
 SIGNED_HEADER = auth.SIGNED_HEADER
@@ -109,6 +109,20 @@ def vary_on_viewer(resp):
     """Mark a response as per-viewer. Returns it, so it can wrap a return."""
     resp.headers["Vary"] = VIEWER_VARY
     return resp
+
+
+def no_store(resp):
+    """A per-viewer response nothing may keep: `no-store`, and `Vary`. Returns it."""
+    resp.headers["Cache-Control"] = "no-store"
+    return vary_on_viewer(resp)
+
+
+def private_no_cache(resp):
+    """A per-viewer response a browser may keep but must revalidate every time,
+    and a shared cache may not keep at all: `private, no-cache`, and `Vary`.
+    Returns it."""
+    resp.headers["Cache-Control"] = "private, no-cache"
+    return vary_on_viewer(resp)
 
 
 def sees_everything(groups):
@@ -285,8 +299,12 @@ def hidden_node_ids(data, groups):
     return {n.get("id") for n in data.get("nodes", []) if not cleared(n, groups)}
 
 
-def _hidden_words(data, groups):
-    """A pattern for the hidden places' names, ids and addresses, or None."""
+def hidden_words(data, groups):
+    """A pattern for the hidden places' names, ids and addresses, for callers
+    with free text to check. None when nothing is hidden, and for a viewer who
+    sees everything."""
+    if sees_everything(groups):
+        return None
     words = set()
     for n in data.get("nodes", []):
         if not cleared(n, groups):
@@ -298,28 +316,25 @@ def _hidden_words(data, groups):
                       re.IGNORECASE)
 
 
-def hidden_words(data, groups):
-    """`_hidden_words` for callers with free text to check; None for a viewer
-    who sees everything."""
-    return None if sees_everything(groups) else _hidden_words(data, groups)
-
-
 def visible_monitors(data, groups):
     """Kuma monitor names charted on a service this viewer is cleared for.
 
     The signals feed is keyed by monitor name, not node id, so this is the seam
     that turns a clearance into "which health entries may they see". A monitor
     the map does not chart at all is in nobody's set — an uncharted monitor is
-    survey information about the estate, not a service the viewer was given."""
+    survey information about the estate, not a service the viewer was given.
+
+    A link that names no monitor is in the set under its own key
+    (`signals.service_key`), which is what a built-in check reports it by."""
+    import signals
     out = set()
     for node in data.get("nodes", []):
         if not cleared(node, groups):
             continue
         for link in node.get("links") or []:
-            if cleared(link, groups) and link.get("kuma"):
-                out.add(link["kuma"])
+            if cleared(link, groups):
+                out.add(signals.service_key(node.get("id"), link))
     hidden = hidden_node_ids(data, groups)
-    import signals
     for monitor, node_id in signals.monitor_map(data).items():
         if node_id not in hidden:
             out.add(monitor)
@@ -328,7 +343,14 @@ def visible_monitors(data, groups):
 
 def redact_for_groups(data):
     """Return (dataset, cache_key) with entries the viewer isn't cleared for removed."""
-    groups = viewer_groups()
+    import api_tokens
+    return redact(data, viewer_groups(), bool(api_tokens.current()))
+
+
+def redact(data, groups, token=False):
+    """`redact_for_groups` for a viewer handed in rather than read from the
+    request: `groups` as `viewer_groups` gives them, `token` true when the
+    reader is an API token. Reads nothing but its arguments."""
     if sees_everything(groups):
         return data, ""
     d = copy.deepcopy(data)
@@ -339,7 +361,7 @@ def redact_for_groups(data):
     # account roster below, and on the same not-`sees_everything` path.
     d.pop("stones", None)
     hidden = hidden_node_ids(d, groups)
-    names = _hidden_words(d, groups)
+    names = hidden_words(d, groups)
     d["nodes"] = [n for n in d.get("nodes", []) if cleared(n, groups)]
     # PROVENANCE: when and whether, not who. The change log is admin-only because
     # it names people, and a stamp's `*_by` is the same names on another page.
@@ -398,8 +420,7 @@ def redact_for_groups(data):
             pins = r.get("places") if isinstance(r, dict) else None
             if isinstance(pins, dict):
                 r["places"] = {k: v for k, v in pins.items() if k not in hidden}
-    import api_tokens
-    if api_tokens.current():
+    if token:
         # A TOKEN READS A LITTLE LESS THAN A PERSON WITH NO GROUPS (2026-11-11), so
         # it must not share that person's cache key: an ETag or a cache built on
         # the group set alone would hand one of them the other's body.

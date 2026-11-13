@@ -11,8 +11,8 @@
 
 import assert from 'node:assert/strict';
 import {
-  chartedAddresses, countLabel, drawable, formatAddress, isSubnetOf, nextFree,
-  occupancy, parseAddress, parseCidr, prefixesOf, rangeAt, usableRange,
+  chartedAddresses, countLabel, drawable, formatAddress, freeV4, isSubnetOf, looseAddresses,
+  nextFree, occupancy, parseAddress, parseCidr, prefixesOf, rangeAt, sharersOf, usableRange,
 } from '../static/js/ipam.js';
 
 let passed = 0;
@@ -209,6 +209,42 @@ test('rangeAt identifies pool membership', () => {
   const admin = prefixesOf(DATA).find((p) => p.id === 'admin4');
   assert.equal(rangeAt(admin, parseAddress('10.77.33.150').value).kind, 'dhcp');
   assert.equal(rangeAt(admin, parseAddress('10.77.33.10').value), null);
+});
+
+/* ── what the Ledger's summary and footer read ───────────────────────── */
+
+test('free grounds count each leaf v4 prefix once, and never a divided one', () => {
+  const list = prefixesOf(DATA);
+  // admin: 254 usable − 2 hosts − a 100-address pool; dmz: 254 − 1 host
+  assert.equal(freeV4(list, chartedAddresses(DATA)), 152n + 253n);
+  assert.equal(freeV4([], new Map()), 0n);
+  const six = prefixesOf({ prefixes: [{ id: 'six', cidr: 'fd00::/64' }] });
+  assert.equal(freeV4(six, new Map()), 0n, 'v6 is not counted');
+});
+
+test('an address inside no described prefix is loose', () => {
+  const loose = looseAddresses(prefixesOf(DATA), chartedAddresses(DATA));
+  assert.deepEqual(loose.map(([, node]) => node.id), ['nowhere', 'range']);
+  assert.equal(loose[0][0], parseAddress('198.51.100.1').value);
+  // with nothing described, everything charted is loose, in charted order
+  assert.deepEqual(looseAddresses([], chartedAddresses(DATA)).map(([, n]) => n.id),
+    ['a', 'b', 'c', 'nowhere', 'range']);
+});
+
+test('the others on an address are named, the place itself is not', () => {
+  const host = { id: 'host', ip: '10.0.0.5', kind: 'vm' };
+  const proxy = { id: 'proxy', ip: '10.0.0.5/24', kind: 'network' };
+  const tunnel = { id: 'tunnel', ip: '10.0.0.5', kind: 'network' };
+  const other = { id: 'other', ip: '10.0.0.6' };
+  const blank = { id: 'blank', ip: '—' };
+  const blank2 = { id: 'blank2', ip: '—' };
+  const unset = { id: 'unset' };
+  const nodes = [host, proxy, tunnel, other, blank, blank2, unset];
+  assert.deepEqual(sharersOf(nodes, host), [proxy, tunnel]);
+  assert.deepEqual(sharersOf(nodes, proxy), [host, tunnel], 'a prefix length is not part of the address');
+  assert.deepEqual(sharersOf(nodes, other), []);
+  assert.deepEqual(sharersOf(nodes, blank), [], 'two places with no address do not share one');
+  assert.deepEqual(sharersOf(nodes, unset), []);
 });
 
 if (!process.exitCode) console.log(`ipam: ${passed} passed`);

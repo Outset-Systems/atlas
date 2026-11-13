@@ -7,16 +7,18 @@ used to coexist collapse into this one shape with optional keys: `{"error"}`,
 `{"error","reason"}`, `{"error","problems"}`.
 
 The fourth — the accounts surface's `{"ok": false, "error"}` — deliberately
-stays. `auth_routes` handlers key their own success/failure off `ok` and the
-sign-in JS reads it, so those bodies keep it; this builder is for everything
-else. The one seam: a same-origin refusal on an `/api/auth/*` route comes from
-`security.same_origin_refusal` (this builder) and so has no `ok`, while the
+stays. The `api/v2/accounts_v2.py` handlers key their own success/failure off
+`ok` and the sign-in JS reads it, so those bodies keep it; this builder is for
+everything else. The one seam: a same-origin refusal on an `/api/v2/auth/*`
+route comes from `security.same_origin_refusal` (this builder) and so has no
+`ok`, while the
 handler's own validation errors on the same route do — the front-end tolerates
 both because it reads `.error` regardless. A future accounts client must not
 assume `ok` is always present on that workstation.
 
 `**extra` is for a key a specific route's client genuinely needs beside the
-sentence (`needs_proof` on the directory save); the reserved keys above always
+sentence (`needs_proof` on the directory save, `POST /api/v2/admin/auth`); the
+reserved keys above always
 win over it, so it cannot reshape the envelope.
 """
 

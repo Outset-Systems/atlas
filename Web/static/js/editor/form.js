@@ -9,11 +9,14 @@
    set. A field left blank that was blank before is simply absent; a field
    cleared that had a value comes back as `null`, which is how `dataset.py`
    is told to remove a key. That distinction is what keeps a save from
-   sprinkling `"hue": ""` through a hand-written dataset. */
+   sprinkling `"hue": ""` through a hand-written dataset. The rules
+   themselves are form-model.js; this builds the widgets and hands it their
+   values. */
 
 import { esc } from '../config.js';
 import { say } from '../words.js';
 import Editor from './store.js';
+import { inputToIso, isoToInput, numberValue, readEntry, readSub, scalarValue } from './form-model.js';
 
 const el = (tag, cls, html) => {
   const node = document.createElement(tag);
@@ -103,14 +106,10 @@ function buildWidget(field, value) {
     const node = el('input', 'dsk-input dsk-mono');
     node.type = 'datetime-local';
     if (value) {
-      const d = new Date(value);
-      if (!Number.isNaN(d.getTime())) node.value = d.toISOString().slice(0, 16);
+      const shown = isoToInput(value);
+      if (shown) node.value = shown;
     }
-    return {
-      node,
-      read: () => (node.value ? new Date(node.value + 'Z').toISOString()
-        .replace(/\.\d{3}Z$/, 'Z') : ''),
-    };
+    return { node, read: () => inputToIso(node.value) };
   }
 
   // a calendar day, stored as YYYY-MM-DD (a canary token's `expires`, v1.52.0)
@@ -131,14 +130,7 @@ function buildWidget(field, value) {
     if (field.min !== undefined) node.min = field.min;
     if (field.max !== undefined) node.max = field.max;
     node.value = value ?? '';
-    return {
-      node,
-      read: () => {
-        if (node.value.trim() === '') return '';
-        const n = Number(node.value);
-        return Number.isNaN(n) ? node.value : n;
-      },
-    };
+    return { node, read: () => numberValue(node.value) };
   }
 
   if (type === 'strings') {
@@ -176,13 +168,7 @@ function buildWidget(field, value) {
   if (type === 'scalar') {
     // text *or* a number (a VLAN is `4` or `—`): a typed whole number goes back
     // as a number, so saving a realm never turns the dataset's `4` into "4"
-    return {
-      node,
-      read: () => {
-        const raw = node.value.trim();
-        return /^-?\d+$/.test(raw) ? Number(raw) : raw;
-      },
-    };
+    return { node, read: () => scalarValue(node.value) };
   }
   return { node, read: () => (typeof node.value === 'string' ? node.value.trim() : node.value) };
 }
@@ -283,16 +269,21 @@ function buildObjectGroup(field, value) {
   return { node: card, read: () => collectSub(field, { widgets }) };
 }
 
-function collectSub(field, row) {
-  const out = {};
-  for (const [name, { field: sub, widget }] of Object.entries(row.widgets || {})) {
-    const raw = widget.read();
-    if (raw === '' || raw === undefined) continue;
-    if (Array.isArray(raw) && !raw.length) continue;
-    if (sub.type === 'bool' && raw === false) continue;
-    out[name] = raw;
+/** What a set of widgets holds now: its fields in widget order, and each
+    one's value by name. The rules for what is saved are form-model.js's. */
+function valuesOf(widgets) {
+  const fields = [];
+  const values = {};
+  for (const [name, { field, widget }] of Object.entries(widgets)) {
+    fields.push(field);
+    values[name] = widget.read();
   }
-  return out;
+  return { fields, values };
+}
+
+function collectSub(field, row) {
+  const { fields, values } = valuesOf(row.widgets || {});
+  return readSub(fields, values);
 }
 
 function fieldRow(field, widget) {
@@ -364,30 +355,8 @@ export function buildForm(sectionKey, entry, opts = {}) {
         form does not show. */
     row(name) { return rows[name] || null; },
     read() {
-      const out = {};
-      const missing = [];
-      for (const [name, { field, widget }] of Object.entries(widgets)) {
-        let value = widget.read();
-        const had = Object.prototype.hasOwnProperty.call(original, name);
-
-        if (field.type === 'bool') {
-          if (value === true) out[name] = true;
-          else if (had && original[name] === true) out[name] = null;
-          continue;
-        }
-        const blank = value === '' || value === undefined ||
-                      (Array.isArray(value) && value.length === 0);
-        if (blank) {
-          if (field.required) missing.push(field.label);
-          else if (had) out[name] = null;   // an explicit clear
-          continue;
-        }
-        out[name] = value;
-      }
-      if (missing.length) {
-        throw new Error(`${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} required`);
-      }
-      return out;
+      const { fields: shown, values } = valuesOf(widgets);
+      return readEntry(shown, original, values);
     },
   };
 }

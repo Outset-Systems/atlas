@@ -1,6 +1,6 @@
-"""The accounts store — real sign-in for ATLAS_AUTH_MODE=accounts.
+"""The accounts store — real sign-in for ATLAS_AUTH_MODE=accounts and hybrid.
 
-Only relevant in accounts mode (see atlas_auth.py). Storage is a small SQLite
+Only relevant in those two modes (see atlas_auth.py). Storage is a small SQLite
 DB beside the dataset (`<data-dir>/accounts.db`), never inside it — the
 lab-data golden round-trip contract stays untouched. Passwords are hashed
 (werkzeug PBKDF2), never stored or logged in plaintext; TOTP secrets are
@@ -8,7 +8,7 @@ encrypted at rest via crypto_at_rest.py.
 
 Two account sources share the table (the Feed's identity-sync doctrine):
 
-  local   created by an admin (atlasctl user-add, /api/auth/users, or the
+  local   created by an admin (atlasctl user-add, /api/v2/auth/users, or the
           bootstrap envs). Carries a password_hash. No open signup, ever —
           this app maps infrastructure; strangers don't get accounts.
   ldap    mirrored from a successful directory bind (ldap_backend.py).
@@ -77,7 +77,7 @@ def _connect():
 
 
 #: Paths whose schema this process has already ensured. init_db runs at the
-#: top of every accounts call and get_user sits on the per-request auth path,
+#: top of most accounts calls and get_user sits on the per-request auth path,
 #: so the four CREATE TABLEs and the index must not be re-issued every time.
 #: Keyed on the RESOLVED path, not a flag: the tests point each case at a
 #: fresh temp DB, and a deployment can repoint ATLAS_ACCOUNTS_DB between
@@ -151,8 +151,8 @@ _migrated = False
 def _migrate(conn):
     """Columns added after a database was born. CREATE IF NOT EXISTS never
     revisits, so a fresh DB gets the full schema above and an old one gets
-    ALTERed here — once per process: init_db runs at the top of every accounts
-    call, and get_user is on the per-request auth path, so this must not cost
+    ALTERed here — once per process: init_db runs at the top of most accounts
+    calls, and get_user is on the per-request auth path, so this must not cost
     a PRAGMA every time."""
     global _migrated
     if _migrated:
@@ -249,6 +249,12 @@ def valid_username(username):
     return bool(_USERNAME_RE.match(_norm(username)))
 
 
+def _check_password(password):
+    """The one password rule. Raises ValueError with the sentence the user reads."""
+    if len(password or "") < MIN_PASSWORD_LEN:
+        raise ValueError(f"Password must be at least {MIN_PASSWORD_LEN} characters.")
+
+
 # ── Users ────────────────────────────────────────────────────────────────────
 
 def get_user(username):
@@ -284,13 +290,19 @@ def count_active_admins():
         return row["n"] if row else 0
 
 
+def is_last_active_admin(acc):
+    """True when `acc` is an active admin and there is no other. Demoting,
+    deactivating or deleting it would leave nobody able to manage accounts."""
+    return bool(acc.get("is_admin") and acc.get("active")
+                and count_active_admins() <= 1)
+
+
 def create_local_user(username, password, *, display_name="", email="",
                       groups=(), is_admin=False):
     username = _norm(username)
     if not valid_username(username):
         raise ValueError("Usernames are lowercase letters, digits, . _ @ -")
-    if len(password or "") < MIN_PASSWORD_LEN:
-        raise ValueError(f"Password must be at least {MIN_PASSWORD_LEN} characters.")
+    _check_password(password)
     groups_csv = ",".join(_clean_groups(groups))
     init_db()
     if get_user(username):
@@ -389,8 +401,7 @@ def verify_password(username, password):
 
 
 def set_password(username, new_password):
-    if len(new_password or "") < MIN_PASSWORD_LEN:
-        raise ValueError(f"Password must be at least {MIN_PASSWORD_LEN} characters.")
+    _check_password(new_password)
     acc = get_user(username)
     if not acc or acc["source"] != "local":
         raise ValueError("No such local account.")
@@ -435,6 +446,16 @@ def set_groups(username, groups):
     with _connect() as conn:
         conn.execute("UPDATE users SET groups_csv = ? WHERE username = ?",
                      (groups_csv, _norm(username)))
+        conn.commit()
+
+
+def set_emblem(username, emblem):
+    """The mark an account wears beside its name — short, cosmetic, its own.
+    Length/shape are the route's to enforce; this stores what it is handed."""
+    init_db()
+    with _connect() as conn:
+        conn.execute("UPDATE users SET emblem = ? WHERE username = ?",
+                     (emblem or "", _norm(username)))
         conn.commit()
 
 
@@ -631,6 +652,14 @@ THROTTLE_IP_MAX = settings.LOGIN_MAX_IP
 THROTTLE_WINDOW_S = settings.LOGIN_WINDOW_S
 
 
+def _user_key(username):
+    return "u:" + _norm(username)
+
+
+def _ip_key(ip):
+    return "ip:" + (ip or "?")
+
+
 def throttled(username, ip):
     """True when either bucket is over its cap. Callers answer a generic 429 —
     the response must not reveal which bucket tripped or whether the account
@@ -642,10 +671,10 @@ def throttled(username, ip):
         conn.execute("DELETE FROM login_throttle WHERE ts < ?", (cutoff - 3600,))
         n_user = conn.execute(
             "SELECT COUNT(*) AS n FROM login_throttle WHERE key = ? AND ts > ?",
-            ("u:" + _norm(username), cutoff)).fetchone()["n"]
+            (_user_key(username), cutoff)).fetchone()["n"]
         n_ip = conn.execute(
             "SELECT COUNT(*) AS n FROM login_throttle WHERE key = ? AND ts > ?",
-            ("ip:" + (ip or "?"), cutoff)).fetchone()["n"]
+            (_ip_key(ip), cutoff)).fetchone()["n"]
         conn.commit()
     return n_user >= THROTTLE_USER_MAX or n_ip >= THROTTLE_IP_MAX
 
@@ -655,9 +684,9 @@ def record_failure(username, ip):
     now = time.time()
     with _connect() as conn:
         conn.execute("INSERT INTO login_throttle (key, ts) VALUES (?, ?)",
-                     ("u:" + _norm(username), now))
+                     (_user_key(username), now))
         conn.execute("INSERT INTO login_throttle (key, ts) VALUES (?, ?)",
-                     ("ip:" + (ip or "?"), now))
+                     (_ip_key(ip), now))
         conn.commit()
 
 
@@ -667,21 +696,11 @@ def clear_failures(username):
     refreshed by one hit)."""
     with _connect() as conn:
         conn.execute("DELETE FROM login_throttle WHERE key = ?",
-                     ("u:" + _norm(username),))
+                     (_user_key(username),))
         conn.commit()
 
 
 # ── Audit (append-only) ──────────────────────────────────────────────────────
-
-def set_emblem(username, emblem):
-    """The mark an account wears beside its name — short, cosmetic, its own.
-    Length/shape are the route's to enforce; this stores what it is handed."""
-    init_db()
-    with _connect() as conn:
-        conn.execute("UPDATE users SET emblem = ? WHERE username = ?",
-                     (emblem or "", _norm(username)))
-        conn.commit()
-
 
 def audit(event, username="", ip="", detail=""):
     init_db()

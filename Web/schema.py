@@ -2,12 +2,13 @@
 
 Every editable section of `lab-data.json` is described here once: its fields,
 their types, which other sections they point at, and which are required. Three
-consumers read this and nothing else:
+consumers were the reason for it (`redaction.py`, `openapi.py` and
+`tripwires.py` read it now too):
 
-  * `validation.py`  — turns the catalogue into the problem list served on
-    `/api/status` and `X-Atlas-Data-Problems`.
-  * `store/dataset.py` — coerces and strictly checks a write before it lands.
-  * `/api/admin/context` — hands it to the browser (as its `schema` key), which
+  * `validation.py`  — turns the catalogue into the problem list, which is
+    logged and counted on `/api/status` and `X-Atlas-Data-Problems`.
+  * `dataset.py` — coerces and strictly checks a write before it lands.
+  * `/api/v2/admin/context` — hands it to the browser (as its `schema` key), which
     renders every editor form and table from it. This line used to say
     `/api/admin/schema`, which is not a route that exists; corrected 2026-08-14
     while adding `stones`, because a reader greps for what the comment names.
@@ -24,6 +25,7 @@ of what the file may hold.
 
 import ipaddress
 import re
+from datetime import date, datetime
 
 # ── Field constructors ───────────────────────────────────────────────────────
 # A field is a plain dict so it serializes to the browser untouched.
@@ -96,6 +98,11 @@ PREFIX_ROLES = ["prefix", "container", "reserved"]
 RANGE_KINDS = ["dhcp", "reserved"]
 #: How a service's button behaves — see LINK_FIELDS["open_in"] and glass.js.
 OPEN_IN = ["auto", "here", "tab"]
+#: How a maintenance window recurs.
+MAINTENANCE_REPEATS = ("none", "daily", "weekly", "monthly")
+#: The lowest and highest value a `percent` field may hold. Named once because
+#: `overlays.py` holds a saved marker's y to the same two numbers.
+PERCENT_MIN, PERCENT_MAX = -40, 140
 
 # ── tripwires (the `stones` section; the decoy feed is one source) ──────────
 #: What kind of bait a stone is. Mirrors the token types the decoy feed charts; kept
@@ -647,7 +654,7 @@ SECTIONS = {
             f("ends", "datetime", required=True,
               help="When it closes (UTC). Required on purpose — a window with no "
                    "end is a suppression somebody has to remember to remove."),
-            f("repeat", "select", options=list(("none", "daily", "weekly", "monthly")),
+            f("repeat", "select", options=list(MAINTENANCE_REPEATS),
               default="none", help="Recurring windows re-open on the same schedule."),
             f("note", "text", help="Anything the next person should know."),
         ]),
@@ -682,8 +689,9 @@ SECTIONS = {
         ]),
 }
 
-# Sections that hold live-signal wiring rather than inventory. Edited through
-# their own small panel, not the generic table.
+# Sections that hold live-signal wiring rather than inventory. Not drawn by the
+# generic table, and no panel edits them: `catalogue()` hands them to the
+# browser and `openapi.py` describes them.
 SIGNAL_FIELDS = [
     f("kuma", "json", label="Monitor → place map",
       help="`{\"Monitor Name\": \"place-id\"}` — ties a Kuma monitor to a marker."),
@@ -745,163 +753,248 @@ _HEX_RE = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
 NONE_MARKS = ("—", "-", "")
 
 
+def _check_text(fld, value):
+    name = fld["name"]
+    if not isinstance(value, str):
+        return f"{name} must be text"
+    if fld["type"] == "slug" and value and not _SLUG_RE.match(value):
+        return (f"{name} {value!r} is not a valid id — lowercase letters, digits, "
+                "dot, dash and underscore only, starting with a letter or digit")
+    return None
+
+
+def _check_datetime(fld, value):
+    name = fld["name"]
+    if not isinstance(value, str):
+        return f"{name} must be a timestamp"
+    if value in NONE_MARKS:
+        return None
+    try:
+        datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return f"{name} {value!r} is not a date and time (YYYY-MM-DDTHH:MM)"
+    return None
+
+
+def _check_date(fld, value):
+    # A calendar day, `YYYY-MM-DD` (TRIPWIRES: a token's `expires`). Blank
+    # or the dataset's em-dash means none.
+    name = fld["name"]
+    if not isinstance(value, str):
+        return f"{name} must be a date"
+    if value.strip() in NONE_MARKS:
+        return None
+    try:
+        date.fromisoformat(value.strip())
+    except ValueError:
+        return f"{name} {value!r} is not a date (YYYY-MM-DD)"
+    return None
+
+
+def _check_scalar(fld, value):
+    # Text *or* a number. The dataset writes `"vlan": 4` and `"vlan": "—"`
+    # in the same field, and both are correct.
+    if isinstance(value, bool) or not isinstance(value, (str, int, float)):
+        return f"{fld['name']} must be text or a number"
+    return None
+
+
+def _check_url(fld, value):
+    if not isinstance(value, str) or not value.startswith(("http://", "https://")):
+        return f"{fld['name']} must be a url starting http:// or https://"
+    return None
+
+
+def carries_credentials(value):
+    """Whether any http(s) URL inside `value`, at any depth, has a user name or
+    password before its host (`https://user:pass@host/`).
+
+    The write path asks this of what is being saved (`dataset.py`), not of the
+    whole document: a map is read by viewers, tokens and exports, so a password
+    typed into a link is a password published, and the moment to say so is when
+    it is typed. An old file that already holds one still loads and still saves;
+    a token is served such a URL without the credential either way
+    (`redaction.bare_urls`).
+    """
+    if isinstance(value, str):
+        text = value.strip()
+        if not text.lower().startswith(("http://", "https://")):
+            return False
+        authority = text.split("://", 1)[1].split("/", 1)[0].split("?", 1)[0].split("#", 1)[0]
+        return "@" in authority
+    if isinstance(value, dict):
+        return any(carries_credentials(v) for v in value.values())
+    if isinstance(value, (list, tuple)):
+        return any(carries_credentials(v) for v in value)
+    return False
+
+
+#: What the Desk is told. It does not repeat the URL: the answer is logged.
+URL_CREDENTIALS = ("a URL here carries a user name or password (the user:pass@host form). "
+                   "Remove it from the URL and keep the credential in the service itself; "
+                   "everyone and everything that reads the map would read it too")
+
+
+def _check_link(fld, value):
+    # An absolute URL, or a relative path this app serves (the Abyss's
+    # `report/security`). Protocol-relative `//host` is refused — it would
+    # silently follow the page's scheme off-origin.
+    name = fld["name"]
+    if not isinstance(value, str):
+        return f"{name} must be text"
+    if value.startswith(("http://", "https://")):
+        return None
+    if value.startswith("//") or ":" in value.split("/")[0]:
+        return f"{name} must be an http(s) url or a relative path"
+    return None
+
+
+def _check_color(fld, value):
+    if not isinstance(value, str) or not _HEX_RE.match(value):
+        return f"{fld['name']} must be a hex colour like #C9A554"
+    return None
+
+
+def _check_bool(fld, value):
+    return None if isinstance(value, bool) else f"{fld['name']} must be true or false"
+
+
+def _check_number(fld, value):
+    name = fld["name"]
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return f"{name} must be a number"
+    if fld["type"] == "int" and not float(value).is_integer():
+        return f"{name} must be a whole number"
+    if "min" in fld and value < fld["min"]:
+        return f"{name} must be at least {fld['min']}"
+    if "max" in fld and value > fld["max"]:
+        return f"{name} must be at most {fld['max']}"
+    return None
+
+
+def _check_percent(fld, value):
+    name = fld["name"]
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return f"{name} must be a number"
+    # y may exceed 100 by design — THE WILD lives in the void below the map.
+    if not (PERCENT_MIN <= value <= PERCENT_MAX):
+        return f"{name} {value} is off the table"
+    return None
+
+
+def _check_select(fld, value):
+    name = fld["name"]
+    opts = fld.get("options", [])
+    if value in NONE_MARKS and "" in opts:
+        return None
+    if value not in opts:
+        return f"unknown {name} {value!r}"
+    return None
+
+
+def _check_ip(fld, value):
+    name = fld["name"]
+    if not isinstance(value, str):
+        return f"{name} must be text"
+    if value in NONE_MARKS:
+        return None
+    try:
+        ipaddress.ip_address(value)
+        return None
+    except ValueError:
+        pass
+    # A place that *is* a network carries a prefix here (Tailscale's
+    # 100.64.0.0/10), which is a legitimate answer to "where is it".
+    try:
+        ipaddress.ip_network(value, strict=False)
+        return None
+    except ValueError:
+        return f"{name} {value!r} is not an ip address"
+
+
+def _check_cidr(fld, value):
+    name = fld["name"]
+    if not isinstance(value, str):
+        return f"{name} must be text"
+    if value in NONE_MARKS:
+        return None
+    try:
+        ipaddress.ip_network(value, strict=False)
+    except ValueError:
+        return f"{name} {value!r} is not a prefix like 10.0.20.0/24"
+    return None
+
+
+def _check_strings(fld, value):
+    if not isinstance(value, list) or any(not isinstance(v, str) for v in value):
+        return f"{fld['name']} must be a list of text values"
+    return None
+
+
+def _check_objects(fld, value):
+    if not isinstance(value, list) or any(not isinstance(v, dict) for v in value):
+        return f"{fld['name']} must be a list of entries"
+    return None
+
+
+def _check_object(fld, value):
+    if not isinstance(value, dict):
+        return f"{fld['name']} must be a group of settings"
+    return None
+
+
+#: The check for each field type. A type with no entry (`json`, `ref`) holds
+#: anything as far as this table is concerned.
+_CHECKS = {
+    "text": _check_text, "longtext": _check_text, "path": _check_text, "slug": _check_text,
+    "datetime": _check_datetime,
+    "date": _check_date,
+    "scalar": _check_scalar,
+    "url": _check_url,
+    "link": _check_link,
+    "color": _check_color,
+    "bool": _check_bool,
+    "int": _check_number, "number": _check_number,
+    "percent": _check_percent,
+    "select": _check_select,
+    "ip": _check_ip,
+    "cidr": _check_cidr,
+    "strings": _check_strings,
+    "objects": _check_objects,
+    "object": _check_object,
+}
+
+
 def check_value(fld, value):
     """Return an error string for `value` under field `fld`, or None if fine.
 
     Absence is not this function's business — `required` is checked by the
     caller, which knows whether the key was present at all.
     """
-    t = fld["type"]
-    name = fld["name"]
+    check = _CHECKS.get(fld["type"])
+    return check(fld, value) if check else None
 
-    if t in ("text", "longtext", "path", "slug"):
-        if not isinstance(value, str):
-            return f"{name} must be text"
-        if t == "slug" and value and not _SLUG_RE.match(value):
-            return (f"{name} {value!r} is not a valid id — lowercase letters, digits, "
-                    "dot, dash and underscore only, starting with a letter or digit")
-        return None
 
-    if t == "datetime":
-        if not isinstance(value, str):
-            return f"{name} must be a timestamp"
-        if value in NONE_MARKS:
-            return None
-        from datetime import datetime
-        try:
-            datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
-        except ValueError:
-            return f"{name} {value!r} is not a date and time (YYYY-MM-DDTHH:MM)"
-        return None
-
-    if t == "date":
-        # A calendar day, `YYYY-MM-DD` (TRIPWIRES: a token's `expires`). Blank
-        # or the dataset's em-dash means none.
-        if not isinstance(value, str):
-            return f"{name} must be a date"
-        if value.strip() in NONE_MARKS:
-            return None
-        from datetime import date
-        try:
-            date.fromisoformat(value.strip())
-        except ValueError:
-            return f"{name} {value!r} is not a date (YYYY-MM-DD)"
-        return None
-
-    if t == "scalar":
-        # Text *or* a number. The dataset writes `"vlan": 4` and `"vlan": "—"`
-        # in the same field, and both are correct.
-        if isinstance(value, bool) or not isinstance(value, (str, int, float)):
-            return f"{name} must be text or a number"
-        return None
-
-    if t == "url":
-        if not isinstance(value, str) or not value.startswith(("http://", "https://")):
-            return f"{name} must be a url starting http:// or https://"
-        return None
-
-    if t == "link":
-        # An absolute URL, or a relative path this app serves (the Abyss's
-        # `report/security`). Protocol-relative `//host` is refused — it would
-        # silently follow the page's scheme off-origin.
-        if not isinstance(value, str):
-            return f"{name} must be text"
-        if value.startswith(("http://", "https://")):
-            return None
-        if value.startswith("//") or ":" in value.split("/")[0]:
-            return f"{name} must be an http(s) url or a relative path"
-        return None
-
-    if t == "color":
-        if not isinstance(value, str) or not _HEX_RE.match(value):
-            return f"{name} must be a hex colour like #C9A554"
-        return None
-
-    if t == "bool":
-        return None if isinstance(value, bool) else f"{name} must be true or false"
-
-    if t in ("int", "number"):
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            return f"{name} must be a number"
-        if t == "int" and not float(value).is_integer():
-            return f"{name} must be a whole number"
-        if "min" in fld and value < fld["min"]:
-            return f"{name} must be at least {fld['min']}"
-        if "max" in fld and value > fld["max"]:
-            return f"{name} must be at most {fld['max']}"
-        return None
-
-    if t == "percent":
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            return f"{name} must be a number"
-        # y may exceed 100 by design — THE WILD lives in the void below the map.
-        if not (-40 <= value <= 140):
-            return f"{name} {value} is off the table"
-        return None
-
-    if t == "select":
-        opts = fld.get("options", [])
-        if value in NONE_MARKS and "" in opts:
-            return None
-        if value not in opts:
-            return f"unknown {name} {value!r}"
-        return None
-
-    if t == "ip":
-        if not isinstance(value, str):
-            return f"{name} must be text"
-        if value in NONE_MARKS:
-            return None
-        try:
-            ipaddress.ip_address(value)
-            return None
-        except ValueError:
-            pass
-        # A place that *is* a network carries a prefix here (Tailscale's
-        # 100.64.0.0/10), which is a legitimate answer to "where is it".
-        try:
-            ipaddress.ip_network(value, strict=False)
-            return None
-        except ValueError:
-            return f"{name} {value!r} is not an ip address"
-
-    if t == "cidr":
-        if not isinstance(value, str):
-            return f"{name} must be text"
-        if value in NONE_MARKS:
-            return None
-        try:
-            ipaddress.ip_network(value, strict=False)
-        except ValueError:
-            return f"{name} {value!r} is not a prefix like 10.0.20.0/24"
-        return None
-
-    if t == "strings":
-        if not isinstance(value, list) or any(not isinstance(v, str) for v in value):
-            return f"{name} must be a list of text values"
-        return None
-
-    if t == "objects":
-        if not isinstance(value, list) or any(not isinstance(v, dict) for v in value):
-            return f"{name} must be a list of entries"
-        return None
-
-    if t == "object":
-        if not isinstance(value, dict):
-            return f"{name} must be a group of settings"
-        return None
-
-    if t == "json":
-        return None
-
-    return None
+def _check_sub(prefix, holder, subfields, out):
+    """Check one sub-object against its own field list, appending to `out`."""
+    for subfld in subfields:
+        sname = subfld["name"]
+        if sname not in holder or holder[sname] is None:
+            if subfld.get("required"):
+                out.append(f"{prefix}: missing {sname}")
+            continue
+        suberr = check_value(subfld, holder[sname])
+        if suberr:
+            out.append(f"{prefix}: {suberr}")
 
 
 def check_entry(section_key, entry, strict=False):
     """Every problem with one entry of a section, as plain strings.
 
-    `strict` also rejects entries that are not dicts and required-but-blank
-    values. Non-strict is the historic read path: report, never refuse.
+    An entry that is not an object is a problem either way. `strict` adds one
+    check: a required value that is present but blank. Nothing is refused
+    here; the caller decides what a problem means (the read path reports, the
+    write path refuses).
     """
     s = SECTIONS.get(section_key)
     if s is None:
@@ -932,39 +1025,38 @@ def check_entry(section_key, entry, strict=False):
         # sub-objects carry their own field list
         if fld["type"] == "objects":
             for i, sub in enumerate(value):
-                for subfld in fld.get("of", []):
-                    sname = subfld["name"]
-                    if sname not in sub or sub[sname] is None:
-                        if subfld.get("required"):
-                            out.append(f"{name}[{i}]: missing {sname}")
-                        continue
-                    suberr = check_value(subfld, sub[sname])
-                    if suberr:
-                        out.append(f"{name}[{i}]: {suberr}")
+                _check_sub(f"{name}[{i}]", sub, fld.get("of", []), out)
         elif fld["type"] == "object":
-            for subfld in fld.get("of", []):
-                sname = subfld["name"]
-                if sname not in value or value[sname] is None:
-                    if subfld.get("required"):
-                        out.append(f"{name}: missing {sname}")
-                    continue
-                suberr = check_value(subfld, value[sname])
-                if suberr:
-                    out.append(f"{name}: {suberr}")
+            _check_sub(name, value, fld.get("of", []), out)
+    return out
+
+
+def ref_fields(section_key):
+    """[(field, subfield | None, target_section, type)] for every reference a
+    section can hold. `subfield` is set for a reference inside a sub-object
+    (`links` / `connects`); `type` is the type of the field holding the id."""
+    out = []
+    for fld in fields_of(section_key):
+        if fld.get("ref"):
+            out.append((fld["name"], None, fld["ref"], fld["type"]))
+        for sub in fld.get("of", []) or []:
+            if sub.get("ref"):
+                out.append((fld["name"], sub["name"], sub["ref"], sub["type"]))
     return out
 
 
 def refs_of(section_key):
     """[(field_name, target_section)] for every reference a section can hold,
     including references inside its sub-objects (as `links.connects`)."""
-    out = []
-    for fld in fields_of(section_key):
-        if fld.get("ref"):
-            out.append((fld["name"], fld["ref"]))
-        for sub in fld.get("of", []) or []:
-            if sub.get("ref"):
-                out.append((f"{fld['name']}.{sub['name']}", sub["ref"]))
-    return out
+    return [(name if sub is None else f"{name}.{sub}", target)
+            for name, sub, target, _ in ref_fields(section_key)]
+
+
+def as_list(value):
+    """A reference field's value as a list: one id, a list of them, or none."""
+    if value is None:
+        return []
+    return value if isinstance(value, list) else [value]
 
 
 def blank(section_key):

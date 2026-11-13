@@ -16,7 +16,7 @@ ANNALS like any other fault, so it inherits acknowledgement — "yes, I know,
 The download host is off this week" is a thing you can say to it.
 
 **Two ways to report, because one is never enough.** A job that can reach the
-app POSTs to `/api/rites/<key>/beat` carrying the shared token. A job that
+app POSTs to `/api/v2/rites/<key>/beat` carrying the shared token. A job that
 cannot — in the suite deployment the port is unpublished and the app lives
 behind the Hub — touches a file under `/data/beats/`, which anything holding
 the volume can do, including `ssh app-host touch …` from another host. Both

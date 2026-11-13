@@ -35,7 +35,7 @@
 import { A, $, esc, zoneById, FALLBACK_HUE } from './config.js';
 import { makeScene } from './scene.js';
 
-let root, listEl, headEl;
+let listEl, headEl;
 
 /* The three sudo states, loudest first. `nopasswd` takes the map's existing
    alarm tone (`--sem-down`); `password` is ordinary and quiet; `none` is the
@@ -142,8 +142,7 @@ A.openAccounts = open;
 A.closeAccounts = close;
 
 A.buildAccountsScene = function buildAccountsScene() {
-  root = scene.mount();
-  if (!root) return;
+  if (!scene.mount()) return;
   listEl = $('acc-list');
   headEl = $('acc-head');
 };

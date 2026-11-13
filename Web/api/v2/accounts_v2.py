@@ -2,7 +2,8 @@
 
 The sign-in API (the login PAGE stays a view: `auth_routes.py`). A nested
 blueprint whose `before_request` 404s outside the modes that have sessions,
-so in hub/standalone these paths simply do not exist.
+so in hub/standalone these paths simply do not exist. The admin half
+(`/users*`, `/audit`) is `accounts_admin.py`, on the same blueprint.
 
 These paths are exempt from the app gate (a signed-out user must be able to
 reach the login flow), so every route here enforces its own requirements: the
@@ -74,13 +75,20 @@ def session_required(view):
 def admin_required(view):
     @wraps(view)
     def guarded(*args, **kwargs):
-        acc = atlas_auth.current_account()
-        if not acc:
-            return jsonify({"ok": False, "error": "Sign in required."}), 401
-        if not acc.get("is_admin"):
+        if not atlas_auth.current_account().get("is_admin"):
             return jsonify({"ok": False, "error": "Admin account required."}), 403
         return view(*args, **kwargs)
-    return guarded
+    return session_required(guarded)
+
+
+def _too_many():
+    """The throttle's answer, the same on every route that takes a guess."""
+    return jsonify({"ok": False, "error": "Too many attempts. Try again later."}), 429
+
+
+def _name(username):
+    """A username as the store spells it."""
+    return username.strip().lower()
 
 
 def _enroll_pending_user():
@@ -168,12 +176,12 @@ def _try_backends(username, password):
 def api_login():
     import accounts
     data = request.get_json(silent=True) or {}
-    username = (data.get("username") or "").strip().lower()
+    username = _name(data.get("username") or "")
     password = data.get("password") or ""
     ip = atlas_auth.client_ip()
     if accounts.throttled(username, ip):
         accounts.audit("login_locked", username, ip)
-        return jsonify({"ok": False, "error": "Too many attempts. Try again later."}), 429
+        return _too_many()
 
     try:
         acc, source = _try_backends(username, password)
@@ -222,7 +230,7 @@ def api_login_mfa():
     username = session.get("_mfa_user")
     ip = atlas_auth.client_ip()
     if accounts.throttled(username or "", ip):
-        return jsonify({"ok": False, "error": "Too many attempts. Try again later."}), 429
+        return _too_many()
     started = session.get("_mfa_started", 0)
     if not username or time.time() - started > _MFA_PENDING_TTL:
         session.pop("_mfa_user", None)
@@ -284,7 +292,7 @@ def api_mfa_setup():
         return jsonify({"ok": False, "error": "Sign in first."}), 401
     ip = atlas_auth.client_ip()
     if accounts.throttled(username, ip):
-        return jsonify({"ok": False, "error": "Too many attempts. Try again later."}), 429
+        return _too_many()
     acc = atlas_auth.current_account()
     if acc:
         # a full session proves itself; the forced-enrollment state is not
@@ -310,7 +318,7 @@ def api_mfa_confirm():
     if not username:
         return jsonify({"ok": False, "error": "Sign in first."}), 401
     if accounts.throttled(username, ip):
-        return jsonify({"ok": False, "error": "Too many attempts. Try again later."}), 429
+        return _too_many()
     code = (request.get_json(silent=True) or {}).get("code") or ""
     try:
         backup_codes = accounts.confirm_mfa(username, code)
@@ -337,7 +345,7 @@ def api_mfa_disable():
                         "MFA is required on this instance (ATLAS_MFA_REQUIRED)."}), 403
     ip = atlas_auth.client_ip()
     if accounts.throttled(acc["username"], ip):
-        return jsonify({"ok": False, "error": "Too many attempts. Try again later."}), 429
+        return _too_many()
     refusal = _reauth_refusal(acc, request.get_json(silent=True) or {})
     if refusal:
         return refusal
@@ -385,139 +393,9 @@ def api_me_emblem():
     return jsonify({"ok": True, "emblem": emblem})
 
 
-# ── Admin: user management (G14) ─────────────────────────────────────────────
-
-@auth_bp.route("/users")
-@admin_required
-def api_users():
-    import accounts
-    return jsonify({"ok": True, "users": accounts.list_users()})
-
-
-@auth_bp.route("/users", methods=["POST"])
-@same_origin_required
-@admin_required
-def api_users_create():
-    import accounts
-    data = request.get_json(silent=True) or {}
-    try:
-        acc = accounts.create_local_user(
-            data.get("username") or "", data.get("password") or "",
-            display_name=data.get("display_name") or "",
-            email=data.get("email") or "",
-            groups=data.get("groups") or (),
-            is_admin=bool(data.get("is_admin")))
-    except ValueError as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 400
-    accounts.audit("user_created", acc["username"], atlas_auth.client_ip(),
-                   "by " + atlas_auth.current_user())
-    return jsonify({"ok": True, "username": acc["username"]})
-
-
-def _admin_target_guard(username, *, demoting=False, deactivating=False):
-    import accounts
-    me = atlas_auth.current_user()
-    acc = accounts.get_user(username)
-    if not acc:
-        return jsonify({"ok": False, "error": "No such account."}), 404
-    if username == me and (demoting or deactivating):
-        return jsonify({"ok": False, "error": "You can't do that to your own account."}), 400
-    if ((demoting or deactivating) and acc.get("is_admin") and acc.get("active")
-            and accounts.count_active_admins() <= 1):
-        return jsonify({"ok": False, "error": "That is the last active admin."}), 400
-    return None
-
-
-@auth_bp.route("/users/<username>/admin", methods=["POST"])
-@same_origin_required
-@admin_required
-def api_user_admin(username):
-    import accounts
-    username = username.strip().lower()
-    on = bool((request.get_json(silent=True) or {}).get("on"))
-    acc = accounts.get_user(username)
-    if acc and acc.get("source") == "ldap":
-        return jsonify({"ok": False, "error":
-                        "Directory accounts get admin from ATLAS_LDAP_ADMIN_GROUPS — "
-                        "change the AD group, not this flag."}), 400
-    blocked = _admin_target_guard(username, demoting=not on)
-    if blocked:
-        return blocked
-    accounts.set_admin(username, on)
-    accounts.audit("user_admin", username, atlas_auth.client_ip(),
-                   f"{'granted' if on else 'revoked'} by {atlas_auth.current_user()}")
-    return jsonify({"ok": True})
-
-
-@auth_bp.route("/users/<username>/active", methods=["POST"])
-@same_origin_required
-@admin_required
-def api_user_active(username):
-    import accounts
-    username = username.strip().lower()
-    on = bool((request.get_json(silent=True) or {}).get("on"))
-    blocked = _admin_target_guard(username, deactivating=not on)
-    if blocked:
-        return blocked
-    accounts.set_active(username, on)
-    accounts.audit("user_active", username, atlas_auth.client_ip(),
-                   f"{'activated' if on else 'deactivated'} by {atlas_auth.current_user()}")
-    return jsonify({"ok": True})
-
-
-@auth_bp.route("/users/<username>/groups", methods=["POST"])
-@same_origin_required
-@admin_required
-def api_user_groups(username):
-    import accounts
-    groups = (request.get_json(silent=True) or {}).get("groups") or []
-    try:
-        accounts.set_groups(username.strip().lower(), groups)
-    except ValueError as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 400
-    accounts.audit("user_groups", username, atlas_auth.client_ip(),
-                   "by " + atlas_auth.current_user())
-    return jsonify({"ok": True})
-
-
-@auth_bp.route("/users/<username>/reset-mfa", methods=["POST"])
-@same_origin_required
-@admin_required
-def api_user_reset_mfa(username):
-    import accounts
-    username = username.strip().lower()
-    if not accounts.get_user(username):
-        return jsonify({"ok": False, "error": "No such account."}), 404
-    accounts.disable_mfa(username)
-    accounts.audit("mfa_reset", username, atlas_auth.client_ip(),
-                   "by " + atlas_auth.current_user())
-    return jsonify({"ok": True})
-
-
-@auth_bp.route("/users/<username>", methods=["DELETE"])
-@same_origin_required
-@admin_required
-def api_user_delete(username):
-    import accounts
-    username = username.strip().lower()
-    blocked = _admin_target_guard(username, deactivating=True)
-    if blocked:
-        return blocked
-    accounts.delete_user(username)
-    accounts.audit("user_deleted", username, atlas_auth.client_ip(),
-                   "by " + atlas_auth.current_user())
-    return jsonify({"ok": True})
-
-
-@auth_bp.route("/audit")
-@admin_required
-def api_audit():
-    import accounts
-    try:
-        limit = min(max(int(request.args.get("limit", 200)), 1), 500)
-    except ValueError:
-        limit = 200
-    return jsonify({"ok": True, "events": accounts.audit_tail(limit)})
-
+# The admin half of this surface (`/users*`, `/audit`). It attaches to `auth_bp`,
+# so it is imported here, after everything above exists and before the
+# blueprint is registered.
+from . import accounts_admin  # noqa: E402,F401
 
 bp.register_blueprint(auth_bp)

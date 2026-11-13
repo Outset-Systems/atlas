@@ -34,6 +34,7 @@ import time
 import settings
 from jsonio import iso_utc
 from jsonstore import JsonStore
+from signals import NODE_STATES
 
 log = logging.getLogger("atlas.live.events")
 
@@ -41,8 +42,9 @@ log = logging.getLogger("atlas.live.events")
 KEEP = 2000
 
 #: States worth remembering a move between. A transition into or out of any of
-#: these is an event; anything else is noise.
-TRACKED = ("healthy", "degraded", "down", "maintenance", "slumbering")
+#: these is an event; anything else is noise. The marker states, as the signals
+#: layer spells them; a tuple, so an unhashable junk state is simply not in it.
+TRACKED = tuple(sorted(NODE_STATES))
 
 #: How an event reads in the log, by where it landed. "consequence" is not a
 #: state — it is a `down` whose cause is something else that is also down, so it
@@ -67,6 +69,32 @@ def _shape(stored):
 
 #: THE ANNALS: {seq, state, events}. Path read live so a settings reload lands.
 _STORE = JsonStore(lambda: settings.EVENTS_PATH, _shape)
+
+
+# ── writing to the annals: one lock, one load, one numbering, one save ──────
+# Everything that appends an event goes through these four, so the id sequence
+# and the cap are kept in one place (`record` below, `tripwires.record`).
+def locked():
+    """The annals' write lock, held across a load, a change and a `commit`."""
+    return _STORE.locked()
+
+
+def load():
+    """The annals as stored: {seq, state, events}."""
+    return _STORE.load()
+
+
+def next_id(store):
+    """Take the next event id from a loaded store."""
+    store["seq"] += 1
+    return store["seq"]
+
+
+def commit(store):
+    """Trim a loaded store to the newest KEEP events and save it."""
+    if len(store["events"]) > KEEP:
+        store["events"] = store["events"][-KEEP:]
+    _STORE.save(store)
 
 
 def _observed(feed):
@@ -102,8 +130,8 @@ def record(feed, label_for=None):
     if not observed:
         return []
 
-    with _STORE.locked():
-        store = _STORE.load()
+    with locked():
+        store = load()
         known = store["state"]
         fresh = []
         # `known` is the same object as store["state"], so comparing them later
@@ -120,14 +148,14 @@ def record(feed, label_for=None):
             if previous is None:
                 # first sighting — seed, don't narrate
                 continue
-            store["seq"] += 1
+            event_id = next_id(store)
             # A fault explained by something else that is also down is a
             # consequence: recorded in full, but it must not add a second
             # thing to acknowledge for one fault.
             gravity = ("consequence" if (cause and state == "down")
                        else _GRAVITY.get(state, "clear"))
             event = {
-                "id": store["seq"],
+                "id": event_id,
                 "at": _now(),
                 "kind": kind,
                 "target": target,
@@ -145,9 +173,7 @@ def record(feed, label_for=None):
             return []                       # nothing moved; don't touch the disk
 
         store["events"].extend(fresh)
-        if len(store["events"]) > KEEP:
-            store["events"] = store["events"][-KEEP:]
-        _STORE.save(store)
+        commit(store)
 
     for event in fresh:
         log.info("event: %s %s %s -> %s", event["kind"], event["target"],

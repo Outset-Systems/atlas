@@ -1,6 +1,7 @@
 """`GET /api/status` — the fleet-wide the suite card contract, kept on purpose.
 
-The one unversioned API path that survived the v1 removal (v1.41.0).
+One of the two unversioned API paths (the other is `/api/manifest`, below),
+kept at the v1 removal (v1.41.0).
 The Hub and Kuma probe `/api/status` on every app in the
 suite; it stays until that contract changes fleet-wide, and it answers
 anonymously (`hub_auth.auth.DEFAULT_EXEMPT`) for exactly that reason.

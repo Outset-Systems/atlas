@@ -52,8 +52,7 @@ def login_page():
 
 
 def _say_nobody_can_sign_in():
-    import settings
-    if settings.auth_mode() == "accounts":
+    if atlas_auth.accounts_mode():
         # Nobody can sign in, and nothing else says why.
         log.warning("no admin account exists, so nobody can sign in. Set "
                     "ATLAS_ADMIN_PASSWORD in .env and run `up -d` again (without "

@@ -9,14 +9,14 @@ ADMIN ONLY, unlike the map itself. The body is a list of the addresses each
 app will believe a client identity from — the shortest possible description of
 where to aim a forged header. The map's own redaction is group-shaped and
 tuned for places and services; this is not a place, so it gets the blunt
-answer instead.
+answer instead. The one exception is a demo: where `ATLAS_DEMO_TRUST` names an
+invented map, that file is served to every visitor.
 
 Served from the image, so it is exactly as old as the running build. A
 deployment whose config has moved since the last generate would show a stale
 answer confidently — which is the failure this view exists to prevent — so
-`stale_risk` carries the app version and the caller is told to re-run the
-generator, and the trust-map generator --check` is the mechanical form of the same
-question.
+the body carries the running app's `version`, and the trust-map generator --check`
+is the mechanical form of the same question.
 """
 import json
 import logging

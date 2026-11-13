@@ -99,6 +99,34 @@ def parse_csv(text):
     return rows, errors
 
 
+def node_drafts(rows, data):
+    """Parsed rows as node drafts for the editor to review; nothing is written.
+    Each draft takes its id and its place the way a surveyed device does
+    (`discovery.as_node`), then the row's own name, kind, role and notes. A row
+    naming a zone the map does not have falls back to one it does."""
+    import discovery
+    taken = {n.get("id") for n in data.get("nodes", []) or []}
+    zones = {z.get("id") for z in data.get("zones", []) or []}
+    fallback = next(iter(zones), "uncharted")
+    drafts = []
+    for row in rows:
+        node = discovery.as_node(
+            {"ip": row["ip"], "hostname": row["name"]}, data, taken)
+        node.update({
+            "name": row["name"].upper(),
+            "kind": row["kind"],
+            "role": row["role"] or "imported · not yet described",
+            "lore": row["notes"] or "Newly charted, its story not yet written.",
+        })
+        if row["zone"]:
+            node["zone"] = row["zone"] if row["zone"] in zones else fallback
+        if row["url"]:
+            node["links"] = [{"label": row["url_label"] or "Service", "url": row["url"]}]
+        taken.add(node["id"])
+        drafts.append(node)
+    return drafts
+
+
 def import_rows(session, rows, site_slug, retire_missing=False):
     """Write validated rows into `site_slug`. One transaction; additive unless
     `retire_missing`. Hand-written lore/links/positions are never overwritten."""

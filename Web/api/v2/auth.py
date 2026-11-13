@@ -22,21 +22,20 @@ adapts, it never decides.
 
 from functools import wraps
 
-from flask import jsonify
-
 import security
 
 
 def admin_required(view):
     """403 anyone `security.is_admin()` does not vouch for.
 
-    Same predicate and same body as the admin blueprint's `before_request`, so the editor's
-    reads refuse identically on both sides of the migration.
+    Same predicate and same body as the admin blueprint's `before_request`
+    (`api/v2/admin.py`), so an admins-only read outside that blueprint refuses
+    exactly as one inside it.
     """
     @wraps(view)
     def guarded(*args, **kwargs):
         if not security.is_admin():
-            return jsonify({"error": "admins only"}), 403
+            return security.admins_only()
         return view(*args, **kwargs)
     return guarded
 
@@ -50,8 +49,8 @@ def whole_map_required(view):
     """
     @wraps(view)
     def guarded(*args, **kwargs):
-        if not security.sees_everything(security.viewer_groups()):
-            return jsonify({"error": "admins only"}), 403
+        if not security.sees_whole_map():
+            return security.admins_only()
         return view(*args, **kwargs)
     return guarded
 

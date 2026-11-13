@@ -22,6 +22,7 @@ clears the overlay entry for anything it writes: see `drop()`.
 import logging
 import re
 
+import schema
 from filelock import exclusive, lock_for
 from jsonio import read_json_dict, write_json_atomic
 
@@ -122,7 +123,7 @@ def _position_clean(data, submitted):
         x, y = p.get("x"), p.get("y")
         # y may exceed 100 by design — THE WILD lives in the void below.
         if isinstance(x, (int, float)) and isinstance(y, (int, float)) \
-                and 0 <= x <= 100 and -40 <= y <= 140:
+                and 0 <= x <= 100 and schema.PERCENT_MIN <= y <= schema.PERCENT_MAX:
             clean[node_id] = {"x": round(float(x), 2), "y": round(float(y), 2)}
     return clean
 

@@ -1562,7 +1562,7 @@ body.scene-open #scenes-list {
    has emitted `chron-fly` since. Removed 2026-08-21.) */
 
 /* (the artist's star mark on lab5 was hidden here by #star-hide until
-   2026-11-11; lab6 has no star, so the patch went with the old render.) */
+   2026-11-11; lab6 and lab7 have no star, so the patch went with the old render.) */
 
 /* ── Network layer (routes) ─────────────────────────── */
 /* (#overlay's z-index: 4 sits on its base rule, by the stage) */

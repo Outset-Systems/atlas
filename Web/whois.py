@@ -150,3 +150,46 @@ def referral(text):
         if value and "." in value and re.match(r"^[a-z0-9._-]{1,253}$", value):
             return value
     return None
+
+
+def follow(query):
+    """Ask the root, then each server the last answer points at, hop-capped.
+
+    Returns `(servers, texts, dead_server, error)`. `servers` are the ones that
+    answered, in order; `texts` is what to show for each hop, closed by a note
+    when the chain stopped at a server that could not be asked. `dead_server`
+    is None unless the FIRST server could not be asked, so nothing was learned:
+    then it names that server, and `error` is the OSError its conversation
+    raised, or None for a name `endpoint` would not vouch for.
+    """
+    servers, texts = [], []
+    server, seen = ROOT, set()
+    for _ in range(MAX_HOPS):
+        if not server or server in seen:
+            break
+        seen.add(server)
+        # Vetted per hop, the root included: one path, so a mistake here cannot
+        # be a mistake that only some hops make.
+        targets = endpoint(server)
+        if targets is None:
+            # Deliberately the SAME sentence for "does not resolve" and
+            # "resolves somewhere private". The referral is written by whoever
+            # answered the last hop, so telling them apart would answer
+            # "does this internal name exist?" for a caller who is not
+            # supposed to be able to ask. `endpoint`'s log line says which.
+            if not texts:
+                return servers, texts, server, None
+            texts.append(f"% {server} is not a public whois server — "
+                         "the chain ends here.")
+            break
+        try:
+            answer = ask(targets, query)
+        except OSError as e:
+            if not texts:
+                return servers, texts, server, e
+            texts.append(f"% {server} would not answer — the chain ends here.")
+            break
+        servers.append(server)
+        texts.append(f"% ── {server} ──\n{answer.strip()}")
+        server = referral(answer)
+    return servers, texts, None, None

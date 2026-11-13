@@ -2,7 +2,7 @@
 
 The plumbing for this has existed since Phase 1: `observed_nodes` rows, an
 nmap importer that fills them, a relay that can push them, and
-`/api/v1/sites/<slug>/observed` to read them. What was missing was anywhere to
+`/api/v2/sites/<slug>/observed` to read them. What was missing was anywhere to
 *act* on it, so the drift signal only ever became a number.
 
 This is the acting half — the Zabbix "auto-registration" / NetBox
@@ -19,6 +19,7 @@ import ipaddress
 import logging
 import re
 
+import layoutgrid
 import settings
 from jsonio import iso_utc
 from jsonstore import JsonStore
@@ -299,11 +300,9 @@ def forget(keys):
         return len(state["hosts"])
 
 
-#: Draft placement, matching store.layout's grid so both backends lay a survey
-#: out the same way: five across, 7% apart, starting just under the realm's
-#: label and below whatever already stands there.
-_GRID_COLS, _GRID_STEP = 5, 7.0
-_X_MIN, _X_MAX, _Y_MIN, _Y_MAX = 2.0, 98.0, -38.0, 138.0
+# Draft placement uses the grid store.layout uses (`layoutgrid`), so both
+# backends lay a survey out the same way: five across, 7% apart, starting just
+# under the realm's label and below whatever already stands there.
 
 
 def place_drafts(data, drafts):
@@ -314,9 +313,6 @@ def place_drafts(data, drafts):
     drafts are gridded under its label, after the places it already has, so
     they arrive readable and in a stable order. Mutates and returns `drafts`.
     """
-    def clamp(v, lo, hi):
-        return max(lo, min(hi, v))
-
     def num(v):
         return isinstance(v, (int, float)) and not isinstance(v, bool)
 
@@ -328,7 +324,8 @@ def place_drafts(data, drafts):
         if num(z.get("label_x")) and num(z.get("label_y")):
             anchors[z.get("id")] = (z["label_x"], z["label_y"] + 6.0)
         else:
-            anchors[z.get("id")] = (50.0, 14.0 + 17.0 * band + 6.0)
+            anchors[z.get("id")] = (layoutgrid.BAND_CENTER_X,
+                                    layoutgrid.BAND_TOP + layoutgrid.BAND_STEP * band + 6.0)
             band += 1
     residents = {}
     for n in data.get("nodes", []) or []:
@@ -336,12 +333,11 @@ def place_drafts(data, drafts):
     slots = {}
     for node in drafts:
         zone = node.get("zone")
-        ax, ay = anchors.get(zone, (50.0, 120.0))
+        ax, ay = anchors.get(zone, (layoutgrid.BAND_CENTER_X, 120.0))
         slot = residents.get(zone, 0) + slots.get(zone, 0)
         slots[zone] = slots.get(zone, 0) + 1
-        col, row = slot % _GRID_COLS, slot // _GRID_COLS
-        node["x"] = round(clamp(ax + (col - (_GRID_COLS - 1) / 2) * _GRID_STEP, _X_MIN, _X_MAX), 1)
-        node["y"] = round(clamp(ay + row * _GRID_STEP, _Y_MIN, _Y_MAX), 1)
+        x, y = layoutgrid.grid_slot(ax, ay, slot)
+        node["x"], node["y"] = round(x, 1), round(y, 1)
     return drafts
 
 

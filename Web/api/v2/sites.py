@@ -20,11 +20,12 @@ per endpoint (`tests/test_api_v2_sites_scoping.py`).
 import hashlib
 from datetime import timezone
 
-from flask import abort, current_app, jsonify, make_response, request
+from flask import abort, jsonify, make_response, request
 
+import settings
 from context import atlas
-from redaction import (cleared, redact_for_groups, sees_everything,
-                       vary_on_viewer, viewer_groups)
+from redaction import (cleared, private_no_cache, redact_for_groups,
+                       sees_everything, vary_on_viewer, viewer_groups)
 
 from . import bp
 
@@ -97,7 +98,7 @@ def site_lab_data(slug):
     version, ts = stamp
     # sha1, not hash(): see reads.lab_data — a salted hash is a per-worker ETag
     gtag = hashlib.sha1(gkey.encode("utf-8")).hexdigest()[:8]
-    resp.set_etag(f"{current_app.config.get('APP_VERSION', 'v1')}-{slug}-{version}-{ts}-{gtag}")
+    resp.set_etag(f"{settings.APP_VERSION}-{slug}-{version}-{ts}-{gtag}")
     resp.headers["Cache-Control"] = "private, no-cache"
     if problems:
         resp.headers["X-Atlas-Data-Problems"] = str(len(problems))
@@ -153,8 +154,7 @@ def site_nodes(slug):
                           for l in n.links if cleared(l.extra_json or {}, groups)],
             })
     resp = make_response(jsonify({"site": slug, "count": len(out), "nodes": out}))
-    resp.headers["Cache-Control"] = "private, no-cache"
-    return vary_on_viewer(resp)
+    return private_no_cache(resp)
 
 
 @bp.route("/sites/<slug>/observed")
@@ -198,5 +198,4 @@ def site_observed(slug):
     undocumented = sum(1 for o in out if o["undocumented"])
     resp = make_response(jsonify({"site": slug, "count": len(out),
                                   "undocumented": undocumented, "observed": out}))
-    resp.headers["Cache-Control"] = "private, no-cache"
-    return vary_on_viewer(resp)
+    return private_no_cache(resp)

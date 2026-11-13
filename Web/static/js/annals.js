@@ -14,7 +14,7 @@ import { A, $, esc, themeText, ago } from './config.js';
 import { say } from './words.js';
 import { makeScene } from './scene.js';
 
-let root, listEl, headEl;
+let listEl, headEl;
 let showAll = true;
 
 const GRAVITY_CLASS = { grave: 'ann-grave', warn: 'ann-warn', planned: 'ann-planned',
@@ -104,8 +104,7 @@ A.openAnnals = open;
 A.closeAnnals = close;
 
 A.buildAnnalsScene = function buildAnnalsScene() {
-  root = scene.mount();
-  if (!root) return;
+  if (!scene.mount()) return;
   listEl = $('ann-list');
   headEl = $('ann-head');
 };

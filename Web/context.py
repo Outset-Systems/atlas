@@ -4,8 +4,10 @@ Built once by `create_app()` and hung on `app.extensions["atlas"]`, so a route
 reaches them through `current_app` rather than importing a module global. That
 is what lets the test suite build two apps with different backends in one
 process — the thing that module-level config made impossible, and the reason
-The suite currently only passes one file at a time.
+The suite once only passed one file at a time.
 """
+
+import os
 
 from flask import current_app
 
@@ -40,7 +42,6 @@ class AtlasContext:
 
     def overlay_mtimes(self):
         """Each overlay's mtime, so a layout save invalidates the ETag."""
-        import os
         out = []
         for overlay in self.overlays.values():
             try:

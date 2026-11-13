@@ -83,21 +83,30 @@ def insecure(key, value):
     return bool(names) and str(value(names[0])).strip() == "1"
 
 
-def _ready(key, creds):
+def ready(key, creds):
+    """Whether `creds` are enough to ask a system with: its own `ready` rule, or
+    every one of them."""
     test = _BY_KEY[key].get("ready")
     return test(creds) if test else all(creds)
+
+
+def saved(key):
+    """A connection's saved settings: (url, creds, insecure), as `integrations`
+    has them now."""
+    return (integrations.get(field(key, "url")[0]), credentials(key, integrations.get),
+            insecure(key, integrations.get))
 
 
 def _with_monitors(rows, notes):
     """Kuma's monitors on the places a review found, when Kuma is set up here. Its
     saved address and key only, the same as its own review; it never stops a review."""
-    url = integrations.get("ATLAS_KUMA_URL").rstrip("/")
-    key = integrations.get("ATLAS_KUMA_API_KEY")
-    if not (url and key):
+    url, creds, unverified = saved("kuma")
+    url = url.rstrip("/")
+    if not (url and all(creds)):
         return rows, notes
     from importers import review
     try:
-        monitors = kuma.metrics(url, [key], not insecure("kuma", integrations.get))
+        monitors = kuma.metrics(url, creds, not unverified)
     except (_Refused, requests.exceptions.RequestException, ValueError) as e:
         why = str(e).rstrip(".") if isinstance(e, _Refused) else "it did not answer"
         return rows, notes + [f"Uptime Kuma is set up but did not list its monitors ({why}), "
@@ -115,7 +124,7 @@ def _asking(key, url, creds, ask):
     base = (url or "").rstrip("/")
     if not base:
         return False, "No URL to ask."
-    if not _ready(key, creds):
+    if not ready(key, creds):
         return False, "No credential to ask with."
     try:
         return True, ask(base)

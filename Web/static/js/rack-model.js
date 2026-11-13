@@ -43,7 +43,7 @@ export const uLabel = (top, size) => (size <= 1 ? `U${top}` : `U${top - size + 1
    stub in the tests).
    Which lab names mean "the gateway" or "the forge" is the THEME's to say
    (v1.48.0: `gateway_nodes`, `forge_names`), set once by the browser modules
-   through setRackTheme(); the model itself names no lab. */
+   through setRackTheme(); kindOf itself names no lab. */
 const RACK_THEME = { gatewayNodes: [], forgeNames: [] };
 export function setRackTheme({ gatewayNodes = [], forgeNames = [] } = {}) {
   RACK_THEME.gatewayNodes = gatewayNodes.map(String);
@@ -80,10 +80,6 @@ export function rackDepthMm(devices, rear = []) {
   return Math.max(500, deepest + 60 + (rear.length ? 130 : 0));
 }
 
-/* rack (raw slots) + a nodeById(id) resolver + pre-Save overrides → the device
-   list and the rack height. Pure but for one deliberate write: an override
-   rewrites its slot's `u` label (as the 2D drag did), so the caller's dataset
-   reflects the moved vessel. */
 /* The racks to show, always at least one: a lab that charted none has the one
    rack it always had, so nothing needs migrating. */
 export function rackList(racks, fallbackLocation = '') {
@@ -98,6 +94,10 @@ export function inRack(entries, list, id) {
   return (entries || []).filter((e) => (known.has(e.rack) ? e.rack : list[0].id) === id);
 }
 
+/* rack (raw slots) + a nodeById(id) resolver + pre-Save overrides → the device
+   list and the rack height. Pure but for one deliberate write: an override
+   rewrites its slot's `u` label (as the 2D drag did), so the caller's dataset
+   reflects the moved vessel. */
 export function buildDevices(rack, nodeById, overrides = {}) {
   rack = rack || [];
   const rackU = Math.max(1, ...rack.map(topU));
@@ -114,6 +114,23 @@ export function buildDevices(rack, nodeById, overrides = {}) {
              size, top, kind, depth: depthMm(slot, kind) };
   });
   return { devices, rackU };
+}
+
+/* The vessel a rack opens on, in both views: the crown when it is in this
+   rack, else whatever sits first. `undefined` for an empty rack. This is the
+   one place the model names a place by id. */
+export function crownOf(devices) {
+  return devices.find((d) => d.slot && d.slot.node === 'hypervisor')
+    || devices[0];
+}
+
+/* The charted place a port's `peer` names, if it names one. `peer` is prose
+   by schema, so it is matched whole against an id or a name, case-blind.
+   Falsy when the text is blank or names nothing charted. */
+export function peerNode(nodes, text) {
+  return text && nodes.find((nn) =>
+    nn.id.toLowerCase() === text.toLowerCase() ||
+    String(nn.name || '').toLowerCase() === text.toLowerCase());
 }
 
 /* The fittings behind the rack, in the shape the shared detail pane reads. */
@@ -256,6 +273,6 @@ export function faceplate(d, ledHex) {
   if (d.kind === 'power') return facePower(d.size, ledHex);
   if (d.kind === 'enclosure') return faceEnclosure(d.size, ledHex);
   if (d.kind === 'patch') return facePatch(d.size);
-  if (d.kind === 'forge') return faceCompute(d.size, ledHex, '#C0714E');
-  return faceCompute(d.size, ledHex, '#C9A554');
+  if (d.kind === 'forge') return faceCompute(d.size, ledHex, KIND_HUE.forge);
+  return faceCompute(d.size, ledHex, KIND_HUE.compute);
 }

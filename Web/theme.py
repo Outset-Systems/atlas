@@ -24,8 +24,9 @@ log = logging.getLogger("atlas.web.theme")
 HERE = os.path.dirname(os.path.abspath(__file__))
 THEMES_DIR = os.path.join(HERE, "themes")
 DEFAULT = "plain"
-_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
-_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
+#: One shape for a theme's name and for an icon's: lower case, digits and
+#: dashes, forty characters at most. `mapart` checks a sidecar's icons with it.
+SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
 
 
 def _read(name):
@@ -51,7 +52,7 @@ def load(name=None):
     plain = {k: v for k, v in _read(DEFAULT).items() if not k.startswith("_")}
     if name == DEFAULT:
         return DEFAULT, plain
-    if not _NAME_RE.match(name):
+    if not SLUG_RE.match(name):
         log.warning("ATLAS_THEME=%r is not a theme name; using plain", name)
         return DEFAULT, plain
     try:
@@ -62,10 +63,6 @@ def load(name=None):
 
 
 NAME, T = load()
-
-
-def text(key):
-    return T["text"].get(key, "")
 
 
 def foreign_maps():
@@ -99,13 +96,13 @@ def map_label(name):
 def client():
     """The part of the theme the browser needs (config.js reads it as CFG.THEME)."""
     logos = {str(k): str(v) for k, v in (T.get("node_logos") or {}).items()
-             if _SLUG_RE.match(str(v))}
+             if SLUG_RE.match(str(v))}
     return {
         "name": NAME,
         "text": dict(T["text"]),
         "nodeLogos": logos,
         # emblems that belong to the theme's own map: on another map style they stand down
-        "sceneryLogos": [str(s) for s in T.get("scenery_logos") or [] if _SLUG_RE.match(str(s))],
+        "sceneryLogos": [str(s) for s in T.get("scenery_logos") or [] if SLUG_RE.match(str(s))],
         "foldedZones": [str(z) for z in T.get("folded_zones") or []],
         "forgeNames": [str(n).lower() for n in T.get("forge_names") or []],
         "gatewayNodes": [str(n) for n in T.get("gateway_nodes") or []],

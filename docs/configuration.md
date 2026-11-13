@@ -38,6 +38,7 @@ restart.
 | `ATLAS_HOST` | `0.0.0.0` | Bind address for the development server only. The container runs gunicorn, which binds `0.0.0.0:5006` regardless. | no | no |
 | `ATLAS_PORT` | `5006` | Port for the development server only. In the container, change the published port in compose instead. | no | no |
 | `ATLAS_READONLY` | depends on mode | `1` refuses every write, `0` allows writes. When unset, `standalone` mode is read-only (it has no sign-in, so anyone who can reach the port would be an admin) unless `ATLAS_ALLOW_INSECURE=1`; `accounts`, `hybrid` and `hub` modes are writable and check admin rights per request. | no | no |
+| `ATLAS_AGENT_LOG_DAYS` | `90` | How long a line of the token read log (`token-reads.jsonl` in the data directory) is kept. Every request an API token makes adds one: when, which token, from which address, the path or MCP tool, and the size and hash of the answer. At least `1`; anything else falls back to 90. | no | no |
 | `ATLAS_AGENT_API` | (unset) | Whether API tokens and the MCP endpoint are served at all. Unset: off until an admin turns it on in Settings, Connections. `0`: off, and that screen cannot turn it on. `1`: on, until an admin turns it off there. While it is off the MCP endpoint answers 404, every token is refused, and none can be created. Tokens are kept, not revoked. | no | yes (Connections), unless `0` |
 | `ATLAS_ALLOW_INSECURE` | (unset) | `1` acknowledges that `standalone` mode serves the whole map with no sign-in. It silences the startup security warning and makes standalone writable. Use only on loopback or a trusted network. | no | no |
 
@@ -168,9 +169,15 @@ controller itself shows as offline is marked down. It uses the UniFi
 connection's saved address and credential (`ATLAS_UNIFI_URL` and its API key
 or local user, under Connections).
 
+The `checks` source is for a map with no monitoring: about once a minute it
+asks each service URL charted on the map (only those, and not a link that names
+a Kuma monitor) and reports whether it answered; it needs no URL or key of its
+own. It verifies no certificates and follows no redirects, so a self-signed
+service or a sign-in page counts as up, and it sends no credentials.
+
 | Variable | Default | What it does | Secret | Settings screen |
 |---|---|---|---|---|
-| `ATLAS_SIGNALS_SOURCES` | (empty) | Comma-separated list of live sources to poll: `prometheus`, `kuma`, `unifi`, `deception` (the decoy feed), `relay` (pushes stored by the ingest API, `db` backend), `static` (a JSON file). Empty means a static map, except on the bundled demo (`ATLAS_FALLBACK=bundled`, not yet seeded), which reads the image's demo feed and reports it as the `demo` source. | no | yes (Sources) |
+| `ATLAS_SIGNALS_SOURCES` | (empty) | Comma-separated list of live sources to poll: `prometheus`, `kuma`, `unifi`, `checks` (built-in checks of the charted service URLs), `deception` (the decoy feed), `relay` (pushes stored by the ingest API, `db` backend), `static` (a JSON file). Empty means a static map, except on the bundled demo (`ATLAS_FALLBACK=bundled`, not yet seeded), which reads the image's demo feed and reports it as the `demo` source. | no | yes (Sources) |
 | `ATLAS_SIGNALS_FILE` | `/data/signals.json` | The JSON file the `static` source reads. | no | no |
 | `ATLAS_PROM_URL` | (unset) | Prometheus base URL, for example `http://prometheus:9090`. Feeds the card vitals, the patch line on a card and the built-in charts. Marker colours come from Kuma, not from here. | no | yes (Sources) |
 | `ATLAS_LOKI_URL` | (unset) | Loki base URL, for example `http://loki:3100`. Feeds the log-derived charts. | no | yes (Sources) |

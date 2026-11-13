@@ -9,7 +9,9 @@ Run it as `python cli.py <command>`; there is no installed
     python cli.py initdb
     python cli.py tripwires-key     # the TRIPWIRES webhook key (no db needed)
 
-Talks to ATLAS_DB_URL (or --db). Import is the authoritative full-replace path
+The dataset and token commands talk to ATLAS_DB_URL (or --db); the user-*
+commands talk to the accounts store beside the dataset, and `tripwires-key`
+and `mcp` to no database. Import is the authoritative full-replace path
 (the JSON is the truth); validation problems are reported but tolerated —
 same doctrine as the server — unless --strict. Export writes a file that
 file-mode Atlas renders identically (the §4 round-trip contract).
@@ -37,6 +39,29 @@ def _store():
 ACTOR = "cli"
 
 
+def _print_problems(problems):
+    """Each validation problem on its own line of stderr."""
+    for p in problems:
+        print(f"  problem: {p}", file=sys.stderr)
+
+
+def _stats_line(stats):
+    """An importer's counts as `key value, key value`, zeroes left out."""
+    return ", ".join(f"{k} {v}" for k, v in stats.items() if v)
+
+
+def _read_token_file(path, label):
+    """The token in the file at `path`, stripped. None when the file cannot be
+    read, after saying so on stderr with `label` naming where the path came
+    from; an empty file is an empty string, not None."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            return f.read().strip()
+    except OSError as e:
+        print(f"error: cannot read {label}: {e}", file=sys.stderr)
+        return None
+
+
 def cmd_import_json(args):
     try:
         with open(args.path, encoding="utf-8") as f:
@@ -45,8 +70,7 @@ def cmd_import_json(args):
         print(f"error: cannot read dataset: {e}", file=sys.stderr)
         return 2
     problems = validate(data)
-    for p in problems:
-        print(f"  problem: {p}", file=sys.stderr)
+    _print_problems(problems)
     if problems and args.strict:
         print(f"error: {len(problems)} problem(s) and --strict set — nothing imported",
               file=sys.stderr)
@@ -72,19 +96,13 @@ def cmd_import_netbox(args):
     )
     token = args.token
     if not token and args.token_file:
-        try:
-            with open(args.token_file, encoding="utf-8") as f:
-                token = f.read().strip()
-        except OSError as e:
-            print(f"error: cannot read token file: {e}", file=sys.stderr)
+        token = _read_token_file(args.token_file, "token file")
+        if token is None:
             return 2
     token = token or os.environ.get("NETBOX_TOKEN")
     if not token and os.environ.get("NETBOX_TOKEN_FILE"):
-        try:
-            with open(os.environ["NETBOX_TOKEN_FILE"], encoding="utf-8") as f:
-                token = f.read().strip()
-        except OSError as e:
-            print(f"error: cannot read NETBOX_TOKEN_FILE: {e}", file=sys.stderr)
+        token = _read_token_file(os.environ["NETBOX_TOKEN_FILE"], "NETBOX_TOKEN_FILE")
+        if token is None:
             return 2
     if not token:
         print("error: no NetBox token (--token/--token-file or NETBOX_TOKEN[_FILE])",
@@ -109,9 +127,8 @@ def cmd_import_netbox(args):
         stats = sync(s, snapshot, site_slug=args.site, role_map=role_map)
         st.restamp(s, args.site, before, ACTOR, "netbox")
         problems = validate(st.dump_labdata(s, args.site))
-    print(f"netbox -> site {args.site!r}: " + ", ".join(f"{k} {v}" for k, v in stats.items() if v))
-    for p in problems:
-        print(f"  problem: {p}", file=sys.stderr)
+    print(f"netbox -> site {args.site!r}: " + _stats_line(stats))
+    _print_problems(problems)
     return 0
 
 
@@ -142,7 +159,7 @@ def cmd_import_nmap(args):
             for o in undocumented(s, args.site)
         ]
     print(f"{args.source} -> site {args.site!r}: {len(hosts)} host(s) up, "
-          + ", ".join(f"{k} {v}" for k, v in stats.items() if v))
+          + _stats_line(stats))
     if drift:
         print(f"  undocumented device(s) on the network ({len(drift)}):", file=sys.stderr)
         for d in drift:
@@ -171,9 +188,8 @@ def cmd_import_csv(args):
         st.restamp(s, args.site, before, ACTOR, "csv")
         problems = validate(st.dump_labdata(s, args.site))
     print(f"csv -> site {args.site!r}: {len(rows)} row(s), "
-          + ", ".join(f"{k} {v}" for k, v in stats.items() if v))
-    for p in problems:
-        print(f"  problem: {p}", file=sys.stderr)
+          + _stats_line(stats))
+    _print_problems(problems)
     return 0
 
 
@@ -302,13 +318,13 @@ def cmd_initdb(args):
 # Passwords are prompted (getpass) or read from --password-file, never argv —
 # argv is world-readable in a process listing.
 
-def _read_password(args, confirm=True):
+def _read_password(args):
     if getattr(args, "password_file", None):
         with open(args.password_file, encoding="utf-8") as f:
             return f.read().strip()
     import getpass
     pw = getpass.getpass("Password: ")
-    if confirm and getpass.getpass("Again: ") != pw:
+    if getpass.getpass("Again: ") != pw:
         print("error: passwords do not match", file=sys.stderr)
         return None
     return pw
@@ -414,19 +430,8 @@ def cmd_mcp(args):
     return mcp_stdio.main(token)
 
 
-def main(argv=None):
-    # The dataset (and validation messages) carry em-dashes and arrows; a
-    # Windows console is cp1252 and would raise UnicodeEncodeError mid-export.
-    for stream in (sys.stdout, sys.stderr):
-        try:
-            stream.reconfigure(encoding="utf-8")
-        except (AttributeError, ValueError):
-            pass  # already wrapped (tests capture with StringIO)
-
-    ap = argparse.ArgumentParser(prog="python cli.py", description=__doc__.splitlines()[0])
-    ap.add_argument("--db", help="database URL (overrides ATLAS_DB_URL)")
-    sub = ap.add_subparsers(dest="cmd", required=True)
-
+def _add_dataset_commands(sub):
+    """The imports, the export and the site list."""
     p = sub.add_parser("import-json", help="full-replace import of a canonical dataset")
     p.add_argument("path")
     p.add_argument("--site", default="default", help="site slug (default: default)")
@@ -471,6 +476,10 @@ def main(argv=None):
     p = sub.add_parser("sites", help="list sites")
     p.set_defaults(fn=cmd_sites)
 
+
+def _add_token_commands(sub):
+    """The site tokens, and the two commands that hand over a key or carry a
+    token: `tripwires-key` and `mcp`."""
     p = sub.add_parser("token-issue", help="mint a relay token for a site (shown once)")
     p.add_argument("--site", required=True)
     p.add_argument("--label", help="what this token is for, e.g. 'app-host relay'")
@@ -498,9 +507,9 @@ def main(argv=None):
     p.add_argument("--token-file", help="read the token from this file instead of ATLAS_TOKEN")
     p.set_defaults(fn=cmd_mcp)
 
-    p = sub.add_parser("initdb", help="create tables (dev; deployments use alembic)")
-    p.set_defaults(fn=cmd_initdb)
 
+def _add_account_commands(sub):
+    """The user-* commands (accounts mode)."""
     p = sub.add_parser("user-add", help="create a local account (accounts mode)")
     p.add_argument("username")
     p.add_argument("--admin", action="store_true")
@@ -533,7 +542,34 @@ def main(argv=None):
     p.add_argument("username")
     p.set_defaults(fn=cmd_user_del)
 
-    args = ap.parse_args(argv)
+
+def _build_parser():
+    """The whole command line. The order the commands are added in is the order
+    `--help` lists them in, which is why `initdb` sits between two groups."""
+    ap = argparse.ArgumentParser(prog="python cli.py", description=__doc__.splitlines()[0])
+    ap.add_argument("--db", help="database URL (overrides ATLAS_DB_URL)")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+
+    _add_dataset_commands(sub)
+    _add_token_commands(sub)
+
+    p = sub.add_parser("initdb", help="create tables (dev; deployments use alembic)")
+    p.set_defaults(fn=cmd_initdb)
+
+    _add_account_commands(sub)
+    return ap
+
+
+def main(argv=None):
+    # The dataset (and validation messages) carry em-dashes and arrows; a
+    # Windows console is cp1252 and would raise UnicodeEncodeError mid-export.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8")
+        except (AttributeError, ValueError):
+            pass  # already wrapped (tests capture with StringIO)
+
+    args = _build_parser().parse_args(argv)
     if args.db:
         os.environ["ATLAS_DB_URL"] = args.db  # before any store engine is built
     try:

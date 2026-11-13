@@ -17,7 +17,7 @@ import { A, $, esc } from './config.js';
 import { say } from './words.js';
 import { makeScene } from './scene.js';
 
-let root, listEl, headEl;
+let listEl, headEl;
 
 const DAY = 86400000;
 const GROUPS = [
@@ -108,8 +108,7 @@ A.openSeals = open;
 A.closeSeals = close;
 
 A.buildSealsScene = function buildSealsScene() {
-  root = scene.mount();
-  if (!root) return;
+  if (!scene.mount()) return;
   listEl = $('sl-list');
   headEl = $('sl-head');
 };

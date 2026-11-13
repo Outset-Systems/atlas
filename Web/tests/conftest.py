@@ -8,14 +8,15 @@ dataset. `pytest.ini` points `--basetemp` at a directory beside the tests.
 
 **Environment that no suite should inherit.** Each test module sets its own
 db/ingest configuration at import time, because `app.py` used to read config
-at import. That is why the suite passes file by file and fails as a whole:
-whichever module imports `app` first decides the backend for the entire run.
+at import. That is why the suite once passed file by file and failed as a
+whole: whichever module imported `app` first decided the backend for the
+entire run.
 
-`create_app()` now exists, so a module *can* build its own app — but the
-existing suites predate it and still import the module-level `app`. Rather
-than rewrite ten files, this fixture records the environment before each
-module and restores it after, which stops one suite's settings leaking into
-the next module's import.
+`create_app()` now exists, and the suites build their own app with
+`appfixture.fresh_app`. Each module declares its environment as
+`ATLAS_TEST_ENV`; the fixture below applies it before each test of that
+module and puts back what was there after, which stops one suite's settings
+leaking into the next.
 """
 
 import os
@@ -47,7 +48,7 @@ ATLAS_ENV = [
     "ATLAS_REPORTS", "ATLAS_MAINTENANCE", "ATLAS_INGEST_ENABLED",
     "ATLAS_BEATS", "ATLAS_BEATS_DIR", "ATLAS_BEAT_TOKEN", "ATLAS_BEAT_TOKEN_FILE",
     "ATLAS_SIGNALS_SOURCES", "ATLAS_SIGNALS_FILE", "ATLAS_READONLY",
-    "ATLAS_FALLBACK", "ATLAS_ALLOW_INSECURE", "ATLAS_AGENT_API", "ATLAS_EVENTS", "ATLAS_REVISIONS",
+    "ATLAS_FALLBACK", "ATLAS_ALLOW_INSECURE", "ATLAS_AGENT_API", "ATLAS_EVENTS",
     "ATLAS_EMBED_HOSTS", "ATLAS_EMBED_SERVICES", "ATLAS_EMBED_PROBE", "ATLAS_WHOIS",
     "ATLAS_DEFAULT_STYLE", "ATLAS_DEMO_TRUST", "ATLAS_DEMO_LINK",
     "ATLAS_SCROLL_ROOT", "ATLAS_AUTH_MODE", "ATLAS_PROM_URL", "ATLAS_LOKI_URL",

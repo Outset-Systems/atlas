@@ -24,6 +24,7 @@ Three decisions:
   leak and, for the dataset's ids, a topology leak into a metrics store.
 """
 
+import hashlib
 import hmac
 import logging
 import os
@@ -39,6 +40,7 @@ METRICS_PATH = "/metrics"
 _enabled = False
 _registry = None
 _REQUESTS = _LATENCY = _CHART_FETCHES = _CHART_SECONDS = _SOURCE_STATE = _BUILD = None
+_DRIFT = _DATASET_AGE = None
 
 
 def _token():
@@ -51,6 +53,7 @@ def _setup():
     in the sense that its absence turns this module into a no-op that logs
     why, rather than an import error that stops the map."""
     global _enabled, _registry, _REQUESTS, _LATENCY, _CHART_FETCHES, _CHART_SECONDS, _SOURCE_STATE, _BUILD
+    global _DRIFT, _DATASET_AGE
     if _enabled:
         return True
     try:
@@ -83,7 +86,6 @@ def _setup():
                           ["source"], multiprocess_mode="livemostrecent")
     _BUILD = Gauge("atlas_build_info", "Version of the running Atlas", ["version"],
                    multiprocess_mode="livemax")
-    global _DRIFT, _DATASET_AGE
     _DRIFT = Gauge("atlas_dataset_drift",
                    "1 when the live dataset differs from the copy baked into this image (git HEAD at build)",
                    multiprocess_mode="livemostrecent")
@@ -95,7 +97,6 @@ def _setup():
     return True
 
 
-_DRIFT = _DATASET_AGE = None
 _drift_cache = {"at": 0.0, "value": None}
 
 
@@ -113,7 +114,6 @@ def _observe_dataset():
     File backend only: on the db backend `DATA_PATH` is not the dataset, so
     hashing it read as permanent drift. There is nothing to compare there
     yet, and no reading beats a false one."""
-    import hashlib
     import settings
     if settings.DATA_BACKEND != "file":
         return

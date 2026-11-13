@@ -1,6 +1,6 @@
 """The MCP endpoint — `POST /api/v2/mcp`, tools only, read-only, stateless.
 
-Written by hand because this is the whole of it: four methods, JSON replies, no
+Written by hand because this is the whole of it: five methods, JSON replies, no
 sessions, no streams, and the Atlas gains no dependency. Tool logic is in
 `mcp_tools.py`.
 
@@ -24,6 +24,7 @@ from flask import Response, jsonify, request
 import api_tokens
 import mcp_tools
 import settings
+import token_log
 
 from . import bp
 
@@ -103,6 +104,8 @@ def _tools_list():
 
 def _tools_call(msg_id, params, wrap):
     name = params.get("name")
+    # for the read log: which tool, asked what (token_log.py cuts long values)
+    token_log.note(tool=name if isinstance(name, str) else None, args=params.get("arguments"))
     if not mcp_tools.known(name):
         return _err(msg_id, BAD_PARAMS, f"Unknown tool: {name}")
     try:
@@ -177,6 +180,7 @@ def mcp_post():
         return Response(status=202)                  # a notification: nothing to say
     if not isinstance(msg.get("method"), str):
         return _err(msg.get("id"), INVALID_REQUEST, "No method", status=400)
+    token_log.note(method=msg["method"])
     params = msg.get("params")
     params = params if isinstance(params, dict) else {}
     meta = params.get("_meta")

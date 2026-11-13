@@ -9,10 +9,10 @@
 
 /* The overview's three states, mapped onto the scene's voices. The voice
    names stay the scene's CSS classes; the WORDS are theme text. */
-export const VOICE_OF_STATE = { lit: 'speaking', stirred: 'stirred', quiet: 'silent' };
-export const RANK = { speaking: 0, stirred: 1, unheard: 1.5, silent: 2 };
+const VOICE_OF_STATE = { lit: 'speaking', stirred: 'stirred', quiet: 'silent' };
+const RANK = { speaking: 0, stirred: 1, unheard: 1.5, silent: 2 };
 
-export const voiceOf = (v) => (v in RANK ? v : 'unheard');
+const voiceOf = (v) => (v in RANK ? v : 'unheard');
 
 /** The family a tripwire belongs to when the row does not say. Mirrors
     schema.stone_family: `honeypot-*` kinds are honeypots, the rest tokens. */

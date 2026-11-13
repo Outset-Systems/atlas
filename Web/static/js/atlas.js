@@ -2,7 +2,7 @@
    Modules: config.js (CFG + shared context A) · camera.js · world.js · ui.js.
    Hub contract: relative paths only. */
 
-import { A, CFG, REDUCED, $, esc } from './config.js';
+import { A, REDUCED, $, esc } from './config.js';
 import './scheme.js';   // THE COLOUR SCHEME (v1.52.0): first, so data-scheme stands before any panel opens
 import './deck.js';     // THE DECK (v1.66.0 phone, v1.67.0 everywhere): before every sibling, so a page that opens on the charts has its column first
 // table.js FIRST among the siblings: it swaps the backdrop src at import time,

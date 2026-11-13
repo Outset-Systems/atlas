@@ -55,7 +55,26 @@ one.
 - **It opens seven doors**, listed below. Every other path ignores the token
   and answers as it would to a stranger.
 - **It is limited to 120 requests a minute.** Past that the answer is 429 with
-  `Retry-After: 60`.
+  `Retry-After: 60`. The limit is one budget for the token, however many
+  workers serve it. An address that keeps presenting no token or a bad one to
+  the MCP endpoint is told to wait a minute as well.
+- **It can be bound to where it is used from.** A new token works only from the
+  local network (loopback and the private address ranges) unless you untick
+  that when you create it; `"networks": null` in the request asks for any
+  address, and a list such as `["192.168.7.0/24"]` names networks. From
+  anywhere else the token is refused with 403 and stays valid. This stops a
+  leaked copy being used from outside. It does not limit what a tool on your
+  network does with what it reads, and it trusts the address Atlas sees: behind
+  a reverse proxy, name the proxy in `ATLAS_TRUSTED_PROXIES` or every caller
+  looks local. Settings, Connections shows the address Atlas sees you at.
+- **Everything it reads is written down.** Each request a token makes adds a
+  line to `token-reads.jsonl` in the data directory: when, which token, the
+  address, the path or the MCP tool with its arguments, the answer's status,
+  size and SHA-256, and how many charted places the answer named. A refusal of
+  a valid token is logged with its reason. The answers themselves are not
+  kept. An admin reads the lines for a token in Settings, Connections ("What it
+  read") or at `GET /api/v2/admin/tokens/reads`. Lines are kept for
+  `ATLAS_AGENT_LOG_DAYS` (90). Revoking a token does not erase what it read.
 
 What a tool reads leaves with it. A cloud AI tool sends what it reads to its
 model's vendor, so a token handed to one takes this map off your network:
@@ -181,9 +200,9 @@ should read the answers.
 | Status | Meaning |
 |---|---|
 | 401 | No token, or one that is not valid or has expired |
-| 403 | A token tried something other than a read, agent access is off, or a cloud token asked for a path other than the MCP endpoint |
+| 403 | A token tried something other than a read, agent access is off, a cloud token asked for a path other than the MCP endpoint, or the token is bound to networks the request did not come from |
 | 404 | On `/api/v2/mcp`: agent access is off |
-| 429 | Too many requests on this token; wait a minute |
+| 429 | Too many requests on this token, or too many without a valid token from this address; wait a minute |
 | 500 | The dataset on disk could not be read |
 
 A 401, 403, 404 or 429 from the token gate carries `{"error": ..., "reason": ...}`.

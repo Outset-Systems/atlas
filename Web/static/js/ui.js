@@ -1,7 +1,7 @@
 /* Atlas — screen-space UI: the ivory card, THE INDEX drawer,
    the command-column flyouts, scene buttons, and toasts. */
 
-import { A, CFG, $, esc, host, glassAttrs, zoneById, canAdminWrite, ago, FALLBACK_HUE } from './config.js';
+import { A, CFG, $, esc, host, glassAttrs, svcKey, zoneById, canAdminWrite, ago, FALLBACK_HUE } from './config.js';
 import { say } from './words.js';
 import { chronicleItems, buildChronicle, buildAbyss } from './chronicle.js';
 import { makeScene } from './scene.js';
@@ -76,7 +76,9 @@ function svcRow(list, svc) {
   list.appendChild(row);
 }
 
-/** flat list of every service {name, url, kuma, open_in, group, gsub, ghue} */
+/** flat list of every service {name, url, kuma, open_in, group, gsub, ghue};
+    `kuma` is the service's key in the live feed (svcKey), which is its monitor's
+    name when it has one. A report has none: no place charts it. */
 function allServices() {
   const out = [];
   for (const c of chronicleItems()) {
@@ -91,12 +93,14 @@ function allServices() {
     const zone = zoneById(n.zone);
     for (const l of n.links) {
       out.push({ ghue: zone ? zone.hue : FALLBACK_HUE, group: n.name,
-        gsub: n.ip !== '—' ? n.ip : '', name: l.label, url: l.url, kuma: l.kuma,
+        gsub: n.ip !== '—' ? n.ip : '', name: l.label, url: l.url, kuma: svcKey(l, n.id),
         open_in: l.open_in });
     }
   }
   return out;
 }
+
+let applyIndexSearch;   // set below, once the search box is in hand
 
 function buildServices() {
   const list = $('services-list');
@@ -119,7 +123,7 @@ function buildServices() {
     svcRow(list, s);
   }
   A.paintServiceHealth?.(list);   // K4 — colour dots from the current feed
-  A.applyIndexSearch?.();         // keep an active filter after a rebuild (e.g. pin)
+  applyIndexSearch?.();           // keep an active filter after a rebuild (e.g. pin)
 }
 
 /* ☰ IS THE INDEX BUTTON, AND AN INDEX BUTTON MUST OPEN AN INDEX (the owner,
@@ -201,7 +205,7 @@ function filterList(listEl, q) {
 }
 
 const idxSearch = $('idx-search'), idxClear = $('idx-search-clear');
-A.applyIndexSearch = function applyIndexSearch() {
+applyIndexSearch = function () {
   const q = idxSearch.value.trim().toLowerCase();
   idxClear.hidden = !q;
   filterList($('index-list'), q);
@@ -242,11 +246,11 @@ $('idx-seek')?.addEventListener('click', () => {
   window.open(svc.url.replace(/\/+$/, '') + '/search?q=' + encodeURIComponent(q),
     '_blank', 'noopener');
 });
-idxSearch.addEventListener('input', A.applyIndexSearch);
+idxSearch.addEventListener('input', applyIndexSearch);
 idxSearch.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') { e.stopPropagation(); if (idxSearch.value) { idxSearch.value = ''; A.applyIndexSearch(); } else idxSearch.blur(); }
+  if (e.key === 'Escape') { e.stopPropagation(); if (idxSearch.value) { idxSearch.value = ''; applyIndexSearch(); } else idxSearch.blur(); }
 });
-idxClear.addEventListener('click', () => { idxSearch.value = ''; A.applyIndexSearch(); idxSearch.focus(); });
+idxClear.addEventListener('click', () => { idxSearch.value = ''; applyIndexSearch(); idxSearch.focus(); });
 if (lastListTab !== 'places') selectDrawerTab(lastListTab);   // the remembered tab (see LIST_TABS)
 
 /* ── The sky ascent ─────────────────────────────────── */
@@ -289,10 +293,6 @@ function closeAllScenes() {
   A.closeAccounts?.(); A.closeTrust?.(); A.closeSettings?.();
 }
 A.closeAllScenes = closeAllScenes;   // the Escape chain (camera.js) reads this list rather than keeping its own
-A.showAtlas = function showAtlas() {
-  closeAllScenes();
-  setSceneActive('atlas');
-};
 
 /* ACCOUNTS is the one scene whose data is admin-only, so it is the one button
    that is not always there. The roster is stripped server-side for anyone not

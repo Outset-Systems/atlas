@@ -1,8 +1,9 @@
 """lab-data.json ⇄ DB round-trip (Atlas for Teams, Phase 1).
 
 `load_labdata` ingests a canonical dataset dict into a site (authoritative
-full-replace: the JSON is the truth, missing rows are removed — importers with
-softer never-delete semantics come in the design notes and do NOT use this path).
+full-replace: the JSON is the truth, missing rows are removed — the importers
+in `importers/` have softer never-delete semantics and do NOT
+use this path).
 `dump_labdata` reproduces the dict exactly: modeled columns + extra_json
 passthrough + original top-level key order. The golden test (import → export →
 deep-compare) is the contract; see tests/test_store.py.

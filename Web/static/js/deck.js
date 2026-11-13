@@ -92,7 +92,6 @@ A.setDeck = function setDeck(on, { remember = false } = {}) {
   if (remember && !A.PHONE) writeStored(store, storedFor(on));
   paintHome();
 };
-A.toggleDeck = (opts) => A.setDeck(!A.DECK, opts);
 A.deckTop = () => deck.scrollTo({ top: 0, behavior: 'smooth' });
 
 A.setDeck(opensOnDeck(view, screenIsPhone, readStored(store)));

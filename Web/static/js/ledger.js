@@ -17,11 +17,11 @@ import { A, CFG, $, esc, zoneById, nodeById, FALLBACK_HUE } from './config.js';
 import { say } from './words.js';
 import { makeScene } from './scene.js';
 import {
-  GRID_LIMIT, chartedAddresses, countLabel, drawable, formatAddress,
-  nextFree, occupancy, prefixesOf, rangeAt, usableRange,
+  GRID_LIMIT, chartedAddresses, countLabel, drawable, formatAddress, freeV4,
+  looseAddresses, nextFree, occupancy, prefixesOf, rangeAt, sharersOf, usableRange,
 } from './ipam.js';
 
-let root, listEl;
+let listEl;
 
 function liveDot(id) {
   const st = A.signalsFeed?.nodes?.[id]?.state;
@@ -30,21 +30,9 @@ function liveDot(id) {
 
 const hueOf = (prefix) => zoneById(prefix.zone)?.hue || FALLBACK_HUE;
 
-/* Every OTHER charted place answering on this address. chartedAddresses keeps
-   one holder per address so the grid stays one-cell-one-lease; this is how the
-   ones it set aside still get said out loud, instead of vanishing from the only
-   view that claims to account for every address. */
-function sharersOf(node) {
-  const ip = String(node.ip || '').split('/')[0];
-  if (!ip || ip === '—') return [];
-  return A.DATA.nodes.filter((n) => n !== node
-    && String(n.ip || '').split('/')[0] === ip);
-}
-
 /* ── the survey strip + the port map ──────────────────────────────────── */
 function summaryHTML(prefixes, charted) {
-  const v4 = prefixes.filter((p) => p.net.version === 4 && !p.children.length);
-  const free = v4.reduce((sum, p) => sum + occupancy(p, charted).free, 0n);
+  const free = freeV4(prefixes, charted);
 
   const ifaces = (A.DATA.interfaces || []);
   const byDevice = {};
@@ -140,7 +128,7 @@ function prefixHTML(prefix, charted, depth = 0) {
 
   const table = stats.direct.map(({ value, node }) => {
     const band = rangeAt(prefix, value);
-    const shared = sharersOf(node);
+    const shared = sharersOf(A.DATA.nodes, node);
     return `<button class="ldg-host" data-id="${esc(node.id)}">` +
       `<span class="ldg-host-ip">${esc(formatAddress(version, value))}</span>` +
       `<span class="ldg-host-name">${liveDot(node.id)}${esc(node.name)}</span>` +
@@ -197,8 +185,7 @@ function build() {
         `<code>prefix</code> from the map editor, and its addresses appear here.</div>`);
 
   // an unclaimed address is still worth seeing: hosts outside every prefix
-  const loose = [...charted.entries()].filter(([value]) =>
-    !prefixes.some((p) => value >= p.net.network && value <= p.net.broadcast));
+  const loose = looseAddresses(prefixes, charted);
   if (loose.length) {
     listEl.insertAdjacentHTML('beforeend',
       `<div class="ldg-block" style="--z-hue:#C49A52">
@@ -246,7 +233,6 @@ A.openLedger = open;
 A.closeLedger = close;
 
 A.buildLedgerScene = function buildLedgerScene() {
-  root = scene.mount();
-  if (!root) return;
+  if (!scene.mount()) return;
   listEl = $('ldg-list');
 };

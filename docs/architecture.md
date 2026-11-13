@@ -24,6 +24,7 @@ Web/                  the app (this is what the image runs)
   api/status.py       /api/status and /api/manifest
   api/v2/             the HTTP API, one blueprint at /api/v2/
   views.py            the map page, map images, staged reports
+  reports.py          the merge behind the staged security report
   auth_routes.py      the sign-in page and the first-admin bootstrap
   atlas_auth.py       the auth gate for all four modes
   hub_auth/           signed hub identity (HMAC tokens), standalone defaults
@@ -34,6 +35,7 @@ Web/                  the app (this is what the image runs)
   labdata.py          the read path (cached, validated, hot-reloaded)
   dataset.py          the write path (typed ops, strict validation, revisions)
   overlays.py         positions.json and rack.json merged over the dataset
+  layoutgrid.py       where an imported place lands on the map (no database imports)
   schema.py           the field catalogue: what the dataset is
   validation.py       the catalogue applied to a dataset
   store/              SQLAlchemy models for the db backend
@@ -49,6 +51,9 @@ Web/                  the app (this is what the image runs)
   importers/          one module per system an Atlas reads, plus nmap, CSV and lease parsers
   connections.py      the registry of those systems
   provenance.py       who charted a place, and whether a person has checked it
+  api_tokens.py       API tokens: the gate, the kinds, the network binding, the limit
+  token_log.py        what each token read (token-reads.jsonl)
+  chart_catalogue.py  the chart windows and queries
   tests/              pytest suite and node tests
 relay/                optional push agent that runs on another machine
 demo-lab/             the invented demo lab and its builder
@@ -142,12 +147,15 @@ per surface, each attaching routes to it:
 | `feeds.py` | `/signals`, `/rites`, `/events` |
 | `probes.py` | `/embeddable` (may this URL be framed?), `/whois` |
 | `beat.py` | `/rites/<key>/beat` (a job reports that it ran) |
-| `admin.py` | `/admin/*`, the editor: ops, revisions and revert, discovery, maintenance, CSV import, map images. Also the admins-only gate and what the other admin modules share |
+| `admin.py` | `/admin/*`, the editor: ops, revisions and revert, maintenance. Also the admins-only gate and what the other admin modules share |
+| `admin_discovery.py` | `/admin/discovery*`, `/admin/import/csv`: scans, leases, the survey inbox and the CSV import |
+| `admin_mapart.py` | `/admin/map-art*`: map images and the map built from OpenStreetMap |
 | `admin_directory.py` | `/admin/auth*`: who may sign in and who is an admin |
 | `admin_sources.py` | `/admin/integrations*`, `/admin/deployment`: the live sources, a test of each, the read-only Deployment view |
-| `admin_connections.py` | `/admin/tokens*`, `/admin/connections*`: API tokens, and the systems an Atlas reads (test, review, import) |
+| `admin_connections.py` | `/admin/tokens*`, `/admin/connections*`: API tokens and what each one read, and the systems an Atlas reads (test, review, import) |
 | `mcp.py`, `reference.py` | `/mcp` (the MCP endpoint) and `/openapi.json` (the API reference) |
-| `accounts_v2.py` | `/auth/*`: sign-in, MFA, password, users, audit (sessions only) |
+| `accounts_v2.py` | `/auth/*`: sign-in, MFA, password (sessions only) |
+| `accounts_admin.py` | `/auth/users*`, `/auth/audit`: user management and the sign-in audit (admins only, sessions only) |
 | `sites.py` | `/sites/*` (db backend only) |
 | `ingest_v2.py` | `/ingest/{signals,inventory,observed}` (db backend and `ATLAS_INGEST_ENABLED=1`) |
 | `tripwires.py` | `/ingest/tripwires` (the tripwires webhook, either backend, `ATLAS_TRIPWIRES_WEBHOOK=1`), `/tripwires` and `/tripwires/setup` (admin) |
@@ -190,7 +198,7 @@ one bundled in the image. `DbLabData` answers the same
 `get() -> (data, mtime, problems)` contract from the database.
 
 **Write path, `dataset.py`.** Every edit is a list of typed operations
-(`upsert`, `insert`, `delete`, `move`, `set`), never a whole document. The
+(`upsert`, `insert`, `delete`, `move`, `review`), never a whole document. The
 store applies them to a copy, validates the result in **strict** mode and
 refuses the write whole if it would add problems. It checks the client's
 version to refuse a write made against a stale copy (`ConflictError`), takes
@@ -263,9 +271,12 @@ own token checks instead.
 
 `signals.py` has one small adapter per source: `PrometheusAdapter`,
 `KumaAdapter` (Kuma's `/metrics`), `UniFiAdapter` (what is connected now, for
-charted places no monitor watches), `DeceptionAdapter` (the decoy feed),
-`RelayAdapter` (the latest push stored by ingest) and `StaticFileAdapter`.
-Each has a hard three-second timeout and **never raises**: any failure is
+charted places no monitor watches), `ChecksAdapter` (built-in checks),
+`DeceptionAdapter` (the decoy feed), `RelayAdapter` (the latest push stored by
+ingest) and `StaticFileAdapter`. `ChecksAdapter` asks only the service URLs
+charted on the map that name no Kuma monitor, and keeps its last round in
+`checks.json` beside the dataset so two workers do not both ask.
+Each request has a hard timeout (three seconds; six for UniFi) and an adapter **never raises**: any failure is
 "no signal", so a dead source removes its markers and nothing else.
 `SignalsHub` merges the enabled adapters into one feed cached for 30 seconds,
 served at `/api/v2/signals`.
@@ -308,7 +319,8 @@ flowchart TD
     ATLAS --> TABLE[table.js<br/>backdrop image]
     ATLAS --> CAM[camera.js]
     CAM --> CAMM[camera-model.js<br/>pure maths]
-    ATLAS --> WORLD[world.js<br/>markers, zones, routes]
+    ATLAS --> WORLD[world.js<br/>markers, labels, the Depths]
+    WORLD --> PARTS[places.js, roads.js,<br/>constellation.js]
     WORLD --> PROJ[project.js]
     ATLAS --> UI[ui.js<br/>index drawer, flyouts, toasts]
     ATLAS --> CARD[card.js<br/>place card]
@@ -337,9 +349,12 @@ flowchart TD
   racks, resources, the calendar, certificates, tripwires, the event history,
   the topology, accounts). `scene.js` provides `makeScene({ id, closeId, build,
   onClose })` so each module supplies only what it draws.
-- **Pure models** (`camera-model.js`, `calendar-model.js`, `ipam.js`,
-  `project.js`, `rack-model.js`) have no DOM access and are unit tested with
-  node.
+- **Pure models** (`camera-model.js`, `region-model.js`, `world-model.js`,
+  `card-model.js`, `calendar-model.js`, `ipam.js`, `path-model.js`,
+  `connections-model.js`, `editor/form-model.js`, `project.js`,
+  `rack-model.js` and the other `*-model.js` files) have no DOM access and are
+  unit tested with node. Logic that decides something goes in a model; the
+  module beside it draws.
 - **The editor** (`editor/`) is inert unless the server rendered the page as
   editable. Every form submit is one atomic ops write, then the map redraws
   from the server's answer. `wizard.js` is the first-run setup.
@@ -408,5 +423,6 @@ Run them with:
 ```sh
 cd Web && python -m pytest -q
 node --test Web/tests/*.mjs
-node tools/check-boot.mjs Web/static/js
+node tools/check-boot.mjs Web/static/js    # the boot calls and every A.x( resolve
+node tools/check-links.mjs Web/static/js   # every named import is an export
 ```

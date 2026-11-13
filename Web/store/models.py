@@ -160,7 +160,9 @@ class Route(Base):
 class ObservedNode(Base):
     """Drift plumbing: a device seen by discovery (nmap/ARP/
     relay) — matched to a documented node by ip, or an 'undocumented device'
-    candidate when matched_node_id is NULL. No UI until P1."""
+    candidate when matched_node_id is NULL. Listed by
+    `GET /api/v2/sites/<slug>/observed`; in db mode `discovery.py` keeps its
+    survey here too."""
 
     __tablename__ = "observed_nodes"
     __table_args__ = (UniqueConstraint("site_id", "ip", "mac"),)

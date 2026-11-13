@@ -11,7 +11,7 @@
    stop that went back to following the system (10-20) is gone: on every other
    click it looked like nothing had happened. */
 
-export const SCHEMES = ['dark', 'light'];
+const SCHEMES = ['dark', 'light'];
 export const SCHEME_KEY = 'atlas.scheme';
 
 /** A stored value, or null when nothing usable is stored. */

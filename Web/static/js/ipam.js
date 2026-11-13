@@ -94,7 +94,7 @@ export function parseCidr(text) {
   };
 }
 
-export const contains = (net, addrValue) =>
+const contains = (net, addrValue) =>
   net && addrValue >= net.network && addrValue <= net.broadcast;
 
 /** True when `inner` sits entirely inside `outer` and is not the same prefix. */
@@ -195,8 +195,8 @@ export function prefixesOf(data) {
   return out;
 }
 
-/** Every charted address, as {value: node}. Skips `—` and anything unparseable. */
-/** value -> the place that holds it.
+/** value -> the place that holds it, as a Map. Skips `—` and anything
+    unparseable.
 
     More than one charted place can answer on one address: the edge the VM and
     The edge services drawn as their own places, TRAEFIK and PANGOLIN, all sit
@@ -207,7 +207,7 @@ export function prefixesOf(data) {
     holds the lease; a `network` place charted at the same address is a role
     running on it. Ties keep the first, so the answer is stable across edits.
     Co-claimants are not dropped: the Ledger names them on the row (see
-    ledger.js sharersOf). */
+    sharersOf below). */
 export function chartedAddresses(data) {
   const out = new Map();
   const rank = (n) => (n.kind === 'vm' || n.kind === 'physical' ? 0 : 1);
@@ -218,6 +218,17 @@ export function chartedAddresses(data) {
     if (!held || rank(node) < rank(held)) out.set(addr.value, node);
   }
   return out;
+}
+
+/* Every OTHER charted place answering on this address. chartedAddresses keeps
+   one holder per address so the grid stays one-cell-one-lease; this is how the
+   ones it set aside still get said out loud, instead of vanishing from the only
+   view that claims to account for every address. */
+export function sharersOf(nodes, node) {
+  const ip = String(node.ip || '').split('/')[0];
+  if (!ip || ip === '—') return [];
+  return nodes.filter((n) => n !== node
+    && String(n.ip || '').split('/')[0] === ip);
 }
 
 /** What the Ledger needs to draw one prefix. */
@@ -266,4 +277,18 @@ export function rangeAt(prefix, value) {
     if (from !== undefined && to !== undefined && value >= from && value <= to) return r;
   }
   return null;
+}
+
+/** How many addresses are still free across the v4 prefixes that hold hosts
+    themselves (a prefix divided among children is not counted twice). */
+export function freeV4(prefixes, charted) {
+  const v4 = prefixes.filter((p) => p.net.version === 4 && !p.children.length);
+  return v4.reduce((sum, p) => sum + occupancy(p, charted).free, 0n);
+}
+
+/** Charted addresses inside no prefix that has been described, as
+    [value, node] pairs in charted order. */
+export function looseAddresses(prefixes, charted) {
+  return [...charted.entries()].filter(([value]) =>
+    !prefixes.some((p) => value >= p.net.network && value <= p.net.broadcast));
 }

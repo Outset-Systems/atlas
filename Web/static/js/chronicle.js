@@ -6,10 +6,10 @@
    single largest subsystem in the file, flagged for extraction on 2026-08-12
    and left because of the Grafana-timing code it carries). Moved out whole on
    2026-08-21, behaviour unchanged except the sleeping frames below. The rest of
-   ui.js reaches it through exactly three names — `settleScry` (the card's
-   vitals fade in the same way a slide does), `chronicleItems` (THE INDEX lists
-   the sky's watchings) and `buildChronicle`/`buildAbyss` (buildUI) — and
-   nothing else in the app touches it except `A.closeMax` from the Escape chain. */
+   ui.js reaches it through exactly three names — `chronicleItems` (THE INDEX
+   lists the sky's watchings), `buildChronicle` and `buildAbyss` (buildUI) —
+   and nothing else in the app touches it except `A.closeMax` from the Escape
+   chain. `settleScry`, the rule a slide fades in by, is used only in here. */
 
 import { A, CFG, $, esc, glassAttrs, isMixed } from './config.js';
 import { say } from './words.js';
@@ -36,7 +36,7 @@ const abyssItems = () => (A.DATA?.abyss || []);
    every watching still shows SOMETHING and Grafana keeps the ones the Atlas
    cannot yet draw. */
 const chartIndex = () => A.CHARTS || {};
-export function chartFor(c) {
+function chartFor(c) {
   if (!c) return null;
   const idx = chartIndex();
   if (c.chart) return idx[c.chart] ? c.chart : null;
@@ -200,7 +200,7 @@ function slideHTML(c, i) {
    unless the frame was parked or torn down while we waited. Was three
    hand-rolled copies with three different liveness guards; this one carries
    the union of them. */
-export function settleScry(frame, target = frame) {
+function settleScry(frame, target = frame) {
   if (!frame.src || frame.src === 'about:blank') return;
   setTimeout(() => {
     if (frame.isConnected && frame.src && frame.src !== 'about:blank') {
@@ -377,8 +377,8 @@ function makeCarousel(p) {
     const slide = fs.closest('.chron-slide');
     const frame = slide?.querySelector('iframe');
     const at = Number(slide?.dataset.i ?? idx);
-    if (chartFor(items[at])) { A.maximizeEmbed(null, items, at); return; }
-    A.maximizeEmbed(frame?.src && frame.src !== 'about:blank' ? frame.src : items[idx]?.embed,
+    if (chartFor(items[at])) { maximizeEmbed(null, items, at); return; }
+    maximizeEmbed(frame?.src && frame.src !== 'about:blank' ? frame.src : items[idx]?.embed,
                     items, at);
   });
   // a figure on the visible slide is redrawn as it goes stale, so a slide left
@@ -498,7 +498,7 @@ function maxShow(i) {
   const t = $('embed-max-title');
   if (t) t.textContent = c.title || '';
 }
-A.maximizeEmbed = function maximizeEmbed(src, items = [], idx = 0) {
+function maximizeEmbed(src, items = [], idx = 0) {
   const m = $('embed-max');
   if (!m) return;
   maxItems = items.filter(c => c.embed || chartFor(c));
@@ -513,7 +513,7 @@ A.maximizeEmbed = function maximizeEmbed(src, items = [], idx = 0) {
   if (prev) prev.hidden = !nav;
   if (next) next.hidden = !nav;
   m.hidden = false;
-};
+}
 A.closeMax = function closeMax() {
   const m = $('embed-max');
   if (!m || m.hidden) return;

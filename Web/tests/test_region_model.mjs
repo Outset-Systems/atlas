@@ -9,6 +9,7 @@
 
 import assert from 'node:assert/strict';
 import { foldedAt, homesAt, foldSummary, foldWords, carryTo, exitPoint, exitLabel, mergeExits,
+  standingOn, drawnAbove, exitsFor,
   autoCandidate, carryRect, chainOf, childrenOf, clampLens, clampRect, coverage, fitContain,
   fitRect, hashWithRegion, pinchStep, placeOn, rectFromView, rectOnScreen, rectToChild,
   rectToParent, regionFromHash, shown, toChild, toParent, viewRect, zoomAround,
@@ -487,6 +488,108 @@ test('mergeExits: one line where several leave a place by the same spot', () => 
   assert.equal(exitLabel(['A', 'B']), 'A, B');
   assert.equal(exitLabel(['A', 'B', 'C']), 'A, B +1');
   assert.equal(exitLabel([]), '');
+});
+
+/* ── what stands on a region, what is drawn above it, and the roads out ──── */
+
+/* An island on the main map with a cold corner inside it. The gateway is
+   pinned on both; the keep is carried through the rectangles; the edge host and
+   the wild lie out on the main map; the cellar is charted and never drawn. */
+const ISLAND = [
+  { id: 'isle', name: 'Isle', map: 'i.webp', x: 10, y: 10, w: 40, h: 40,
+    places: { gateway: { x: 66, y: 22 } } },
+  { id: 'cold', name: 'Cold', map: 'c.webp', parent: 'isle', x: 50, y: 0, w: 50, h: 50,
+    places: { gateway: { x: 68, y: 42 } } },
+];
+const SPOTS = {
+  gateway: { x: 30, y: 20 }, keep: { x: 42, y: 14 }, mill: { x: 14, y: 46 },
+  edge: { x: 70, y: 30 }, wild: { x: 90, y: 90 },
+};
+const NAMES = { gateway: 'GATEWAY', keep: 'KEEP', mill: 'MILL', edge: 'EDGE', wild: 'THE WILD', cellar: 'CELLAR' };
+
+test('standingOn: every drawn place inside the rectangle, pins first', () => {
+  const isle = standingOn(ISLAND, 'isle', SPOTS);
+  assert.deepEqual(Object.keys(isle), ['gateway', 'keep', 'mill']);
+  assert.deepEqual(isle.gateway, { x: 66, y: 22 });                 // the pin
+  near(isle.keep.x, 80); near(isle.keep.y, 10);                     // carried through
+  near(isle.mill.x, 10); near(isle.mill.y, 90);
+  const cold = standingOn(ISLAND, 'cold', SPOTS);
+  assert.deepEqual(Object.keys(cold), ['gateway', 'keep']);         // the mill is not in that corner
+  assert.deepEqual(cold.gateway, { x: 68, y: 42 });
+  near(cold.keep.x, 60); near(cold.keep.y, 20);
+  assert.deepEqual(standingOn(ISLAND, 'nowhere', SPOTS), {});
+  assert.deepEqual(standingOn(ISLAND, 'isle', undefined), {});
+});
+
+test('drawnAbove: the main map and every region on the way down, less the folded', () => {
+  const routes = [{ from: 'gateway', to: 'edge' }];
+  // one level in: only the main map is above
+  assert.deepEqual([...drawnAbove(ISLAND, 'isle', SPOTS, routes)].sort(), ['edge', 'gateway', 'keep', 'mill', 'wild']);
+  // two levels in: the island's own map is above too, and adds nothing new
+  assert.deepEqual([...drawnAbove(ISLAND, 'cold', SPOTS, routes)].sort(), ['edge', 'gateway', 'keep', 'mill', 'wild']);
+  // a folded island keeps what has no road off it: those are not drawn on the main map
+  const folded = [{ ...ISLAND[0], fold: true }, ISLAND[1]];
+  assert.deepEqual([...drawnAbove(folded, 'isle', SPOTS, routes)].sort(), ['edge', 'gateway', 'wild']);
+  // from the cold corner the island's own map is above, and draws them again
+  assert.deepEqual([...drawnAbove(folded, 'cold', SPOTS, routes)].sort(), ['edge', 'gateway', 'keep', 'mill', 'wild']);
+});
+
+test('exitsFor: a road to a place out on a map above runs to the border and is named', () => {
+  const here = standingOn(ISLAND, 'isle', SPOTS);
+  const road = { from: 'gateway', to: 'edge', kind: 'wan' };
+  const routes = [
+    road,
+    { from: 'keep', to: 'gateway', kind: 'lan' },        // both drawn here: no exit
+    { from: 'edge', to: 'wild', kind: 'wan' },           // neither drawn here: no exit
+    { from: 'cellar', to: 'keep', kind: 'lan' },         // the far place is kept off the map
+    { from: 'keep', to: 'ghost', kind: 'lan' },          // the far place is not in the dataset
+    { from: 'keep', to: 'toString', kind: 'lan' },       // nor is a name every object answers to
+  ];
+  const got = exitsFor(ISLAND, 'isle', here, SPOTS, NAMES, routes);
+  assert.equal(got.length, 1);
+  const [ex] = got;
+  assert.equal(ex.from, 'gateway'); assert.equal(ex.to, 'edge');
+  assert.equal(ex.name, 'EDGE'); assert.equal(ex.label, 'EDGE');
+  assert.deepEqual(ex.ids, ['edge']); assert.deepEqual(ex.names, ['EDGE']);
+  assert.equal(ex.kind, 'wan'); assert.equal(ex.road, road);
+  // The edge host carries to (150, 50) on the island's map; from the pin at (66, 22) that leaves east
+  near(ex.at.x, 100); near(ex.at.y, 22 + 28 * (34 / 84));
+});
+
+test('exitsFor: the near end may be either end of the road, and two roads out by one spot merge', () => {
+  const here = standingOn(ISLAND, 'isle', SPOTS);
+  const spots = { ...SPOTS, post: { x: 70, y: 31 } };
+  const routes = [
+    { from: 'edge', to: 'gateway', kind: 'wan' },        // written the other way round
+    { from: 'gateway', to: 'post', kind: 'lan' },
+  ];
+  const got = exitsFor(ISLAND, 'isle', here, spots, { ...NAMES, post: 'POST' }, routes);
+  assert.equal(got.length, 1);
+  assert.equal(got[0].from, 'gateway'); assert.equal(got[0].to, 'edge');
+  assert.deepEqual(got[0].ids, ['edge', 'post']);
+  assert.equal(got[0].label, 'EDGE, POST');
+  assert.equal(got[0].kind, 'wan');
+});
+
+test('exitsFor: a far place folded away on a map above gets no line', () => {
+  // two islands on the main map. The envoy stands on the eastern one beside the
+  // barn, and is pinned onto the first island's own map.
+  const east = { id: 'east', name: 'East', map: 'e.webp', x: 60, y: 60, w: 30, h: 30 };
+  const isle = { ...ISLAND[0], places: { envoy: { x: 50, y: 50 } } };
+  const spots = { keep: { x: 42, y: 14 }, envoy: { x: 75, y: 75 }, barn: { x: 80, y: 80 } };
+  const names = { keep: 'KEEP', envoy: 'ENVOY', barn: 'BARN' };
+  const routes = [{ from: 'envoy', to: 'barn', kind: 'lan' }];
+  const here = standingOn([isle, east], 'isle', spots);
+  assert.deepEqual(Object.keys(here), ['keep', 'envoy']);
+  // unfolded, the main map draws the barn: the envoy's road to it leaves the island
+  assert.deepEqual(exitsFor([isle, east], 'isle', here, spots, names, routes).map((e) => e.to), ['barn']);
+  // folded, the barn's only road stays inside its own island, so no map above draws it
+  const folded = [isle, { ...east, fold: true }];
+  assert.deepEqual(exitsFor(folded, 'isle', here, spots, names, routes), []);
+  // a second road, off the eastern island, brings the barn back out and the line with it
+  const out = exitsFor(folded, 'isle', here, spots, names, [...routes, { from: 'barn', to: 'keep', kind: 'lan' }]);
+  assert.deepEqual(out.map((e) => [e.from, e.to]), [['envoy', 'barn'], ['keep', 'barn']]);
+  assert.deepEqual(exitsFor(folded, 'isle', here, spots, names, undefined), []);
 });
 
 console.log(`\nregion-model: ${passed} passed`);

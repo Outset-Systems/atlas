@@ -1,9 +1,11 @@
 """The editing API — `/api/v2/admin/*`, everything behind the ✎ chrome.
 
-One namespace, every write through `security.write_refusal()` and the same
-admin clearance for reads. Nothing here is reachable in a read-only
-deployment, and nothing here exists for a viewer who isn't cleared: `/`
-doesn't even render the editing chrome for them.
+One namespace, every write through `security.write_refusal()` (as the
+`write_required` decorator) and the same admin clearance for reads. A
+read-only deployment refuses every write here and still answers its admins'
+reads; a look-only standalone one has no admin, so there every request here is
+refused. Nothing here exists for a viewer who isn't cleared: `/` doesn't even
+render the editing chrome for them.
 
 A NESTED blueprint (Flask ≥2), so the admin surface keeps its own
 `before_request` (admins only) and `after_request` (never cache) without
@@ -19,22 +21,22 @@ what made six editors affordable.
 """
 
 import logging
+import threading
 import time
 
 from flask import Blueprint, jsonify, request
 
 import dataset as ds
-import discovery
 import events
 import maintenance
-import mapart
 import schema
 import settings
 from context import atlas
 from overlays import slot_key
-from security import actor, is_admin, write_refusal
+from security import actor, is_admin
 
-from . import bp
+from . import _body, bp
+from .auth import write_required
 
 log = logging.getLogger("atlas.api.v2")
 
@@ -136,6 +138,16 @@ def _fail(exc, status):
                     "problems": getattr(exc, "problems", [str(exc)])}), status
 
 
+def _read(ctx):
+    """The dataset and its stamp, or the 409 a route answers when the store
+    cannot be read. Returns (data, stamp, None) or (None, None, response)."""
+    try:
+        data, stamp = ctx.store.read()
+    except ds.RejectedError as e:
+        return None, None, _fail(e, 409)
+    return data, stamp, None
+
+
 # ── Boot ─────────────────────────────────────────────────────────────────────
 @admin_bp.route("/context")
 def context():
@@ -164,10 +176,9 @@ def context():
 @admin_bp.route("/dataset")
 def get_dataset():
     ctx = atlas()
-    try:
-        data, stamp = ctx.store.read()
-    except ds.RejectedError as e:
-        return _fail(e, 409)
+    data, stamp, refusal = _read(ctx)
+    if refusal:
+        return refusal
 
     overridden = {}
     for section, (overlay_name, _fields) in OVERLAID.items():
@@ -178,19 +189,29 @@ def get_dataset():
 
 
 # ── Writes ───────────────────────────────────────────────────────────────────
+_STORE_REFUSALS = (ds.ConflictError, ds.BusyError, ds.RejectedError)
+
+
+def _store_refusal(exc):
+    """What a write answers when the store refuses it: 409 for a map that has
+    moved on, 503 with `Retry-After` for a store that is busy, 422 for a change
+    it rejects."""
+    if isinstance(exc, ds.ConflictError):
+        return _fail(exc, 409)
+    if isinstance(exc, ds.BusyError):
+        resp = jsonify({"error": str(exc), "problems": [str(exc)]})
+        resp.headers["Retry-After"] = "2"
+        return resp, 503
+    return _fail(exc, 422)
+
+
 def _commit(ctx, ops, expect, note, origin=None):
     """One batch through the store, or the error response a write route answers with.
     Returns (result, None) or (None, response)."""
     try:
         result = ctx.store.apply(ops, actor=actor(), expect=expect, note=note, origin=origin)
-    except ds.ConflictError as e:
-        return None, _fail(e, 409)
-    except ds.BusyError as e:
-        resp = jsonify({"error": str(e), "problems": [str(e)]})
-        resp.headers["Retry-After"] = "2"
-        return None, (resp, 503)
-    except ds.RejectedError as e:
-        return None, _fail(e, 422)
+    except _STORE_REFUSALS as e:
+        return None, _store_refusal(e)
     except (TypeError, AttributeError, KeyError) as e:
         # a value of the wrong shape (an id that is a list, say) that the checks
         # tripped over before they could name it: refused, and nothing was saved
@@ -222,10 +243,8 @@ def _clear_superseded_overlays(ctx, ops):
 
 
 @admin_bp.route("/ops", methods=["POST"])
+@write_required
 def apply_ops():
-    refusal = write_refusal()
-    if refusal:
-        return refusal
     body = request.get_json(silent=True)
     if not isinstance(body, dict):
         return jsonify({"error": "expected {ops, expect}"}), 400
@@ -242,10 +261,9 @@ def dependents():
     entry_id = request.args.get("id", "")
     if not schema.get(section):
         return jsonify({"error": f"unknown section {section!r}"}), 400
-    try:
-        data, _ = atlas().store.read()
-    except ds.RejectedError as e:
-        return _fail(e, 409)
+    data, _, refusal = _read(atlas())
+    if refusal:
+        return refusal
     return jsonify({"dependents": ds.dependents(data, section, entry_id)})
 
 
@@ -258,136 +276,18 @@ def revisions():
 
 
 @admin_bp.route("/revisions/<int:revision_id>/revert", methods=["POST"])
+@write_required
 def revert(revision_id):
-    refusal = write_refusal()
-    if refusal:
-        return refusal
     ctx = atlas()
     try:
         result = ctx.store.revert(revision_id, actor=actor(),
-                                  expect=(request.get_json(silent=True) or {}).get("expect"))
-    except ds.ConflictError as e:
-        return _fail(e, 409)
-    except ds.BusyError as e:
-        resp = jsonify({"error": str(e), "problems": [str(e)]})
-        resp.headers["Retry-After"] = "2"
-        return resp, 503
-    except ds.RejectedError as e:
-        return _fail(e, 422)
+                                  expect=_body().get("expect"))
+    except _STORE_REFUSALS as e:
+        return _store_refusal(e)
     except OSError as e:
         return jsonify({"error": f"could not revert: {e}"}), 500
     ctx.invalidate()
     return jsonify(result)
-
-
-# ── Discovery inbox ──────────────────────────────────────────────────────────
-@admin_bp.route("/discovery")
-def discovery_list():
-    ctx = atlas()
-    try:
-        data, _ = ctx.store.read()
-    except ds.RejectedError as e:
-        return _fail(e, 409)
-    rows = discovery.listing(data, ctx.backend, ctx.site)
-    return jsonify({
-        "observed": rows,
-        "undocumented": sum(1 for r in rows if r["undocumented"] and not r["ignored"]),
-    })
-
-
-@admin_bp.route("/discovery/scan", methods=["POST"])
-def discovery_scan():
-    refusal = write_refusal()
-    if refusal:
-        return refusal
-    body = request.get_json(silent=True) or {}
-    text = body.get("nmap_xml") or ""
-    if not isinstance(text, str) or not text.strip():
-        return jsonify({"error": "send {nmap_xml: '<nmaprun>…'}"}), 400
-    if len(text) > 4_000_000:
-        return jsonify({"error": "that scan is too large (max 4 MB)"}), 413
-    from importers.scan import NmapError, parse_nmap_xml
-    try:
-        hosts = parse_nmap_xml(text)
-    except NmapError as e:
-        return jsonify({"error": str(e)}), 422
-    new = discovery.record(hosts, atlas().backend, atlas().site)
-    log.info("v2 discovery: %d hosts filed (%d new) by %s", len(hosts), new, actor())
-    return jsonify({"ok": True, "seen": len(hosts), "new": new})
-
-
-@admin_bp.route("/discovery/leases", methods=["POST"])
-def discovery_leases():
-    """A router's DHCP lease file, filed into the same survey as a scan: the
-    devices that asked for an address, with the names they gave themselves.
-    Read from what the operator hands over, never fetched from the router."""
-    refusal = write_refusal()
-    if refusal:
-        return refusal
-    body = request.get_json(silent=True) or {}
-    text = body.get("leases") or ""
-    if not isinstance(text, str) or not text.strip():
-        return jsonify({"error": "send {leases: '<the lease file>'}"}), 400
-    if len(text) > 4_000_000:
-        return jsonify({"error": "that lease file is too large (max 4 MB)"}), 413
-    from importers.leases import LeaseError, parse_leases
-    try:
-        fmt, hosts = parse_leases(text)
-    except LeaseError as e:
-        return jsonify({"error": str(e)}), 422
-    new = discovery.record(hosts, atlas().backend, atlas().site)
-    log.info("v2 discovery: %d %s leases filed (%d new) by %s", len(hosts), fmt, new, actor())
-    return jsonify({"ok": True, "format": fmt, "seen": len(hosts), "new": new})
-
-
-@admin_bp.route("/discovery/decide", methods=["POST"])
-def discovery_decide():
-    refusal = write_refusal()
-    if refusal:
-        return refusal
-    body = request.get_json(silent=True) or {}
-    keys = body.get("keys")
-    action = body.get("action")
-    if not isinstance(keys, list) or not keys:
-        return jsonify({"error": "send {keys: [...], action: ignore|unignore|forget}"}), 400
-    if action == "ignore":
-        discovery.set_ignored(keys, True)
-    elif action == "unignore":
-        discovery.set_ignored(keys, False)
-    elif action == "forget":
-        if atlas().backend == "db":
-            # `discovery.forget` edits the FILE inbox; on the db backend that
-            # file is not the inbox, so the edit would succeed and change
-            # nothing the viewer can see.
-            return jsonify({"error": "forget is not available on the db backend "
-                                     "— ignore the device instead"}), 400
-        discovery.forget(keys)
-    else:
-        return jsonify({"error": f"unknown action {action!r}"}), 400
-    return jsonify({"ok": True, "action": action, "count": len(keys)})
-
-
-@admin_bp.route("/discovery/as-nodes", methods=["POST"])
-def discovery_as_nodes():
-    refusal = write_refusal()
-    if refusal:
-        return refusal
-    body = request.get_json(silent=True) or {}
-    keys = set(body.get("keys") or [])
-    ctx = atlas()
-    try:
-        data, _ = ctx.store.read()
-    except ds.RejectedError as e:
-        return _fail(e, 409)
-    taken = {n.get("id") for n in data.get("nodes", []) or []}
-    drafts = []
-    for row in discovery.listing(data, ctx.backend, ctx.site):
-        if row["key"] not in keys:
-            continue
-        node = discovery.as_node(row, data, taken)
-        taken.add(node["id"])
-        drafts.append(node)
-    return jsonify({"nodes": discovery.place_drafts(data, drafts)})
 
 
 # ── THE REPAIRS — maintenance windows ────────────────────────────────────────
@@ -403,10 +303,8 @@ def maintenance_list():
 
 
 @admin_bp.route("/maintenance", methods=["POST"])
+@write_required
 def maintenance_save():
-    refusal = write_refusal()
-    if refusal:
-        return refusal
     body = request.get_json(silent=True)
     if not isinstance(body, dict) or not isinstance(body.get("windows"), list):
         return jsonify({"error": "expected {windows: [...]}"}), 400
@@ -416,21 +314,7 @@ def maintenance_save():
         return jsonify({"error": "someone else changed the repairs while you were "
                                  "editing — reload and try again"}), 409
 
-    problems = []
-    seen = set()
-    for i, window in enumerate(body["windows"]):
-        if not isinstance(window, dict):
-            problems.append(f"window #{i + 1}: not an object")
-            continue
-        label = window.get("id") or f"#{i + 1}"
-        problems += [f"window {label}: {p}"
-                     for p in schema.check_entry("maintenance", window, strict=True)]
-        if window.get("id") in seen:
-            problems.append(f"window {label}: duplicate id")
-        seen.add(window.get("id"))
-        state, _s, _e = maintenance.occurrence(window)
-        if state == "invalid":
-            problems.append(f"window {label}: it ends before it starts")
+    problems = maintenance.problems(body["windows"])
     if problems:
         return jsonify({"error": "those repairs have problems", "problems": problems}), 422
 
@@ -440,137 +324,13 @@ def maintenance_save():
 
 # ── THE ANNALS — acknowledging what happened ─────────────────────────────────
 @admin_bp.route("/events/<int:event_id>/ack", methods=["POST"])
+@write_required
 def event_ack(event_id):
-    refusal = write_refusal()
-    if refusal:
-        return refusal
-    body = request.get_json(silent=True) or {}
+    body = _body()
     event = events.acknowledge(event_id, actor(), body.get("note") or "")
     if event is None:
         return jsonify({"error": f"no event {event_id}"}), 404
     return jsonify({"ok": True, "event": event})
-
-
-# ── Bulk import ──────────────────────────────────────────────────────────────
-@admin_bp.route("/import/csv", methods=["POST"])
-def import_csv():
-    refusal = write_refusal()
-    if refusal:
-        return refusal
-    body = request.get_json(silent=True) or {}
-    text = body.get("csv") or ""
-    if not isinstance(text, str) or not text.strip():
-        return jsonify({"error": "send {csv: 'name,ip,kind,...'}"}), 400
-    from importers.csv_import import parse_csv
-    rows, errors = parse_csv(text)
-    if errors:
-        return jsonify({"error": "that list has problems", "problems": errors}), 422
-    try:
-        data, _ = atlas().store.read()
-    except ds.RejectedError as e:
-        return _fail(e, 409)
-
-    taken = {n.get("id") for n in data.get("nodes", []) or []}
-    zones = {z.get("id") for z in data.get("zones", []) or []}
-    fallback = next(iter(zones), "uncharted")
-    drafts = []
-    for row in rows:
-        node = discovery.as_node(
-            {"ip": row["ip"], "hostname": row["name"]}, data, taken)
-        node.update({
-            "name": row["name"].upper(),
-            "kind": row["kind"],
-            "role": row["role"] or "imported · not yet described",
-            "lore": row["notes"] or "Newly charted, its story not yet written.",
-        })
-        if row["zone"]:
-            node["zone"] = row["zone"] if row["zone"] in zones else fallback
-        if row["url"]:
-            node["links"] = [{"label": row["url_label"] or "Service", "url": row["url"]}]
-        taken.add(node["id"])
-        drafts.append(node)
-    return jsonify({"nodes": discovery.place_drafts(data, drafts), "count": len(drafts)})
-
-
-# ── The base render ──────────────────────────────────────────────────────────
-@admin_bp.route("/map-art")
-def map_art_list():
-    return jsonify({"images": mapart.available(),
-                    "default": mapart.DEFAULT,
-                    "max_bytes": mapart.MAX_BYTES})
-
-
-@admin_bp.route("/map-art", methods=["POST"])
-def map_art_upload():
-    refusal = write_refusal()
-    if refusal:
-        return refusal
-    upload = request.files.get("image")
-    if not upload:
-        return jsonify({"error": "send a file as `image`"}), 400
-    name = (request.form.get("name") or upload.filename or "").strip()
-    try:
-        stored = mapart.save(name, upload.read())
-    except ValueError as e:
-        return jsonify({"error": str(e), "problems": [str(e)]}), 422
-    except OSError as e:
-        log.error("v2: could not store map art: %s", e)
-        return jsonify({"error": f"could not store that render: {e}"}), 500
-    log.info("v2: map art %s uploaded by %s", stored, actor())
-    return jsonify({"ok": True, "name": stored, "images": mapart.available()})
-
-
-@admin_bp.route("/map-art/survey", methods=["POST"])
-def map_art_survey():
-    refusal = write_refusal()
-    if refusal:
-        return refusal
-    q = (request.get_json(silent=True) or {}).get("query") or ""
-    import worldsurvey
-    try:
-        name, display = worldsurvey.survey(q)
-    except worldsurvey.SurveyError as e:
-        return jsonify({"error": str(e)}), 422
-    except Exception as e:                       # noqa: BLE001 — one sentence out
-        log.error("v2: survey failed for %r: %s", q, e, exc_info=True)
-        return jsonify({"error": "the survey failed — see the server log"}), 502
-    log.info("v2: survey render %s stored by %s", name, actor())
-    return jsonify({"ok": True, "name": name, "surveyed": display,
-                    "images": mapart.available()})
-
-
-@admin_bp.route("/map-art/<name>/layout", methods=["POST"])
-def map_art_layout(name):
-    """Settings → Move places, on a map style: the dragged spots go into that
-    style's sidecar, so every viewer of the style sees them there."""
-    refusal = write_refusal()
-    if refusal:
-        return refusal
-    try:
-        saved = mapart.save_layout(name, request.get_json(silent=True))
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 422
-    except OSError as e:
-        log.error("v2: could not save the layout of %s: %s", name, e)
-        return jsonify({"error": f"could not save that layout: {e}"}), 500
-    log.info("v2: layout of map style %s saved by %s (%d spots)", name, actor(), saved)
-    from .reads import maps_for_viewer
-    return jsonify({"ok": True, "saved": saved, "maps": maps_for_viewer()})
-
-
-@admin_bp.route("/map-art/<name>", methods=["DELETE"])
-def map_art_delete(name):
-    refusal = write_refusal()
-    if refusal:
-        return refusal
-    try:
-        mapart.remove(name)
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 422
-    except OSError as e:
-        return jsonify({"error": f"could not remove that render: {e}"}), 500
-    log.info("v2: map art %s removed by %s", name, actor())
-    return jsonify({"ok": True, "images": mapart.available()})
 
 
 # ── Shared by the screens that reach outward ─────────────────────────────────
@@ -597,12 +357,11 @@ def _secret_stays_home():
 #: actor is more than a human testing four sources needs (v1.38.0).
 _PROBE_LIMIT, _PROBE_WINDOW_S = 10, 60
 _probe_log: dict = {}
-_probe_lock = __import__("threading").Lock()
+_probe_lock = threading.Lock()
 
 
 def _probe_allowed(who):
-    import time as _t
-    now = _t.monotonic()
+    now = time.monotonic()
     with _probe_lock:
         recent = [t for t in _probe_log.get(who, []) if now - t < _PROBE_WINDOW_S]
         if len(recent) >= _PROBE_LIMIT:
@@ -616,7 +375,9 @@ def _probe_allowed(who):
 # The other admin screens. They attach to `admin_bp`, so they are imported here,
 # after everything above exists and before the blueprint is registered. The
 # editor stays in this file; each of these is one screen of Settings.
-from . import admin_connections, admin_directory, admin_sources  # noqa: E402,F401
+from . import (  # noqa: E402,F401
+    admin_connections, admin_directory, admin_discovery, admin_mapart, admin_sources,
+)
 # Names that lived in this module before the split and are still reached through it.
 from .admin_sources import _probe  # noqa: E402,F401
 

@@ -44,6 +44,7 @@ import settings
 from ingest import _RateLimiter
 from jsonio import iso_utc
 from jsonstore import JsonStore
+from signals import STONE_STATES
 
 log = logging.getLogger("atlas.live.tripwires")
 
@@ -403,8 +404,8 @@ def record(reading, stone):
     now = iso_utc()
     target = str(stone["id"]) if stone else "unmatched"
     sensor = reading["label"]
-    with events._STORE.locked():
-        store = events._STORE.load()
+    with events.locked():
+        store = events.load()
         for ev in reversed(store["events"][-200:]):
             trip = ev.get("trip") if ev.get("kind") == "tripwire" else None
             if not isinstance(trip, dict) or ev.get("ack"):
@@ -414,11 +415,10 @@ def record(reading, stone):
                     and time.time() - _epoch(trip.get("last_at")) <= COALESCE_SECONDS):
                 trip["count"] = min(int(trip.get("count") or 1) + 1, 10 ** 6)
                 trip["last_at"] = now
-                events._STORE.save(store)
+                events.commit(store)
                 return ev, True
-        store["seq"] += 1
         event = {
-            "id": store["seq"], "at": now, "kind": "tripwire", "target": target,
+            "id": events.next_id(store), "at": now, "kind": "tripwire", "target": target,
             "name": (str(stone.get("name") or stone["id"])[:CAP] if stone else "unmatched trip"),
             "from": "quiet", "to": "tripped", "gravity": gravity_for(stone), "ack": None,
             "trip": {"source": reading["source"], "sensor": sensor,
@@ -427,9 +427,7 @@ def record(reading, stone):
                      "count": 1, "last_at": now},
         }
         store["events"].append(event)
-        if len(store["events"]) > events.KEEP:
-            store["events"] = store["events"][-events.KEEP:]
-        events._STORE.save(store)
+        events.commit(store)
     log.warning("tripwire: %s tripped (%s)", target, reading["source"])
     return event, False
 
@@ -465,7 +463,7 @@ def counts_without_trips(visible=None, visible_services=None, visible_rites=None
 # ── the read model ───────────────────────────────────────────────────────────
 _STONE_FIELDS = ("id", "name", "kind", "host", "zone", "severity", "placement",
                  "mimics", "planted", "expires", "sensor", "retired", "note")
-_DECOY_STATES = ("silent", "stirred", "speaking")
+_DECOY_STATES = tuple(sorted(STONE_STATES))   # a tuple: a junk state is simply not in it
 
 
 def _trip_view(ev):
