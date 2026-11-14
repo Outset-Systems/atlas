@@ -206,6 +206,39 @@ def test_a_stale_stamp_is_a_conflict(client):
     assert r.status_code == 409
 
 
+def test_two_editors_with_one_stamp_cannot_both_save(client, monkeypatch):
+    """The stamp is checked under the write's lock (2026-11-13). It was checked
+    before the lock, then the windows were validated, then written: two editors
+    who read the same stamp could both pass the check and the second overwrote
+    the first. Here the second editor's save lands exactly in that gap, inside
+    the first's validation, and the first must then be refused."""
+    import maintenance
+    stamp = client.get("/api/v2/admin/maintenance").get_json()["stamp"]
+    real = maintenance.problems
+    other = {**OPEN_NOW, "id": "other", "reason": "the other editor"}
+    seen = {}
+
+    def meanwhile(windows):
+        if not seen:
+            seen["second"] = None           # once: the second editor's own check runs the real one
+            seen["second"] = client.post("/api/v2/admin/maintenance", headers=WRITE,
+                                         json={"windows": [other], "expect": stamp})
+        return real(windows)
+
+    monkeypatch.setattr(maintenance, "problems", meanwhile)
+    first = client.post("/api/v2/admin/maintenance", headers=WRITE,
+                        json={"windows": [OPEN_NOW], "expect": stamp})
+    assert seen["second"].status_code == 200
+    assert first.status_code == 409, "the slower editor overwrote the faster one"
+    assert [w["id"] for w in maintenance.read()["windows"]] == ["other"]
+
+
+def test_a_save_answers_the_new_stamp(client):
+    r = client.post("/api/v2/admin/maintenance", headers=WRITE, json={"windows": [OPEN_NOW]})
+    assert r.status_code == 200
+    assert r.get_json()["stamp"] == client.get("/api/v2/admin/maintenance").get_json()["stamp"]
+
+
 def test_a_monthly_window_is_still_found_years_later(store):
     """The occurrence jump must land SHORT of the current one: a 28-day
     estimate of a month overshot by ~2.5 days each, so after two and a half

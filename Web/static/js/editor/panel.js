@@ -18,7 +18,9 @@ import { A, $, esc } from '../config.js';
 import { say } from '../words.js';
 import Editor from './store.js';
 import { buildForm, makeEl as el } from './form.js';
-import { standing, sentence, waiting } from './standing.js';
+import {
+  REVIEW_BATCH, armedLabel, inBatches, markedLine, reviewOps, sentence, standing, twoPress, waiting,
+} from '../roster-model.js';
 import { VIRTUAL, desk, iconBtn, notice, problemList, run } from './desk-kit.js';
 import { drawSurvey } from './survey.js';
 import { drawChanges } from './changes.js';
@@ -171,25 +173,21 @@ function drawTable(key) {
 
 /* ── checked by a person ──────────────────────────────────────────────── */
 
-/** The store takes 500 changes in one save. */
-const REVIEW_BATCH = 400;
-
 /** Say "I have looked at these and they are right". Nothing on a place changes
-    but its stamp, which the server writes (provenance.py). */
+    but its stamp, which the server writes (provenance.py). The batching (the
+    store takes 500 changes in one save; REVIEW_BATCH is 400) and the words are
+    roster-model.js's, shared with NODES. */
 async function markChecked(ids) {
-  let done = 0;
+  let outcome;
   try {
-    for (let i = 0; i < ids.length; i += REVIEW_BATCH) {
-      const ops = ids.slice(i, i + REVIEW_BATCH).map((id) => ({ op: 'review', section: 'nodes', id }));
-      const result = await run(() => Editor.apply(ops, 'marked as checked'), false);
-      if (!result) return;          // someone else saved first: run() reloaded and redrew
-      done += ops.length;
-    }
+    outcome = await inBatches(ids, (part) =>
+      run(() => Editor.apply(reviewOps(part), 'marked as checked'), false), REVIEW_BATCH);
   } catch (err) {
     A.showToast?.(err.message || 'That could not be saved.');
     return;
   }
-  A.showToast?.(done === 1 ? 'Marked as checked.' : `${done} marked as checked.`);
+  if (outcome.stopped) return;      // someone else saved first: run() reloaded and redrew
+  A.showToast?.(markedLine(outcome.done));
   show('nodes');
 }
 
@@ -207,28 +205,27 @@ function reviewNotice(entries, section, tbody) {
     only.textContent = on ? `Show every ${section.singular}` : 'Show only these';
     disarm();
   });
-  // Two presses: the first counts what is on screen and says so, the second writes.
-  let armed = null;
+  // Two presses: the first counts what is on screen and says so, the second
+  // writes (roster-model.js twoPress, shared with NODES).
+  const arm = twoPress();
   function disarm() {
-    armed = null;
+    arm.disarm();
     all.textContent = 'Mark the ones shown as checked';
     all.classList.remove('dsk-btn-go');
   }
   all.addEventListener('click', async () => {
-    if (armed) {
-      const ids = armed;
+    const step = arm.press(() => [...tbody.children]
+      .filter((tr) => !tr.hidden && tr.dataset.standing !== 'checked')
+      .map((tr) => tr.dataset.id));
+    if (step.write) {
       all.disabled = true;
-      await markChecked(ids);
+      await markChecked(step.write);
       all.disabled = false;
       disarm();
       return;
     }
-    const ids = [...tbody.children]
-      .filter((tr) => !tr.hidden && tr.dataset.standing !== 'checked')
-      .map((tr) => tr.dataset.id);
-    if (!ids.length) return;
-    armed = ids;
-    all.textContent = `Yes, I have checked ${ids.length === 1 ? 'this one' : `these ${ids.length}`}`;
+    if (!step.armed) return;
+    all.textContent = armedLabel(step.armed.length);
     all.classList.add('dsk-btn-go');
   });
   const bar = el('div', 'dsk-review-bar');
@@ -427,6 +424,14 @@ export async function openDesk(sectionKey) {
     await Editor.loadRepairs();
   } catch { /* the repairs endpoint is admin-only and may legitimately fail */ }
   await show(sectionKey || desk.active);
+}
+
+/** Open the Desk straight on one place's own form (the card's `Edit ›` from a
+    view, 2026-11-13). The same form and Save as the ✎ in the PLACES list. */
+export async function editPlace(id) {
+  await openDesk('nodes');
+  const entry = (Editor.data?.nodes || []).find((n) => n.id === id);
+  if (entry) drawForm('nodes', entry, { id });
 }
 
 export function closeDesk() {

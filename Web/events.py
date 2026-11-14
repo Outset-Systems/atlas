@@ -59,10 +59,14 @@ def _now():
 
 def _shape(stored):
     if not isinstance(stored, dict):
-        return {"seq": 0, "state": {}, "events": []}
+        return {"seq": 0, "state": {}, "behind": {}, "events": []}
     return {
         "seq": stored.get("seq") or 0,
         "state": stored.get("state") if isinstance(stored.get("state"), dict) else {},
+        # WHAT A FAULT WAS BEHIND (2026-11-13): {key: cause id} for every target
+        # last seen down as a consequence. Kept apart from `state`, whose values
+        # stay plain strings, so a store written before this reads unchanged.
+        "behind": stored.get("behind") if isinstance(stored.get("behind"), dict) else {},
         "events": stored.get("events") if isinstance(stored.get("events"), list) else [],
     }
 
@@ -133,6 +137,7 @@ def record(feed, label_for=None):
     with locked():
         store = load()
         known = store["state"]
+        behind = store["behind"]
         fresh = []
         # `known` is the same object as store["state"], so comparing them later
         # would always be equal — track the change explicitly or first sightings
@@ -141,7 +146,22 @@ def record(feed, label_for=None):
 
         for key, (kind, target, state, cause) in sorted(observed.items()):
             previous = known.get(key)
-            if previous == state:
+            was_behind = behind.get(key)
+            now_behind = cause if (cause and state == "down") else None
+            if was_behind != now_behind:
+                if now_behind:
+                    behind[key] = now_behind
+                else:
+                    behind.pop(key, None)
+                seeded = True
+            # A CONSEQUENCE THAT OUTLIVES ITS CAUSE (11-12 audit): a VM down
+            # behind its host, the host back, the VM still down. Down equals
+            # down, so this used to say nothing, and the VM's own outage never
+            # reached the queue of things to acknowledge. Its own fault starts
+            # now, so it is an event of its own: `outlived`, naming no cause
+            # (the cause may be a place this reader is not cleared for).
+            outlived = (previous == state == "down" and was_behind and not now_behind)
+            if previous == state and not outlived:
                 continue
             known[key] = state
             seeded = True
@@ -167,6 +187,8 @@ def record(feed, label_for=None):
             }
             if cause:
                 event["cause"] = cause
+            if outlived:
+                event["outlived"] = True
             fresh.append(event)
 
         if not fresh and not seeded:
@@ -189,6 +211,10 @@ def for_viewer(event):
     whether, not who. An ack's `by` is an admin's sign-in name and its `note` is
     whatever they typed, about a place this viewer may not be cleared for.
     """
+    # ALERTS (2026-11-13): where a send went is an admin's own wiring (the
+    # destination's name), never a viewer's or a token's
+    if "sent" in event:
+        event = {k: v for k, v in event.items() if k != "sent"}
     ack = event.get("ack")
     if not isinstance(ack, dict):
         return event
@@ -254,6 +280,44 @@ def counts(visible=None, visible_services=None, visible_rites=None):
     """Totals for the chrome: how much is unacknowledged, how busy it's been."""
     return _counts(listing(limit=KEEP, visible=visible, visible_services=visible_services,
                            visible_rites=visible_rites))
+
+
+#: How many "sent to" notes one event keeps.
+SENT_KEEP = 10
+
+
+def note_sent(event_ids, to, at=None):
+    """Write "sent to <destination>" on each event a send covered (ALERTS,
+    2026-11-13), under the annals' own lock, so the ANNALS can show where an
+    alert went. `to` is the destination's name. Returns how many were noted.
+    Never raises on an event that has aged out of the store."""
+    wanted = {int(i) for i in event_ids or [] if isinstance(i, int) and not isinstance(i, bool)}
+    if not wanted:
+        return 0
+    at = at or _now()
+    noted = 0
+    with _STORE.locked():
+        store = _STORE.load()
+        for event in store["events"]:
+            if event.get("id") in wanted:
+                sent = event.get("sent") if isinstance(event.get("sent"), list) else []
+                event["sent"] = (sent + [{"to": str(to)[:80], "at": at}])[-SENT_KEEP:]
+                noted += 1
+        if noted:
+            _STORE.save(store)
+    return noted
+
+
+def since(seq):
+    """Every event with an id above `seq`, oldest first (ALERTS' tick reads the
+    annals by sequence, so an event is considered once whichever worker sees it)."""
+    return [e for e in _STORE.load()["events"]
+            if isinstance(e, dict) and isinstance(e.get("id"), int) and e["id"] > seq]
+
+
+def current_seq():
+    """The last event id handed out."""
+    return _STORE.load()["seq"]
 
 
 def acknowledge(event_id, actor, note=""):

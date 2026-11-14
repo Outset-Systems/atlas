@@ -147,7 +147,8 @@ def test_a_token_cannot_write_to_the_reference(realm, token):
 
 
 @pytest.mark.parametrize("path", ["/api/v2/lab-data", "/api/v2/maps", "/api/v2/signals",
-                                  "/api/v2/rites", "/api/v2/events"])
+                                  "/api/v2/rites", "/api/v2/events", "/api/v2/places/roster",
+                                  "/api/v2/overview"])
 def test_what_a_token_is_sent_is_made_of_documented_fields(realm, token, path):
     doc = _doc()
     r = realm.app.test_client().get(path, headers=token)

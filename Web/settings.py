@@ -46,7 +46,7 @@ APP_NAME = _theme.T["app_name"]
 # a public door (atlas.example.com) and again for the hosted edition, where
 # one login page fronts many realms and must not leak which one you asked for.
 APP_BRAND = os.environ.get("ATLAS_BRAND", "").strip() or "The Atlas"
-APP_VERSION = "0.2.0-dev.14"
+APP_VERSION = "0.2.0-dev.15"
 ACCENT_COLOR = "#C9A554"
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -145,6 +145,30 @@ BEATS_DIR = os.environ.get("ATLAS_BEATS_DIR", os.path.join(DATA_DIR, "beats"))
 # Uploaded base renders — the picture the map is drawn on. Bundled art in
 # `static/map/` always wins over anything here (mapart.resolve).
 MAPS_DIR = os.environ.get("ATLAS_MAPS", os.path.join(DATA_DIR, "maps"))
+
+# ── ALERTS (2026-11-13) ──────────────────────────────────────────────────────
+# Rules that send a message when a place, set or network changes state and
+# stays there (alerts.py), through a sender that may reach only the hosts the
+# operator lists (alert_send.py). OFF until both ATLAS_ALERTS=1 and a non-empty
+# ATLAS_ALERT_HOSTS: without both nothing is sent, and the admin routes that
+# write or test refuse. The demo and the public image ship it off.
+ALERTS_ENABLED = os.environ.get("ATLAS_ALERTS", "").strip().lower() in ("1", "true", "yes", "on")
+#: `host:port,host:port`, raw; alert_send parses it (`allowed_hosts()`).
+ALERT_HOSTS = os.environ.get("ATLAS_ALERT_HOSTS", "").strip()
+#: The base address a message links to (`<base>?place=<id>`). Atlas cannot know
+#: the address it is reached by behind a proxy, so without this, no link.
+PUBLIC_URL = os.environ.get("ATLAS_PUBLIC_URL", "").strip()
+#: Rules, the digest and destinations (never secrets: only their names).
+ALERTS_PATH = os.environ.get("ATLAS_ALERTS_FILE", os.path.join(DATA_DIR, "alerts.json"))
+#: The tick's own record: last event processed, pending timers, the rate limit.
+ALERTS_STATE_PATH = os.environ.get("ATLAS_ALERTS_STATE", os.path.join(DATA_DIR, "alerts-state.json"))
+#: One line per send: when, rule, destination, events, outcome. No body, no secret.
+ALERT_LOG_PATH = os.environ.get("ATLAS_ALERT_LOG", os.path.join(DATA_DIR, "alert-deliveries.jsonl"))
+
+
+def alerts_on():
+    """True when alerts may send at all: switched on AND some host is listed."""
+    return bool(ALERTS_ENABLED and ALERT_HOSTS)
 
 # ── Posture ──────────────────────────────────────────────────────────────────
 # Acknowledge that standalone mode serves the whole map with no auth.
@@ -261,7 +285,7 @@ SESSION_ABS_S = int(os.environ.get("ATLAS_SESSION_ABS_HOURS", "12")) * 3600
 
 # The reverse proxies whose X-Forwarded-For this app believes, BY ADDRESS —
 # tls-proxy and the Hub, whose container IPs are PINNED in the internal host's
-# compose (172.19.255.7 / .9) so they can be named here at all.
+# compose so they can be named here at all.
 #
 # This was a hop COUNT until 2026-09-09. A count believes the header from ANY
 # peer that can open a socket to :5006 — all 14 containers on the `suite`

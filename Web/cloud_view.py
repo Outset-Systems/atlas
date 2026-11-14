@@ -132,7 +132,7 @@ def project(data, words=None):
         place["links"] = [_pick(l, LINK) for l in node.get("links") or [] if isinstance(l, dict)]
         out["nodes"].append(place)
     # a network is named only when a place this view holds sits in it
-    lived_in = {place.get("zone") for place in out["nodes"]}
+    lived_in = {place.get("zone") for place in out["nodes"] if isinstance(place.get("zone"), str)}
     out["zones"] = [_pick(z, ZONE) for z in data.get("zones") or []
                     if isinstance(z, dict) and z.get("id") in lived_in]
     return out

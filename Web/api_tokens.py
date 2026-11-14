@@ -144,7 +144,11 @@ READ_PATHS = frozenset({
     "/api/v2/signals",
     "/api/v2/rites",
     "/api/v2/events",
-    # the reference for the five above: static, and the same file as docs/openapi.json
+    # the places table (2026-11-13): the two above, joined per place and cut the same way
+    "/api/v2/places/roster",
+    # OVERVIEW (2026-11-13): the same two again, folded into the realm's facts and cut the same way
+    "/api/v2/overview",
+    # the reference for the seven above: static, and the same file as docs/openapi.json
     "/api/v2/openapi.json",
 })
 

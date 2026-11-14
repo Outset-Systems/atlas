@@ -146,8 +146,59 @@ try {
   if (LIST_TABS.includes(saved)) lastListTab = saved;
 } catch { /* no storage: the default stands */ }
 
+/* IDLE ROLL-UP (owner, 2026-11-13): THE INDEX and the views menu fade to 60%
+   the moment the MOUSE leaves them (and what opened them), and roll up when it
+   has stayed away ROLLUP_MS. Coming back cancels both. Only a mouse makes them
+   idle: a touch screen cannot hover, and a keyboard working inside one (or
+   typing in its search) keeps it up — the roll-up waits until focus leaves. */
+const ROLLUP_MS = 4000;
+const mouse = (e) => e.pointerType === 'mouse';
+const working = (panel) => {
+  const el = document.activeElement;
+  return !!el && panel.contains(el) && (el.matches('input, textarea, select') || el.matches(':focus-visible'));
+};
+function idleRollup(panel, parts, { isUp, rollUp }) {
+  let timer = null;
+  let fade = null;
+  let inside = false;
+  const wake = () => {
+    clearTimeout(timer); clearTimeout(fade); timer = null;
+    panel.classList.remove('idle');
+  };
+  const later = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      timer = null;
+      if (inside || !isUp()) return;
+      if (working(panel)) return;          // focusout below starts it again
+      panel.classList.remove('idle');
+      rollUp();
+    }, ROLLUP_MS);
+  };
+  const leave = () => {
+    inside = false;
+    if (!isUp()) return;
+    // a beat first, so crossing from what opened it into it does not flicker
+    clearTimeout(fade);
+    fade = setTimeout(() => { if (!inside && isUp()) panel.classList.add('idle'); }, 160);
+    later();
+  };
+  for (const el of parts) {
+    el.addEventListener('pointerenter', (e) => { if (mouse(e)) { inside = true; wake(); } });
+    el.addEventListener('pointerleave', (e) => { if (mouse(e)) leave(); });
+  }
+  panel.addEventListener('focusin', () => { if (working(panel)) wake(); });
+  panel.addEventListener('focusout', (e) => {
+    if (panel.contains(e.relatedTarget) || inside || !isUp()) return;
+    if (panel.classList.contains('idle') || timer) { panel.classList.add('idle'); later(); }
+  });
+  return { wake, leave };
+}
+
+let drawerIdle = null;   // set just below, once ☰ exists
 A.toggleDrawer = function toggleDrawer(open) {
   const willOpen = open ?? !drawer.classList.contains('open');
+  if (!willOpen) drawerIdle?.wake();
   drawer.classList.toggle('open', willOpen);
   drawer.setAttribute('aria-hidden', String(!willOpen));
   // A right-hand card sits under the Index (which docks right), so drawer-open
@@ -161,6 +212,11 @@ A.toggleDrawer = function toggleDrawer(open) {
    the drawer hangs from this button, so this button is the control that acts
    on it — Esc and a click on the map still close it too. */
 $('btn-menu').addEventListener('click', () => A.toggleDrawer());
+// ☰ counts as part of THE INDEX: the pointer is on it when it opens the panel
+drawerIdle = idleRollup(drawer, [drawer, $('btn-menu')], {
+  isUp: () => drawer.classList.contains('open'),
+  rollUp: () => A.toggleDrawer(false),
+});
 
 /* One drawer, two sections. (Three from 2026-08-10, with settings folded in;
    the scenes left for their own band 2026-08-15; settings left for a scene of
@@ -339,35 +395,25 @@ document.querySelectorAll('[data-scene]').forEach(btn => {
                      accounts: A.openAccounts, trust: A.openTrust,
                      settings: A.openSettings };
     const deselect = btn.classList.contains('active');
-    /* THE ATLAS is the home button (owner, 2026-11-01), and since v1.67.0 it
-       also puts the map away (owner, 2026-11-05: "if you click the atlas
-       button it basically just hides the map with nodes"). A scene that is up
-       is closed FIRST and that is the whole click, so a scene can never strand
-       you; with nothing up, it switches between the map and THE DECK, the
-       column of charts (deck.js). Coming back to the map is coming home:
-       A.home and not A.recenter, because from the Depths home is the map, not
-       the middle of the Depths.
-       It centres first (owner, 2026-11-05: "clicking the button should center
-       the map or clicking it again would close/open it"): a map that has
-       moved goes home, and only a map already home is put away. On a phone
-       the button is hidden (atlas.css), since there is no map to bring back;
-       a desk asking for `?view=phone` still gets the top of the column. */
+    /* THE ATLAS is the home button (owner, 2026-11-01), and since 2026-11-13
+       it is ALWAYS home: it closes whatever is up (a scene, the card), leaves
+       any view for the map (views.js), and centres. A.home and not
+       A.recenter, because from the Depths home is the map, not the middle of
+       the Depths. The other ways of looking at the realm are one step off it,
+       in the views' menu (hover, focus or ▾, below). This retires v1.67.0 and
+       v1.68.0's second press that put the map away: one button, one meaning.
+       On a phone the button is hidden (atlas.css), since there is no map; a
+       desk asking for `?view=phone` still gets the top of the column. */
     if (btn.dataset.scene === 'atlas') {
-      const sceneWasUp = A.sceneOpen;
-      const wasHome = A.atHome?.() ?? true;
       closeAllScenes();
       setSceneActive('atlas');
       A.closeCard?.();
+      closeViewMenu(false);
       if (A.PHONE) { A.deckTop?.(); return; }
+      if (A.VIEW !== 'map') A.setView('map', { remember: true });
       // inside a region, home is the main map and not the middle of the region
       // (owner, 2026-11-11): leave every level and stand centred on the whole map
-      if (A.inRegion?.()) {
-        if (A.DECK) A.setDeck(false, { remember: true });
-        A.leaveToMap();
-        return;
-      }
-      if (A.DECK) { A.setDeck(false, { remember: true }); A.home(true); return; }
-      if (!sceneWasUp && wasHome) { A.setDeck?.(true, { remember: true }); return; }
+      if (A.inRegion?.()) { A.leaveToMap(); return; }
       A.home(true);
       return;
     }
@@ -386,27 +432,146 @@ $('btn-zoom-out').addEventListener('click', () => A.zoomAt(innerWidth / 2, inner
 $('btn-depths').addEventListener('click', () => A.descend());
 $('btn-net').addEventListener('click', () => A.toggleNet());
 
-/* The map tools drop down from THE ATLAS (owner, 2026-11-01), a column beside
-   the zoom column: sky, depths, tripwires. Not `:hover`, because the cluster
-   is not a descendant of the band (see `.atlas-tools` in atlas.css). The close is
-   delayed so the pointer can cross the gap and reach the column it just opened.
-   A touch screen has no hover, so atlas.css keeps the column out there. */
-function hoverReveal(anchor, cluster, delay = 220) {
-  if (!anchor || !cluster) return;
+/* Something that drops from an anchor while a mouse is over either, or while
+   the keyboard is in either: `.peek` on the cluster. Not `:hover`, because the
+   cluster is not a descendant of the band (the trap `.atlas-tools` in atlas.css
+   explains). The close is delayed so the pointer can cross the gap and reach
+   what it just opened. Only a MOUSE peeks: a tap on a touch screen also sends
+   the pointer "in", and a tap on THE ATLAS means home and nothing else. Only a
+   keyboard focus peeks too, for the same reason (a click focuses as well).
+   `refuse` can turn a peek down; `onChange` hears every change.
+   A mouse leaving does not shut it at once: it fades and rolls up ROLLUP_MS
+   later (idleRollup above, owner 2026-11-13); a keyboard leaving shuts it after
+   `delay`. */
+function hoverReveal(anchor, cluster, { delay = 220, onChange = () => {}, refuse = () => false } = {}) {
+  if (!anchor || !cluster) return { close() {} };
   let timer = null;
-  const peek = (on) => {
+  const peek = (on, how) => {
     clearTimeout(timer);
-    if (on) { cluster.classList.add('peek'); return; }
-    timer = setTimeout(() => cluster.classList.remove('peek'), delay);
+    if (on) {
+      if (refuse(how)) return;
+      cluster.classList.add('peek'); onChange(); return;
+    }
+    timer = setTimeout(() => { cluster.classList.remove('peek'); onChange(); }, delay);
   };
   [anchor, cluster].forEach(el => {
-    el.addEventListener('mouseenter', () => peek(true));
-    el.addEventListener('mouseleave', () => peek(false));
-    el.addEventListener('focusin', () => peek(true));
-    el.addEventListener('focusout', () => peek(false));
+    el.addEventListener('pointerenter', (e) => { if (mouse(e)) peek(true, 'pointer'); });
+    el.addEventListener('focusin', (e) => {
+      if (e.target.matches?.(':focus-visible')) peek(true, 'focus');
+    });
+    el.addEventListener('focusout', (e) => {
+      if (anchor.contains(e.relatedTarget) || cluster.contains(e.relatedTarget)) return;
+      if (!cluster.classList.contains('idle')) peek(false);
+    });
   });
+  return { close() { clearTimeout(timer); cluster.classList.remove('peek', 'idle'); onChange(); } };
 }
-hoverReveal($('scene-home'), $('atlas-tools'));
+
+/* ── THE VIEWS' MENU (2026-11-13) ──────────────────────────────────────────
+   MAP, OVERVIEW, NODES and, for an admin, ALERTS under THE ATLAS (views.js
+   removes ALERTS for anyone else, so every item here is one that is drawn). A view replaces the map area; ATLAS is
+   the way back. It opens three ways: a mouse over ATLAS (hoverReveal), the
+   keyboard reaching ATLAS, and ATLAS's ▾ (Enter, Space or ↓ opens it and
+   focuses the first item; a tap on a touch screen). ↑ ↓ Home End move inside
+   it; Escape closes it and gives focus back to ▾; Tab out, a click elsewhere
+   or a pick closes it. `.peek` is the hover's, `.open` the ▾'s; either shows
+   it, and `aria-expanded` on ▾ says which is true. Its keys stop here, so the
+   arrows move the menu and never pan the map behind it. */
+// detached stand-ins keep an older template (no menu yet) from stopping ui.js
+const viewMenu = $('view-menu') || document.createElement('div');
+const viewMore = $('view-more') || document.createElement('button');
+const sceneHome = $('scene-home');
+// every row that is drawn: the views, and the map's tools while MAP is the view
+const viewItems = () => [...viewMenu.querySelectorAll('[role="menuitem"]')].filter((b) => !b.hidden && b.getClientRects().length);
+const inViewChrome = (el) => !!el && (viewMenu.contains(el) || sceneHome.contains(el));
+/* Focus handed back to ▾ (after Escape or a pick) must not open it again:
+   hushed until the keyboard leaves ATLAS and the menu. */
+let viewHush = false;
+
+function paintViewMenu() {
+  const shown = viewMenu.classList.contains('peek') || viewMenu.classList.contains('open');
+  viewMore.setAttribute('aria-expanded', String(shown));
+  if (!shown) return;
+  // under ATLAS, wherever the band's label strip has scrolled it
+  const r = sceneHome.getBoundingClientRect();
+  viewMenu.style.setProperty('--view-menu-x', `${Math.max(8, Math.round(r.left))}px`);
+}
+const viewReveal = hoverReveal(sceneHome, viewMenu, {
+  onChange: paintViewMenu,
+  refuse: (how) => A.PHONE || (how === 'focus' && viewHush),
+});
+const viewShown = () => viewMenu.classList.contains('peek') || viewMenu.classList.contains('open');
+idleRollup(viewMenu, [sceneHome, viewMenu], {
+  isUp: viewShown,
+  rollUp: () => { viewMenu.classList.remove('open'); viewReveal.close(); },
+});
+function openViewMenu(focusFirst) {
+  viewHush = false;
+  viewMenu.classList.add('open');
+  paintViewMenu();
+  if (focusFirst) viewItems()[0]?.focus();
+}
+function closeViewMenu(focusOpener) {
+  if (focusOpener) viewHush = true;
+  viewMenu.classList.remove('open');
+  viewReveal.close();
+  if (focusOpener) viewMore.focus();
+}
+
+viewMore.addEventListener('click', (e) => {
+  e.stopPropagation();
+  // a hover-peek becomes an open menu; an open one closes
+  if (viewMenu.classList.contains('open')) closeViewMenu(e.detail === 0);
+  else openViewMenu(true);
+});
+viewMore.addEventListener('keydown', (e) => {
+  if (e.key !== 'ArrowDown') return;
+  e.preventDefault(); e.stopPropagation();
+  openViewMenu(true);
+});
+viewMenu.addEventListener('keydown', (e) => {
+  if (e.key === 'Tab') return;   // focusout below closes it
+  e.stopPropagation();           // never the camera's arrows or letters
+  const items = viewItems();
+  const at = items.indexOf(document.activeElement);
+  const go = (i) => { e.preventDefault(); items[(i + items.length) % items.length]?.focus(); };
+  if (e.key === 'ArrowDown') go(at + 1);
+  else if (e.key === 'ArrowUp') go(at < 0 ? items.length - 1 : at - 1);
+  else if (e.key === 'Home') go(0);
+  else if (e.key === 'End') go(items.length - 1);
+  else if (e.key === 'Escape') { e.preventDefault(); closeViewMenu(true); }
+});
+viewMenu.addEventListener('click', (e) => {
+  // a map tool has acted already (its own listener); the menu just goes
+  const tool = e.target.closest('.view-tool');
+  if (tool) {
+    e.stopPropagation();
+    const keyboard = e.detail === 0;
+    closeViewMenu(keyboard);
+    if (!keyboard && viewMenu.contains(document.activeElement)) document.activeElement.blur();
+    return;
+  }
+  const item = e.target.closest('[data-view]');
+  if (!item) return;
+  e.stopPropagation();
+  const keyboard = e.detail === 0;
+  const wasAway = A.VIEW !== 'map';
+  closeAllScenes();
+  setSceneActive('atlas');
+  A.setView(item.dataset.view, { remember: true });
+  if (item.dataset.view === 'map' && wasAway) A.home?.(true);
+  closeViewMenu(keyboard);
+  if (!keyboard && viewMenu.contains(document.activeElement)) document.activeElement.blur();
+});
+[viewMenu, sceneHome].forEach((el) => el.addEventListener('focusout', (e) => {
+  if (inViewChrome(e.relatedTarget)) return;
+  viewHush = false;
+  if (viewMenu.classList.contains('open')) { viewMenu.classList.remove('open'); paintViewMenu(); }
+}));
+document.addEventListener('pointerdown', (e) => {
+  if (!viewMenu.classList.contains('open') || inViewChrome(e.target)) return;
+  closeViewMenu(false);
+});
 
 /* The band's labels scroll in their own strip. `.over` brings out ‹ › only while
    something is out of reach; they are dimmed at the end they have reached. */

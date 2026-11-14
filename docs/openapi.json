@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Atlas API",
-    "version": "2.2.0",
+    "version": "2.5.0",
     "description": "What an API token can read from an Atlas. Tokens are issued in Settings, Connections, by an admin, once agent access is turned on there. A token is read-only, sees no more than a signed-in viewer with no groups, and reaches only the paths in this document. A URL reaches it without `user:pass@` or its query string. While agent access is off every path here answers 403 to a token and the MCP endpoint answers 404. A token made for a cloud AI tool reads a reduced view through the MCP endpoint only, and every other path here answers it 403. The rest of `/api/v2` belongs to the page and is not a contract.",
     "license": {
       "name": "MIT",
@@ -204,6 +204,68 @@
             "description": "`1` returns only events nobody has acknowledged."
           }
         ]
+      }
+    },
+    "/api/v2/places/roster": {
+      "get": {
+        "operationId": "getPlacesTable",
+        "summary": "Every place, one row each",
+        "description": "The places this reader may see, each with its live state, network, addresses, review, repair windows, nearest certificate and sets. Made from the map and the live health, cut the same way as those two.",
+        "responses": {
+          "200": {
+            "description": "The table.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Roster"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Off"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooMany"
+          },
+          "500": {
+            "$ref": "#/components/responses/Unreadable"
+          }
+        }
+      }
+    },
+    "/api/v2/overview": {
+      "get": {
+        "operationId": "getOverview",
+        "summary": "The realm at a glance",
+        "description": "Places by state, what is down and what depends on it, events nobody has acknowledged, repair windows in the next 7 days, certificates lapsing within 30, places unchecked or not reviewed in 90, how many places changed this week and whether every source answered. Made from the map and the live health, cut the same way as those two.",
+        "responses": {
+          "200": {
+            "description": "The tiles.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Overview"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Off"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooMany"
+          },
+          "500": {
+            "$ref": "#/components/responses/Unreadable"
+          }
+        }
       }
     },
     "/api/v2/openapi.json": {
@@ -1197,6 +1259,10 @@
                   "type": "string",
                   "description": "Where it is presented from."
                 },
+                "place": {
+                  "type": "string",
+                  "description": "The place this certificate is for Names an entry in `nodes`."
+                },
                 "expires": {
                   "type": "string",
                   "description": "The day it lapses, ISO: `2026-09-02`."
@@ -1212,6 +1278,35 @@
               }
             },
             "description": "The certs."
+          },
+          "sets": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "Short unique key, e.g. `storage`."
+                },
+                "name": {
+                  "type": "string",
+                  "description": "What the set is called, e.g. `Storage`."
+                },
+                "places": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "The places in this set, by id. Names an entry in `nodes`."
+                },
+                "note": {
+                  "type": "string",
+                  "description": "What the set is for."
+                }
+              }
+            },
+            "description": "The sets."
           }
         },
         "description": "The whole map. No field is promised present: a hand-edited dataset is served as it is, and keys the catalogue does not know are kept. Places a token may not see are removed, with everything that names them."
@@ -1306,6 +1401,16 @@
             },
             "description": "Each source by name: `ok`, or `silent` when it did not answer."
           },
+          "sources_at": {
+            "type": "object",
+            "additionalProperties": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "description": "Each source by name: when it last answered, UTC, or null if it has not since the server started."
+          },
           "nodes": {
             "type": "object",
             "additionalProperties": {
@@ -1370,6 +1475,13 @@
             "type": "object",
             "additionalProperties": true,
             "description": "For a place that is down because another is: which one."
+          },
+          "confirmed_by": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Places by id: the source whose answer gave the place its state in this feed. Absent for a place under repair, whose state comes from the window."
           },
           "maintenance": {
             "type": "array",
@@ -1521,6 +1633,10 @@
                   "type": "string",
                   "description": "Present when another fault explains this one."
                 },
+                "outlived": {
+                  "type": "boolean",
+                  "description": "Present and true on a place still down after the fault that explained it has cleared: its own outage starts here, so `from` and `to` are both `down`. It names no cause."
+                },
                 "ack": {
                   "type": [
                     "object",
@@ -1543,6 +1659,610 @@
               },
               "last_24h": {
                 "type": "integer"
+              }
+            }
+          }
+        }
+      },
+      "Roster": {
+        "type": "object",
+        "properties": {
+          "stamp": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The dataset's version, as an editor sends it back."
+          },
+          "generated_at": {
+            "type": "string",
+            "description": "When this answer was made, UTC."
+          },
+          "zones": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "sets": {
+            "type": "array",
+            "description": "Named lists of places. Not access.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "note": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "places": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "rows": {
+            "type": "array",
+            "description": "One per place.",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "state": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "examples": [
+                    "healthy",
+                    "degraded",
+                    "down",
+                    "slumbering",
+                    "maintenance"
+                  ],
+                  "description": "The live state. Null is unknown, not healthy."
+                },
+                "cause": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "The place whose fault explains this one's, when one does."
+                },
+                "zone": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "zone_name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "kind": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "examples": [
+                    "physical",
+                    "vm",
+                    "network",
+                    "unknown"
+                  ]
+                },
+                "role": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "addresses": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "The place's `ip` and `mac`, then `ipv6`, `hostname` and `fqdn` when present. Only those with a value."
+                },
+                "services": {
+                  "type": "integer",
+                  "description": "How many services the place lists."
+                },
+                "confirmed_by": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "The source whose answer gave the place its state."
+                },
+                "charted_source": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "`hand`, or the import that wrote the place."
+                },
+                "reviewed": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
+                  "description": "Null for a place charted before the map kept provenance."
+                },
+                "reviewed_at": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "UTC."
+                },
+                "reviewed_by": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Who reviewed it. Sent to an admin only."
+                },
+                "changed_since_review": {
+                  "type": "boolean"
+                },
+                "unchecked": {
+                  "type": "boolean",
+                  "description": "Never reviewed, or reviewed and changed by an import since. False for a place charted before the map kept provenance."
+                },
+                "maintenance": {
+                  "type": "object",
+                  "properties": {
+                    "now": {
+                      "type": "boolean",
+                      "description": "Under repair now."
+                    },
+                    "next": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "When the next window that names it opens, UTC."
+                    }
+                  }
+                },
+                "cert": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "description": "The certificate tied to this place (its `place`) that lapses first. `days` is whole days left, negative once lapsed, null when its date is not charted.",
+                  "properties": {
+                    "name": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "days": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "expires": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                },
+                "sets": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "The sets this place is in."
+                },
+                "depends_on": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Places this one cannot work without."
+                }
+              }
+            }
+          }
+        }
+      },
+      "Overview": {
+        "type": "object",
+        "properties": {
+          "generated_at": {
+            "type": "string",
+            "description": "When this answer was made, UTC."
+          },
+          "admin": {
+            "type": "boolean",
+            "description": "Whether the reader sees everything. Never true for a token."
+          },
+          "states": {
+            "type": "object",
+            "description": "The reader's places by live state. `unknown` is a place with no state, not a healthy one.",
+            "properties": {
+              "healthy": {
+                "type": "integer"
+              },
+              "degraded": {
+                "type": "integer"
+              },
+              "down": {
+                "type": "integer"
+              },
+              "slumbering": {
+                "type": "integer"
+              },
+              "maintenance": {
+                "type": "integer"
+              },
+              "unknown": {
+                "type": "integer"
+              },
+              "total": {
+                "type": "integer"
+              }
+            }
+          },
+          "down": {
+            "type": "array",
+            "description": "Places down or degraded on their own account, down first, then by name. A place whose fault another visible place explains is that place's fallout and is not listed.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "state": {
+                  "type": "string",
+                  "examples": [
+                    "down",
+                    "degraded"
+                  ]
+                },
+                "cause": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Always null here: a place with a visible cause is not a root."
+                },
+                "downstream": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    }
+                  },
+                  "description": "Every visible place that needs this one, directly or through another, from `parent` and `depends_on` only."
+                },
+                "declared": {
+                  "type": "boolean",
+                  "description": "Whether any visible place declares that it needs this one. False means nothing is declared to depend on it, not that nothing is affected."
+                }
+              }
+            }
+          },
+          "unacked": {
+            "type": "object",
+            "description": "Events nobody has acknowledged, of any gravity.",
+            "properties": {
+              "count": {
+                "type": "integer"
+              },
+              "items": {
+                "type": "array",
+                "description": "Newest first, at most 8.",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "integer"
+                    },
+                    "at": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "string"
+                    },
+                    "target": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "from": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "to": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "maintenance": {
+            "type": "array",
+            "description": "Repair windows open now or opening within 7 days, soonest first, with the reader's places in each. A window that names only places the reader may not see is not listed.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "window": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "reason": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "starts": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "This occurrence's start, UTC."
+                },
+                "ends": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "This occurrence's end, UTC. Null when it has none."
+                },
+                "now": {
+                  "type": "boolean",
+                  "description": "Open now."
+                },
+                "places": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "certs": {
+            "type": "array",
+            "description": "Certificates with 30 days or fewer left, lapsed ones included, soonest first.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "place": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                },
+                "days": {
+                  "type": "integer",
+                  "description": "Whole days left, negative once lapsed."
+                },
+                "expires": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "review": {
+            "type": "object",
+            "properties": {
+              "unchecked": {
+                "type": "integer",
+                "description": "Places an import wrote or changed that no person has checked since."
+              },
+              "stale": {
+                "type": "integer",
+                "description": "Places with no review, or none in 90 days."
+              },
+              "items": {
+                "type": "array",
+                "description": "Never reviewed first, then the oldest review; at most 8.",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "reviewed_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "changes": {
+            "type": "object",
+            "description": "For an admin, the last 8 entries in the change log. For anyone else, a token included, how many of their places changed in 7 days, with no names.",
+            "properties": {
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "by": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "summary": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              },
+              "count_7d": {
+                "type": "integer"
+              }
+            }
+          },
+          "sources": {
+            "type": "object",
+            "properties": {
+              "all_ok": {
+                "type": "boolean",
+                "description": "No source was silent on the last build."
+              },
+              "silent": {
+                "type": "integer"
+              },
+              "items": {
+                "type": "array",
+                "description": "Each source, for an admin. Empty for anyone else.",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "last_ok": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "When it last answered, UTC."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "drift": {
+            "type": "object",
+            "description": "Monitors the map has not charted. Sent to an admin only.",
+            "properties": {
+              "count": {
+                "type": "integer"
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
               }
             }
           }

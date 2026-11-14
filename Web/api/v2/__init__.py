@@ -77,6 +77,8 @@ from . import health  # noqa: E402,F401
 from . import reads  # noqa: E402,F401  — the map's reads: lab-data, maps
 from . import writes  # noqa: E402,F401  — the layout writes: positions, rack
 from . import feeds  # noqa: E402,F401  — signals, rites, events
+from . import roster  # noqa: E402,F401  — the places table (2026-11-13)
+from . import overview  # noqa: E402,F401  — OVERVIEW, the realm's own facts (2026-11-13)
 from . import probes  # noqa: E402,F401  — embeddable, whois
 from . import beat  # noqa: E402,F401  — the machine beat
 from . import admin  # noqa: E402,F401  — the editor (nested bp)

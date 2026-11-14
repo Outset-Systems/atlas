@@ -207,3 +207,68 @@ def test_a_ports_words_do_not_name_what_is_hidden(realm):
     assert "ault" not in json.dumps(seen)
     whole = _login(realm, "ops").get("/api/v2/lab-data").get_json()
     assert whole["interfaces"][0]["peer"] == "Vault-Keeper and 3 guests"
+
+
+# ── a hidden name joined to other words (2026-11-13) ─────────────────────────
+#
+# The pattern's edges were `\w` and `-`, so a hidden place's name joined to
+# other text by a dash or an underscore was not found: a rite called
+# "vault-https" reached a viewer not cleared for VAULT.
+
+def _hidden_world():
+    return {"nodes": [{"id": "vault", "name": "Keeper", "ip": "10.0.0.9",
+                       "require_group": "HUB-Nobody"},
+                      {"id": "open", "name": "Open", "ip": "10.0.0.90"}]}
+
+
+@pytest.mark.parametrize("text", [
+    "vault-https", "backup_vault", "10.0.0.9-ping", "ping_10.0.0.9", "www.vault.example",
+    "VAULT", "keeper:443", "the KEEPER disk", "(vault)", "vault.", "-vault-",
+])
+def test_a_hidden_name_joined_by_a_dash_underscore_or_dot_is_found(text):
+    import redaction
+    assert redaction.hidden_words(_hidden_world(), set()).search(text), text
+
+
+@pytest.mark.parametrize("text", [
+    "10.0.0.90", "110.0.0.9", "10.0.0.90-ping", "vaults", "keepers", "openvault2",
+    "Open", "a vaulted ceiling",
+])
+def test_a_word_that_only_contains_a_hidden_name_is_not(text):
+    import redaction
+    assert not redaction.hidden_words(_hidden_world(), set()).search(text), text
+
+
+def test_nothing_hidden_is_no_pattern():
+    import redaction
+    world = _hidden_world()
+    world["nodes"][0].pop("require_group")
+    assert redaction.hidden_words(world, set()) is None
+    assert redaction.hidden_words(_hidden_world(), None) is None      # sees everything
+
+
+def test_a_rite_naming_a_hidden_place_with_a_dash_is_withheld():
+    import redaction
+    world = {**_hidden_world(), "rites": [
+        {"name": "vault-https", "host": "", "note": ""},
+        {"name": "nightly", "host": "backup_vault", "note": ""},
+        {"name": "open-https", "host": "10.0.0.90", "note": ""}]}
+    seen, _ = redaction.redact(world, set())
+    assert [r["name"] for r in seen["rites"]] == ["open-https"]
+
+
+def test_a_list_where_one_place_belongs_is_judged_by_what_it_holds():
+    # written before validation refused it (2026-11-13): `value in hidden`
+    # raised on the list, a 500 for every restricted reader
+    import redaction
+    world = {**_hidden_world(), "certs": [
+        {"name": "one", "place": ["vault"]},
+        {"name": "two", "place": ["open"]},
+        {"name": "three", "place": {"id": "vault"}}],
+        "rack": [{"name": "slot", "node": ["open", "vault"], "u": "U1"}],
+        "routes": [{"from": ["open"], "to": "open"}]}
+    seen, _ = redaction.redact(world, set())
+    assert seen["certs"] == [{"name": "two"}]
+    assert seen["rack"] == []
+    assert seen["routes"] == [{"to": "open"}]
+    assert "vault" not in json.dumps(seen)

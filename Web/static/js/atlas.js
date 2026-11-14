@@ -4,7 +4,7 @@
 
 import { A, REDUCED, $, esc } from './config.js';
 import './scheme.js';   // THE COLOUR SCHEME (v1.52.0): first, so data-scheme stands before any panel opens
-import './deck.js';     // THE DECK (v1.66.0 phone, v1.67.0 everywhere): before every sibling, so a page that opens on the charts has its column first
+import './views.js';    // THE VIEWS (2026-11-13; the Deck, v1.66.0/v1.67.0, is CHARTS): before every sibling, so a page that opens on a view has it first
 // table.js FIRST among the siblings: it swaps the backdrop src at import time,
 // and boot() below measures whatever src is standing when the image settles
 import './table.js';
@@ -29,6 +29,9 @@ import './trust.js';           // THE TRUST scene (generated view; admin only)
 import './whois.js';
 import './decoys.js';
 import './regions.js';   // REGIONS (v1.49.0): after world.js — it wraps buildWorld + onCameraMove
+import './nodes.js';     // NODES (2026-11-13): the table view; reads A.VIEW on load and hears `atlas:view`
+import './overview.js';  // OVERVIEW (2026-11-13): the facts above the Deck's charts; reads A.VIEW on load too
+import './alerts.js';    // ALERTS (2026-11-13, stage 4): rules and destinations, an admin's; reads A.VIEW on load too
 import './editor/index.js';
 
 const mapBase = $('map-base');

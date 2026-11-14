@@ -332,6 +332,12 @@ addEventListener('keydown', (e) => {
   // guards the same way). Escape alone stays reachable from everywhere.
   if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName || '') || e.target.isContentEditable) return;
   if (e.key !== 'Escape' && (e.ctrlKey || e.metaKey || e.altKey)) return;
+  /* The map is put away (a view is up, views.js): no key steers the hidden map
+     (2026-11-13; the Deck had this gap since v1.67.0). Escape still closes what
+     is over the view, and `/` (above) and M (the Index) still answer, but
+     nothing glides the camera behind it. */
+  const away = document.body.classList.contains('deck');
+  if (away && e.key !== 'Escape' && e.key !== 'm') return;
   const pan = CFG.PAN_KEY_PX;
   switch (e.key) {
     // the glass sits over everything, so it swallows the first Escape alone —
@@ -347,7 +353,7 @@ addEventListener('keydown', (e) => {
       const leaving = A.sceneOpen || A.cardOpen?.();
       A.closeMax?.(); A.closePalette?.(); A.closeAllScenes?.(); A.closeCard?.();
       A.toggleDecoys?.(false); A.toggleDrawer?.(false);
-      if (leaving) A.recenter?.(true);
+      if (leaving && !away) A.recenter?.(true);
       break;
     }
     case 'ArrowLeft': cam.x += pan; clampCam(); apply(false); break;

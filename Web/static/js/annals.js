@@ -8,11 +8,16 @@
    Acknowledging is the difference between a log and an operations tool — it
    says a human looked, and leaves the reason for the next person. Admins only;
    everyone else reads. Events inherit the map's redaction server-side, so a
-   place a viewer cannot see never appears here either. */
+   place a viewer cannot see never appears here either.
+
+   An event that ALERTS sent word about (2026-11-13, stage 4) carries `sent`,
+   [{to, at}], and says "sent to <destination>" beside it. Acknowledging it
+   here is also what stops its repeats. */
 
 import { A, $, esc, themeText, ago } from './config.js';
 import { say } from './words.js';
 import { makeScene } from './scene.js';
+import { ALERTS_TEXT, fill, sentNote } from './alerts-model.js';
 
 let listEl, headEl;
 let showAll = true;
@@ -33,10 +38,14 @@ function when(iso) {
   return ago(Date.now() - then.getTime());
 }
 
+/** "sent to Lab ntfy", through the theme; '' when nothing was sent. */
+const sentTo = (sent) => sentNote(sent, (key, vars) => fill(themeText(key, ALERTS_TEXT[key] || key), vars));
+
 function rowHTML(e) {
   // a consequence reads as what it is: not its own incident
   const phrase = e.gravity === 'consequence'
     ? 'went dark with it' : (PHRASE[e.to] || `became ${e.to}`);
+  const sent = Array.isArray(e.sent) ? sentTo(e.sent) : '';
   const behind = e.cause
     ? `<span class="ann-behind"> behind ${esc(e.cause)}</span>` : '';
   // who saw it and what they wrote are an admin's to read: anyone else gets "seen"
@@ -47,7 +56,9 @@ function rowHTML(e) {
   return `<div class="ann-row ${GRAVITY_CLASS[e.gravity] || ''}">
     <span class="ann-when" title="${esc(e.at)}">${esc(when(e.at))}</span>
     <span class="ann-what"><strong>${esc(e.name)}</strong> ${esc(phrase)}${behind}` +
-    (e.kind === 'tripwire' ? '' : `<span class="ann-from"> (from ${esc(e.from)})</span>`) + `</span>
+    (e.kind === 'tripwire' ? '' : `<span class="ann-from"> (from ${esc(e.from)})</span>`) +
+    // inside the event's own words, so the row keeps its four columns
+    (sent ? `<span class="ann-from ann-sent"${e.sent[0]?.at ? ` title="${esc(String(e.sent[0].at))}"` : ''}> · ${esc(sent)}</span>` : '') + `</span>
     <span class="ann-kind">${esc(e.kind)}</span>
     ${ack}
   </div>`;
@@ -84,7 +95,10 @@ async function build() {
 
   for (const btn of listEl.querySelectorAll('.ann-ack-btn')) {
     btn.addEventListener('click', async () => {
-      const note = prompt('What was it? (optional)') ?? '';
+      // Cancel is "not now", never an empty note: only OK acknowledges (the
+      // 11-12 audit; an empty OK still acknowledges with no note)
+      const note = prompt('What was it? (optional)');
+      if (note === null) return;
       btn.disabled = true;
       try {
         const { Editor } = await import('./editor/index.js');

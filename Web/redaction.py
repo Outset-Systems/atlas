@@ -216,6 +216,24 @@ def bare_urls(value):
 #: "through" — see its schema help). These are dropped whole, never filtered.
 _ORDERED_REF_FIELDS = {"path"}
 
+#: Sections whose references to places are attributes of the entry rather than
+#: its reason to exist (see `_scrub_entry`'s `defining`): a hidden id is taken
+#: out and the entry stays. A set (2026-11-13) is a list of places by name of
+#: its own; one hidden member must not hide the other members from the viewer.
+_FILTERED_SECTIONS = {"nodes", "sets"}
+
+#: Free text that can name a place in words, by section. No reference walker
+#: can read prose, so an entry whose words name a hidden place goes whole, the
+#: way rites always have (2026-11-13: certificates, sets, a rite's name and a
+#: rack slot's words joined them; the 11-12 audit found each of them open).
+_FREE_TEXT = {
+    "rites": ("name", "host", "note"),
+    "certs": ("name", "host", "note"),
+    "sets": ("name", "note"),
+    "rack": ("name", "desc"),
+    "rack_rear": ("name", "desc"),
+}
+
 
 def _node_refs(section_key):
     """[(field, subfield|None, type)] for every ref from a section to nodes."""
@@ -254,15 +272,54 @@ def _scrub_entry(entry, refs, hidden, defining):
     return True
 
 
+def _holds_hidden(value, hidden):
+    """True when `value`, or anything inside a list or object it holds, is a
+    hidden id. Never raises on a value a set cannot hold."""
+    if isinstance(value, dict):
+        return any(_holds_hidden(k, hidden) or _holds_hidden(v, hidden)
+                   for k, v in value.items())
+    if isinstance(value, (list, tuple)):
+        return any(_holds_hidden(v, hidden) for v in value)
+    try:
+        return value in hidden
+    except TypeError:
+        return False
+
+
 def _scrub_value(holder, name, ftype, hidden, defining):
     """Clean one field in place. False ⇒ the holder must go (see `_scrub_entry`)."""
     if name not in holder:
         return True
     value = holder[name]
+    if ftype != "strings" and isinstance(value, (list, dict)):
+        # A list or an object where one id belongs (2026-11-13): validation
+        # refuses it now, but a map saved before that can hold one, and
+        # `value in hidden` raised on it (a 500 for every restricted reader).
+        # It names no place anyone can look up, so it is never served to a
+        # restricted reader, and an entry it ties to a hidden place goes.
+        if defining and _holds_hidden(value, hidden):
+            return False
+        holder.pop(name, None)
+        return True
+    if ftype == "strings" and isinstance(value, str):
+        # A hand-edited `"depends_on": "vault"`: one id where a list belongs.
+        # Validation only warns about it, so it is served, and it must be
+        # judged like the list it stands for (the 11-12 audit's first item).
+        if value not in hidden:
+            return True
+        if defining:
+            return False
+        holder.pop(name, None)
+        return True
     if ftype == "strings":
         if not isinstance(value, list):
+            if not _holds_hidden(value, hidden):
+                return True
+            if defining:
+                return False
+            holder.pop(name, None)
             return True
-        kept = [v for v in value if v not in hidden]
+        kept = [v for v in value if not _holds_hidden(v, hidden)]
         if len(kept) == len(value):
             return True
         if defining:
@@ -289,7 +346,7 @@ def _scrub_signals_block(d, hidden):
         return
     kuma = block.get("kuma")
     if isinstance(kuma, dict):
-        block["kuma"] = {m: n for m, n in kuma.items() if n not in hidden}
+        block["kuma"] = {m: n for m, n in kuma.items() if not _holds_hidden(n, hidden)}
 
 
 def hidden_node_ids(data, groups):
@@ -309,11 +366,22 @@ def hidden_words(data, groups):
     for n in data.get("nodes", []):
         if not cleared(n, groups):
             ip = str(n.get("ip") or "").split("/")[0].strip()
-            words |= {str(w) for w in (n.get("id"), n.get("name"), ip) if w and w != "—"}
+            # every "no value" mark, not only the dash: a hidden place whose ip
+            # is "-" made "-" a hidden word and dropped every rite with a hyphen
+            words |= {str(w) for w in (n.get("id"), n.get("name"), ip)
+                      if w and str(w).strip() not in schema.NONE_MARKS}
     if not words:
         return None
-    return re.compile(r"(?<![\w.-])(?:" + "|".join(map(re.escape, sorted(words))) + r")(?![\w-])",
-                      re.IGNORECASE)
+    # A WORD ENDS AT ANYTHING BUT A LETTER OR A DIGIT (2026-11-13). The edges
+    # were `\w` and `-` before, so a hidden name joined to other text by a dash
+    # or an underscore (`vault-https`, `backup_vault`, `10.0.0.9-ping`) was not
+    # found. Now a dash, an underscore and a dot are separators on both sides.
+    # A digit still joins, so `10.0.0.9` is not found inside `10.0.0.90`. The
+    # cost is the safe one: a visible word with a hidden name as one of its
+    # parts is withheld too.
+    edge = r"[^\W_]"
+    return re.compile(rf"(?<!{edge})(?:" + "|".join(map(re.escape, sorted(words)))
+                      + rf")(?!{edge})", re.IGNORECASE)
 
 
 def visible_monitors(data, groups):
@@ -368,10 +436,13 @@ def redact(data, groups, token=False):
     import provenance
     provenance.for_viewer(d["nodes"])
     # a rite's `host` is free text, so no node reference covers it: a rite that
-    # names a hidden place in words goes as surely as one that points at it
-    if names and isinstance(d.get("rites"), list):
-        d["rites"] = [r for r in d["rites"] if not (
-            isinstance(r, dict) and names.search(f"{r.get('host') or ''} {r.get('note') or ''}"))]
+    # names a hidden place in words goes as surely as one that points at it.
+    # The same for a certificate, a set and a rack slot (`_FREE_TEXT`).
+    if names:
+        for key, fields in _FREE_TEXT.items():
+            if isinstance(d.get(key), list):
+                d[key] = [e for e in d[key] if not (isinstance(e, dict) and names.search(
+                    " ".join(str(e.get(f) or "") for f in fields)))]
     for n in d["nodes"]:
         if n.get("links"):
             n["links"] = [l for l in n["links"] if cleared(l, groups)]
@@ -397,7 +468,7 @@ def redact(data, groups, token=False):
             refs = _node_refs(key)
             if not refs:
                 continue
-            defining = key != "nodes"
+            defining = key not in _FILTERED_SECTIONS
             d[key] = [e for e in value
                       if not isinstance(e, dict)
                       or _scrub_entry(e, refs, hidden, defining)]

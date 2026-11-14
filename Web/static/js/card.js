@@ -13,7 +13,7 @@
    it through `A`: openCard, closeCard, cardOpen, setCardSide,
    showServiceDetail. Registered in atlas.js after ui.js. */
 
-import { A, CFG, $, esc, host, glassAttrs, svcKey, zoneById, nodeById, FALLBACK_HUE } from './config.js';
+import { A, CFG, $, esc, host, glassAttrs, svcKey, zoneById, nodeById, FALLBACK_HUE, canAdminWrite, themeText } from './config.js';
 import { say } from './words.js';
 import { calendarPointerHTML } from './calendar.js';
 import * as M from './card-model.js';
@@ -303,6 +303,32 @@ function fillStrip(info) {
   return patchLine;
 }
 
+/* Opened from a view (the map is put away, views.js, 2026-11-13): one line
+   with the way to this place on the map, and for an admin with the editor its
+   form in the Desk. A phone has no map, so it gets no "show on the map"; the
+   Desk's form comes through `A.editPlace`, the editor's own door, and the line
+   offers it only when that door exists. */
+function fillFromView(n) {
+  const line = $('card-from-view');
+  if (!line) return;
+  const away = document.body.classList.contains('deck');
+  const toMap = away && !A.PHONE;
+  const toDesk = away && canAdminWrite() && A.editorReady?.() && typeof A.editPlace === 'function';
+  line.hidden = !(toMap || toDesk);
+  line.innerHTML =
+    (toMap ? `<button type="button" class="cfv-map">${esc(themeText('show_on_map', 'Show on the map ›'))}</button>` : '') +
+    (toDesk ? `<button type="button" class="cfv-edit">${esc(themeText('edit_place', 'Edit ›'))}</button>` : '');
+  line.querySelector('.cfv-map')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    A.setView('map', { remember: true });
+    A.focusNode(n.id);
+  });
+  line.querySelector('.cfv-edit')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    A.editPlace(n.id);
+  });
+}
+
 function fillActions(n, entries) {
   /* SPLIT / SCROLL, right above the drawer.
      ⁘ THE CONSTELLATION — scatter this place's services onto the map as their
@@ -460,6 +486,7 @@ A.openCard = function openCard(n) {
   const info = A.signalsFeed?.nodes?.[n.id];
   const patchLine = fillStrip(info);
   const entries = A.serviceEntriesFor?.(n.id) || [];
+  fillFromView(n);
   fillActions(n, entries);
   fillServices(n, entries);
   fillDetails(n, zone, patchLine);

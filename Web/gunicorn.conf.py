@@ -21,8 +21,21 @@ def post_worker_init(worker):
     try:
         import annalist
         annalist.start(worker.wsgi)
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception:  # noqa: BLE001 — never stop a worker, but never in silence
+        # A start that fails here used to be swallowed with no line anywhere, so
+        # the annals (and the alerts that ride them) stopped advancing while
+        # nobody had the map open, and nothing said so (11-12 audit).
+        # `/api/v2/health` now says whether the poll runs; this says why not.
+        import logging
+        logging.getLogger("atlas.live.annalist").exception(
+            "annalist: could not start in worker %s; the annals will not advance "
+            "with nobody watching", getattr(worker, "pid", "?"))
+        log = getattr(worker, "log", None)
+        if log is not None:
+            try:
+                log.error("annalist: could not start (see atlas.live.annalist)")
+            except Exception:  # noqa: BLE001 — gunicorn's own logger is a courtesy
+                pass
 
 
 def child_exit(server, worker):  # noqa: ARG001 — gunicorn's signature

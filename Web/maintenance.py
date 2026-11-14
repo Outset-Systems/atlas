@@ -234,26 +234,43 @@ def problems(windows):
     return found
 
 
-def save(windows, actor="unknown"):
+class StaleError(Exception):
+    """The file changed after the editor read it: `expect` no longer matches."""
+
+
+def save(windows, actor="unknown", expect=None):
     """Replace the window list, preserving whatever owns the `nodes` key.
 
     Full replace rather than an op stream: the list is short, the editor sends
     all of it, and keeping the ops tooling's `nodes` key untouched matters more
     than fine-grained merges.
+
+    `expect` is the stamp the editor read. It is compared under the same lock
+    as the write (2026-11-13; the 11-12 audit found the route comparing it
+    before taking the lock, so two editors holding one stamp could both pass
+    and the second overwrite the first). Raises StaleError when it differs.
+    The returned `stamp` is the file's stamp after this write.
     """
     with _STORE.locked():
         stored = _STORE.load()
+        if expect and expect != _stamp_of(stored):
+            raise StaleError("the repairs changed since they were read")
         payload = {"nodes": stored["nodes"], "windows": windows}
         _STORE.save(payload)
+        after = _stamp_of(_STORE.load())
     log.info("maintenance windows saved by %s: %d window(s), %d legacy node(s)",
              actor, len(windows), len(stored["nodes"]))
-    return {"windows": len(windows), "legacy_nodes": len(stored["nodes"])}
+    return {"windows": len(windows), "legacy_nodes": len(stored["nodes"]), "stamp": after}
+
+
+def _stamp_of(stored):
+    blob = json.dumps(stored, sort_keys=True).encode()
+    return hashlib.sha256(blob).hexdigest()[:16]
 
 
 def stamp():
     """A cheap version token so two editors don't silently overwrite."""
-    blob = json.dumps(read(), sort_keys=True).encode()
-    return hashlib.sha256(blob).hexdigest()[:16]
+    return _stamp_of(read())
 
 
 def summary(now=None):

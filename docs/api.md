@@ -52,7 +52,7 @@ one.
   - **Who acknowledged an event.** An event says that it was acknowledged and
     when, not by whom or in what words. This holds for every viewer who is not
     an admin.
-- **It opens seven doors**, listed below. Every other path ignores the token
+- **It opens eight doors**, listed below. Every other path ignores the token
   and answers as it would to a stranger.
 - **It is limited to 120 requests a minute.** Past that the answer is 429 with
   `Retry-After: 60`. The limit is one budget for the token, however many
@@ -106,6 +106,8 @@ admin. Atlas refuses tokens in that mode, so that nobody opens the port for one.
 | `GET /api/v2/signals` | Live health of places and services, and whether each source answered |
 | `GET /api/v2/rites` | Every scheduled job and whether it ran |
 | `GET /api/v2/events` | The history of state changes, newest first |
+| `GET /api/v2/places/roster` | Every place, one row each: live state, network, addresses, review, repairs, nearest certificate, sets |
+| `GET /api/v2/overview` | The realm at a glance: places by state, what is down and what depends on it, unacknowledged events, repairs this week, lapsing certificates, review, changes, sources |
 | `GET /api/v2/maps` | The pictures the map can be drawn on |
 | `GET /api/v2/openapi.json` | The reference for this list |
 | `POST /api/v2/mcp` | The MCP endpoint, for AI tools |
@@ -166,6 +168,79 @@ or `silent`.
 nothing it watches can be called fine. This call never fails: a source that
 does not answer is reported, and the rest of the feed is still sent.
 
+`confirmed_by` maps a place's id to the source whose answer gave it its state
+in this feed. A place under repair is not in it: its state comes from the
+window.
+
+`sources_at` gives each source the time it last answered, or null if it has
+not since the server started. Each server process keeps its own, in memory.
+
+### The places table: `/api/v2/places/roster`
+
+```sh
+curl -s -H "Authorization: Bearer $TOKEN" "$ATLAS/api/v2/places/roster"
+```
+
+One row per place, made from the map and the live health above and cut the
+same way, so a place a token may not see has no row and is not named in any
+other. Each row holds:
+
+- `state` and `cause` from the live health, and `confirmed_by`, the source
+  that gave the state.
+- `zone` and `zone_name`, `kind`, `role`.
+- `addresses`: the place's `ip` and `mac`, then `ipv6`, `hostname` and `fqdn`
+  when a hand edit added them. Only the ones with a value.
+- `services`: how many services the place lists.
+- `charted_source`, `reviewed`, `reviewed_at`, `changed_since_review` and
+  `unchecked`, from its `provenance`. Who reviewed it is for admins.
+- `maintenance`: `now` when a repair window is open on it, and `next`, when
+  the next one opens.
+- `cert`: the certificate tied to this place that lapses first, with `days`
+  left (negative once lapsed). Only a certificate whose `place` names the
+  place counts; one that names it only in `host` is not guessed at.
+- `sets`: the sets it is in, and `depends_on`.
+
+Beside the rows: `zones`, `sets` (named lists of places; a set is not an
+access group) and `stamp`, the map's version.
+
+### The realm at a glance: `/api/v2/overview`
+
+```sh
+curl -s -H "Authorization: Bearer $TOKEN" "$ATLAS/api/v2/overview"
+```
+
+The facts OVERVIEW shows, made from the map and the live health above and cut
+the same way, so a place a token may not see is in no part of it. It stores
+nothing and asks no source anything new.
+
+- `states`: how many of your places are `healthy`, `degraded`, `down`,
+  `slumbering` or under `maintenance`, how many have no state (`unknown`, not
+  healthy) and the `total`.
+- `down`: each place that is down or degraded on its own account, down first.
+  A place whose fault another place you can see explains is that place's
+  fallout and is left out. `downstream` lists every place that needs it,
+  directly or through another, from `parent` and `depends_on` only.
+  `declared: false` means nothing is declared to depend on it, which is not the
+  same as nothing being affected.
+- `unacked`: how many events nobody has acknowledged, of any gravity, and the
+  newest eight.
+- `maintenance`: repair windows open now (`now: true`) or opening within seven
+  days, with this occurrence's `starts` and `ends` and the places in each. A
+  window that names only places you may not see is left out, and so is one
+  whose reason names one.
+- `certs`: certificates with 30 days or fewer left, lapsed ones included
+  (`days` is negative), soonest first, with the place each is tied to.
+- `review`: `unchecked` (written or changed by an import and not checked
+  since), `stale` (no review, or none in 90 days) and up to eight of the stale
+  ones, never-reviewed first. When, never who.
+- `changes`: for a token, `count_7d`, how many of its places changed in seven
+  days. It names nobody. An admin in the browser gets the change log instead.
+- `sources`: `all_ok` and how many are `silent`. Which one is silent, and
+  when each last answered, is for admins: a token gets an empty `items`.
+
+`generated_at` says when it was made. `admin` is always false for a token, and
+the map's drift from its sources, which an admin also sees here, is not sent.
+
 ### Scheduled jobs: `/api/v2/rites`
 
 Each job as charted, plus a `verdict`: `kept`, `late`, `missed`, `failed`,
@@ -185,8 +260,10 @@ curl -s -H "Authorization: Bearer $TOKEN" "$ATLAS/api/v2/events?limit=20&unacked
 
 Each event says what changed (`kind`, `target`, `name`), from which state to
 which, and when it was first observed. A `cause` means another fault explains
-this one. `ack.at` is when someone acknowledged it; who, and what they wrote,
-are for admins.
+this one. `outlived: true` marks a place still down after the fault that
+explained it has cleared: its own outage starts there, so `from` and `to` are
+both `down`. `ack.at` is when someone acknowledged it; who, and what they wrote,
+are for admins, and so is where an alert about it was sent.
 
 ### AI tools: `/api/v2/mcp`
 
@@ -194,6 +271,32 @@ The endpoint speaks the Model Context Protocol over HTTP, both the 2026-07-28
 revision and the earlier `initialize` handshake. It offers nine read-only
 tools. [Atlas for AI agents](mcp.md) has the setup, the tools and how an agent
 should read the answers.
+
+## Alerts: admins only, never a token
+
+The ALERTS view's own routes are listed here so an operator knows they exist.
+They belong to the page, not to this contract, and every one of them refuses a
+token (403): they sit behind the admin check, and an API token reads as a
+viewer with no groups. Writes need the page's write header (`X-Atlas-Write`),
+a same-origin request, and a writable Atlas (`ATLAS_READONLY` refuses them).
+While alerts are off (`ATLAS_ALERTS` unset, or `ATLAS_ALERT_HOSTS` empty) the
+read still answers, and the save and the test send answer 403 with how to
+turn them on. See [Alerts](configuration.md#alerts) for the settings.
+
+| Route | What it does |
+|---|---|
+| `GET /api/v2/admin/alerts` | `{doc, stamp, status, states}`. `doc` holds `rules`, `digest` and `destinations`. A destination's `secret` is the secret's name only, with `secret_bound` saying whether it is bound to the destination's address; the value is never returned. `status` says whether alerts are on, which hosts are allowed, whether `ATLAS_PUBLIC_URL` is set, the poll's interval, whether it runs in the worker that answered, when any worker last ran the alerts, and the ids of rules suspended because their target is no longer visible to a viewer with no groups. `states` are the states a rule may name. |
+| `POST /api/v2/admin/alerts` | `{doc, expect}`: replace the whole document. `expect` is the `stamp` you read, and is required (400 without it); a document changed since answers 409. Problems answer 422 with `problems`. A secret is bound to the destination's address when it is named; a changed address drops the binding (the answer's `notes` say so) until the secret is named again: a new name, or `"bind": true` on that destination. |
+| `POST /api/v2/admin/alerts/destinations/<id>/test` | Sends "Atlas test from <the map's title>" through the same path as an alert, at most 10 a minute per admin (shared with the other connection tests). Answers `{outcome, status, why}` only: `delivered`, `refused` with the HTTP status, `unreachable` or `blocked`, never anything the receiver said. |
+| `GET /api/v2/admin/alerts/deliveries?limit=` | The delivery log, newest first, default 100, at most 1000: `at`, `rule` (its id; `test`, `digest` or `fold` for those sends), `destination` (its name), `events`, `outcome`, `status`, `why`, and `folded` on an "and N more" message. |
+
+A rule is `{id, name, note, enabled, target: {kind: place|set|network, id},
+to: [states], for_minutes: 0-1440, destination}`. The digest is `{enabled,
+hour: 0-23 (the server's local time), destination, cert_days, review_days,
+drift, uncharted}`; `uncharted` must be false for now. A destination is `{id,
+name, kind: ntfy|gotify|webhook, url, secret}`; its URL may carry no user name,
+password or query string, and its host and port must be in
+`ATLAS_ALERT_HOSTS`.
 
 ## Errors
 

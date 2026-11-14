@@ -54,12 +54,16 @@ def _check_refs(problems, label, section_key, entry, known):
                 if not isinstance(sub, dict):
                     continue
                 for val in schema.as_list(sub.get(inner)):
+                    if isinstance(val, (list, dict)):
+                        continue             # not an id: the field check says so
                     if val and val not in known.get(target, set()):
                         problems.append(
                             f"{label}: {path}[{i}] reaches unknown "
                             f"{target.rstrip('s')} {val!r}")
             continue
         for val in schema.as_list(entry.get(path)):
+            if isinstance(val, (list, dict)):
+                continue                     # not an id: the field check says so
             if val and val not in known.get(target, set()):
                 # "unknown zone 'x'" / "unknown host 'y'" — the field name reads
                 # better than the target section in every case we have.
@@ -235,12 +239,12 @@ def _check_regions(problems, data):
             problems.append(f"{label}: the rectangle runs off its map "
                             f"({x:g}+{w:g} across, {y:g}+{h:g} down; both must stay within 100)")
         seen, cur = set(), r
-        while cur and cur.get("parent"):
+        while cur and isinstance(cur.get("parent"), str) and cur["parent"]:
             if cur.get("id") in seen:
                 problems.append(f"{label}: its `parent` chain loops back on itself")
                 break
             seen.add(cur.get("id"))
-            cur = by_id.get(cur.get("parent"))
+            cur = by_id.get(cur["parent"])
         places = r.get("places")
         if places in (None, ""):
             continue

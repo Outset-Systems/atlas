@@ -329,7 +329,8 @@ def place_drafts(data, drafts):
             band += 1
     residents = {}
     for n in data.get("nodes", []) or []:
-        residents[n.get("zone")] = residents.get(n.get("zone"), 0) + 1
+        zone = n.get("zone") if isinstance(n.get("zone"), str) else None
+        residents[zone] = residents.get(zone, 0) + 1
     slots = {}
     for node in drafts:
         zone = node.get("zone")

@@ -470,6 +470,12 @@ SECTIONS = {
             f("issuer", "text", required=True,
               help="Who signed it: `Let's Encrypt`, `step-ca`, `the domain controller-CA`."),
             f("host", "text", help="Where it is presented from."),
+            # 2026-11-13: tied to a place by id, so it is hidden with its place
+            # (`redaction.py` drops a certificate whose place is hidden) and the
+            # places table can show the nearest expiry (`certs.py`). `host`
+            # stays: it is words, and an older certificate has only those.
+            f("place", "ref", ref="nodes", label="Place",
+              help="The place this certificate is for"),
             f("expires", "text", required=True,
               help="The day it lapses, ISO: `2026-09-02`."),
             f("renews", "text",
@@ -578,6 +584,23 @@ SECTIONS = {
             f("expires", "date",
               help="The day a token stops being worth anything (a key rotated "
                    "out, a document past its story). YYYY-MM-DD; blank = never."),
+        ]),
+
+    # SETS (2026-11-13): a named list of places, kept in one record so renaming
+    # or deleting it is one write and a rule elsewhere can name it by id. Not
+    # access: `require_group` decides who sees a place, and redaction drops a
+    # member this viewer may not see while keeping the set.
+    "sets": section(
+        "sets", "set", "sets", noun="set",
+        lore="named lists of places, for the table and for alerts",
+        subtitle="Named lists of places, for the table and for alerts. Not access: "
+                 "who may see a place is its access group.",
+        fields=[
+            f("id", "slug", required=True, help="Short unique key, e.g. `storage`."),
+            f("name", "text", required=True, help="What the set is called, e.g. `Storage`."),
+            f("places", "strings", ref="nodes", label="Places",
+              help="The places in this set, by id."),
+            f("note", "longtext", help="What the set is for."),
         ]),
 
     "chronicle": section(
@@ -707,7 +730,7 @@ SIGNAL_FIELDS = [
 
 # Order the editor presents them in — inventory first, then the wiring.
 SECTION_ORDER = ["nodes", "zones", "regions", "prefixes", "routes", "interfaces",
-                 "racks", "rack", "rack_rear", "vms", "rites", "certs", "stones",
+                 "racks", "rack", "rack_rear", "vms", "rites", "certs", "sets", "stones",
                  "maintenance", "chronicle", "abyss", "meta"]
 
 # Order they sit in the *file*, which is a different question: the dataset is
@@ -716,7 +739,7 @@ SECTION_ORDER = ["nodes", "zones", "regions", "prefixes", "routes", "interfaces"
 # presentation order put the first `prefixes[]` above `meta`.
 FILE_ORDER = ("meta", "zones", "regions", "nodes", "routes", "prefixes", "interfaces",
               "racks", "rack", "rack_rear", "vms", "signals", "chronicle", "abyss", "rites",
-              "certs", "stones")
+              "certs", "sets", "stones")
 
 
 def get(key):
@@ -943,7 +966,16 @@ def _check_object(fld, value):
     return None
 
 
-#: The check for each field type. A type with no entry (`json`, `ref`) holds
+def _check_ref(fld, value):
+    # One id, as text (2026-11-13). This type had no check, so a list was saved
+    # in a certificate's `place` and then broke every reader that looks the id
+    # up. A field that holds several ids is `strings`, not `ref`.
+    if not isinstance(value, str):
+        return f"{fld['name']} must be one id, as text"
+    return None
+
+
+#: The check for each field type. A type with no entry (`json`) holds
 #: anything as far as this table is concerned.
 _CHECKS = {
     "text": _check_text, "longtext": _check_text, "path": _check_text, "slug": _check_text,
@@ -962,6 +994,7 @@ _CHECKS = {
     "strings": _check_strings,
     "objects": _check_objects,
     "object": _check_object,
+    "ref": _check_ref,
 }
 
 

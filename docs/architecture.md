@@ -145,6 +145,8 @@ per surface, each attaching routes to it:
 | `reads.py` | `/lab-data` (the dataset as this viewer may see it), `/maps` |
 | `writes.py` | `/positions`, `/rack` (layout overlays) |
 | `feeds.py` | `/signals`, `/rites`, `/events` |
+| `roster.py` | `/places/roster` (one row per place this viewer may see, from the redacted map and the redacted live feed) |
+| `overview.py` | `/overview` (OVERVIEW's tiles from the redacted map and live feed; the tiles themselves are built in `Web/overview.py`, which `atlas_overview` reads too) |
 | `probes.py` | `/embeddable` (may this URL be framed?), `/whois` |
 | `beat.py` | `/rites/<key>/beat` (a job reports that it ran) |
 | `admin.py` | `/admin/*`, the editor: ops, revisions and revert, maintenance. Also the admins-only gate and what the other admin modules share |

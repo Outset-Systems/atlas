@@ -75,24 +75,52 @@
   --tone-down: #C06B62;
   --tone-info: #7FB0C4;
   --frame-ground: #101010;   /* behind an embedded service while it loads */
+  /* ── the bar's fills (stage 1, 2026-11-13) ────────────────────────────────
+     These were literals, each repeated under `:root[data-scheme="light"]`, so
+     the bar could only follow the OS. They are tokens now: the night values
+     here (equal to the literals they replaced), the light ones restated in THE
+     BAR block below, which is the one place the bar's condition is written. */
+  --bar-glass: rgba(13,11,7,0.45);           /* #scenes-list */
+  --bar-glass-firm: rgba(13,11,7,0.86);      /* #scenes-list over an open scene */
+  --bar-shadow-firm: 0 12px 34px rgba(0,0,0,0.55);
+  --chrome-glass: rgba(13,11,7,0.4);         /* every .chrome circle */
+  --chrome-glass-firm: rgba(13,11,7,0.72);   /* the chart arrows and the enlarged dashboard's ‹ › × */
+  --crumb-glass: rgba(29, 32, 33, 0.86);     /* .rl-crumbs */
+  --crumb-shadow: 0 4px 18px rgba(0, 0, 0, 0.4);
+  --hint-glass: rgba(29, 32, 33, 0.9);       /* .rl-hint */
+  --hint-shadow: none;
+  --pop-shadow: 0 14px 40px rgba(0,0,0,0.5); /* .chron-fly-pop */
+  --scene-shadow: 0 2px 8px rgba(0,0,0,0.9), 0 0 14px rgba(0,0,0,0.6);
+  --scene-active-bg: rgba(13,11,7,0.45);
+  /* the two journeys, lit: being lit follows the bar's colour, not the pick */
+  --sky-lit-fill: var(--gilt);
+  --sky-lit-ink: var(--on-gilt);
+  --sky-lit-border: var(--gilt);
+  --depths-lit-fill: var(--depth);
+  --depths-lit-ink: var(--card-ink);
+  --depths-lit-border: var(--depth);
+  /* the scheme button carries ☀ and ☾; the bar shows the one it is wearing */
+  --bar-sun: none;
+  --bar-moon: block;
+  /* THE HOVER GLOW's strength (atlas.css foot); a shade softer on pale glass */
+  --hover-glow-a: 0.45;
   color-scheme: dark;
 }
 
 /* ── THE LIGHT SCHEME (v1.52.0, the design notes 2026-10-19) ─────────────────────
    Panels follow the scheme; the map is a night map in both. So the light
    values are restated ONLY on the panel containers, and everything outside
-   them — the stage and its markers and zone labels, the round chrome, the
-   scene band, the veil, the announcements, the parchment card — keeps the
-   night palette from :root by construction, not by a list of exceptions.
-   `data-scheme` on <html> is set by scheme.js (stored choice, else the OS
-   preference). Values since 2026-10-31: slate with a deep blue accent, in place
-   of the warm Gruvbox Light and its amber. --gilt keeps its name because every
-   rule says `gilt`; here it is a deep blue, picked to clear AA at panel sizes
-   even on glass (below). All measured by tests/test_scheme_css.py. */
+   them — the stage and its markers and zone labels, the veil, the
+   announcements, the parchment card — keeps the night palette from :root by
+   construction, not by a list of exceptions. `data-scheme` on <html> is set by
+   scheme.js (the pick, else the OS preference). Values since 2026-10-31: slate
+   with a deep blue accent, in place of the warm Gruvbox Light and its amber.
+   --gilt keeps its name because every rule says `gilt`; here it is a deep
+   blue, picked to clear AA at panel sizes even on glass (below). All measured
+   by tests/test_scheme_css.py. The bar has its own block, next. */
 :root[data-scheme="light"] :is(#index-drawer, .ldg-panel, .trb-panel, .rel-panel, .pth-panel,
-                               .pal-panel, .gl-panel, .dsk-panel, .wiz-panel,
-                               #scenes-list, .scene-home, .chrome, .rl-crumbs, .rl-locator, .rl-hint,
-                               .chron-fly-pop, .chron-arrow, .embed-max-arrow, #embed-max-close) {
+                               .pal-panel, .gl-panel, .dsk-panel, .wiz-panel, #view-nodes,
+                               #overview-tiles, #view-alerts) {
   --abyss: #d6dae0;
   --surface: #c5cad2;
   --surface-2: #cdd2d9;
@@ -119,36 +147,95 @@
   --shade-k: 0.3;
   --hair: rgba(15, 23, 42, 0.16);
   --frame-ground: #c5cad2;
+  --hover-glow-a: 0.32;
   color-scheme: light;
 }
 
-/* THE LIGHT CHROME (2026-10-20) — every flyout follows the scheme, not just the
-   scene panels: the band, the round buttons, the region crumbs/locator/hint,
-   the watchings' arrows and pop-ups. They take the light tokens above; these
-   are the fills that were literals. Still night by design: the stage and its
-   markers, zone labels and region tabs (they are the map), the veil, and the
-   parchment card and toast (already light in both). */
-/* ⚠ one selector per specificity: `:is()` takes its MOST specific argument's
-   weight, so an id in the list would lift the class rules above .chrome.lit */
-:root[data-scheme="light"] .chrome { background: rgba(214, 218, 224, 0.42); }
-:root[data-scheme="light"] :is(.chron-arrow, .embed-max-arrow) { background: rgba(214, 218, 224, 0.62); }
-:root[data-scheme="light"] #embed-max-close { background: rgba(214, 218, 224, 0.62); }
-:root[data-scheme="light"] .chrome.lit { background: var(--gilt); }
-:root[data-scheme="light"] #scenes-list { background: rgba(214, 218, 224, 0.42); }
-/* pale glass over the Depths' black turns muddy, and the navy on it goes with it */
-:root[data-scheme="light"] body.depths #scenes-list { background: rgba(214, 218, 224, 0.94); }
-:root[data-scheme="light"] body.depths .chrome:not(.lit) { background: rgba(214, 218, 224, 0.9); }
-:root[data-scheme="light"] body.scene-open #scenes-list {
-  background: rgba(214, 218, 224, 0.94);
-  box-shadow: 0 12px 34px rgba(15, 23, 42, 0.22);
+/* ── THE BAR FOLLOWS THE MAP (stage 1, 2026-11-13) ──────────────────────────
+   The bar is 10-20's list: the band and THE ATLAS, every `.chrome` circle (the
+   column under ATLAS among them), the region crumbs, locator and hint, the
+   watchings' pop-ups and carousel arrows, and the enlarged dashboard's arrows
+   and ×; since 2026-11-13 also the views' menu, ATLAS's ▾ and the phone's
+   strip of view names. It takes the same light values as the panels, but on its own
+   condition, spelt once here:
+     Light            light everywhere;
+     Light/Dark       light in the Sky, dark in the Depths, and the OS on the
+                      table, under a scene, in the Deck and on a phone;
+     Dark             nowhere, so the night tokens on :root stand.
+   `data-scheme-pick` is written by scheme.js at boot and on a pick only, and
+   `in-sky` / `depths` already flip only at a crossing, so a camera move writes
+   nothing new. No other rule may key a bar element on `data-scheme`: it would
+   follow the OS while the bar follows the camera (tests/test_scheme_css.py). */
+:root[data-scheme-pick="light"] :is(#scenes-list, .scene-home, .chrome, .rl-crumbs, .rl-locator, .rl-hint,
+                                    .chron-fly-pop, .chron-arrow, .embed-max-arrow, #embed-max-close,
+                                    #view-menu, .view-strip, .scene-more),
+:root[data-scheme-pick="auto"] body.in-sky:not(.scene-open, .deck, .phone) :is(#scenes-list, .scene-home, .chrome, .rl-crumbs, .rl-locator, .rl-hint,
+                                    .chron-fly-pop, .chron-arrow, .embed-max-arrow, #embed-max-close,
+                                    #view-menu, .view-strip, .scene-more),
+:root[data-scheme-pick="auto"][data-scheme="light"] body:not(.in-sky, .depths) :is(#scenes-list, .scene-home, .chrome, .rl-crumbs, .rl-locator, .rl-hint,
+                                    .chron-fly-pop, .chron-arrow, .embed-max-arrow, #embed-max-close,
+                                    #view-menu, .view-strip, .scene-more),
+:root[data-scheme-pick="auto"][data-scheme="light"] body:is(.scene-open, .deck, .phone) :is(#scenes-list, .scene-home, .chrome, .rl-crumbs, .rl-locator, .rl-hint,
+                                    .chron-fly-pop, .chron-arrow, .embed-max-arrow, #embed-max-close,
+                                    #view-menu, .view-strip, .scene-more) {
+  --abyss: #d6dae0;
+  --surface: #c5cad2;
+  --surface-2: #cdd2d9;
+  --ink-line: #8e96a3;
+  --ink-soft: #475569;
+  --text: #0f172a;
+  --text-dim: #172033;
+  --text-soft: #172033;
+  --gilt: #111d50;
+  --gilt-bright: #1d4ed8;
+  --gilt-rgb: 17, 29, 80;
+  --on-gilt: #f1f5f9;
+  --sem-up: #166534;
+  --sem-warn: #b45309;
+  --sem-down: #b91c1c;
+  --sem-info: #0369a1;
+  --down-rgb: 185, 28, 28;
+  --tone-up: #166534;
+  --tone-warn: #b45309;
+  --tone-down: #b91c1c;
+  --tone-info: #0369a1;
+  --gilt-deep: #1e3a8a;
+  --shade-rgb: 15, 23, 42;
+  --shade-k: 0.3;
+  --hair: rgba(15, 23, 42, 0.16);
+  --frame-ground: #c5cad2;
+  --hover-glow-a: 0.32;
+  /* the bar's own fills (2026-10-20's literals) */
+  --bar-glass: rgba(214, 218, 224, 0.42);
+  --bar-glass-firm: rgba(214, 218, 224, 0.94);
+  --bar-shadow-firm: 0 12px 34px rgba(15, 23, 42, 0.22);
+  --chrome-glass: rgba(214, 218, 224, 0.42);
+  --chrome-glass-firm: rgba(214, 218, 224, 0.62);
+  --crumb-glass: rgba(226, 232, 240, 0.66);
+  --crumb-shadow: 0 4px 18px rgba(15, 23, 42, 0.18);
+  --hint-glass: rgba(226, 232, 240, 0.66);
+  --hint-shadow: 0 4px 18px rgba(15, 23, 42, 0.18);
+  --pop-shadow: 0 14px 40px rgba(15, 23, 42, 0.22);
+  --scene-shadow: none;
+  --scene-active-bg: rgba(var(--gilt-rgb), 0.12);
+  /* lit on a light bar: the Sky in navy, the Depths in deep teal (the biolume
+     fill would vanish on pale glass; the teal still reads as the Depths) */
+  --sky-lit-fill: var(--gilt);
+  --sky-lit-ink: var(--on-gilt);
+  --sky-lit-border: var(--gilt);
+  --depths-lit-fill: #0f766e;
+  --depths-lit-ink: #f0fdfa;
+  --depths-lit-border: #0f766e;
+  --bar-sun: block;
+  --bar-moon: none;
+  color-scheme: light;
 }
-:root[data-scheme="light"] .scene { text-shadow: none; }
-:root[data-scheme="light"] .scene.active { background: rgba(var(--gilt-rgb), 0.12); }
-:root[data-scheme="light"] :is(.rl-crumbs, .rl-hint) {
-  background: rgba(226, 232, 240, 0.66);
-  box-shadow: 0 4px 18px rgba(15, 23, 42, 0.18);
-}
-:root[data-scheme="light"] .chron-fly-pop { box-shadow: 0 14px 40px rgba(15, 23, 42, 0.22); }
+/* (THE LIGHT CHROME's literals, 2026-10-20, lived here, each keyed on
+   `data-scheme`. They are the tokens above now, read by the base rules. The
+   two v1.58.4 lines that made the band nearly solid over the Depths' black in
+   the light scheme went with them: under Light the Depths are no longer black,
+   and under Light/Dark the bar is dark there. The firmer band over an open
+   scene stays, as `--bar-glass-firm`.) */
 
 /* THE GLASS (2026-10-31, the owner: "a more transparent theme with a blue accent
    instead of orange", then "more gray/slate and about 30% more transparent").
@@ -174,8 +261,6 @@
   backdrop-filter: blur(22px) saturate(1.5);
 }
 :root[data-scheme="light"] #settings-panel { color: var(--text); }
-:root[data-scheme="light"] .scene-home { color: var(--text); }
-:root[data-scheme="light"] .scene-home .scene.active { background: rgba(var(--gilt-rgb), 0.12); }
 :root[data-scheme="light"] :is(#ledger, #calendar, #seals, #stones, #tribute, #reliquary,
                                #accounts, #trust, #settings) {
   background: rgba(13, 11, 7, 0.82);
@@ -311,7 +396,7 @@ body::after {
   filter: blur(18px);
 }
 /* faint bioluminescent motes drifting up, the depths' answer to the clouds */
-.depths-motes {
+.depths-motes, :root[data-scheme-pick="dark"] .sky-glow::after {
   position: absolute; inset: -10% 0 0 0;
   background-image:
     radial-gradient(2px 2px at 12% 80%, rgba(var(--depth-rgb), 0.5), transparent),
@@ -328,7 +413,14 @@ body::after {
   from { transform: translateY(6%); }
   to   { transform: translateY(-8%); }
 }
-@media (prefers-reduced-motion: reduce) { .depths-motes { animation: none; } }
+/* the Sky's motes under Dark drift down, the way the Depths' rise; they stop
+   short of the seam, which the cloud bank covers */
+:root[data-scheme-pick="dark"] .sky-glow::after {
+  content: ''; inset: -6% 0 8% 0; animation-direction: reverse;
+}
+@media (prefers-reduced-motion: reduce) {
+  .depths-motes, :root[data-scheme-pick="dark"] .sky-glow::after { animation: none; }
+}
 
 /* ── The Upper Deck — a lighter dawn above the north edge (tall enough to light
    the Chronicle high above the clouds) ── */
@@ -354,7 +446,7 @@ body::after {
 /* an opaque warm haze band straddles the seam and fully hides the hard PNG edge;
    the fractal clouds ride on top for texture. Taller + denser than before so no
    sand→sky cut shows while scrolling up; fades both ways so it never reads as a line. */
-.cloud-bank::before {
+:is(.cloud-bank, .depths-cloud)::before {
   content: ''; position: absolute; left: -8%; right: -8%; bottom: 6%; height: 60%;
   background: linear-gradient(180deg,
     transparent 0%, rgba(244,236,220,0.6) 22%, rgba(240,231,213,0.98) 42%,
@@ -363,7 +455,7 @@ body::after {
 }
 /* a second, lower opaque strip reinforces just below y=0 so the literal top edge of
    the sand render is always blanketed no matter the scroll position */
-.cloud-bank::after {
+:is(.cloud-bank, .depths-cloud)::after {
   content: ''; position: absolute; left: -8%; right: -8%; bottom: 0%; height: 34%;
   background: linear-gradient(180deg, transparent, rgba(238,228,205,0.96) 55%, rgba(224,208,179,0.55) 90%, transparent);
   filter: blur(16px);
@@ -386,6 +478,217 @@ body::after {
 /* (#sky-title / .sky-head / .sky-sub retired 2026-08-15 — see world.js's
    note by buildSkyIsland for the whole story) */
 
+/* ── THE TWO GROUNDS (stage 1, 2026-11-13) ──────────────────────────────────
+   Each section's dressing is a set of section tokens, so each look is written
+   once. THE SKY SET is the paper dressing (the Sky's ground today); THE DEPTHS
+   SET is the dark one. #chronicle wears the Sky set and #abyss the Depths set,
+   as before; the pick swaps them: under Dark the Sky takes the Depths set, under
+   Light the Depths take the Sky set. Only `data-scheme-pick` does this, never
+   `data-scheme`: the OS moves the panels, not the ground. Every copy of a set
+   is byte-identical (tests/test_scheme_css.py), so the two cannot drift.
+
+   A section keeps its own hue on either ground (the Depths keep their teal on
+   paper, as the Sky keeps its gold on black), so the hue is not in the sets:
+   each section declares its `--hue-*` once, just below, and the sets read it.
+   The heading on the dark ground is the Depths' own, in both sections.
+
+   `--sec-ground` is not drawn: it is the worst field the set's text sits on,
+   the colour the contrast tests measure against. Paper: the Deck's lower stop
+   over its dark column (#e2dac5), darker than anything in the sky. Dark: the
+   Deck's teal-washed surface (#313a38), lighter than the fog's brightest. */
+:is(#chronicle, #abyss) { background: var(--sec-bg); }
+#chronicle {
+  /* THE SKY SET */
+  --sec-ground: #e2dac5;
+  --sec-bg: linear-gradient(180deg, rgba(246,239,224,0.16), rgba(236,229,212,0.05));
+  --sec-head: var(--hue-head-light);
+  --sec-head-glow: none;
+  --sec-head-glow-near: none;
+  --sec-sub: var(--hue-sub-light);
+  --sec-plaque-ink: var(--hue-ink-light);
+  --sec-plaque-hot: var(--hue-hot-light);
+  --sec-plaque-bg: rgba(var(--hue-ink-light-rgb), 0.07);
+  --sec-plaque-bg-hot: rgba(var(--hue-ink-light-rgb), 0.14);
+  --sec-plaque-border: rgba(var(--hue-ink-light-rgb), 0.4);
+  --sec-plaque-edge: var(--hue-ink-light);
+  --sec-frame-bg: rgba(250,246,230,0.72);
+  --sec-frame-border: rgba(var(--gilt-rgb),0.4);
+  --sec-frame-shadow: 0 16px 44px rgba(90,70,30,0.22);
+  --sec-frame-head-bg: rgba(250,246,230,0.94);
+  --sec-frame-head-rule: rgba(var(--gilt-rgb),0.28);
+  --sec-frame-title: #8a6a1e;
+  --sec-frame-quiet: #8a7d60;
+  --sec-frame-quiet-hot: #8a6a1e;
+  --sec-frame-pane: #f4f2ea;
+  --sec-frame-arrow-bg: rgba(250,246,230,0.9);
+  --sec-frame-arrow-border: rgba(var(--gilt-rgb),0.45);
+  --sec-frame-arrow-ink: #8a6a1e;
+  --sec-frame-arrow-hover: #8a6a1e;
+  --sec-deck-ground: linear-gradient(180deg, rgba(248,243,223,0.97), rgba(236,228,206,0.95));
+  --sec-deck-border: rgba(var(--gilt-rgb), 0.3);
+  --sec-aw-ink: #0b655e;
+  --sec-aw-glow: none;
+  --sec-aw-soft: #2b635c;
+  --sec-aw-text: #0b3f3a;
+  --sec-aw-out: #0f4f49;
+  --sec-aw-line: rgba(15, 118, 110, 0.4);
+  --sec-aw-well: rgba(15, 118, 110, 0.06);
+  --sec-aw-well-deep: rgba(15, 118, 110, 0.09);
+  --ch-1: #3F7D95; --ch-2: #A8792E; --ch-3: #B0524A; --ch-4: #5D8452;
+  --ch-5: #3F9B86; --ch-6: #7D5F9C; --ch-7: #8C7A3A; --ch-8: #5D6D7A;
+  --ch-up: #5D8452; --ch-warn: #A8792E; --ch-down: #B0524A;
+  --ch-grid: rgba(60,50,30,0.14); --ch-ink: #6B6046; --ch-text: #2A241A; --ch-surface: #f4f2ea;
+}
+#abyss {
+  /* THE DEPTHS SET */
+  --sec-ground: #313a38;
+  --sec-bg: none;
+  --sec-head: #8FE6D2;
+  --sec-head-glow: 0 0 24px rgba(var(--depth-rgb), 0.35);
+  --sec-head-glow-near: 0 0 30px rgba(var(--depth-rgb), 0.5);
+  --sec-sub: #80b5a8;
+  --sec-plaque-ink: var(--hue-ink-dark);
+  --sec-plaque-hot: var(--hue-hot-dark);
+  --sec-plaque-bg: rgba(var(--hue-rgb), 0.06);
+  --sec-plaque-bg-hot: rgba(var(--hue-rgb), 0.16);
+  --sec-plaque-border: rgba(var(--hue-rgb), 0.32);
+  --sec-plaque-edge: var(--hue-edge);
+  --sec-frame-bg: rgba(8,10,14,0.6);
+  --sec-frame-border: var(--ink-line);
+  --sec-frame-shadow: 0 18px 50px rgba(0,0,0,0.5);
+  --sec-frame-head-bg: rgba(0,0,0,0.32);
+  --sec-frame-head-rule: var(--ink-line);
+  --sec-frame-title: var(--gilt);
+  --sec-frame-quiet: var(--text-dim);
+  --sec-frame-quiet-hot: var(--gilt);
+  --sec-frame-pane: #0b0d12;
+  --sec-frame-arrow-bg: initial;
+  --sec-frame-arrow-border: initial;
+  --sec-frame-arrow-ink: initial;
+  --sec-frame-arrow-hover: initial;
+  --sec-deck-ground: radial-gradient(ellipse 90% 50% at 50% 0%, rgba(var(--depth-rgb), 0.10), transparent 75%), var(--surface);
+  --sec-deck-border: rgba(var(--depth-rgb), 0.2);
+  --sec-aw-ink: #8FE6D2;
+  --sec-aw-glow: 0 0 18px rgba(var(--depth-rgb), 0.3);
+  --sec-aw-soft: #5E8A80;
+  --sec-aw-text: #B8F5E8;
+  --sec-aw-out: #9AD8CA;
+  --sec-aw-line: rgba(var(--depth-rgb), 0.32);
+  --sec-aw-well: rgba(4,12,11,0.55);
+  --sec-aw-well-deep: rgba(4,12,11,0.65);
+  --ch-1: #7FB0C4; --ch-2: #C49A52; --ch-3: #C06B62; --ch-4: #7A9B6E;
+  --ch-5: #7FE0C8; --ch-6: #9A7FB0; --ch-7: #D9C08A; --ch-8: #8A9BA8;
+  --ch-up: #7A9B6E; --ch-warn: #C49A52; --ch-down: #C06B62;
+  --ch-grid: rgba(201,165,84,0.12); --ch-ink: #8A8069; --ch-text: #C9BFA8; --ch-surface: #0b0d12;
+}
+:root[data-scheme-pick="dark"] #chronicle {
+  /* THE DEPTHS SET */
+  --sec-ground: #313a38;
+  --sec-bg: none;
+  --sec-head: #8FE6D2;
+  --sec-head-glow: 0 0 24px rgba(var(--depth-rgb), 0.35);
+  --sec-head-glow-near: 0 0 30px rgba(var(--depth-rgb), 0.5);
+  --sec-sub: #80b5a8;
+  --sec-plaque-ink: var(--hue-ink-dark);
+  --sec-plaque-hot: var(--hue-hot-dark);
+  --sec-plaque-bg: rgba(var(--hue-rgb), 0.06);
+  --sec-plaque-bg-hot: rgba(var(--hue-rgb), 0.16);
+  --sec-plaque-border: rgba(var(--hue-rgb), 0.32);
+  --sec-plaque-edge: var(--hue-edge);
+  --sec-frame-bg: rgba(8,10,14,0.6);
+  --sec-frame-border: var(--ink-line);
+  --sec-frame-shadow: 0 18px 50px rgba(0,0,0,0.5);
+  --sec-frame-head-bg: rgba(0,0,0,0.32);
+  --sec-frame-head-rule: var(--ink-line);
+  --sec-frame-title: var(--gilt);
+  --sec-frame-quiet: var(--text-dim);
+  --sec-frame-quiet-hot: var(--gilt);
+  --sec-frame-pane: #0b0d12;
+  --sec-frame-arrow-bg: initial;
+  --sec-frame-arrow-border: initial;
+  --sec-frame-arrow-ink: initial;
+  --sec-frame-arrow-hover: initial;
+  --sec-deck-ground: radial-gradient(ellipse 90% 50% at 50% 0%, rgba(var(--depth-rgb), 0.10), transparent 75%), var(--surface);
+  --sec-deck-border: rgba(var(--depth-rgb), 0.2);
+  --sec-aw-ink: #8FE6D2;
+  --sec-aw-glow: 0 0 18px rgba(var(--depth-rgb), 0.3);
+  --sec-aw-soft: #5E8A80;
+  --sec-aw-text: #B8F5E8;
+  --sec-aw-out: #9AD8CA;
+  --sec-aw-line: rgba(var(--depth-rgb), 0.32);
+  --sec-aw-well: rgba(4,12,11,0.55);
+  --sec-aw-well-deep: rgba(4,12,11,0.65);
+  --ch-1: #7FB0C4; --ch-2: #C49A52; --ch-3: #C06B62; --ch-4: #7A9B6E;
+  --ch-5: #7FE0C8; --ch-6: #9A7FB0; --ch-7: #D9C08A; --ch-8: #8A9BA8;
+  --ch-up: #7A9B6E; --ch-warn: #C49A52; --ch-down: #C06B62;
+  --ch-grid: rgba(201,165,84,0.12); --ch-ink: #8A8069; --ch-text: #C9BFA8; --ch-surface: #0b0d12;
+}
+:root[data-scheme-pick="light"] #abyss {
+  /* THE SKY SET */
+  --sec-ground: #e2dac5;
+  --sec-bg: linear-gradient(180deg, rgba(246,239,224,0.16), rgba(236,229,212,0.05));
+  --sec-head: var(--hue-head-light);
+  --sec-head-glow: none;
+  --sec-head-glow-near: none;
+  --sec-sub: var(--hue-sub-light);
+  --sec-plaque-ink: var(--hue-ink-light);
+  --sec-plaque-hot: var(--hue-hot-light);
+  --sec-plaque-bg: rgba(var(--hue-ink-light-rgb), 0.07);
+  --sec-plaque-bg-hot: rgba(var(--hue-ink-light-rgb), 0.14);
+  --sec-plaque-border: rgba(var(--hue-ink-light-rgb), 0.4);
+  --sec-plaque-edge: var(--hue-ink-light);
+  --sec-frame-bg: rgba(250,246,230,0.72);
+  --sec-frame-border: rgba(var(--gilt-rgb),0.4);
+  --sec-frame-shadow: 0 16px 44px rgba(90,70,30,0.22);
+  --sec-frame-head-bg: rgba(250,246,230,0.94);
+  --sec-frame-head-rule: rgba(var(--gilt-rgb),0.28);
+  --sec-frame-title: #8a6a1e;
+  --sec-frame-quiet: #8a7d60;
+  --sec-frame-quiet-hot: #8a6a1e;
+  --sec-frame-pane: #f4f2ea;
+  --sec-frame-arrow-bg: rgba(250,246,230,0.9);
+  --sec-frame-arrow-border: rgba(var(--gilt-rgb),0.45);
+  --sec-frame-arrow-ink: #8a6a1e;
+  --sec-frame-arrow-hover: #8a6a1e;
+  --sec-deck-ground: linear-gradient(180deg, rgba(248,243,223,0.97), rgba(236,228,206,0.95));
+  --sec-deck-border: rgba(var(--gilt-rgb), 0.3);
+  --sec-aw-ink: #0b655e;
+  --sec-aw-glow: none;
+  --sec-aw-soft: #2b635c;
+  --sec-aw-text: #0b3f3a;
+  --sec-aw-out: #0f4f49;
+  --sec-aw-line: rgba(15, 118, 110, 0.4);
+  --sec-aw-well: rgba(15, 118, 110, 0.06);
+  --sec-aw-well-deep: rgba(15, 118, 110, 0.09);
+  --ch-1: #3F7D95; --ch-2: #A8792E; --ch-3: #B0524A; --ch-4: #5D8452;
+  --ch-5: #3F9B86; --ch-6: #7D5F9C; --ch-7: #8C7A3A; --ch-8: #5D6D7A;
+  --ch-up: #5D8452; --ch-warn: #A8792E; --ch-down: #B0524A;
+  --ch-grid: rgba(60,50,30,0.14); --ch-ink: #6B6046; --ch-text: #2A241A; --ch-surface: #f4f2ea;
+}
+/* each section's own hue, the same on either ground */
+#chronicle {
+  --hue-rgb: var(--gilt-rgb);
+  --hue-edge: var(--gilt);
+  --hue-ink-dark: var(--gilt-deep);   /* plain gilt is 4.3:1 on the Deck's dark ground */
+  --hue-hot-dark: var(--gilt-bright);
+  --hue-head-light: #463c22;
+  --hue-sub-light: #665a40;
+  --hue-ink-light: #735512;
+  --hue-ink-light-rgb: 115, 85, 18;
+  --hue-hot-light: #4f3a0b;
+}
+#abyss {
+  --hue-rgb: var(--depth-rgb);
+  --hue-edge: var(--depth);
+  --hue-ink-dark: #8FE6D2;
+  --hue-hot-dark: #B8F5E8;
+  --hue-head-light: #0f5c55;
+  --hue-sub-light: #2b635c;
+  --hue-ink-light: #0b655e;
+  --hue-ink-light-rgb: 11, 101, 94;
+  --hue-hot-light: #084a45;
+}
+
 /* ── The Chronicle — live watchings, high above the clouds on a clean backdrop ── */
 #chronicle {
   /* Sky and Depths draw at true size at any window (owner, 2026-11-01). They sit
@@ -396,16 +699,15 @@ body::after {
   top: -48%; left: 50%; transform: translateX(-50%) scale(calc(1 / var(--fit, 1)));
   transform-origin: top center;
   width: min(1560px, calc(100vw - 168px)); text-align: center;   /* clears the zoom column */
-  padding: 24px 24px 16px; border-radius: 14px;
-  background: linear-gradient(180deg, rgba(246,239,224,0.16), rgba(236,229,212,0.05));
+  padding: 24px 24px 16px; border-radius: 14px;   /* its wash is `--sec-bg` (the sets, above) */
 }
 .chron-head {
   font-family: 'Cinzel', serif; font-weight: 400; font-size: 26px;
-  letter-spacing: 0.34em; color: #463c22;
+  letter-spacing: 0.34em; color: var(--sec-head); text-shadow: var(--sec-head-glow);
 }
 .chron-sub {
   font-family: 'IM Fell English', 'Alegreya Sans', serif; font-style: italic; font-size: 15px;
-  color: #6b5f45; margin: 6px 0 18px;
+  color: var(--sec-sub); margin: 6px 0 18px;
 }
 .chron-viewer {
   position: relative; border-radius: 8px; overflow: hidden;
@@ -431,8 +733,6 @@ body::after {
 .chron-open:hover { color: var(--gilt); }
 .chron-fs { background: none; border: none; cursor: pointer; color: var(--text-dim); font-size: 0.95rem; line-height: 1; padding: 0; transition: color 150ms; }
 .chron-fs:hover { color: var(--gilt); }
-#chronicle .chron-fs { color: #8a7d60; }
-#chronicle .chron-fs:hover { color: #8a6a1e; }
 /* the pane holds the dashboard and the realm's own waiting state on top of it,
    so a cold Grafana never shows you *its* spinner (2026-07-31) */
 .chron-pane { flex: 1; position: relative; min-height: 0; background: #0b0d12; }
@@ -504,21 +804,27 @@ body::after {
 .chron-scrying span:nth-child(3) { animation-delay: 0.32s; }
 @keyframes scry-pulse { 0%, 100% { opacity: 0.22; transform: scale(0.75); } 50% { opacity: 1; transform: scale(1); } }
 @media (prefers-reduced-motion: reduce) { .chron-scrying span { animation: none; opacity: 0.7; } }
-/* Sky Chronicle embeds are theme=light Grafana → a light frame that sits in the
-   bright sky; the Depths keeps the default dark frame for its dark dashboards */
-#chronicle .chron-viewer { background: rgba(250,246,230,0.72); border-color: rgba(var(--gilt-rgb),0.4); box-shadow: 0 16px 44px rgba(90,70,30,0.22); }
-#chronicle .chron-slide-head { background: rgba(250,246,230,0.94); border-bottom-color: rgba(var(--gilt-rgb),0.28); }
-#chronicle .chron-title { color: #8a6a1e; }
-#chronicle .chron-open { color: #8a7d60; }
-#chronicle .chron-open:hover { color: #8a6a1e; }
-#chronicle .chron-frame, #chronicle .chron-pane { background: #f4f2ea; }
-#chronicle .chron-scrying { color: #8a7d60; }
-#chronicle .chron-arrow { background: rgba(250,246,230,0.9); border-color: rgba(var(--gilt-rgb),0.45); color: #8a6a1e; }
-#chronicle .chron-arrow:hover { border-color: #8a6a1e; }
+/* The frame follows the ground: on paper a light frame (the Sky's embeds are
+   theme=light Grafana), on the dark ground the dark one. A framed dashboard keeps
+   its own theme inside. The section's ‹ › take the paper frame's arrows; on the
+   dark ground the Depths set leaves them `initial`, so they fall back to the bar's
+   own (the arrows go with the bar). */
+:is(#chronicle, #abyss) .chron-viewer { background: var(--sec-frame-bg); border-color: var(--sec-frame-border); box-shadow: var(--sec-frame-shadow); }
+:is(#chronicle, #abyss) .chron-slide-head { background: var(--sec-frame-head-bg); border-bottom-color: var(--sec-frame-head-rule); }
+:is(#chronicle, #abyss) .chron-title { color: var(--sec-frame-title); }
+:is(#chronicle, #abyss) :is(.chron-open, .chron-fs, .chron-scrying) { color: var(--sec-frame-quiet); }
+:is(#chronicle, #abyss) :is(.chron-open, .chron-fs):hover { color: var(--sec-frame-quiet-hot); }
+:is(#chronicle, #abyss) :is(.chron-frame, .chron-pane) { background: var(--sec-frame-pane); }
+:is(#chronicle, #abyss) .chron-arrow {
+  background: var(--sec-frame-arrow-bg, var(--chrome-glass-firm));
+  border-color: var(--sec-frame-arrow-border, rgba(var(--gilt-rgb), 0.35));
+  color: var(--sec-frame-arrow-ink, var(--gilt));
+}
+:is(#chronicle, #abyss) .chron-arrow:hover { border-color: var(--sec-frame-arrow-hover, var(--gilt)); }
 .chron-arrow {
   position: absolute; top: 50%; transform: translateY(-50%); z-index: 2;
   width: 34px; height: 34px; border-radius: 50%;
-  border: 1px solid rgba(var(--gilt-rgb), 0.35); background: rgba(13,11,7,0.72); color: var(--gilt);
+  border: 1px solid rgba(var(--gilt-rgb), 0.35); background: var(--chrome-glass-firm); color: var(--gilt);
   font-size: 1.2rem; line-height: 1; cursor: pointer; backdrop-filter: blur(4px);
   transition: border-color 200ms;
 }
@@ -535,14 +841,18 @@ body::after {
 .chron-btn-wrap { position: relative; }
 .chron-btn {
   display: inline-block; text-decoration: none;   /* it is an <a> now, not a <button> */
-  background: rgba(var(--gilt-rgb), 0.07); border: 1px solid rgba(var(--gilt-rgb), 0.3);
-  color: var(--gilt); cursor: pointer;
+  background: var(--sec-plaque-bg, rgba(var(--gilt-rgb), 0.07));
+  border: 1px solid var(--sec-plaque-border, rgba(var(--gilt-rgb), 0.3));
+  color: var(--sec-plaque-ink, var(--gilt)); cursor: pointer;
   font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.62rem; letter-spacing: 0.16em;
   padding: 9px 16px 8px; border-radius: 3px; white-space: nowrap;
   transition: background 160ms, border-color 160ms, color 160ms;
 }
-.chron-btn:hover { background: rgba(var(--gilt-rgb), 0.14); border-color: var(--gilt); }
-.chron-btn-wrap:hover .chron-btn, .chron-btn-wrap:focus-within .chron-btn { background: rgba(var(--gilt-rgb), 0.16); border-color: var(--gilt); color: var(--gilt-bright); }
+.chron-btn:hover { background: var(--sec-plaque-bg-hot, rgba(var(--gilt-rgb), 0.14)); border-color: var(--sec-plaque-edge, var(--gilt)); }
+.chron-btn-wrap:hover .chron-btn, .chron-btn-wrap:focus-within .chron-btn {
+  background: var(--sec-plaque-bg-hot, rgba(var(--gilt-rgb), 0.16)); border-color: var(--sec-plaque-edge, var(--gilt));
+  color: var(--sec-plaque-hot, var(--gilt-bright));
+}
 .chron-btn.broken { color: var(--sem-down); border-color: color-mix(in srgb, var(--sem-down) 40%, transparent); }
 .chron-fly-pop {
   position: absolute; left: 50%; bottom: calc(100% + 8px); transform: translateX(-50%);
@@ -550,14 +860,15 @@ body::after {
   display: flex; flex-direction: column; gap: 8px; text-align: left;
   padding: 12px 14px; border-radius: 6px;
   background: color-mix(in srgb, var(--surface-2) 92%, transparent);
-  border: 1px solid var(--ink-line); box-shadow: 0 14px 40px rgba(0,0,0,0.5);
+  border: 1px solid var(--ink-line); box-shadow: var(--pop-shadow);
   backdrop-filter: blur(6px);
   /* hidden until hover/focus-within, not a JS `hidden` flag — keyboard tabbing
      to the button reveals the same blurb the mouse gets. `visibility` (not
      display:none) so the fade can run, and pointer-events:none so the tooltip
      can never eat the click meant for the button underneath it. */
   opacity: 0; visibility: hidden; pointer-events: none;
-  transition: opacity 140ms ease, visibility 140ms;
+  transition: opacity 140ms ease, visibility 140ms,
+              background-color 400ms, color 400ms, border-color 400ms;
 }
 .chron-btn-wrap:hover .chron-fly-pop,
 .chron-btn-wrap:focus-within .chron-fly-pop { opacity: 1; visibility: visible; }
@@ -650,20 +961,17 @@ body.on-style #sky-island, body.on-style #sky-shadow { display: none; }
 }
 .abyss-head {
   font-family: 'Cinzel', serif; font-weight: 400; font-size: 26px;
-  letter-spacing: 0.34em; color: #8FE6D2;
-  text-shadow: 0 0 24px rgba(var(--depth-rgb), 0.35);
+  letter-spacing: 0.34em; color: var(--sec-head);
+  text-shadow: var(--sec-head-glow);
 }
+/* the sub-line was #5E8A80, 4.4:1 on the fog; the Depths set raises it to AA */
 .abyss-sub {
   font-family: 'IM Fell English', 'Alegreya Sans', serif; font-style: italic; font-size: 15px;
-  color: #5E8A80; margin: 6px 0 18px;
+  color: var(--sec-sub); margin: 6px 0 18px;
 }
-#abyss .chron-btn {
-  background: rgba(var(--depth-rgb), 0.06); border-color: rgba(var(--depth-rgb), 0.32); color: #8FE6D2;
-}
-#abyss .chron-btn:hover { background: rgba(var(--depth-rgb), 0.14); border-color: var(--depth); }
-#abyss .chron-btn-wrap:hover .chron-btn, #abyss .chron-btn-wrap:focus-within .chron-btn { background: rgba(var(--depth-rgb), 0.18); border-color: var(--depth); color: #B8F5E8; }
+/* (`#abyss .chron-btn` and its hovers lived here: the plaques read the set now) */
 /* down in the dark the abyss glows; up on the sand it's out of sight anyway */
-body.depths #abyss .abyss-head { text-shadow: 0 0 30px rgba(var(--depth-rgb), 0.5); }
+body.depths #abyss .abyss-head { text-shadow: var(--sec-head-glow-near); }
 
 /* THE NAMING DEEP (2026-08-15) — whois, riding inside the TOP CLIENTS slide:
    the panel that names the busiest client IPs and the tool that asks who
@@ -684,27 +992,27 @@ body.depths #abyss .abyss-head { text-shadow: 0 0 30px rgba(var(--depth-rgb), 0.
 .aw-side { flex: 1; min-width: 0; display: flex; flex-direction: column; text-align: left; min-height: 0; }
 .aw-head {
   font-family: 'Cinzel', serif; font-weight: 400; font-size: 13px;
-  letter-spacing: 0.3em; color: #8FE6D2;
-  text-shadow: 0 0 18px rgba(var(--depth-rgb), 0.3);
+  letter-spacing: 0.3em; color: var(--sec-aw-ink);
+  text-shadow: var(--sec-aw-glow);
 }
 .aw-sub {
   font-family: 'IM Fell English', 'Alegreya Sans', serif; font-style: italic;
-  font-size: 12px; color: #5E8A80; margin: 3px 0 10px;
+  font-size: 12px; color: var(--sec-aw-soft); margin: 3px 0 10px;
 }
 .aw-form {
   display: flex; align-items: center; gap: 8px; padding: 7px 10px;
-  border: 1px solid rgba(var(--depth-rgb), 0.32); border-radius: 4px;
-  background: rgba(4,12,11,0.55);
+  border: 1px solid var(--sec-aw-line); border-radius: 4px;
+  background: var(--sec-aw-well);
 }
 .aw-glyph { color: var(--depth); font-size: 0.95rem; }
 .aw-input {
   flex: 1; min-width: 0; background: transparent; border: none; outline: none;
-  font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: #B8F5E8;
+  font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: var(--sec-aw-text);
 }
-.aw-input::placeholder { color: #4E7A70; }
+.aw-input::placeholder { color: var(--sec-aw-soft); }
 .aw-go {
-  background: rgba(var(--depth-rgb), 0.06); border: 1px solid rgba(var(--depth-rgb), 0.32);
-  color: #8FE6D2; border-radius: 3px; cursor: pointer; padding: 5px 12px 4px;
+  background: rgba(var(--depth-rgb), 0.06); border: 1px solid var(--sec-aw-line);
+  color: var(--sec-aw-ink); border-radius: 3px; cursor: pointer; padding: 5px 12px 4px;
   font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.6rem; letter-spacing: 0.22em;
   transition: background 150ms, border-color 150ms;
 }
@@ -714,10 +1022,10 @@ body.depths #abyss .abyss-head { text-shadow: 0 0 30px rgba(var(--depth-rgb), 0.
   flex: 1; min-height: 0; margin-top: 10px; padding: 10px 12px;
   overflow-y: auto;
   scrollbar-width: thin; scrollbar-color: rgba(var(--depth-rgb), 0.3) transparent;
-  border: 1px solid rgba(var(--depth-rgb), 0.22); border-radius: 4px;
-  background: rgba(4,12,11,0.65);
+  border: 1px solid var(--sec-aw-line); border-radius: 4px;
+  background: var(--sec-aw-well-deep);
   font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; line-height: 1.55;
-  color: #9AD8CA; white-space: pre-wrap; word-break: break-word;
+  color: var(--sec-aw-out); white-space: pre-wrap; word-break: break-word;
 }
 .aw-out[hidden] { display: none; }
 /* the duo is a column at every width now (see .aw-duo above); this rule is
@@ -743,17 +1051,17 @@ body.depths #sky-realm { opacity: 0; visibility: hidden; }
 body.depths .fog-a, body.depths .fog-b { animation: none !important; }
 body.depths .mk:not(.depths-kin) .mk-ring { animation: none !important; }
 body.depths .mk.s-down::after { animation: none !important; opacity: 0.18; }
-body.depths .fog-a {
+:root:not([data-scheme-pick="light"]) body.depths .fog-a {
   background:
     radial-gradient(ellipse 40% 28% at 22% 32%, rgba(64, 200, 190, 0.10), transparent 70%),
     radial-gradient(ellipse 34% 24% at 76% 62%, rgba(120, 220, 160, 0.07), transparent 70%);
 }
-body.depths .fog-b {
+:root:not([data-scheme-pick="light"]) body.depths .fog-b {
   background:
     radial-gradient(ellipse 30% 22% at 60% 20%, rgba(64, 180, 200, 0.06), transparent 70%),
     radial-gradient(ellipse 36% 26% at 32% 76%, rgba(100, 210, 170, 0.08), transparent 70%);
 }
-body.depths #vignette {
+:root:not([data-scheme-pick="light"]) body.depths #vignette {
   background: radial-gradient(ellipse 68% 62% at 50% 48%, transparent 42%, rgba(2, 4, 4, 0.82) 100%);
 }
 body.depths .zone-label, body.depths .mk { opacity: 0.28; transition: opacity 800ms ease; }
@@ -766,6 +1074,103 @@ body.depths .mk.depths-kin .mk-core {
 body.depths .mk.depths-kin .mk-ring { border-color: var(--depth); }
 body.depths #colophon { color: #3E5A52; }
 .zone-label, .mk { transition: opacity 800ms ease; }
+
+/* ── THE OTHER GROUND (stage 1, 2026-11-13) ──────────────────────────────────
+   Light gives the Depths the Sky's ground; Dark gives the Sky the Depths'. The
+   table between them is a night map under every pick: the art, its markers and
+   zone labels, the region tabs, the Sky island, the `style-bright` ink, and the
+   Depths' dim of the table's markers are under no pick here. Keyed on
+   `data-scheme-pick` only, never on `data-scheme`: the OS moves the panels, not
+   the ground. The section dressing is the token sets at THE TWO GROUNDS. */
+
+/* Light: the Depths on paper ─────────────────────────────────────────────── */
+/* the ground below the table: the Sky's field, its stops reversed (the clear end
+   at the seam), over the viewport's own parchment */
+:root[data-scheme-pick="light"] #void {
+  background:
+    linear-gradient(0deg, rgba(248,243,223,0.94) 0%, rgba(244,237,217,0.82) 40%, rgba(238,228,203,0.44) 68%, rgba(232,220,195,0.12) 87%, transparent 96%),
+    radial-gradient(ellipse 72% 60% at 50% 80%, rgba(253,248,232,0.6), transparent 78%),
+    #f8f3df;
+}
+/* the table's foot fades into the warm haze of the cloud bank, not to black */
+:root[data-scheme-pick="light"] #void-fade {
+  background: linear-gradient(180deg, transparent, rgba(240,231,213,0.72) 62%, rgba(240,231,213,0.98) 100%);
+}
+/* the fog becomes the Sky's warm wash, and the motes go */
+:root[data-scheme-pick="light"] .depths-glow {
+  background:
+    linear-gradient(180deg, transparent 0%, rgba(238,228,203,0.3) 10%, rgba(244,237,217,0.62) 34%, rgba(248,243,223,0.9) 100%),
+    radial-gradient(ellipse 72% 40% at 50% 36%, rgba(253,248,232,0.6), transparent 78%);
+}
+:root[data-scheme-pick="light"] .depths-glow::before {
+  background: linear-gradient(180deg,
+    transparent 0%, rgba(244,236,220,0.6) 44%, rgba(240,231,213,0.82) 64%, transparent 100%);
+}
+:root[data-scheme-pick="light"] .depths-motes { display: none; }
+/* The cloud bank at the seam: the Sky's fractal clouds, mirrored, so the dense
+   band covers the table's foot. The realm starts at 110% and clips (for the
+   motes, gone here), so it lets the bank reach up to the seam at 100%. The flip
+   is on the bank, because `.cloud-svg`'s drift owns its own transform. */
+.depths-cloud { display: none; }
+:root[data-scheme-pick="light"] #depths-realm { overflow: visible; }
+:root[data-scheme-pick="light"] .depths-cloud {
+  display: block; position: absolute; left: -12%; right: -12%;
+  top: -17.5%; bottom: auto; height: 33%;   /* ≈ 94% to 124% of the table */
+  transform: scaleY(-1);
+}
+/* the table's darkening on the way down becomes light gathering from its foot,
+   the mirror of #sky-map-light; `--depth-t` drives it as before */
+:root[data-scheme-pick="light"] #depth-map-shade {
+  background: linear-gradient(0deg, rgba(246,238,218,0.5), rgba(240,230,206,0.14) 55%, transparent 80%);
+}
+/* the pins in the band below the map: deep teal with a thin dark ring and no
+   glow, the name in card ink on a parchment halo. They sit on paper before the
+   Depths engage too, so the ring and the name do not wait for `body.depths`. */
+:root[data-scheme-pick="light"] .mk.depths-kin .mk-core { box-shadow: 0 0 0 1.5px rgba(15, 23, 42, 0.72); }
+:root[data-scheme-pick="light"] body.depths .mk.depths-kin .mk-core { background: #0f766e; }
+:root[data-scheme-pick="light"] body.depths .mk.depths-kin .mk-ring { border-color: #0f766e; }
+:root[data-scheme-pick="light"] .mk.depths-kin .mk-label {
+  color: var(--card-ink);
+  text-shadow: 0 0 6px rgba(248, 243, 223, 0.95), 0 0 14px rgba(248, 243, 223, 0.8);
+}
+:root[data-scheme-pick="light"] body.depths #colophon { color: var(--card-ink-soft); }
+
+/* Dark: the Sky on the Depths' ground ───────────────────────────────────── */
+/* the backdrop above the clouds is dark too (a region keeps its own) */
+:root[data-scheme-pick="dark"] body:not(.region-open, .rg-crossing) #viewport { background: #040a0b; }
+/* the Depths' black and teal fog, its stops reversed: dense at the top, clear at the seam */
+:root[data-scheme-pick="dark"] .sky-glow {
+  background:
+    linear-gradient(0deg,
+      transparent 0%, rgba(9,22,24,0.18) 9%, rgba(11,26,28,0.55) 20%, rgba(12,30,32,0.8) 40%,
+      rgba(8,20,22,0.9) 66%, rgba(4,10,11,1) 100%),
+    radial-gradient(ellipse 70% 26% at 50% 74%, rgba(90,180,165,0.2), transparent 72%),
+    radial-gradient(ellipse 62% 48% at 50% 46%, rgba(58,124,112,0.24), transparent 74%),
+    radial-gradient(ellipse 32% 24% at 22% 60%, rgba(70,150,150,0.13), transparent 70%),
+    radial-gradient(ellipse 30% 22% at 80% 50%, rgba(60,120,140,0.11), transparent 70%);
+}
+/* the same bank, coloured as the Depths' seam haze; still opaque at the seam,
+   because it is what hides the art's top edge */
+:root[data-scheme-pick="dark"] .cloud-bank::before {
+  background: linear-gradient(180deg,
+    transparent 0%, rgba(7,18,20,0.6) 22%, rgba(8,20,22,0.98) 42%,
+    rgba(9,22,24,0.99) 66%, rgba(6,14,16,0.7) 86%, transparent 100%);
+}
+:root[data-scheme-pick="dark"] .cloud-bank::after {
+  background: linear-gradient(180deg, transparent, rgba(8,20,22,0.96) 55%, rgba(4,10,11,0.55) 90%, transparent);
+}
+/* The clouds' colour is written by their SVG filter (`feColorMatrix` in
+   index.html), not by the rect's fill, so a fill would change nothing: a static
+   colour filter on the bank's SVG turns the cream to a dark teal-grey fog. */
+:root[data-scheme-pick="dark"] .cloud-bank .cloud-svg {
+  filter: brightness(0.24) sepia(0.5) hue-rotate(125deg) saturate(1.4);
+  opacity: 0.75;
+}
+/* the table's lightening on the way up becomes the Depths' darkening, from its
+   head down; `--sky-t` drives it as before */
+:root[data-scheme-pick="dark"] #sky-map-light {
+  background: linear-gradient(180deg, rgba(2,6,7,0.92), rgba(6,16,16,0.6) 45%, transparent 80%);
+}
 
 /* fog + vignette (screen-space, not on stage) */
 .fog {
@@ -891,11 +1296,13 @@ body:not(.on-style) .mk[data-id="hypervisor"] .mk-ring { inset: -6px; border-rad
   position: fixed; z-index: 960;
   width: 42px; height: 42px; border-radius: 50%;
   border: 1px solid rgba(var(--gilt-rgb), 0.35);
-  background: rgba(13,11,7,0.4); color: var(--gilt);   /* 0.55 until 2026-10-20 ("a bit transparent", like the band) */
+  background: var(--chrome-glass); color: var(--gilt);   /* 0.55 until 2026-10-20 ("a bit transparent", like the band) */
   font-family: 'Cinzel', serif; font-size: 1rem;
   display: flex; align-items: center; justify-content: center;
   cursor: pointer; backdrop-filter: blur(8px);
-  transition: border-color 250ms, box-shadow 250ms, opacity 600ms;
+  /* the ring keeps its hover timing (250ms); fill and ink follow the bar at 400ms */
+  transition: border-color 250ms, box-shadow 250ms, opacity 600ms,
+              background-color 400ms, color 400ms;
 }
 .chrome:hover { border-color: var(--gilt); }   /* its glow is THE HOVER GLOW, at the end of this file */
 /* left column: network + the agent + theme (compass now lives in the zoom stack) */
@@ -919,16 +1326,19 @@ body:not(.on-style) .mk[data-id="hypervisor"] .mk-ring { inset: -6px; border-rad
   50%      { box-shadow: 0 0 0 9px rgba(var(--lit-rgb), 0), 0 0 22px rgba(var(--lit-rgb), 0.35); }
 }
 @media (prefers-reduced-motion: reduce) { .chrome.lit { animation: none; transform: none; } }
-/* the two journeys light in reverse (owner, 2026-11-01), in the theme's own colours:
-   the Depths' biolume with dark ink against the black, dark ink with the accent
-   against the bright sky. `--card-ink` is the one dark that stays dark in the light
-   scheme, whose `--abyss` is pale. `:root` ties these with the light scheme's
-   `.chrome.lit`, and being later in the file wins. */
+/* the two journeys light in reverse (owner, 2026-11-01), in the theme's own colours.
+   Being lit follows the bar's colour, not the pick (stage 1, 2026-11-13), so the
+   fills are tokens the bar block restates: on a dark bar the Depths in biolume with
+   dark ink and the Sky in gilt with its `--on-gilt` ink (the card-ink fill it wore
+   in the Sky would vanish on a dark ground); on a light bar the Sky in navy and the
+   Depths in deep teal with pale ink. `:root` lifts these over `.chrome.lit`. */
 :root .chrome.ci-depths.lit {
-  --lit-rgb: var(--depth-rgb); border-color: var(--depth); background: var(--depth); color: var(--card-ink);
+  --lit-rgb: var(--depth-rgb);
+  border-color: var(--depths-lit-border); background: var(--depths-lit-fill); color: var(--depths-lit-ink);
 }
-:root .chrome.ci-sky.lit { border-color: var(--gilt); background: var(--card-ink); color: var(--gilt-bright); }
-:root[data-scheme="light"] .chrome.ci-sky.lit { background: var(--gilt); color: var(--on-gilt); }
+:root .chrome.ci-sky.lit {
+  border-color: var(--sky-lit-border); background: var(--sky-lit-fill); color: var(--sky-lit-ink);
+}
 .ci-menu { top: 18px; right: 18px; }
 /* ☰ wears the scene lamp now that ◆ is gone — with the drawer shut it is the
    only sign that a scene is standing open over the map (2026-08-10) */
@@ -970,6 +1380,30 @@ body:not(.on-style) .mk[data-id="hypervisor"] .mk-ring { inset: -6px; border-rad
 .sp-row { display: flex; align-items: center; justify-content: space-between; font-size: 0.86rem; cursor: pointer; }
 .sp-row input { width: 16px; height: 16px; accent-color: var(--gilt); cursor: pointer; }
 .sp-hint { font-size: 0.72rem; color: var(--text-soft); margin-top: 8px; line-height: 1.4; }
+/* COLOURS (Settings › YOU, stage 1, 2026-11-13): Light, Dark and Light/Dark as one
+   segmented control, in `.rel-seg`'s idiom (Cinzel micro-caps, gilt, the picked
+   one filled). It is a real radio group, so the arrow keys move through it: the
+   inputs stay for the keyboard and leave the eye, and the label wears both the
+   state and the panels' shared focus ring. Panel tokens only. */
+.sp-scheme { display: flex; margin-top: 8px; }
+.sp-scheme-opt {
+  flex: 1; position: relative; display: flex; align-items: center; justify-content: center;
+  padding: 6px 8px; cursor: pointer;
+  background: rgba(var(--gilt-rgb), 0.08); color: var(--gilt);
+  border: 1px solid rgba(var(--gilt-rgb), 0.35);
+  font-family: 'Cinzel', serif; font-size: 0.6rem; letter-spacing: 0.12em; text-transform: uppercase;
+  transition: background 150ms, color 150ms;
+}
+.sp-scheme-opt + .sp-scheme-opt { border-left-color: rgba(var(--gilt-rgb), 0.28); margin-left: -1px; }
+.sp-scheme-opt:first-child { border-radius: 4px 0 0 4px; }
+.sp-scheme-opt:last-child { border-radius: 0 4px 4px 0; }
+.sp-scheme-opt:hover { background: rgba(var(--gilt-rgb), 0.16); }
+.sp-scheme-opt:has(input:checked) { background: var(--gilt); color: var(--on-gilt); }
+.sp-scheme-opt input[type="radio"] {
+  position: absolute; width: 1px; height: 1px; margin: 0; opacity: 0; pointer-events: none;
+}
+/* the shared ring (KEYBOARD FOCUS on the panels), drawn on the label */
+.sp-scheme-opt:has(input:focus-visible) { outline: 2px solid var(--gilt); outline-offset: 2px; z-index: 1; }
 .sp-actions { display: flex; gap: 8px; margin-top: 12px; }
 .sp-btn {
   flex: 1; padding: 6px 8px; font-size: 0.72rem; font-family: inherit;
@@ -1361,10 +1795,12 @@ body.decoys-on .mk.has-stone .mk-label { opacity: 1; transform: translateX(-50%)
   /* lighter than the round chrome's 0.55 since 2026-10-20 (owner: "a bit
      transparent"); the stronger blur is what keeps the labels legible over a
      bright stretch of map, the trap point 3 above describes */
-  background: rgba(13,11,7,0.45);
+  background: var(--bar-glass);
   border: 1px solid rgba(var(--gilt-rgb), 0.18);
   backdrop-filter: blur(12px) saturate(1.1);
-  transition: opacity 600ms, background 200ms, border-color 200ms;
+  /* the colour change as the bar follows the map: the design notes's "medium" */
+  transition: opacity 600ms, background 200ms, border-color 200ms,
+              background-color 400ms, color 400ms, border-color 400ms;
 }
 /* The labels scroll in their own strip (owner, 2026-11-01): when the band itself
    scrolled, they ran under the buttons at its end, and nothing said there were more.
@@ -1379,7 +1815,8 @@ body.decoys-on .mk.has-stone .mk-label { opacity: 1; transform: translateX(-50%)
   display: none; flex: none; width: 22px; height: 30px;
   background: transparent; border: 1px solid transparent; border-radius: 2px;
   color: var(--gilt); font-size: 1.05rem; line-height: 1; cursor: pointer;
-  transition: background 200ms, border-color 250ms;
+  /* fill and ring are the hover's (200 / 250ms); the ink is the bar's colour */
+  transition: background 200ms, border-color 250ms, color 400ms;
 }
 #scenes-list.over .band-arrow { display: block; }
 .band-arrow:hover:not(:disabled) { background: rgba(var(--gilt-rgb), 0.12); border-color: var(--gilt); }
@@ -1413,6 +1850,7 @@ body.decoys-on .mk.has-stone .mk-label { opacity: 1; transform: translateX(-50%)
   margin-left: auto; flex: none;
   display: inline-flex; align-items: center;
   padding-left: 6px; border-radius: 3px;
+  transition: color 400ms;   /* it has no fill or ring of its own, only ink */
 }
 #scenes-list .menu-tools {
   flex: none;
@@ -1432,6 +1870,10 @@ body.decoys-on .mk.has-stone .mk-label { opacity: 1; transform: translateX(-50%)
 #scenes-list .ci-scheme:hover { box-shadow: none; }   /* the same clip, the same reason */
 /* ☀ wears the lit glyph while the light scheme is in force: pressed, not lamp */
 #scenes-list .ci-scheme[aria-pressed="true"] { color: var(--gilt-bright); }
+/* The button carries ☀ and ☾ and shows the one the bar is wearing: the bar block
+   flips the two tokens, so the glyph follows the camera with no write (stage 1). */
+.sch-sun { display: var(--bar-sun, none); }
+.sch-moon { display: var(--bar-moon, block); }
 #scenes-list .ci-gear.active { border-color: rgba(var(--gilt-rgb), 0.7); color: var(--gilt-bright); }
 
 /* ── ☰'s scene lamp is a lamp, not a beacon (2026-08-15) ─────────────
@@ -1470,8 +1912,10 @@ body.decoys-on .mk.has-stone .mk-label { opacity: 1; transform: translateX(-50%)
    stays put: a tab above its own sheet. The ≤720px override that undid this
    rule went with it. */
 
-/* ── THE ATLAS is the home button: three jobs, one control ─────────────────
-   (2026-08-15.)
+/* ── THE ATLAS is the home button ─────────────────────────────────────────
+   (2026-08-15; NOW, 2026-11-13: a click is always home, hover and ▾ open
+   the views' menu, and the map tools below stand out whenever the map is the
+   view. The three jobs as first written, kept for the trap at the end:)
 
    * **Hover** reveals the map tools — ☁ ◈ 👁 ☾ — as circles hanging below it.
      They are layers and journeys OF the atlas, so they belong to the atlas
@@ -1494,36 +1938,12 @@ body.decoys-on .mk.has-stone .mk-label { opacity: 1; transform: translateX(-50%)
    the BAND, not the viewport — and it carries `overflow-x: auto` for the
    one-row scroll, which then clips that cluster away entirely. Neither
    `fixed` nor `absolute` escapes it. So the cluster is a sibling of the band. */
-.scene-home { position: relative; display: inline-flex; flex: none; }
+/* its colour is the bar's ink, read where the bar block sets it */
+.scene-home { position: relative; display: inline-flex; flex: none; color: var(--text); transition: color 400ms; }
 
-.atlas-tools {
-  /* One column just right of the zoom column (owner, 2026-11-01): `.zoom-stack`
-     sits at left 24 and is 42 wide, so 24 + 42 + 10, its own gap. top is the
-     crown's own clearance; see `--crown-b` in `:root`. */
-  position: fixed; top: var(--crown-clear); left: 76px;
-  z-index: 962;                             /* just over the band it hangs from */
-  display: flex; flex-direction: column; gap: 8px;
-  pointer-events: none;                     /* the map goes on under the gaps */
-}
-/* Each button hides for itself, not the column, because the tripwires are a
-   layer you switched on, and a lit one stays in its slot to say so. Sky and Depths
-   are places, and you can see you are there (owner, 2026-11-01), so they go with
-   the rest. A touch screen cannot hover and this column is the door to the sky, so
-   all stay. */
-@media (hover: hover) {
-  .atlas-tools:not(.peek) .chrome:not(.ci-decoys.lit) {
-    opacity: 0; pointer-events: none; transform: translateY(-6px);
-  }
-}
-/* the circles are the same chrome as everywhere else, just smaller and static */
-.atlas-tools .chrome {
-  position: static; width: 38px; height: 38px; flex: none; pointer-events: auto;
-  transition: border-color 250ms, box-shadow 250ms, opacity 180ms, transform 180ms;
-}
-
-/* A scene is up: the tools have nothing to act on, so they do not appear at
-   all — not even on hover. */
-body.scene-open .atlas-tools { display: none; }
+/* The map's tools (sky, depths, the watch) stood here as a column until
+   2026-11-13; they are the views menu's lower part now (`.view-tools`, with
+   THE VIEWS below). */
 
 /* ── A scene is open: the band comes to the FRONT and firms up ─────────────
    The load-bearing half of this. Every scene overlay is `inset: 0` at z-985
@@ -1536,27 +1956,31 @@ body.scene-open .atlas-tools { display: none; }
    failed to be dimmed with the rest of the map. */
 body.scene-open #scenes-list {
   z-index: 988;
-  background: rgba(13,11,7,0.86);
+  background: var(--bar-glass-firm);
   border-color: rgba(var(--gilt-rgb), 0.42);
-  box-shadow: 0 12px 34px rgba(0,0,0,0.55);
+  box-shadow: var(--bar-shadow-firm);
 }
 .scene {
   background: transparent; border: 1px solid transparent; cursor: pointer;
   font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.66rem;
   letter-spacing: 0.22em; color: var(--text-dim);
   padding: 8px 11px 7px; border-radius: 2px; text-align: center; white-space: nowrap;
-  text-shadow: 0 2px 8px rgba(0,0,0,0.9), 0 0 14px rgba(0,0,0,0.6);
-  /* hover glows the accent, only the selected scene wears the outline (owner, 2026-11-01) */
-  transition: color 200ms, background 200ms, border-color 250ms, text-shadow 200ms;
+  text-shadow: var(--scene-shadow);
+  /* hover glows the accent, only the selected scene wears the outline (owner,
+     2026-11-01). The bar's colour change rides the hover timings already here
+     (colour 200ms, the ring 250ms, v1.58.4): a later 400ms entry for the same
+     property would replace them and slow every hover. Only the fill is new. */
+  transition: color 200ms, background 200ms, border-color 250ms, text-shadow 200ms,
+              background-color 400ms;
 }
 /* tighter before anything has to scroll */
 @media (max-width: 1100px) {
   .scene { padding: 8px 5px 7px; letter-spacing: 0.1em; }
 }
-.scene:hover, :root[data-scheme="light"] .scene:hover {
+.scene:hover {
   color: var(--gilt); text-shadow: 0 0 10px rgba(var(--gilt-rgb), 0.75);
 }
-.scene.active { color: var(--gilt); background: rgba(13,11,7,0.45); border-color: var(--gilt); }
+.scene.active { color: var(--gilt); background: var(--scene-active-bg); border-color: var(--gilt); }
 /* (`.chron-fly` + its .t/.n lived here — the old scene-band flyout rows. The
    watchings' buttons are `.chron-btn` with a `.chron-fly-pop` tooltip; nothing
    has emitted `chron-fly` since. Removed 2026-08-21.) */
@@ -1670,7 +2094,7 @@ body.constellation #overlay .territory-tag { opacity: 0.12; }
   box-shadow: 0 24px 60px rgba(var(--shade-rgb), calc(0.6 * var(--shade-k)));
   clip-path: inset(0 0 100% 0);
   transform: translateY(-10px);
-  transition: clip-path 400ms var(--glide), transform 400ms var(--glide);
+  transition: clip-path 400ms var(--glide), transform 400ms var(--glide), opacity 300ms;
   display: flex; flex-direction: column; overflow: hidden;
 }
 #index-drawer.open { clip-path: inset(0); transform: none; }
@@ -1938,6 +2362,18 @@ body.drawer-open .pth-panel { right: calc(5vw + var(--drawer-clear)); }
 .card-cause { margin: 8px 18px 0; font-size: 0.8rem; color: var(--warn-ink); }
 .card-cause[hidden] { display: none; }
 .card-cause strong { font-weight: 600; letter-spacing: 0.06em; }
+
+/* opened from a view (2026-11-13): the way to the map, and the Desk's form,
+   in the hand of the "vassal of" line above */
+.card-from-view { margin: 8px 18px 0; display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.card-from-view[hidden] { display: none; }
+.card-from-view button {
+  min-height: 26px; margin-left: -4px; padding: 0 4px;
+  background: none; border: none; border-radius: 3px; cursor: pointer;
+  font-family: var(--f-ui); font-size: 0.78rem; font-weight: 600; letter-spacing: 0.04em;
+  color: var(--card-ink-soft);
+}
+.card-from-view button:is(:hover, :focus-visible) { background: var(--paper-drawer); color: var(--card-ink); }
 
 /* split / scroll — right above the tabs' drawer */
 .card-actions { margin: 10px 18px 14px; display: flex; gap: 8px; }
@@ -2274,7 +2710,7 @@ body.constellation .card-split .cs-on { display: inline; }
 #embed-max-close {
   position: absolute; top: 14px; right: 18px; z-index: 2;
   width: 36px; height: 36px; border-radius: 50%;
-  background: rgba(13,11,7,0.72); border: 1px solid rgba(var(--gilt-rgb),0.45); color: var(--gilt);
+  background: var(--chrome-glass-firm); border: 1px solid rgba(var(--gilt-rgb),0.45); color: var(--gilt);
   font-size: 1.35rem; line-height: 1; cursor: pointer; backdrop-filter: blur(4px);
   transition: border-color 150ms;
 }
@@ -2693,8 +3129,6 @@ body.pre #scenes-list { opacity: 0; pointer-events: none; }
   /* (the band no longer shortens for the drawer at any width — the drawer
      hangs BELOW it now, so the override that undid that shortening here is
      gone with the rule it was undoing) */
-  .atlas-tools { gap: 6px; }
-  .atlas-tools .chrome { width: 34px; height: 34px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2786,7 +3220,7 @@ body.pre #scenes-list { opacity: 0; pointer-events: none; }
 .embed-max-arrow {
   position: absolute; top: 50%; transform: translateY(-50%);
   width: 44px; height: 44px; border-radius: 50%;
-  border: 1px solid rgba(var(--gilt-rgb), 0.4); background: rgba(13,11,7,0.72);
+  border: 1px solid rgba(var(--gilt-rgb), 0.4); background: var(--chrome-glass-firm);
   color: var(--gilt); font-size: 1.5rem; line-height: 1; cursor: pointer; z-index: 2;
 }
 .embed-max-arrow:hover { border-color: var(--gilt); color: var(--gilt-bright); }
@@ -3703,18 +4137,10 @@ body.constellation .mk.active .mk-dot { opacity: 0.35; }
    depth, then three quiet neighbours; the parchment set is the same order,
    darkened to clear 3:1 on the light viewer. Semantic inks stay the app's
    own (up/warn/down). */
-.chron-viewer {
-  --ch-1: #7FB0C4; --ch-2: #C49A52; --ch-3: #C06B62; --ch-4: #7A9B6E;
-  --ch-5: #7FE0C8; --ch-6: #9A7FB0; --ch-7: #D9C08A; --ch-8: #8A9BA8;
-  --ch-up: #7A9B6E; --ch-warn: #C49A52; --ch-down: #C06B62;
-  --ch-grid: rgba(201,165,84,0.12); --ch-ink: #8A8069; --ch-text: #C9BFA8; --ch-surface: #0b0d12;
-}
-#chronicle .chron-viewer {
-  --ch-1: #3F7D95; --ch-2: #A8792E; --ch-3: #B0524A; --ch-4: #5D8452;
-  --ch-5: #3F9B86; --ch-6: #7D5F9C; --ch-7: #8C7A3A; --ch-8: #5D6D7A;
-  --ch-up: #5D8452; --ch-warn: #A8792E; --ch-down: #B0524A;
-  --ch-grid: rgba(60,50,30,0.14); --ch-ink: #6B6046; --ch-text: #2A241A; --ch-surface: #f4f2ea;
-}
+/* (the two `--ch-*` sets sat here on `.chron-viewer` and `#chronicle
+   .chron-viewer`. They are in the section sets at THE TWO GROUNDS now, so a
+   section's charts change with its ground; a viewer that declared its own set
+   would shadow the section's.) */
 /* the figure fills its pane exactly as a frame did, and fades in the same way */
 .chron-native {
   position: absolute; inset: 0; box-sizing: border-box; padding: 10px 12px 8px;
@@ -4137,9 +4563,10 @@ body.region-open #btn-sky, body.region-open #btn-depths { display: none; }
   position: fixed; left: 76px; top: var(--crown-clear); z-index: 964;
   display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
   max-width: calc(100vw - 120px); padding: 6px 12px; border-radius: 8px;
-  background: rgba(29, 32, 33, 0.86); border: 1px solid rgba(var(--gilt-rgb), 0.35);
+  background: var(--crumb-glass); border: 1px solid rgba(var(--gilt-rgb), 0.35);
   font: 600 12px/1.3 'Cinzel', serif; letter-spacing: 0.14em; text-transform: uppercase;
-  color: var(--text-dim); box-shadow: 0 4px 18px rgba(0, 0, 0, 0.4);
+  color: var(--text-dim); box-shadow: var(--crumb-shadow);
+  transition: background-color 400ms, color 400ms, border-color 400ms;
 }
 .rl-crumb { color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; }
 button.rl-crumb {
@@ -4155,7 +4582,8 @@ button.rl-crumb:focus-visible { outline: 2px solid var(--gilt-bright); outline-o
   position: fixed; left: 24px; bottom: 24px; z-index: 964; width: 168px; cursor: zoom-out;
   border: 1px solid rgba(var(--gilt-rgb), 0.45); border-radius: 8px; overflow: hidden;
   background: var(--surface); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
-  transition: border-color 160ms ease, transform 160ms ease;
+  /* the ring is the hover's (160ms); the fill follows the bar */
+  transition: border-color 160ms ease, transform 160ms ease, background-color 400ms;
 }
 .rl-locator:hover, .rl-locator:focus-visible { border-color: var(--gilt-bright); transform: translateY(-2px); }
 .rl-locator:focus-visible { outline: 2px solid var(--gilt-bright); outline-offset: 2px; }
@@ -4168,9 +4596,11 @@ button.rl-crumb:focus-visible { outline: 2px solid var(--gilt-bright); outline-o
 .rl-hint {
   position: fixed; left: 50%; bottom: 28px; z-index: 964; transform: translate(-50%, 8px);
   padding: 7px 16px; border-radius: 999px; pointer-events: none;
-  background: rgba(29, 32, 33, 0.9); border: 1px solid rgba(var(--gilt-rgb), 0.4);
+  background: var(--hint-glass); border: 1px solid rgba(var(--gilt-rgb), 0.4);
   color: var(--text); font: 500 13px/1.3 'Alegreya Sans', sans-serif; letter-spacing: 0.02em;
-  opacity: 0; transition: opacity 220ms ease, transform 220ms ease;
+  box-shadow: var(--hint-shadow);
+  opacity: 0; transition: opacity 220ms ease, transform 220ms ease,
+                          background-color 400ms, color 400ms, border-color 400ms;
 }
 .rl-hint.on { opacity: 1; transform: translate(-50%, 0); }
 
@@ -4274,8 +4704,9 @@ body.style-bright #overlay.net-on .territory { fill-opacity: 0.16; stroke-opacit
 /* Only the strength is a token. The colour is `--gilt-rgb` read where the glow
    is drawn, because the light scheme sets its deep-blue gilt on the panels, not
    on :root: a glow worked out on :root would be the night's gold everywhere. */
-:root { --hover-glow-a: 0.45; }
-:root[data-scheme="light"] { --hover-glow-a: 0.32; }   /* a shade softer on pale glass */
+/* `--hover-glow-a` (0.45) is on :root at the top of this file, and the panel and
+   bar blocks restate it at 0.32, a shade softer on pale glass. It sat on
+   `:root[data-scheme="light"]` until stage 1, which made every glow follow the OS. */
 
 /* list rows and chips that were square */
 :is(.scroll-row, .trb-row, .ldg-host, .pth-node, .dsk-nav, .ann-filter, .rel-seg, .rel-tool,
@@ -4291,7 +4722,7 @@ body.style-bright #overlay.net-on .territory { fill-opacity: 0.16; stroke-opacit
   button.rl-crumb, .acct-emb, .dsk-btn, .dsk-icon, .scene-edit, .ann-ack-btn,
   .oc-btn, .oc-actions button, .oc-caret,
   /* tabs */
-  .scene, .dtab, .con-tab, .rg-tab, .rel-seg, .ann-filter, .dsk-nav, .sp-sec > .sp-sub,
+  .scene, .view-menu > button, .view-strip > button, .dtab, .con-tab, .rg-tab, .rel-seg, .ann-filter, .dsk-nav, .sp-sec > .sp-sub,
   /* chips */
   .rel-legend-item, button.rel-port, .wiz-choice, .dsk-mapart-tile, .chart-ip,
   /* list rows */
@@ -4304,46 +4735,51 @@ body.style-bright #overlay.net-on .territory { fill-opacity: 0.16; stroke-opacit
   box-shadow: 0 0 14px rgba(var(--gilt-rgb), var(--hover-glow-a));
 }
 
-/* ── THE DECK (v1.66.0 phone, v1.67.0 everywhere) ─────────────────────────
-   The Atlas without its map: the scene band over one scrolling column of the
-   Sky's and the Depths' charts. deck.js lifts the two sections out of the
-   stage into `#chart-deck` and puts them back; deck-model.js decides when.
-   On a phone it is the page. On a wider screen THE ATLAS puts the map away
-   and brings it back (owner, 2026-11-05). Everything that only steers the map
-   goes with the map: the zoom column, the network glyph, the sky / depths /
-   tripwire tools that hang off THE ATLAS, and the card's ⊖ (owner,
-   2026-11-05: no zoom, depths or network buttons). */
-#chart-deck { display: none; }
-body.deck #viewport, body.deck .zoom-stack, body.deck .atlas-tools, body.deck #btn-card-out { display: none; }
-body.deck #chart-deck {
+/* ── THE VIEWS (2026-11-13; THE DECK, v1.66.0 phone, v1.67.0 everywhere) ────
+   A view stands in the map's place under the band; the band stays. Each is a
+   `main.atlas-view` (index.html), and views.js shows exactly one by taking its
+   `hidden` away. While any view but MAP is up, `body.deck` means "the map is
+   put away", and everything that only steers the map goes with it: the zoom
+   column, the network glyph, the sky / depths / tripwire column, a region's
+   crumbs and the card's ⊖ (owner, 2026-11-05: no zoom, depths or network
+   buttons). What is inside a view is its own: OVERVIEW's lower half (the
+   Deck) is below; its tiles and NODES are views.css. */
+body { --view-top: var(--crown-clear); }   /* where a view's content starts */
+.atlas-view { display: none; }
+body.deck #viewport, body.deck .zoom-stack, body.deck #btn-card-out,
+body.deck .region-lens { display: none; }
+body.deck .atlas-view:not([hidden]) {
   display: block; position: fixed; inset: 0; z-index: 1;
   overflow-y: auto; overscroll-behavior: contain;
   /* the column scrolls BEHIND the band, so it starts below the crown */
-  padding: var(--crown-clear) 24px calc(32px + env(safe-area-inset-bottom, 0px));
+  padding: var(--view-top) 24px calc(32px + env(safe-area-inset-bottom, 0px));
   background: var(--abyss);
 }
-/* the sections forget the map: no camera scale, no seat in map space
+
+/* ── OVERVIEW's lower half, the Deck: the Sky's and the Depths' charts ─────
+   views.js lifts the two sections out of the stage into `#overview-charts`
+   and puts them back. The rules below follow the lift, so they key on the
+   view, not on `body.deck` (under NODES the sections are still on the hidden
+   stage). Stage 2 called this view CHARTS; `?view=charts` still lands here.
+   The sections forget the map: no camera scale, no seat in map space
    (camera.js still writes their `top`, which a static box ignores, and
    re-measures it the moment they go back on the stage) */
-body.deck #chronicle, body.deck #abyss {
+body[data-view="overview"] #chronicle, body[data-view="overview"] #abyss {
   position: static; transform: none; width: auto; max-width: 1560px;
   margin: 0 auto 24px; border-radius: 8px;
 }
 /* the Sky's charts are drawn for a bright field; on the map the sky behind
-   them is that field, here the section carries it */
-body.deck #chronicle {
-  background: linear-gradient(180deg, rgba(248,243,223,0.97), rgba(236,228,206,0.95));
-  border: 1px solid rgba(var(--gilt-rgb), 0.3);
-}
-body.deck #abyss {
-  background: radial-gradient(ellipse 90% 50% at 50% 0%, rgba(var(--depth-rgb), 0.10), transparent 75%), var(--surface);
-  border: 1px solid rgba(var(--depth-rgb), 0.2);
+   them is that field, here the section carries it. Each section's ground is
+   its set's, so in the Deck it follows the same pick rules as on the map. */
+body[data-view="overview"] :is(#chronicle, #abyss) {
+  background: var(--sec-deck-ground);
+  border: 1px solid var(--sec-deck-border);
 }
 /* no map behind a frame to travel, so a frame never sleeps here */
-body.deck .chron-pane .chron-frame { pointer-events: auto; }
-body.deck .chron-pane::after { display: none; }
-/* the colophon rides at the column's foot (deck.js), in flow */
-body.deck #colophon { position: static; transform: none; margin: 4px 16px 0; text-align: center; }
+body[data-view="overview"] .chron-pane .chron-frame { pointer-events: auto; }
+body[data-view="overview"] .chron-pane::after { display: none; }
+/* the colophon rides at the column's foot (views.js), in flow */
+body[data-view="overview"] #colophon { position: static; transform: none; margin: 4px 16px 0; text-align: center; }
 .deck-foot {
   display: block; margin: 8px auto 0; width: max-content; padding: 10px 14px;
   font-family: 'Cinzel', serif; font-size: 0.66rem; letter-spacing: 0.2em; text-transform: uppercase;
@@ -4351,11 +4787,115 @@ body.deck #colophon { position: static; transform: none; margin: 4px 16px 0; tex
 }
 .deck-foot:hover, .deck-foot:focus-visible { color: var(--gilt); }
 
+/* ── THE ATLAS's ▾ and the views' menu (2026-11-13) ───────────────────────
+   A click on ATLAS is always home. The views hang off it as a short menu:
+   hovering ATLAS or focusing it opens it, and so does the ▾ beside it, which
+   is how a keyboard or a touch screen gets there (ui.js). The ▾ keeps its
+   width whether it shows or not, so the band's label strip never changes
+   size under the pointer (and `.over` never flaps); it shows on hover or focus
+   of ATLAS, always on a screen that cannot hover. It sits in the band's
+   scrolling strip, so like ⚙ it casts no glow (the strip would cut it square).
+   The menu is a sibling of the band, for the trap `.atlas-tools` explains, and
+   it wears the bar's tokens (the bar block names it), over a scene too. */
+.scene-more {
+  flex: none; width: 18px; height: 30px; padding: 0; margin-left: -2px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; border: 1px solid transparent; border-radius: 2px; cursor: pointer;
+  color: var(--text-dim); opacity: 0;
+  transition: opacity 180ms, color 200ms;
+}
+.scene-more svg { width: 14px; height: 14px; }
+.scene-home:is(:hover, :focus-within) .scene-more, .scene-more[aria-expanded="true"] { opacity: 1; }
+.scene-more:is(:hover, :focus-visible, [aria-expanded="true"]) { color: var(--gilt); }
+@media (hover: none) { .scene-more { opacity: 1; } }
+
+.view-menu {
+  /* `left` follows ATLAS, measured on open (ui.js), because the strip scrolls */
+  position: fixed; top: var(--crown-clear); left: var(--view-menu-x, 24px);
+  z-index: 989;   /* over the columns, the crumbs, the card and a scene's lifted band (988); under the palette (990) */
+  display: flex; flex-direction: column; gap: 2px; min-width: 140px; padding: 4px;
+  border-radius: 4px; color: var(--text);
+  background: var(--bar-glass-firm);
+  border: 1px solid rgba(var(--gilt-rgb), 0.18);
+  backdrop-filter: blur(12px) saturate(1.1);
+  box-shadow: var(--bar-shadow-firm);
+  visibility: hidden; opacity: 0; transform: translateY(-6px); pointer-events: none;
+  transition: opacity 300ms, transform 180ms, visibility 0s linear 300ms,
+              background-color 400ms, color 400ms, border-color 400ms;
+}
+.view-menu:is(.peek, .open) {
+  visibility: visible; opacity: 1; transform: none; pointer-events: auto; transition-delay: 0s;
+}
+.view-menu > button, .view-strip > button {
+  background: transparent; border: 1px solid transparent; border-radius: 4px; cursor: pointer;
+  font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.66rem;
+  letter-spacing: 0.22em; color: var(--text-dim); white-space: nowrap;
+  padding: 8px 12px 7px; text-align: left;
+  transition: color 200ms, background 200ms, border-color 250ms;
+}
+.view-menu > button:is(:hover, :focus-visible), .view-strip > button:is(:hover, :focus-visible) { color: var(--gilt); }
+/* the view on screen wears the selected scene's outline */
+.view-menu > button[aria-current="true"], .view-strip > button[aria-current="true"] {
+  color: var(--gilt); background: var(--scene-active-bg); border-color: var(--gilt);
+}
+
+/* THE MAP'S TOOLS (owner, 2026-11-13): the views menu's lower part, only while
+   MAP is the view and no scene is up (in a view or over a scene there is no map
+   for them to act on). A row is a small lamp and a name; a tool that is on lights
+   its lamp the way the round buttons lit, in the same tokens. */
+.view-tools {
+  display: flex; flex-direction: column; gap: 2px;
+  margin-top: 3px; padding-top: 5px; border-top: 1px solid rgba(var(--gilt-rgb), 0.18);
+}
+body:is(.deck, .scene-open) .view-tools { display: none; }
+.view-tool {
+  display: flex; align-items: center; gap: 10px;
+  background: transparent; border: 1px solid transparent; border-radius: 4px; cursor: pointer;
+  font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.66rem;
+  letter-spacing: 0.22em; color: var(--text-dim); white-space: nowrap;
+  padding: 5px 12px 5px 7px; text-align: left;
+  transition: color 200ms, background 200ms, border-color 250ms;
+}
+.view-tool:is(:hover, :focus-visible) { color: var(--gilt); }
+.vt-lamp {
+  flex: none; width: 26px; height: 26px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid rgba(var(--gilt-rgb), 0.35); color: var(--gilt);
+  transition: border-color 250ms, background-color 400ms, color 400ms;
+}
+.vt-lamp .ci-glyph { width: 15px; height: 15px; }
+.view-tool:hover .vt-lamp { border-color: var(--gilt); }
+.view-tool.lit { color: var(--gilt); }
+.view-tool.lit .vt-lamp { border-color: var(--gilt); background: var(--gilt); color: var(--abyss); }
+.view-tool.ci-sky.lit .vt-lamp { border-color: var(--sky-lit-border); background: var(--sky-lit-fill); color: var(--sky-lit-ink); }
+.view-tool.ci-depths.lit .vt-lamp { border-color: var(--depths-lit-border); background: var(--depths-lit-fill); color: var(--depths-lit-ink); }
+
+/* IDLE (owner, 2026-11-13): the views menu and THE INDEX fade to 60% when the
+   mouse leaves them and roll up after a few seconds (ui.js `idleRollup`). Only
+   a mouse makes them idle; a keyboard or a touch screen never does. */
+.view-menu:is(.peek, .open).idle, #index-drawer.open.idle { opacity: 0.6; }
+
+/* On a phone there is no ATLAS and no map: the views are a strip of names at
+   the top of the column, standing under the band while the column scrolls. */
+.view-strip {
+  display: none; position: fixed; top: var(--crown-clear); left: 18px; right: 18px; z-index: 5;   /* the band's own insets */
+  justify-content: center; gap: 6px; padding: 3px 6px; border-radius: 4px;
+  background: var(--bar-glass);
+  border: 1px solid rgba(var(--gilt-rgb), 0.18);
+  backdrop-filter: blur(12px) saturate(1.1);
+  transition: background-color 400ms, color 400ms, border-color 400ms;
+}
+body.phone .view-strip { display: flex; }
+body.phone .view-strip > button { text-align: center; }
+body.phone :is(.scene-more, .view-menu) { display: none; }
+
 /* ── on a phone, the column is tightened for a thumb ── */
 /* THE ATLAS has nothing to do on a phone: there is no map to centre, bring
    back or put away (owner, 2026-11-05), and a scene closes from its own band */
 body.phone .scene[data-scene="atlas"] { display: none; }
-body.phone #chart-deck { padding-left: 0; padding-right: 0; }
+body.phone .atlas-view { padding-left: 0; padding-right: 0; }
+/* the strip of view names stands under the band, so a view starts below it */
+body.phone { --view-top: calc(var(--crown-clear) + 46px); }
 body.phone #chronicle, body.phone #abyss { margin: 0 12px 16px; padding: 16px 10px 12px; }
 body.phone .chron-head, body.phone .abyss-head { font-size: 17px; letter-spacing: 0.22em; }
 body.phone .chron-sub, body.phone .abyss-sub { font-size: 13px; margin: 4px 0 12px; }
@@ -4377,3 +4917,15 @@ body.phone .chron-arrow { display: none; }
 body.phone .chron-dots { gap: 2px; margin-top: 8px; }
 body.phone .chron-dot { width: 10px; height: 10px; box-sizing: content-box; padding: 8px; background-clip: content-box; }
 body.phone .chron-buttons, body.phone .abyss-buttons { gap: 8px; margin-top: 12px; }
+
+/* ── THE BAR'S COLOUR CHANGE, UNDER REDUCED MOTION (stage 1, 2026-11-13) ─────
+   As the camera crosses into the Sky or the Depths the bar changes colour over
+   400ms (the design notes's "medium"). Under reduced motion the change is instant: one
+   rule, naming exactly the elements that gained a colour transition, at the
+   foot of the file so it outranks each of their own lists. The Sky's clouds and
+   their mirror in the Depths stop drifting here too. */
+@media (prefers-reduced-motion: reduce) {
+  #scenes-list, .scene, .band-arrow, #scenes-list .band-tail, .scene-home, .chrome, .vt-lamp,
+  .rl-crumbs, .rl-locator, .rl-hint, .chron-fly-pop, .view-menu, .view-strip { transition-duration: 0s; }
+  .cloud-svg { animation: none; }
+}

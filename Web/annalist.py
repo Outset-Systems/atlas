@@ -15,16 +15,25 @@ keeps source load at what one open browser tab already costs.
 
 Started from gunicorn.conf.py's `post_worker_init`, never at import, so the
 test suite (and `flask run`) never grows a background thread.
+
+ALERTS (2026-11-13) ride this loop and add no thread of their own: after each
+build, `alerts.tick` reads the annals by sequence and sends what is due. So
+alerts fire only while this poll runs, and `/api/v2/health` says whether it
+does (`liveness()`: per worker, since each worker polls for itself).
 """
 
 import logging
 import os
 import threading
+import time
 
 log = logging.getLogger("atlas.live.annalist")
 
 _started = False
 _lock = threading.Lock()
+_thread = None
+#: When this worker last finished a poll (epoch seconds), or None.
+_last_tick = None
 
 
 def interval():
@@ -40,21 +49,45 @@ def interval():
 
 
 def poll_once(app):
-    """One fresh build of the feed inside an app context. Never raises."""
+    """One fresh build of the feed inside an app context, then ALERTS' tick.
+    Never raises; a failed tick never fails the poll."""
+    global _last_tick
     try:
         with app.app_context():
             from api.v2.feeds import build_feed
             from context import atlas
-            build_feed(atlas())
+            ctx = atlas()
+            feed = build_feed(ctx)
+            _alerts_tick(ctx, feed)
+        _last_tick = time.time()
         return True
     except Exception as e:      # noqa: BLE001 — the annalist must never take a worker down
         log.warning("annalist poll failed: %s", e)
         return False
 
 
+def _alerts_tick(ctx, feed):
+    """ALERTS: after the build, never instead of it. The tick is called from
+    here and not from `build_feed`, so a browser's request never sends."""
+    try:
+        import alerts
+        data, _, _ = ctx.dataset()
+        alerts.tick(feed, data, ctx=ctx)
+    except Exception as e:      # noqa: BLE001 — an alert that fails must not stop the annals
+        log.warning("alerts tick failed: %s: %s", type(e).__name__, e)
+
+
+def liveness():
+    """{running, last_tick} for this worker: whether its poll thread is alive,
+    and when it last finished a poll (UTC, or None). Nothing else."""
+    from jsonio import iso_utc
+    return {"running": bool(_thread is not None and _thread.is_alive()),
+            "last_tick": iso_utc(_last_tick) if _last_tick else None}
+
+
 def start(app, stop=None):
     """Start the loop once per process. Returns the thread, or None if off."""
-    global _started
+    global _started, _thread
     every = interval()
     if not every:
         log.info("annalist: off (ATLAS_ANNALS_POLL=0)")
@@ -62,16 +95,16 @@ def start(app, stop=None):
     with _lock:
         if _started:
             return None
-        _started = True
-    stop = stop or threading.Event()
+        stop = stop or threading.Event()
 
-    def loop():
-        # first poll after one interval: the worker has just booted and the
-        # first sighting only seeds state anyway (events.py)
-        while not stop.wait(every):
-            poll_once(app)
+        def loop():
+            # first poll after one interval: the worker has just booted and the
+            # first sighting only seeds state anyway (events.py)
+            while not stop.wait(every):
+                poll_once(app)
 
-    t = threading.Thread(target=loop, name="atlas-annalist", daemon=True)
-    t.start()
+        t = threading.Thread(target=loop, name="atlas-annalist", daemon=True)
+        t.start()                 # raises before `_started` is set: a retry may still start it
+        _started, _thread = True, t
     log.info("annalist: polling the feed every %ss", every)
     return t

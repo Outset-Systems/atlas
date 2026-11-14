@@ -1,0 +1,528 @@
+/* THE VIEWS' own sheet (2026-11-13). Read the design notes before editing.
+
+   What stands in the map's place under the band. The shell (which view shows,
+   its seat under the crown, its scroll) is atlas.css "THE VIEWS"; this file
+   is only what is drawn inside one. Tokens only: the panel tokens follow
+   `data-scheme` once `#view-nodes` (and OVERVIEW's `#overview-tiles`) sits in
+   atlas.css's panel token block, so nothing here restates a colour for the
+   light scheme. OVERVIEW is at the foot of this file.
+
+   NODES (nodes.js) is a scene panel laid flat: the `.ldg-panel` sheet
+   (surface gradient, ink-line border, 8px corners), the Desk's table, buttons
+   and notices (desk.css `.dsk-table`, `.dsk-btn`, `.dsk-notice`), the card's
+   status dots (`.svc-health`), and the v1.69.0 inset rule on a row nobody
+   has checked (`.dsk-p-unchecked`). No new colour, type or shape. */
+
+/* never let a display rule below undo `hidden` */
+#view-nodes [hidden] { display: none !important; }
+
+.nv-sheet {
+  max-width: 1560px; margin: 0 auto 24px;
+  padding: 18px 22px 26px;
+  background: linear-gradient(180deg, var(--surface-2), var(--surface));
+  border: 1px solid var(--ink-line); border-radius: 8px;
+  box-shadow: 0 28px 80px rgba(var(--shade-rgb), calc(0.75 * var(--shade-k)));
+  color: var(--text);
+}
+
+/* ── the head: the view's name, its lore line, the count ── */
+.nv-head {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 14px;
+  padding-bottom: 14px; border-bottom: 1px solid var(--ink-line);
+}
+.nv-title {
+  margin: 0; font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.9rem;
+  letter-spacing: 0.3em; color: var(--gilt);
+}
+.nv-sub {
+  margin: 0; font-family: 'IM Fell English', 'Alegreya Sans', serif; font-style: italic;
+  font-size: 0.9rem; color: var(--text-dim);
+}
+.nv-count {
+  margin-left: auto; font-family: 'JetBrains Mono', monospace; font-size: 0.72rem;
+  color: var(--text-dim); font-variant-numeric: tabular-nums;
+}
+
+/* ── the filter bar ── */
+.nv-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin: 16px 0 10px; }
+.nv-filters .dsk-input { width: auto; }
+.nv-search { flex: 1 1 240px; max-width: 320px; }
+.nv-pick { max-width: 190px; }
+.nv-toggle {
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  font-family: 'Alegreya Sans', sans-serif; font-size: 0.86rem; color: var(--text-dim);
+}
+.nv-toggle:hover { color: var(--text); }
+.nv-save { display: inline-flex; align-items: center; gap: 6px; }
+.nv-save-name { max-width: 200px; }
+
+/* the saved filters: chips (20px, the design notes's chip radius) */
+.nv-saved { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+.nv-chip-wrap { display: inline-flex; align-items: center; }
+.nv-chip, .nv-chip-x {
+  font-family: 'Alegreya Sans', sans-serif; font-size: 0.82rem; line-height: 1.2;
+  background: rgba(var(--shade-rgb), calc(0.2 * var(--shade-k)));
+  color: var(--text); border: 1px solid var(--ink-line); cursor: pointer;
+  transition: border-color 150ms, color 150ms;
+}
+.nv-chip { padding: 4px 10px 4px 12px; border-radius: 20px 0 0 20px; border-right: none; }
+.nv-chip-x { padding: 4px 10px 4px 8px; border-radius: 0 20px 20px 0; color: var(--text-dim); }
+.nv-chip:hover, .nv-chip-x:hover { border-color: var(--gilt); color: var(--gilt); }
+
+/* ── the bulk bar (an admin, a wide screen) ── */
+.nv-bulk {
+  display: flex; flex-direction: column; gap: 10px;
+  margin: 0 0 12px; padding: 10px 12px;
+  border: 1px solid var(--ink-line); border-left-width: 3px; border-radius: 3px;
+  background: rgba(var(--shade-rgb), calc(0.2 * var(--shade-k)));
+}
+.nv-bulk-note {
+  font-family: 'Alegreya Sans', sans-serif; font-size: 0.86rem; color: var(--text-dim);
+}
+.nv-bulk-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.nv-bulk-n {
+  font-family: 'JetBrains Mono', monospace; font-size: 0.76rem; color: var(--text);
+  font-variant-numeric: tabular-nums; margin-right: 6px;
+}
+.nv-bulk .dsk-btn.on { border-color: var(--gilt); color: var(--gilt); }
+.nv-bulk-clear { margin-left: auto; }
+
+.nv-form {
+  display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 14px;
+  padding-top: 10px; border-top: 1px solid var(--ink-line);
+}
+.nv-field { display: flex; flex-direction: column; gap: 5px; min-width: 180px; }
+.nv-field .dsk-input { width: auto; min-width: 180px; }
+.nv-field select[multiple] { min-width: 260px; }
+.nv-label {
+  font-family: 'Cinzel', serif; font-size: 0.6rem; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--text-dim);
+}
+.nv-form-note {
+  flex-basis: 100%; margin: 0;
+  font-family: 'Alegreya Sans', sans-serif; font-size: 0.84rem; color: var(--text-dim);
+}
+.nv-form-bar { display: flex; gap: 8px; margin-left: auto; }
+
+.nv-msg:empty { display: none; }
+
+/* ── the table: the Desk's, with sortable heads ── */
+.nv-scroll { overflow-x: auto; }
+.nv-table td { border-bottom-color: color-mix(in srgb, var(--ink-line) 60%, transparent); }
+.nv-table th { padding: 4px 6px; }
+.nv-sort {
+  background: none; border: none; cursor: pointer; padding: 3px 4px; border-radius: 4px;
+  font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit; white-space: nowrap;
+  transition: color 150ms;
+}
+.nv-sort:hover, .nv-sort.on { color: var(--gilt); }
+th[aria-sort="ascending"] .nv-sort::after { content: ' ▲'; font-size: 0.8em; }
+th[aria-sort="descending"] .nv-sort::after { content: ' ▼'; font-size: 0.8em; }
+.nv-row { cursor: pointer; }
+.nv-row.nv-on td { background: rgba(var(--gilt-rgb), 0.08); }
+.nv-num { text-align: right; }
+
+/* a place's name: the Index's Cinzel caps (the design notes: names are always caps) */
+.nv-name, .nv-name-text {
+  font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.7rem; letter-spacing: 0.18em;
+  text-transform: uppercase; color: var(--text);
+}
+.nv-name {
+  background: none; border: none; cursor: pointer; padding: 3px 4px; margin-left: -4px;
+  border-radius: 4px; text-align: left; transition: color 150ms;
+}
+.nv-name:hover { color: var(--gilt); }
+
+.nv-state { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; color: var(--text-dim); }
+.nv-state .svc-health { margin-left: 0; }
+.nv-mono {
+  font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; font-variant-numeric: tabular-nums;
+}
+.nv-dim { color: var(--ink-soft); }
+.nv-quiet { color: var(--text-dim); }
+.nv-now { color: var(--sem-warn); }
+.nv-cert-warn { color: var(--sem-warn); }
+.nv-cert-down { color: var(--sem-down); }
+.nv-cert, .nv-maint, .nv-now { white-space: nowrap; }
+
+.nv-sr {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap;
+}
+
+/* ── on a phone: a list of cards, the same filters, no bulk actions ── */
+.nv-cards { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.nv-card {
+  display: flex; flex-direction: column; gap: 4px; width: 100%;
+  padding: 10px 12px; text-align: left; cursor: pointer;
+  background: rgba(var(--shade-rgb), calc(0.2 * var(--shade-k)));
+  border: 1px solid var(--ink-line); border-radius: 4px; color: var(--text);
+  transition: border-color 150ms;
+}
+.nv-card:hover { border-color: var(--gilt); }
+.nv-card-top { display: flex; align-items: center; gap: 8px; }
+.nv-card-top .svc-health { margin-left: 0; }
+.nv-card-line {
+  display: flex; flex-wrap: wrap; gap: 4px 10px;
+  font-family: 'Alegreya Sans', sans-serif; font-size: 0.84rem; color: var(--text-dim);
+}
+body.phone .nv-sheet { margin: 0 12px 16px; padding: 14px 12px 18px; }
+body.phone .nv-search, body.phone .nv-pick { flex: 1 1 100%; max-width: none; }
+body.phone .nv-count { margin-left: 0; flex-basis: 100%; }
+
+/* THE HOVER GLOW (the design notes 2026-11-02), the same rule as atlas.css's list,
+   for the controls this sheet adds */
+:is(.nv-sort, .nv-name, .nv-chip, .nv-chip-x, .nv-card):is(:hover, :focus-visible):not(:disabled) {
+  box-shadow: 0 0 14px rgba(var(--gilt-rgb), var(--hover-glow-a));
+}
+
+/* ── OVERVIEW (2026-11-13, stage 3) ───────────────────────────────────────
+   The realm's facts in tiles (overview.js draws `#overview-body` inside the
+   sheet `#overview-tiles`), then the
+   Deck's charts (`#overview-charts`, atlas.css). Only the tiles' sheet sits
+   in atlas.css's panel token block, never the whole view: the Depths'
+   section lifted below reads `--surface` and `--ink-line` for its own dark
+   ground, and must keep the night's.
+
+   Made to read across a room at 1920×1080 (the design notes's type, scaled up):
+   counts in Cinzel, words in Alegreya Sans, data in JetBrains Mono with
+   tabular figures. Nothing is shown on hover alone; a list is cut short with
+   "+N more" rather than scrolled. The grid is one column on a phone. */
+
+#view-overview [hidden] { display: none !important; }
+
+/* `Charts ↓`: in the sheet's head, at its right edge, so a wall keeps every
+   pixel for the tiles. It sits in the sheet (so it wears the panel's tokens)
+   but outside `#overview-body`, which overview.js redraws. */
+.ov-jump {
+  position: absolute; z-index: 1; top: 16px; right: 20px;
+  display: block; width: max-content; padding: 2px 4px;
+  font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.72rem; letter-spacing: 0.22em;
+  text-transform: uppercase; color: var(--text-dim); text-decoration: none;
+  transition: color 150ms;
+}
+.ov-jump:hover, .ov-jump:focus-visible { color: var(--gilt); }
+/* the charts stop below the band when `Charts ↓` brings them up */
+#overview-charts { scroll-margin-top: var(--view-top); }
+
+.ov-sheet {
+  position: relative;
+  max-width: 1560px; margin: 0 auto 28px;
+  padding: 18px 22px 22px;
+  background: linear-gradient(180deg, var(--surface-2), var(--surface));
+  border: 1px solid var(--ink-line); border-radius: 8px;
+  box-shadow: 0 28px 80px rgba(var(--shade-rgb), calc(0.75 * var(--shade-k)));
+  color: var(--text);
+}
+.ov-head {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 14px;
+  padding-bottom: 14px; border-bottom: 1px solid var(--ink-line);
+}
+.ov-title {
+  margin: 0; font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.95rem;
+  letter-spacing: 0.32em; color: var(--gilt);
+}
+.ov-sub {
+  margin: 0; font-family: 'IM Fell English', 'Alegreya Sans', serif; font-style: italic;
+  font-size: 0.95rem; color: var(--text-dim);
+}
+.ov-stamp {
+  margin-left: auto; margin-right: 128px;   /* room for `Charts ↓` beside it */ font-family: 'JetBrains Mono', monospace; font-size: 0.8rem;
+  color: var(--text-dim); font-variant-numeric: tabular-nums;
+}
+.ov-msg {
+  margin: 14px 0 0; padding: 8px 12px;
+  border: 1px solid var(--ink-line); border-left: 3px solid var(--sem-warn); border-radius: 3px;
+  font-family: 'Alegreya Sans', sans-serif; font-size: 1rem; color: var(--text);
+}
+
+/* the tiles: as many columns as fit at 340px, the state counts across two */
+.ov-grid {
+  display: grid; gap: 12px; margin-top: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+}
+.ov-tile {
+  display: flex; flex-direction: column; gap: 8px; min-width: 0;
+  padding: 12px 16px 14px;
+  background: rgba(var(--shade-rgb), calc(0.2 * var(--shade-k)));
+  border: 1px solid var(--ink-line); border-left-width: 3px; border-radius: 4px;
+}
+.ov-tile[data-tile="states"] { grid-column: span 2; }
+.ov-tone-down { border-left-color: var(--sem-down); }
+.ov-tone-warn { border-left-color: var(--sem-warn); }
+.ov-tile-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 2.2rem; }
+.ov-tile-title {
+  margin: 0; font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.78rem;
+  letter-spacing: 0.22em; text-transform: uppercase; color: var(--text-dim);
+}
+/* a tile's count and the state counts: read from across the room */
+.ov-count, .ov-big {
+  font-family: 'Cinzel', serif; font-weight: 700; line-height: 1;
+  font-variant-numeric: tabular-nums; color: var(--text);
+}
+.ov-count { font-size: clamp(1.9rem, 2vw, 2.6rem); }
+.ov-big { font-size: clamp(2.4rem, 2.8vw, 3.6rem); }
+.ov-tile-body { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+
+.ov-states { display: flex; flex-wrap: wrap; gap: 14px 34px; }
+.ov-state { display: flex; flex-direction: column; gap: 6px; }
+.ov-state-name {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-family: 'Alegreya Sans', sans-serif; font-size: 1rem; color: var(--text-dim);
+}
+.ov-state-name .svc-health, .ov-row-head .svc-health { margin-left: 0; }
+.ov-state-down .ov-big { color: var(--sem-down); }
+.ov-state-degraded .ov-big { color: var(--sem-warn); }
+
+.ov-line { margin: 0; font-family: 'Alegreya Sans', sans-serif; font-size: 1.05rem; line-height: 1.4; }
+.ov-say { color: var(--text); }
+.ov-calm { color: var(--text-dim); }
+.ov-quiet { color: var(--text-dim); font-family: 'Alegreya Sans', sans-serif; font-size: 0.95rem; }
+.ov-mono { font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+.ov-what { font-family: 'Alegreya Sans', sans-serif; font-weight: 500; font-size: 1.02rem; color: var(--text); }
+.ov-down { color: var(--sem-down); }
+.ov-warn { color: var(--sem-warn); }
+
+.ov-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.ov-row {
+  display: flex; flex-direction: column; gap: 3px; padding: 5px 0;
+  border-top: 1px solid color-mix(in srgb, var(--ink-line) 60%, transparent);
+}
+.ov-row:first-child { border-top: none; padding-top: 0; }
+.ov-row-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; }
+.ov-row-head .ov-days, .ov-row-head .ov-pct { margin-left: auto; }
+.ov-row-head .ov-pct { min-width: 3.2em; text-align: right; }
+/* a range's address and fill stay on its name's line, cut short before the % wraps */
+.ov-range-at { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ov-cert-name { color: var(--text); overflow-wrap: anywhere; }
+.ov-takes { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
+.ov-more { padding-top: 6px; font-family: 'Alegreya Sans', sans-serif; font-size: 0.95rem; color: var(--text-dim); }
+
+/* a place: the Index's Cinzel caps (the design notes: names are always caps), a
+   button that opens the map's own card */
+.ov-place {
+  background: none; border: none; cursor: pointer; padding: 3px 4px; margin-left: -4px;
+  border-radius: 4px; text-align: left;
+  font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.82rem; letter-spacing: 0.16em;
+  text-transform: uppercase; color: var(--text);
+  transition: color 150ms;
+}
+.ov-place:hover, .ov-place:focus-visible { color: var(--gilt); }
+
+/* an event nobody has acknowledged: the whole row opens the ANNALS */
+.ov-event {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; width: 100%;
+  background: none; border: none; border-radius: 4px; padding: 2px 4px; margin-left: -4px;
+  cursor: pointer; text-align: left; color: var(--text); font: inherit;
+  transition: color 150ms;
+}
+.ov-event-name {
+  font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.82rem; letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.ov-event .ov-quiet { margin-left: auto; }
+.ov-event:hover .ov-event-name, .ov-event:focus-visible .ov-event-name { color: var(--gilt); }
+.ov-go {
+  align-self: flex-start; background: none; border: none; cursor: pointer; padding: 4px; margin-left: -4px;
+  border-radius: 4px; font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.7rem; letter-spacing: 0.2em;
+  text-transform: uppercase; color: var(--gilt);
+}
+
+/* the fullest ranges: a thin bar, gilt, warn from 75%, down from 90% */
+.ov-bar {
+  height: 6px; border-radius: 3px; overflow: hidden;
+  background: rgba(var(--shade-rgb), calc(0.35 * var(--shade-k)));
+  border: 1px solid color-mix(in srgb, var(--ink-line) 70%, transparent);
+}
+.ov-bar > span { display: block; height: 100%; background: var(--gilt); }
+.ov-bar > span.ov-warn { background: var(--sem-warn); }
+.ov-bar > span.ov-down { background: var(--sem-down); }
+
+/* ── on a phone, and any narrow window: one column ── */
+@media (max-width: 760px) {
+  .ov-grid { grid-template-columns: 1fr; }
+  .ov-tile[data-tile="states"] { grid-column: auto; }
+}
+body.phone .ov-grid { grid-template-columns: 1fr; }
+body.phone .ov-tile[data-tile="states"] { grid-column: auto; }
+body.phone .ov-sheet { margin: 0 12px 16px; padding: 14px 12px 16px; }
+/* a narrow window and a phone: the stamp takes its own line under the name,
+   and `Charts ↓` keeps the head's corner */
+@media (max-width: 760px) {
+  .ov-stamp { margin: 0; flex-basis: 100%; }
+  .ov-jump { top: 12px; right: 10px; padding: 4px; }
+}
+body.phone .ov-stamp { margin: 0; flex-basis: 100%; }
+body.phone .ov-jump { top: 12px; right: 10px; padding: 4px; }
+body.phone .ov-title { padding-right: 96px; }
+
+/* THE HOVER GLOW (the design notes 2026-11-02), for the controls this view adds */
+:is(.ov-place, .ov-event, .ov-go):is(:hover, :focus-visible) {
+  box-shadow: 0 0 14px rgba(var(--gilt-rgb), var(--hover-glow-a));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :is(.ov-jump, .ov-place, .ov-event) { transition: none; }
+}
+
+/* ── ALERTS (2026-11-13, stage 4) ─────────────────────────────────────────
+   Rules and destinations, an admin's (alerts.js draws the whole of
+   `#view-alerts`, so the whole view sits in atlas.css's panel token block,
+   as NODES does). A scene panel laid flat, like NODES: the same sheet, the
+   Desk's inputs, buttons and notices, NODES' form fields (`.nv-field`,
+   `.nv-label`, `.nv-toggle`, `.nv-form-note`, `.nv-form-bar`), the card's
+   status dots. No new colour, type or shape. A rule reads as a sentence in
+   Alegreya Sans; addresses and times in JetBrains Mono; section heads in
+   Cinzel micro-caps, the tiles' own. Gilt only where NODES spends it. */
+
+#view-alerts [hidden] { display: none !important; }
+
+.al-sheet {
+  max-width: 1180px; margin: 0 auto 24px;
+  padding: 18px 22px 26px;
+  background: linear-gradient(180deg, var(--surface-2), var(--surface));
+  border: 1px solid var(--ink-line); border-radius: 8px;
+  box-shadow: 0 28px 80px rgba(var(--shade-rgb), calc(0.75 * var(--shade-k)));
+  color: var(--text);
+}
+.al-head {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 14px;
+  padding-bottom: 14px; border-bottom: 1px solid var(--ink-line);
+}
+.al-title {
+  margin: 0; font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.9rem;
+  letter-spacing: 0.3em; color: var(--gilt);
+}
+.al-sub {
+  margin: 0; font-family: 'IM Fell English', 'Alegreya Sans', serif; font-style: italic;
+  font-size: 0.9rem; color: var(--text-dim);
+}
+
+/* the status strip: On or Off, the allowed hosts, the poll, the last look */
+.al-strip:empty { display: none; }
+.al-status {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; margin: 14px 0 0;
+  font-family: 'Alegreya Sans', sans-serif; font-size: 0.9rem; color: var(--text-dim);
+}
+.al-onoff {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.66rem; letter-spacing: 0.22em;
+  text-transform: uppercase; color: var(--text);
+}
+.al-onoff .svc-health { margin-left: 0; }
+.al-is-off .svc-health { background: var(--ink-soft); box-shadow: none; }
+.al-notes {
+  margin: 10px 0 0; padding: 8px 12px 8px 30px;
+  border: 1px solid var(--ink-line); border-left: 3px solid var(--sem-warn); border-radius: 3px;
+  font-family: 'Alegreya Sans', sans-serif; font-size: 0.9rem; line-height: 1.45; color: var(--text);
+}
+.al-msg { margin-top: 14px; }
+.al-msg:empty { display: none; }
+.al-msg .dsk-notice { margin-bottom: 0; }
+
+/* off: only how to turn it on */
+.al-off { max-width: 70ch; margin: 22px 0 6px; }
+.al-off-title {
+  margin: 0 0 10px; font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.78rem;
+  letter-spacing: 0.22em; text-transform: uppercase; color: var(--text);
+}
+.al-off-line {
+  margin: 0 0 10px; font-family: 'Alegreya Sans', sans-serif; font-size: 1.02rem; line-height: 1.5; color: var(--text);
+}
+.al-off-notes {
+  margin: 14px 0 0; padding-left: 20px;
+  font-family: 'Alegreya Sans', sans-serif; font-size: 0.95rem; line-height: 1.5; color: var(--text-dim);
+}
+
+/* the four sections */
+.al-sec { margin-top: 22px; }
+.al-sec-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding-bottom: 8px; border-bottom: 1px solid color-mix(in srgb, var(--ink-line) 60%, transparent);
+}
+.al-sec-title {
+  margin: 0; font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.72rem;
+  letter-spacing: 0.22em; text-transform: uppercase; color: var(--text-dim);
+}
+.al-empty {
+  margin: 10px 0 0; font-family: 'Alegreya Sans', sans-serif; font-size: 0.95rem; color: var(--text-dim);
+}
+.al-list, .al-log { list-style: none; margin: 0; padding: 0; }
+.al-row {
+  display: flex; flex-direction: column; gap: 4px; padding: 10px 0 10px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--ink-line) 60%, transparent);
+  border-left: 2px solid transparent;
+}
+.al-row.al-editing { border-left-color: var(--gilt); }
+.al-row.al-paused .al-sentence { color: var(--text-dim); }
+.al-row-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; }
+.al-name { font-family: 'Alegreya Sans', sans-serif; font-weight: 700; font-size: 0.98rem; color: var(--text); }
+.al-kind, .al-tag {
+  font-family: 'Cinzel', serif; font-size: 0.56rem; letter-spacing: 0.16em;
+  text-transform: uppercase; color: var(--text-dim);
+}
+.al-tag { border: 1px solid var(--ink-line); border-radius: 20px; padding: 1px 8px; }
+.al-acts { display: inline-flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+.al-sentence {
+  margin: 0; font-family: 'Alegreya Sans', sans-serif; font-size: 1.02rem; line-height: 1.45; color: var(--text);
+}
+.al-note { margin: 0; }
+.al-mono {
+  font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; font-variant-numeric: tabular-nums;
+}
+.al-url { color: var(--text); overflow-wrap: anywhere; }
+.al-quiet { font-family: 'Alegreya Sans', sans-serif; font-size: 0.9rem; color: var(--text-dim); }
+.al-warn { color: var(--sem-warn); font-family: 'Alegreya Sans', sans-serif; font-size: 0.9rem; }
+.al-test {
+  align-self: flex-start; margin-top: 2px; padding: 2px 10px;
+  border: 1px solid var(--ink-line); border-left-width: 3px; border-radius: 3px;
+  font-family: 'Alegreya Sans', sans-serif; font-size: 0.9rem; color: var(--text);
+}
+.al-tone-up { border-left-color: var(--sem-up); }
+.al-tone-warn { border-left-color: var(--sem-warn); }
+.al-tone-down { border-left-color: var(--sem-down); }
+
+/* the forms: NODES' bulk form, standing in its section */
+.al-slot { margin-top: 12px; }
+.al-slot:empty { display: none; }
+.al-form {
+  padding: 12px 14px; border: 1px solid var(--ink-line); border-left-width: 3px; border-radius: 3px;
+  background: rgba(var(--shade-rgb), calc(0.2 * var(--shade-k)));
+}
+.al-field { max-width: 100%; }
+.al-fieldset { border: none; margin: 0; padding: 0; min-width: 0; }
+.al-fieldset legend { padding: 0; margin-bottom: 5px; }
+.al-form .dsk-input.al-wide { min-width: min(420px, 100%); }
+.al-form .dsk-input.al-num { min-width: 0; width: 7em; }
+.al-target { max-width: 320px; }
+.al-states { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 6px 0; }
+.al-toggle { align-self: center; color: var(--text); }
+.al-off-choice { color: var(--text-dim); cursor: default; }
+.al-hint { font-family: 'Alegreya Sans', sans-serif; font-size: 0.8rem; line-height: 1.35; color: var(--text-dim); max-width: 46ch; }
+.al-problem { font-family: 'Alegreya Sans', sans-serif; font-size: 0.84rem; color: var(--sem-down); }
+.al-problem:empty, .al-form-problems:empty { display: none; }
+.al-form-problems { flex-basis: 100%; color: var(--sem-down); }
+.al-preview {
+  flex-basis: 100%; padding: 8px 0 0; border-top: 1px solid color-mix(in srgb, var(--ink-line) 60%, transparent);
+}
+
+/* the log: a time, then a sentence */
+.al-log-row {
+  display: grid; grid-template-columns: 9.5em 1fr; gap: 12px; align-items: baseline;
+  padding: 6px 0; border-bottom: 1px solid color-mix(in srgb, var(--ink-line) 60%, transparent);
+}
+.al-when { color: var(--text-dim); }
+.al-log-line {
+  display: inline-flex; align-items: baseline; gap: 8px;
+  font-family: 'Alegreya Sans', sans-serif; font-size: 0.95rem; color: var(--text);
+}
+.al-log-line .svc-health { margin-left: 0; flex: none; align-self: center; }
+
+/* on a phone: one column, the actions under the name */
+body.phone .al-sheet { margin: 0 12px 16px; padding: 14px 12px 18px; }
+body.phone .al-acts { margin-left: 0; flex-basis: 100%; }
+body.phone .al-log-row { grid-template-columns: 1fr; gap: 2px; }
+body.phone .al-form .nv-field, body.phone .al-form .dsk-input { min-width: 0; width: 100%; }
+
+/* the ANNALS: "sent to" rides inside the event's words (annals.js) */
+.ann-sent { white-space: nowrap; }

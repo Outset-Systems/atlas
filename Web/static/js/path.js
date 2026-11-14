@@ -49,9 +49,9 @@ function traceEdge(a, b, crossing) {
   }
 
   // Each road names the place it starts from, not just the service. Two of the
-  // realm's roads are both labelled "Vista" — charted from TRAEFIK and from THE
-  // WILD, genuinely different roads over this hop — and a legend that printed
-  // "Vista, Vista" would read as a bug in the map rather than a fact about it.
+  // realm's roads can carry the same label — charted from two different hosts,
+  // genuinely different roads over this hop — and a legend that printed
+  // the label twice would read as a bug in the map rather than a fact about it.
   const names = crossing.map(({ host, link, chain }) =>
     `<span class="pth-lg pth-lg-svc"><strong>${esc(link.label)}</strong>` +
     `<span class="pth-lg-from"> from ${esc(host.name.toLowerCase())}</span>` +

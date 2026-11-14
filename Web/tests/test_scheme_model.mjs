@@ -1,11 +1,12 @@
-/* THE COLOUR SCHEME's choosing rules, in plain node (v1.52.0).
+/* THE COLOUR SCHEME's choosing rules, in plain node (v1.52.0; three picks,
+   stage 1, 2026-11-13).
 
    Run:  node tests/test_scheme_model.mjs        (from Web/) */
 
 import assert from 'node:assert/strict';
 import {
-  SCHEME_KEY, buttonFace, isToggleKey, nextChoice, otherScheme, parseStored, readStored,
-  resolveScheme, writeStored,
+  RESET_KEY, RESET_MARK, SCHEME_KEY, barScheme, buttonFace, isToggleKey, migrateOnce, nextChoice,
+  otherScheme, parsePick, parseStored, pickAttr, readStored, resolveScheme, whereFrom, writeStored,
 } from '../static/js/scheme-model.js';
 
 let passed = 0;
@@ -20,29 +21,98 @@ const memory = (init = {}) => {
            removeItem: (k) => { delete m[k]; }, m };
 };
 const throwing = { getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); } };
+const classes = (...names) => ({ contains: (c) => names.includes(c) });
+
+const PICKS = ['light', 'dark', null];
+const PLACES = ['table', 'sky', 'depths', 'other'];
 
 test('a stored pick wins over the OS preference', () => {
   assert.equal(resolveScheme('dark', true), 'dark');
   assert.equal(resolveScheme('light', false), 'light');
 });
 
-test('no pick: the OS decides, and no signal at all means dark', () => {
+test('no pick: the OS decides the panels, and no signal at all means dark', () => {
   assert.equal(resolveScheme(null, true), 'light');
   assert.equal(resolveScheme(null, false), 'dark');
   assert.equal(resolveScheme(null, undefined), 'dark');
 });
 
-test('junk in storage is no pick', () => {
-  for (const junk of ['', 'sepia', '1', 'LIGHTS', null, undefined, '{}']) {
-    assert.equal(parseStored(junk), null, String(junk));
+test('junk in storage is no pick (Light/Dark)', () => {
+  for (const junk of ['', 'sepia', '1', 'LIGHTS', 'auto', null, undefined, '{}']) {
+    assert.equal(parsePick(junk), null, String(junk));
   }
-  assert.equal(parseStored(' Light '), 'light');
+  assert.equal(parsePick(' Light '), 'light');
+  assert.equal(parseStored, parsePick);
+});
+
+test('the pick as an attribute: auto is Light/Dark', () => {
+  assert.equal(pickAttr('light'), 'light');
+  assert.equal(pickAttr('dark'), 'dark');
+  assert.equal(pickAttr(null), 'auto');
+  assert.equal(pickAttr('sepia'), 'auto');
 });
 
 test('toggling flips between the two names', () => {
   assert.equal(otherScheme('light'), 'dark');
   assert.equal(otherScheme('dark'), 'light');
   assert.equal(otherScheme('anything'), 'light');
+});
+
+// The decided table, written out (not recomputed): pick × OS light? × place.
+const BAR = {
+  light: { true: { table: 'light', sky: 'light', depths: 'light', other: 'light' },
+           false: { table: 'light', sky: 'light', depths: 'light', other: 'light' } },
+  dark:  { true: { table: 'dark', sky: 'dark', depths: 'dark', other: 'dark' },
+           false: { table: 'dark', sky: 'dark', depths: 'dark', other: 'dark' } },
+  auto:  { true: { table: 'light', sky: 'light', depths: 'dark', other: 'light' },
+           false: { table: 'dark', sky: 'light', depths: 'dark', other: 'dark' } },
+};
+
+test('the bar: all 24 cases of pick × OS × place', () => {
+  let n = 0;
+  for (const pick of PICKS) for (const os of [true, false]) for (const where of PLACES) {
+    assert.equal(barScheme(pick, os, where), BAR[pickAttr(pick)][os][where], `${pick} ${os} ${where}`);
+    n++;
+  }
+  assert.equal(n, 24);
+});
+
+test('where the camera is, from body classes', () => {
+  assert.equal(whereFrom(classes()), 'table');
+  assert.equal(whereFrom(classes('in-sky')), 'sky');
+  assert.equal(whereFrom(classes('depths')), 'depths');
+  for (const c of ['scene-open', 'deck', 'phone']) {
+    assert.equal(whereFrom(classes(c)), 'other', c);
+    assert.equal(whereFrom(classes(c, 'in-sky')), 'other', `${c} in the sky`);
+    assert.equal(whereFrom(classes(c, 'depths')), 'other', `${c} in the depths`);
+  }
+  assert.equal(whereFrom(null), 'table');
+  assert.equal(whereFrom({ contains() { throw new Error('no'); } }), 'table');
+});
+
+test('from Light/Dark a press pins the scheme the bar is not showing, in every place', () => {
+  for (const os of [true, false]) for (const where of PLACES) {
+    const shown = barScheme(null, os, where);
+    const next = nextChoice(null, os, where);
+    assert.notEqual(next, shown, `${os} ${where}`);
+    assert.equal(barScheme(next, os, where), next);   // and the bar then shows it
+  }
+  assert.equal(nextChoice(null, true, 'sky'), 'dark');
+  assert.equal(nextChoice(null, false, 'depths'), 'light');
+});
+
+test('from Light a press goes to Dark and from Dark to Light; never null', () => {
+  for (const os of [true, false, undefined]) for (const where of [...PLACES, undefined]) {
+    assert.equal(nextChoice('light', os, where), 'dark');
+    assert.equal(nextChoice('dark', os, where), 'light');
+    for (const pick of [...PICKS, 'sepia']) assert.notEqual(nextChoice(pick, os, where), null);
+  }
+});
+
+test('with no place, a press is the 11-01 rule: the OS scheme not on screen', () => {
+  assert.equal(nextChoice(null, false), 'light');
+  assert.equal(nextChoice(null, true), 'dark');
+  assert.equal(nextChoice('sepia', false), 'light');   // junk counts as no pick
 });
 
 test('the pick persists under its key and reads back', () => {
@@ -54,6 +124,13 @@ test('the pick persists under its key and reads back', () => {
   assert.equal(SCHEME_KEY, 'atlas.scheme');
 });
 
+test('Light/Dark (null) removes the stored key', () => {
+  const s = memory({ [SCHEME_KEY]: 'dark' });
+  assert.equal(writeStored(s, null), true);
+  assert.equal(SCHEME_KEY in s.m, false);
+  assert.equal(readStored(s), null);
+});
+
 test('storage that throws or is absent never breaks the page', () => {
   assert.equal(readStored(throwing), null);
   assert.equal(writeStored(throwing, 'dark'), false);
@@ -61,42 +138,63 @@ test('storage that throws or is absent never breaks the page', () => {
   assert.equal(writeStored(undefined, 'dark'), false);
 });
 
-test('the switch: always the scheme not on screen, and it never rests on the system', () => {
-  assert.equal(nextChoice(null, false), 'light');
-  assert.equal(nextChoice(null, true), 'dark');
-  assert.equal(nextChoice('light', false), 'dark');
-  assert.equal(nextChoice('dark', false), 'light');
-  assert.equal(nextChoice('dark', true), 'light');
-  assert.equal(nextChoice('light', true), 'dark');
-  assert.equal(nextChoice('sepia', false), 'light');   // junk counts as no pick
-});
-
-test('every click changes what is drawn', () => {
-  for (const sys of [true, false]) {
-    let choice = null;
-    for (let i = 0; i < 4; i++) {
-      const before = resolveScheme(choice, sys);
-      choice = nextChoice(choice, sys);
-      assert.notEqual(resolveScheme(choice, sys), before);
-    }
+test('the button says the pick and what a press does', () => {
+  const a = buttonFace(null, true), l = buttonFace('light', false), d = buttonFace('dark', true);
+  assert.equal(a.title, 'Light/Dark: the bar follows the map. A press pins the other one (T)');
+  assert.equal(l.title, 'Light: press for Dark (T)');
+  assert.equal(d.title, 'Dark: press for Light (T)');
+  assert.equal(a.label, 'Light/Dark: the bar follows the map. A press pins the other one');
+  assert.equal(l.label, 'Light: press for Dark');
+  assert.equal(d.label, 'Dark: press for Light');
+  assert.deepEqual(buttonFace(null, false), a);   // the words do not follow the OS
+  for (const f of [a, l, d]) {
+    assert.deepEqual(Object.keys(f).sort(), ['label', 'title']);   // no pressed, no glyph
   }
 });
 
-test('the button: the sun or the moon, and it says what a click does', () => {
-  const l = buttonFace('light', false), d = buttonFace('dark', false), a = buttonFace(null, true);
-  assert.equal(l.glyph, '☀'); assert.equal(d.glyph, '☾'); assert.equal(a.glyph, '☀');
-  assert.equal(l.icon, 'sun'); assert.equal(d.icon, 'moon'); assert.equal(a.icon, 'sun');
-  assert.match(l.title, /^Light panels — switch to dark \(T\)$/);
-  assert.match(d.title, /^Dark panels — switch to light \(T\)$/);
-  assert.equal(a.title, l.title);
-  assert.equal(l.pressed, true); assert.equal(d.pressed, false); assert.equal(a.pressed, true);
+test('migrateOnce: clears a stored light or dark and writes the mark', () => {
+  for (const pick of ['light', 'dark']) {
+    const s = memory({ [SCHEME_KEY]: pick });
+    assert.equal(migrateOnce(s), true);
+    assert.equal(SCHEME_KEY in s.m, false);
+    assert.equal(s.m[RESET_KEY], RESET_MARK);
+  }
+  assert.equal(RESET_KEY, 'atlas.scheme.reset');
+  assert.equal(RESET_MARK, '2026-11');
 });
 
-test('choosing auto forgets the stored pick', () => {
-  const s = memory({ [SCHEME_KEY]: 'dark' });
-  assert.equal(writeStored(s, null), true);
-  assert.equal(SCHEME_KEY in s.m, false);
-  assert.equal(readStored(s), null);
+test('migrateOnce: a second run leaves a new pick alone', () => {
+  const s = memory({ [SCHEME_KEY]: 'light' });
+  migrateOnce(s);
+  writeStored(s, 'dark');
+  assert.equal(migrateOnce(s), false);
+  assert.equal(readStored(s), 'dark');
+});
+
+test('migrateOnce: storage whose every call throws does not throw', () => {
+  const all = { getItem() { throw new Error('x'); }, setItem() { throw new Error('x'); },
+                removeItem() { throw new Error('x'); } };
+  assert.doesNotThrow(() => migrateOnce(all));
+  assert.equal(migrateOnce(all), false);
+  assert.doesNotThrow(() => migrateOnce(throwing));   // no removeItem at all
+  assert.equal(migrateOnce(null), false);
+});
+
+test('migrateOnce: a failing mark write leaves the pick in place', () => {
+  const s = memory({ [SCHEME_KEY]: 'light' });
+  s.setItem = () => { throw new Error('quota'); };
+  assert.equal(migrateOnce(s), false);
+  assert.equal(readStored(s), 'light');
+  assert.equal(RESET_KEY in s.m, false);
+});
+
+test('migrateOnce: junk in the mark counts as no mark', () => {
+  for (const junk of ['', '2026-10', 'true', '2026-11 ']) {
+    const s = memory({ [SCHEME_KEY]: 'dark', [RESET_KEY]: junk });
+    assert.equal(migrateOnce(s), true, JSON.stringify(junk));
+    assert.equal(readStored(s), null);
+    assert.equal(s.m[RESET_KEY], RESET_MARK);
+  }
 });
 
 test('T toggles, but never while typing or with a modifier', () => {

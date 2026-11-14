@@ -38,23 +38,58 @@ _FAULTED = ("down",)
 _PLANNED = ("maintenance",)
 
 
+def _placed(node):
+    """True for a place this module can reason about: an object with a text id.
+    A hand-edited entry without one is served with a warning, so it must not
+    stop the feed (11-12 audit: one id-less place 500'd `/api/v2/signals` and
+    stopped the annalist here)."""
+    return isinstance(node, dict) and isinstance(node.get("id"), str) and bool(node["id"])
+
+
 def declared_edges(data):
     """{node_id: [ancestors]} — only what the dataset actually asserts."""
     edges = {}
-    known = {n.get("id") for n in data.get("nodes", []) or [] if isinstance(n, dict)}
+    known = {n["id"] for n in data.get("nodes", []) or [] if _placed(n)}
     for node in data.get("nodes", []) or []:
-        if not isinstance(node, dict):
+        if not _placed(node):
             continue
         ancestors = []
         parent = node.get("parent")
-        if parent and parent in known:
+        if isinstance(parent, str) and parent in known:        # a list is no parent
             ancestors.append(parent)
         for dep in node.get("depends_on") or []:
-            if dep and dep in known and dep not in ancestors and dep != node.get("id"):
+            if isinstance(dep, str) and dep in known and dep not in ancestors \
+                    and dep != node.get("id"):
                 ancestors.append(dep)
         if ancestors:
             edges[node["id"]] = ancestors
     return edges
+
+
+def walk(start, step, known):
+    """Every place reached from `start` by repeating `step`, breadth first, in
+    the order first reached. `start` itself is never in it, and neither is an id
+    outside `known`. Loop-safe: a hand-edited map can always hold one."""
+    seen, queue = [], list(step(start))
+    while queue:
+        nxt = queue.pop(0)
+        if nxt == start or nxt in seen or nxt not in known:
+            continue
+        seen.append(nxt)
+        queue.extend(step(nxt))
+    return seen
+
+
+def needs(edges, node_id, known):
+    """What `node_id` cannot work without, transitively (`edges` from
+    `declared_edges`)."""
+    return walk(node_id, lambda n: edges.get(n, []), known)
+
+
+def needed_by(edges, node_id, known):
+    """What stops working if `node_id` does, transitively: everything that
+    declares it, or declares something that does."""
+    return walk(node_id, lambda n: [k for k, v in edges.items() if n in v], known)
 
 
 def _root_cause(node_id, edges, states, seen=None):

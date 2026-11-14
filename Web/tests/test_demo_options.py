@@ -80,3 +80,17 @@ def test_a_default_style_with_no_art_falls_back_to_the_realms_map(tmp_path):
     page = _look_only(tmp_path, ATLAS_DEFAULT_STYLE="gone.png").test_client().get("/").get_data(as_text=True)
     assert "map-art/gone.png" not in page
     assert "defaultStyle" not in _config(page)
+
+
+def test_a_look_only_atlas_keeps_the_admin_s_tiles_to_itself(tmp_path):
+    """Every visitor of a look-only standalone Atlas sees every place (no one
+    signs in), but none of them is its admin: OVERVIEW names no change, drift
+    or source, and NODES names no reviewer (the 2026-11-13 front-end review)."""
+    client = _look_only(tmp_path).test_client()
+    assert client.get("/api/v2/admin/dataset").status_code == 403
+    body = client.get("/api/v2/overview").get_json()
+    assert body["admin"] is False
+    assert "drift" not in body
+    assert body["sources"]["items"] == []
+    rows = client.get("/api/v2/places/roster").get_json()["rows"]
+    assert rows and all("reviewed_by" not in r for r in rows)

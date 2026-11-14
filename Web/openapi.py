@@ -26,7 +26,7 @@ import schema
 #: The contract's own version, apart from the app's. It moves when a documented
 #: path, parameter or field changes, so the file on disk does not churn with
 #: every release.
-CONTRACT = "2.2.0"
+CONTRACT = "2.5.0"
 
 OPENAPI_PATH = "/api/v2/openapi.json"
 
@@ -162,6 +162,130 @@ _BY_ID = {"type": "object", "additionalProperties": {
     "type": "object", "additionalProperties": True, "properties": {"state": _STATE}}}
 
 
+def _roster_schema():
+    """The places table, one row per place (`api/v2/roster.py`)."""
+    text = {"type": ["string", "null"]}
+    ids = {"type": "array", "items": {"type": "string"}}
+    row = {
+        "id": {"type": "string"},
+        "name": text,
+        "state": {"type": ["string", "null"], "examples": list(_STATE["examples"]),
+                  "description": "The live state. Null is unknown, not healthy."},
+        "cause": {**text, "description": "The place whose fault explains this one's, when one does."},
+        "zone": text,
+        "zone_name": text,
+        "kind": {**text, "examples": list(schema.NODE_KINDS)},
+        "role": text,
+        "addresses": {**ids, "description": ("The place's `ip` and `mac`, then `ipv6`, `hostname` "
+                                              "and `fqdn` when present. Only those with a value.")},
+        "services": {"type": "integer", "description": "How many services the place lists."},
+        "confirmed_by": {**text, "description": "The source whose answer gave the place its state."},
+        "charted_source": {**text, "description": "`hand`, or the import that wrote the place."},
+        "reviewed": {"type": ["boolean", "null"],
+                     "description": "Null for a place charted before the map kept provenance."},
+        "reviewed_at": {**text, "description": "UTC."},
+        "reviewed_by": {**text, "description": "Who reviewed it. Sent to an admin only."},
+        "changed_since_review": {"type": "boolean"},
+        "unchecked": {"type": "boolean",
+                      "description": ("Never reviewed, or reviewed and changed by an import since. "
+                                      "False for a place charted before the map kept provenance.")},
+        "maintenance": {"type": "object", "properties": {
+            "now": {"type": "boolean", "description": "Under repair now."},
+            "next": {**text, "description": "When the next window that names it opens, UTC."}}},
+        "cert": {"type": ["object", "null"], "description": (
+            "The certificate tied to this place (its `place`) that lapses first. `days` is whole "
+            "days left, negative once lapsed, null when its date is not charted."),
+            "properties": {"name": text, "days": {"type": ["integer", "null"]}, "expires": text}},
+        "sets": {**ids, "description": "The sets this place is in."},
+        "depends_on": {**ids, "description": "Places this one cannot work without."},
+    }
+    return {"type": "object", "properties": {
+        "stamp": {**text, "description": "The dataset's version, as an editor sends it back."},
+        "generated_at": {"type": "string", "description": "When this answer was made, UTC."},
+        "zones": {"type": "array", "items": {"type": "object", "properties": {
+            "id": {"type": "string"}, "name": text}}},
+        "sets": {"type": "array", "description": "Named lists of places. Not access.",
+                 "items": {"type": "object", "properties": {
+                     "id": {"type": "string"}, "name": text, "note": text, "places": ids}}},
+        "rows": {"type": "array", "description": "One per place.",
+                 "items": {"type": "object", "additionalProperties": True, "properties": row}},
+    }}
+
+
+def _overview_schema():
+    """OVERVIEW's tiles (`api/v2/overview.py`, built in `overview.py`)."""
+    text = {"type": ["string", "null"]}
+    count = {"type": "integer"}
+    ref = {"type": "object", "properties": {"id": {"type": "string"}, "name": text}}
+    refs = {"type": "array", "items": ref}
+    return {"type": "object", "properties": {
+        "generated_at": {"type": "string", "description": "When this answer was made, UTC."},
+        "admin": {"type": "boolean", "description": "Whether the reader sees everything. Never true for a token."},
+        "states": {"type": "object", "description": (
+            "The reader's places by live state. `unknown` is a place with no state, not a healthy one."),
+            "properties": {k: count for k in ("healthy", "degraded", "down", "slumbering",
+                                              "maintenance", "unknown", "total")}},
+        "down": {"type": "array", "description": (
+            "Places down or degraded on their own account, down first, then by name. A place "
+            "whose fault another visible place explains is that place's fallout and is not listed."),
+            "items": {"type": "object", "properties": {
+                "id": {"type": "string"}, "name": text,
+                "state": {"type": "string", "examples": ["down", "degraded"]},
+                "cause": {**text, "description": "Always null here: a place with a visible cause is not a root."},
+                "downstream": {**refs, "description": (
+                    "Every visible place that needs this one, directly or through another, from "
+                    "`parent` and `depends_on` only.")},
+                "declared": {"type": "boolean", "description": (
+                    "Whether any visible place declares that it needs this one. False means nothing "
+                    "is declared to depend on it, not that nothing is affected.")}}}},
+        "unacked": {"type": "object", "description": "Events nobody has acknowledged, of any gravity.",
+                    "properties": {
+                        "count": count,
+                        "items": {"type": "array", "description": "Newest first, at most 8.",
+                                  "items": {"type": "object", "properties": {
+                                      "id": {"type": "integer"}, "at": {"type": "string"},
+                                      "kind": {"type": "string"}, "target": {"type": "string"},
+                                      "name": text, "from": text, "to": text}}}}},
+        "maintenance": {"type": "array", "description": (
+            "Repair windows open now or opening within 7 days, soonest first, with the reader's "
+            "places in each. A window that names only places the reader may not see is not listed."),
+            "items": {"type": "object", "properties": {
+                "window": text, "reason": text,
+                "starts": {**text, "description": "This occurrence's start, UTC."},
+                "ends": {**text, "description": "This occurrence's end, UTC. Null when it has none."},
+                "now": {"type": "boolean", "description": "Open now."},
+                "places": refs}}},
+        "certs": {"type": "array", "description": (
+            "Certificates with 30 days or fewer left, lapsed ones included, soonest first."),
+            "items": {"type": "object", "properties": {
+                "name": text, "place": {"type": ["object", "null"], "properties": ref["properties"]},
+                "days": {"type": "integer", "description": "Whole days left, negative once lapsed."},
+                "expires": text}}},
+        "review": {"type": "object", "properties": {
+            "unchecked": {**count, "description": "Places an import wrote or changed that no person has checked since."},
+            "stale": {**count, "description": "Places with no review, or none in 90 days."},
+            "items": {"type": "array", "description": "Never reviewed first, then the oldest review; at most 8.",
+                      "items": {"type": "object", "properties": {
+                          "id": {"type": "string"}, "name": text, "reviewed_at": text}}}}},
+        "changes": {"type": "object", "description": (
+            "For an admin, the last 8 entries in the change log. For anyone else, a token "
+            "included, how many of their places changed in 7 days, with no names."),
+            "properties": {
+                "items": {"type": "array", "items": {"type": "object", "properties": {
+                    "at": text, "by": text, "summary": text}}},
+                "count_7d": count}},
+        "sources": {"type": "object", "properties": {
+            "all_ok": {"type": "boolean", "description": "No source was silent on the last build."},
+            "silent": count,
+            "items": {"type": "array", "description": "Each source, for an admin. Empty for anyone else.",
+                      "items": {"type": "object", "properties": {
+                          "name": {"type": "string"}, "ok": {"type": "boolean"},
+                          "last_ok": {**text, "description": "When it last answered, UTC."}}}}}},
+        "drift": {"type": "object", "description": "Monitors the map has not charted. Sent to an admin only.",
+                  "properties": {"count": count, "items": {"type": "array", "items": {"type": "string"}}}},
+    }}
+
+
 def _schemas():
     return {
         "Dataset": dataset_schema(),
@@ -190,10 +314,17 @@ def _schemas():
                 "cached": {"type": "boolean", "description": "Served from the 30 second cache."},
                 "sources": {"type": "object", "additionalProperties": {"type": "string"},
                             "description": "Each source by name: `ok`, or `silent` when it did not answer."},
+                "sources_at": {"type": "object", "additionalProperties": {"type": ["string", "null"]},
+                               "description": ("Each source by name: when it last answered, UTC, or null "
+                                               "if it has not since the server started.")},
                 "nodes": {**_BY_ID, "description": "Places by id."},
                 "services": {**_BY_ID, "description": "Services by monitor name."},
                 "rites": {**_BY_ID, "description": "Scheduled jobs that are late, missed or failed, by key."},
                 "causes": {**_ANY_OBJECT, "description": "For a place that is down because another is: which one."},
+                "confirmed_by": {"type": "object", "additionalProperties": {"type": "string"},
+                                 "description": ("Places by id: the source whose answer gave the place "
+                                                 "its state in this feed. Absent for a place under "
+                                                 "repair, whose state comes from the window.")},
                 "maintenance": {"type": "array", "items": _ANY_OBJECT},
                 "repairs": _ANY_OBJECT,
                 "metrics": _ANY_OBJECT,
@@ -233,6 +364,10 @@ def _schemas():
                     "gravity": {"type": "string",
                                 "examples": ["grave", "warn", "planned", "clear", "consequence"]},
                     "cause": {"type": "string", "description": "Present when another fault explains this one."},
+                    "outlived": {"type": "boolean", "description": (
+                        "Present and true on a place still down after the fault that "
+                        "explained it has cleared: its own outage starts here, so `from` "
+                        "and `to` are both `down`. It names no cause.")},
                     "ack": {"type": ["object", "null"], "additionalProperties": True,
                             "description": ("`at`: when it was acknowledged; null if it was not. "
                                             "Who, and what they wrote, are for admins.")},
@@ -241,6 +376,8 @@ def _schemas():
                 "total": {"type": "integer"}, "unacked": {"type": "integer"},
                 "last_24h": {"type": "integer"}}},
         }},
+        "Roster": _roster_schema(),
+        "Overview": _overview_schema(),
         "Refusal": {"type": "object", "properties": {
             "error": {"type": "string"}, "reason": {"type": "string"}}},
         "Unreadable": {"type": "object", "properties": {"error": {"type": "string"}}},
@@ -293,6 +430,20 @@ def _paths():
                  "description": "How many to return. The history keeps 2,000."},
                 {"name": "unacked", "in": "query", "schema": {"type": "string", "enum": ["1"]},
                  "description": "`1` returns only events nobody has acknowledged."}]),
+        "/api/v2/places/roster": _get(
+            "getPlacesTable", "Every place, one row each",
+            "The places this reader may see, each with its live state, network, addresses, "
+            "review, repair windows, nearest certificate and sets. Made from the map and the "
+            "live health, cut the same way as those two.",
+            _json("Roster", "The table."), extra=("500",)),
+        "/api/v2/overview": _get(
+            "getOverview", "The realm at a glance",
+            "Places by state, what is down and what depends on it, events nobody has "
+            "acknowledged, repair windows in the next 7 days, certificates lapsing within 30, "
+            "places unchecked or not reviewed in 90, how many places changed this week and "
+            "whether every source answered. Made from the map and the live health, cut the "
+            "same way as those two.",
+            _json("Overview", "The tiles."), extra=("500",)),
         OPENAPI_PATH: _get(
             "getReference", "This document",
             "The same document as `docs/openapi.json` in the repository.",

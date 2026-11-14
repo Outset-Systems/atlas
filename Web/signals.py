@@ -744,6 +744,10 @@ def monitor_map(data):
     monitor because a hand-kept line is the more deliberate of the two."""
     out = {}
     for node in data.get("nodes", []) or []:
+        # an entry that is not an object, or names no place, lights nothing
+        # (11-12 audit: one such entry stopped every feed build)
+        if not isinstance(node, dict) or not node.get("id"):
+            continue
         for name in node.get("monitors") or []:
             if isinstance(name, str) and name:
                 out.setdefault(name, node.get("id"))
@@ -754,8 +758,8 @@ def monitor_map(data):
 def ip_map(data):
     """{address: place id} from a dataset: which place a Prometheus `instance`
     belongs to."""
-    return {n["ip"]: n["id"] for n in data.get("nodes", [])
-            if n.get("ip") and n["ip"] != "—"}
+    return {n["ip"]: n["id"] for n in data.get("nodes", []) or []
+            if isinstance(n, dict) and n.get("id") and n.get("ip") and n["ip"] != "—"}
 
 
 def unifi_places(data):
@@ -872,17 +876,29 @@ def _coerce_feed(raw):
     return out
 
 
-def _merge(feeds):
-    """Deep-merge partial feeds. Later feeds win per-key (order = adapter priority)."""
+def _merge(feeds, names=None):
+    """Deep-merge partial feeds. Later feeds win per-key (order = adapter priority).
+
+    With `names` (one adapter name per feed), the merged feed also says which
+    adapter supplied each place's state: `confirmed_by` = {place id: name}
+    (2026-11-13, for the places table). Only an entry that carries a `state`
+    counts, so an adapter that adds another key to a place does not take the
+    credit for its state. In memory only: nothing stores it.
+    """
     merged = {"nodes": {}, "services": {}, "stones": {}, "metrics": {}}
-    for feed in feeds:
+    confirmed = {}
+    for i, feed in enumerate(feeds):
         for nid, info in feed.get("nodes", {}).items():
             merged["nodes"].setdefault(nid, {}).update(info)
+            if names is not None and isinstance(info, dict) and info.get("state"):
+                confirmed[nid] = names[i]
         for sid, info in feed.get("services", {}).items():
             merged["services"].setdefault(sid, {}).update(info)
         for tid, info in feed.get("stones", {}).items():
             merged["stones"].setdefault(tid, {}).update(info)
         merged["metrics"].update(feed.get("metrics", {}))
+    if names is not None:
+        merged["confirmed_by"] = confirmed
     return merged
 
 
@@ -901,6 +917,9 @@ class SignalsHub:
         reaches every worker on its next poll, with no restart."""
         self._factory = factory
         self._stamp = None
+        # {adapter name: when its fetch last came back with something, UTC}.
+        # Keyed by name, not by adapter, so it outlives a rebuild of the set.
+        self._last_ok = {}
         if factory is not None:
             self._refresh_adapters(force=True)
         else:
@@ -934,18 +953,36 @@ class SignalsHub:
         feed = self._cache or {}
         return dict(feed.get("sources") or {})
 
+    def last_ok(self):
+        """When each source last answered with something ({name: UTC stamp}),
+        in this worker, since it started. A source that has not answered here
+        yet is absent. In memory only, like `last_sources`: nothing stores it,
+        and each gunicorn worker keeps its own (2026-11-13, for OVERVIEW)."""
+        return dict(self._last_ok)
+
+    def _sources_at(self):
+        return {a.name: self._last_ok.get(a.name) for a in self.adapters}
+
     @property
     def enabled(self):
         return [a.name for a in self.adapters]
 
     def _build(self):
-        feeds, sources = [], {}
+        feeds, sources, names = [], {}, []
         for a in self.adapters:
             partial = a.fetch()
             feeds.append(partial)
+            names.append(a.name)
             sources[a.name] = "ok" if partial else "silent"
-        merged = _merge(feeds)
+            if partial:
+                # `jsonio.iso_utc`'s spelling, written out: a relay box imports
+                # this module with nothing beside the standard library and settings
+                self._last_ok[a.name] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        merged = _merge(feeds, names)
         merged["sources"] = sources
+        # beside `sources`, whose shape stays {name: "ok"|"silent"}: when each
+        # one last answered in this worker, null if it has not yet
+        merged["sources_at"] = self._sources_at()
         merged["generated"] = time.time()
         try:
             import metrics
@@ -971,7 +1008,9 @@ class SignalsHub:
             except Exception as e:  # noqa: BLE001 - the hub must never raise either
                 log.error("signals build failed, serving empty feed: %s", e)
                 built = {"nodes": {}, "services": {}, "stones": {}, "metrics": {},
+                         "confirmed_by": {},
                          "sources": {a.name: "silent" for a in self.adapters},
+                         "sources_at": self._sources_at(),
                          "generated": time.time()}
             self._cache, self._cache_at = built, now
             fresh = dict(built)

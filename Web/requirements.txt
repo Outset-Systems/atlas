@@ -1,5 +1,8 @@
 flask>=3.0,<4
 requests>=2.31,<3
+# ALERTS' sender (alert_send.py) opens one pinned connection with urllib3 2's
+# server_hostname/assert_hostname; requests alone allows urllib3 1.x
+urllib3>=2,<3
 gunicorn>=22,<24
 # /metrics — the Atlas's own watchfire (metrics.py); multiprocess mode across
 # the gunicorn workers via PROMETHEUS_MULTIPROC_DIR (Dockerfile)

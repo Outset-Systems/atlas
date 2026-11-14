@@ -43,9 +43,12 @@ def card():
     healthy, nodes, zones, services, mtime, problems = True, 0, 0, 0, 0, []
     try:
         data, mtime, problems = ctx.dataset()
-        nodes = len(data.get("nodes", []))
-        zones = len(data.get("zones", []))
-        services = sum(len(n.get("links", [])) for n in data.get("nodes", []))
+        # a hand-edited entry that is not an object is served with a warning,
+        # so it must not 500 the one address a monitor asks (11-12 audit)
+        places = [n for n in data.get("nodes") or [] if isinstance(n, dict)]
+        nodes = len(places)
+        zones = len(data.get("zones") or [])
+        services = sum(len(n.get("links") or []) for n in places)
     except (OSError, ValueError) as e:
         log.error("health: lab-data unreadable: %s", e)
         healthy = False
@@ -56,7 +59,7 @@ def card():
     #
     # Safe for the Hub: its cards render from `summary` alone and it labels
     # them from its OWN app config, never from this field.
-    return app_status(
+    out = app_status(
         app_key=settings.APP_KEY,
         name=settings.APP_BRAND,
         version=settings.APP_VERSION,
@@ -75,6 +78,14 @@ def card():
         icon="map",
         accent=settings.ACCENT_COLOR,
     )
+    # THE ANNALIST'S PULSE (2026-11-13): whether this worker's background poll
+    # runs and when it last finished. A poll that died, or never started, was
+    # silent before (11-12 audit), and ALERTS fire only while it runs. Two
+    # values and nothing else, since this answers anonymously; `healthy` is
+    # left alone, because a poll switched off (ATLAS_ANNALS_POLL=0) is a choice.
+    import annalist
+    out["annalist"] = annalist.liveness()
+    return out
 
 
 @bp.route("/health")

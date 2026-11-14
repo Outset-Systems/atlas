@@ -233,3 +233,29 @@ def test_an_empty_map_is_valid():
     """A fresh install must not open unhealthy."""
     from labdata import EMPTY_DATASET
     assert validate(EMPTY_DATASET) == []
+
+
+# ── one reference is one id, as text (2026-11-13) ────────────────────────────
+
+@pytest.mark.parametrize("value,ok", [
+    ("alpha", True), ("", True), ("—", True),
+    (["alpha"], False), ({"id": "alpha"}, False), (7, False), (True, False),
+])
+def test_one_reference_is_one_id_as_text(value, ok):
+    fld = schema.field("certs", "place")
+    assert fld["type"] == "ref"
+    assert (schema.check_value(fld, value) is None) is ok
+
+
+def test_a_list_where_one_id_belongs_is_reported_not_fatal():
+    problems = validate(_map(
+        nodes=[node("a")],
+        routes=[{"from": ["a"], "to": {"id": "a"}}],
+        certs=[{"name": "c", "kind": "tls", "place": [["a"]]}],
+        regions=[{"id": "r", "name": "R", "x": 1, "y": 1, "w": 10, "h": 10,
+                  "parent": ["r"]}]), strict=True)
+    joined = " | ".join(problems)
+    assert "from must be one id, as text" in joined
+    assert "to must be one id, as text" in joined
+    assert "place must be one id, as text" in joined
+    assert "parent must be one id, as text" in joined

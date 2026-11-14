@@ -91,7 +91,10 @@ def test_health_answers_the_card_contract(standalone):
     r = c.get("/api/v2/health")
     assert r.status_code == 200
     body = r.get_json()
-    assert set(body) == {"app", "name", "version", "healthy", "summary", "card"}
+    # `annalist` (2026-11-13): whether this worker's background poll runs and
+    # when it last finished, added beside the card contract's own keys
+    assert set(body) == {"app", "name", "version", "healthy", "summary", "card", "annalist"}
+    assert set(body["annalist"]) == {"running", "last_tick"}
     assert body["app"] == "atlas"
     assert body["healthy"] is True
     assert body["summary"]["headline_label"] == "Places Charted"

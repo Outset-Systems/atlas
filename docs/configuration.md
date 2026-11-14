@@ -355,6 +355,49 @@ in it.
 | `ATLAS_TRIPWIRES_SECRET` | (unset) | The webhook secret, at least 16 characters (`python cli.py tripwires-key --new-secret` prints a random one). Signs `X-Atlas-Signature` and derives the webhook key. | yes, `ATLAS_TRIPWIRES_SECRET_FILE` | no |
 | `ATLAS_TRIPWIRES_STATE` | `<events dir>/tripwires.json` | When each sender (OpenCanary, Canarytokens, generic) was last heard and last tripped. Small; one row per sender. | no | no |
 
+## Alerts
+
+Alerts send a short message to ntfy, Gotify or a JSON webhook when a place, a
+set or a network changes state and stays in it for as long as a rule says,
+plus an optional daily digest. Rules and destinations are made by an admin in
+the ALERTS view. They are **off** until the operator sets both `ATLAS_ALERTS=1`
+and a non-empty `ATLAS_ALERT_HOSTS`. While either is missing nothing is sent,
+and the admin routes that save or test answer 403 with that reason.
+
+Alerts ride the background poll (`ATLAS_ANNALS_POLL`), after each build of the
+live feed. They add no thread and make no request except the sends. So they
+fire only while that poll runs: not with `ATLAS_ANNALS_POLL=0`, and not under
+the development server. `GET /api/v2/health` says whether the poll runs
+(`annalist.running`, `annalist.last_tick`, for the worker that answered). How
+long a state must last is measured in polls, so a rule's minutes are only as
+fine as the poll interval (60 seconds by default).
+
+What a message may say is what a viewer with no access groups may see. A rule
+on a place, set or network that viewer cannot see is refused when it is saved.
+A place they cannot see is never named, listed or counted in a message, and a
+rule's own name and note are never sent. A message about a place behind
+another place that is down names that root once and lists what went with it,
+instead of one message per place. A place inside a maintenance window sends
+nothing. Acknowledging an event in the ANNALS stops it sending again. At most 6
+messages a minute go to one destination and 30 an hour in all; anything over
+that is sent as one "and N more changes, see Atlas" message at the next poll.
+
+The daily digest (at an hour the admin picks, in the server's local time)
+lists certificates near lapsing, places nobody has reviewed in a number of
+days, and, if chosen, the monitors the map has not charted. Devices a survey
+saw but the map has not charted are not in it yet: no feed the poll builds
+carries them.
+
+| Variable | Default | What it does | Secret | Settings screen |
+|---|---|---|---|---|
+| `ATLAS_ALERTS` | (unset) | `1` lets alerts send. Off, the ALERTS view says how to turn them on and saves nothing. | no | no |
+| `ATLAS_ALERT_HOSTS` | (unset) | The hosts a destination may name, as `host:port`, comma separated, for example `ntfy.example.internal:443,gotify.example.internal:8080`. An admin can only send to a host listed here. Loopback, link-local, multicast and unspecified addresses, the cloud metadata addresses (`fd00:ec2::254`, `100.100.100.200`, `192.0.0.192`), Atlas's own address and the addresses this machine's name resolves to are refused even when listed. The name is resolved once per send, given up after 3 seconds, and the connection goes to that address. Empty, nothing is sent. | no | no |
+| `ATLAS_ALERT_SECRET_<NAME>` | (unset) | A destination's key, named in the ALERTS view by `<NAME>` alone (`NTFY_LAB` reads `ATLAS_ALERT_SECRET_NTFY_LAB`). Sent as `Authorization: Bearer` to ntfy and a webhook, and as `X-Gotify-Key` to Gotify. Atlas never stores it, shows it or logs it, and sends it only to the address it was named for: change the address and the admin names the secret again. The prefix the app reads is `ATLAS_ALERT_SECRET_`. | yes, `ATLAS_ALERT_SECRET_<NAME>_FILE` | no |
+| `ATLAS_PUBLIC_URL` | (unset) | The address people reach this Atlas by, for example `https://atlas.example.internal/`. A message links to `<address>?place=<id>`. Atlas cannot know its own address behind a proxy, so unset, messages carry no link. | no | no |
+| `ATLAS_ALERTS_FILE` | `<data dir>/alerts.json` | The rules, the digest and the destinations (secrets by name only). Written by the ALERTS view. Never exported and never shown to a token. | no | no |
+| `ATLAS_ALERTS_STATE` | `<data dir>/alerts-state.json` | The poll's own record for alerts: the last event handled, rules waiting out their minutes, the rate limit and the last digest day. Written under a lock so two workers send once. | no | no |
+| `ATLAS_ALERT_LOG` | `<data dir>/alert-deliveries.jsonl` | One line per send: when, the rule's id, the destination's name, the events, and how it went (delivered, refused with the HTTP status, unreachable, blocked). Never a message's words or a secret. Mode 0600, kept 90 days, read by admins at `GET /api/v2/admin/alerts/deliveries`. | no | no |
+
 ## Metrics
 
 | Variable | Default | What it does | Secret | Settings screen |
@@ -396,7 +439,7 @@ variables of its own. The web app does not read them.
 Settings → Connections issues tokens for scripts, local models and coding harnesses
 (admins only). A token is shown once and stored as a hash. It is read-only, it sees what
 a signed-in viewer with no groups sees, and it reaches only `lab-data`, `maps`, `signals`,
-`rites`, `events` and `openapi.json` under `/api/v2`, plus the MCP endpoint. [The API
+`rites`, `events`, `places/roster`, `overview` and `openapi.json` under `/api/v2`, plus the MCP endpoint. [The API
 guide](api.md) has each path with an example, and [`openapi.json`](openapi.json) is the
 reference.
 

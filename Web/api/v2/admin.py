@@ -309,17 +309,19 @@ def maintenance_save():
     if not isinstance(body, dict) or not isinstance(body.get("windows"), list):
         return jsonify({"error": "expected {windows: [...]}"}), 400
 
-    expect = body.get("expect")
-    if expect and expect != maintenance.stamp():
-        return jsonify({"error": "someone else changed the repairs while you were "
-                                 "editing — reload and try again"}), 409
-
     problems = maintenance.problems(body["windows"])
     if problems:
         return jsonify({"error": "those repairs have problems", "problems": problems}), 422
 
-    result = maintenance.save(body["windows"], actor=actor())
-    return jsonify({"ok": True, "stamp": maintenance.stamp(), **result})
+    # `expect` is checked inside the write's lock (`maintenance.save`), not
+    # here: checked first and written later, two editors holding the same
+    # stamp both passed and the second overwrote the first (11-12 audit).
+    try:
+        result = maintenance.save(body["windows"], actor=actor(), expect=body.get("expect"))
+    except maintenance.StaleError:
+        return jsonify({"error": "someone else changed the repairs while you were "
+                                 "editing — reload and try again"}), 409
+    return jsonify({"ok": True, **result})
 
 
 # ── THE ANNALS — acknowledging what happened ─────────────────────────────────
@@ -376,7 +378,8 @@ def _probe_allowed(who):
 # after everything above exists and before the blueprint is registered. The
 # editor stays in this file; each of these is one screen of Settings.
 from . import (  # noqa: E402,F401
-    admin_connections, admin_directory, admin_discovery, admin_mapart, admin_sources,
+    admin_alerts, admin_connections, admin_directory, admin_discovery, admin_mapart,
+    admin_sources,
 )
 # Names that lived in this module before the split and are still reached through it.
 from .admin_sources import _probe  # noqa: E402,F401

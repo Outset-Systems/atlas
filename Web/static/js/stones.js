@@ -238,7 +238,10 @@ function setupBlock(adminRead) {
 function wire() {
   for (const btn of listEl.querySelectorAll('.gs-ack')) {
     btn.addEventListener('click', async () => {
-      const note = prompt('What was it? (optional)') ?? '';
+      // Cancel is "not now", never an empty note: only OK acknowledges (the
+      // 11-12 audit; an empty OK still acknowledges with no note)
+      const note = prompt('What was it? (optional)');
+      if (note === null) return;
       btn.disabled = true;
       try {
         const { Editor } = await import('./editor/index.js');

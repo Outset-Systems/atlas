@@ -22,6 +22,7 @@ import cloud_view
 import dependencies
 import events
 import heartbeats
+import overview as realm_overview
 import provenance
 import signals
 import tripwires
@@ -221,21 +222,8 @@ def _state(entry):
 
 
 def overview(_args):
-    data, feed = _map(), _feed()
-    nodes = data.get("nodes") or []
-    tally = {"places": {}, "services": {}}
-    for kind, rows in (("places", feed.get("nodes") or {}), ("services", feed.get("services") or {})):
-        for row in rows.values():
-            state = _state(row) or "unknown"
-            tally[kind][state] = tally[kind].get(state, 0) + 1
-    out = {"title": (data.get("meta") or {}).get("title"),
-           "surveyed": (data.get("meta") or {}).get("surveyed"),
-           "zones": [z.get("name") or z.get("id") for z in data.get("zones") or []],
-           "places": len(nodes),
-           "services": sum(len(n.get("links") or []) for n in nodes),
-           "roads": len(data.get("routes") or []),
-           "health": tally, "sources": feed.get("sources") or {},
-           "provenance": provenance.summary(nodes)}
+    # the same reading OVERVIEW's route grows into its tiles (`overview.py`)
+    out = realm_overview.summary(_map(), _feed())
     withheld = _withheld()
     if withheld:
         out["withheld"] = withheld
@@ -345,19 +333,8 @@ def impact(args):
     by_id = {n["id"]: n for n in data.get("nodes") or []
              if isinstance(n, dict) and isinstance(n.get("id"), str)}
     edges = dependencies.declared_edges(data)        # {place: [what it needs]}
-
-    def walk(step):
-        seen, queue = [], list(step(node_id))
-        while queue:
-            nxt = queue.pop(0)
-            if nxt == node_id or nxt in seen or nxt not in by_id:
-                continue
-            seen.append(nxt)
-            queue.extend(step(nxt))
-        return seen
-
-    needs = walk(lambda n: edges.get(n, []))
-    needed_by = walk(lambda n: [k for k, v in edges.items() if n in v])
+    needs = dependencies.needs(edges, node_id, by_id)
+    needed_by = dependencies.needed_by(edges, node_id, by_id)
     wired = []
     for road in data.get("routes") or []:
         if not isinstance(road, dict):

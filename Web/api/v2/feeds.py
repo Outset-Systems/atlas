@@ -41,7 +41,11 @@ def _apply_kuma_map(ctx):
     for adapter in getattr(ctx.signals, "adapters", []):
         use_map = getattr(adapter, "use_map", None)
         if use_map is not None:
-            use_map(data)     # each adapter takes its own (signals.py)
+            try:
+                use_map(data)     # each adapter takes its own (signals.py)
+            except Exception as e:  # noqa: BLE001 — one odd entry must not 500 the feed
+                log.warning("signals: %s could not read the map (%s: %s)",
+                            getattr(adapter, "name", "a source"), type(e).__name__, e)
 
 
 def _label_for(ctx):
@@ -50,7 +54,7 @@ def _label_for(ctx):
         data, _, _ = ctx.dataset()
     except (OSError, ValueError):
         return lambda kind, target: target
-    names = {n.get("id"): n.get("name") for n in data.get("nodes", [])}
+    names = {n.get("id"): n.get("name") for n in data.get("nodes") or [] if isinstance(n, dict)}
     rites = {heartbeats.key_for(r): (r.get("name") or "")
              for r in (data.get("rites") or []) if isinstance(r, dict)}
 
@@ -77,8 +81,8 @@ def _drift(ctx, feed):
     # built-in check reports it by: its result is not an uncharted monitor
     import signals
     charted = {signals.service_key(node.get("id"), link)
-               for node in data.get("nodes", [])
-               for link in (node.get("links") or [])}
+               for node in data.get("nodes") or [] if isinstance(node, dict)
+               for link in (node.get("links") or []) if isinstance(link, dict)}
     ignore = set(((data.get("signals") or {}).get("drift_ignore")) or [])
     uncharted = sorted(n for n in services if n not in charted and n not in ignore)
     return {"count": len(uncharted), "uncharted": uncharted}
@@ -101,13 +105,16 @@ def _redact_feed(ctx, feed, groups, data=None):
     # is the deception layout read the wrong way round. Same blunt rule as
     # the account roster — cleared to see everything, or none of it.
     sources = {k: v for k, v in (feed.get("sources") or {}).items() if k != "deception"}
+    # when each source last answered (2026-11-13) names the sources too, so it
+    # takes the same cut: a time beside "deception" says a decoy feed is wired
+    sources_at = {k: v for k, v in (feed.get("sources_at") or {}).items() if k != "deception"}
     try:
         if data is None:
             data, _, _ = ctx.dataset()
     except (OSError, ValueError):
         # Fail closed. Without the dataset there is no way to know which ids
         # this viewer may see, and every key in this feed is one of those ids.
-        return {"nodes": {}, "services": {}, "sources": sources,
+        return {"nodes": {}, "services": {}, "sources": sources, "sources_at": sources_at,
                 "generated": feed.get("generated"),
                 "cached": feed.get("cached", False)}
 
@@ -116,6 +123,7 @@ def _redact_feed(ctx, feed, groups, data=None):
     out = dict(feed)
     out.pop("stones", None)
     out["sources"] = sources
+    out["sources_at"] = sources_at
     if isinstance(out.get("metrics"), dict):
         out["metrics"] = {k: v for k, v in out["metrics"].items()
                           if k not in ("unattributed_trips", "undelivered_alerts")}
@@ -132,6 +140,11 @@ def _redact_feed(ctx, feed, groups, data=None):
             info = {k: v for k, v in info.items() if k not in ("cause", "via")}
         nodes[node_id] = info
     out["nodes"] = nodes
+    # WHICH SOURCE SAID SO (2026-11-13) is keyed by place id like `nodes`, so it
+    # takes the same cut. The decoy feed is never named, as in `sources`.
+    if isinstance(feed.get("confirmed_by"), dict):
+        out["confirmed_by"] = {k: v for k, v in feed["confirmed_by"].items()
+                               if k not in hidden and v != "deception"}
 
     out["services"] = {name: info for name, info in (feed.get("services") or {}).items()
                        if name in monitors}
@@ -175,6 +188,12 @@ def build_feed(ctx):
         for node_id in repairs["under_repair"]:
             nodes[node_id] = {**nodes.get(node_id, {}), "state": "maintenance"}
         feed["nodes"] = nodes
+        # the state of a place under repair is the window's, not a source's, so
+        # no source is named as having confirmed it (a new dict: the hub's cache
+        # holds the one it built)
+        if isinstance(feed.get("confirmed_by"), dict):
+            feed["confirmed_by"] = {k: v for k, v in feed["confirmed_by"].items()
+                                    if k not in repairs["under_repair"]}
     feed["maintenance"] = repairs["under_repair"]
     feed["repairs"] = {k: repairs[k] for k in ("active", "upcoming", "next", "next_reason")}
 

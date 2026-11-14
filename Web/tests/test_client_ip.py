@@ -30,8 +30,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 ATLAS_TEST_ENV = {}
 
-NGINX = "172.19.255.7"      # tls-proxy, pinned in the internal host's compose
-HUB = "172.19.255.9"        # the Hub, likewise
+NGINX = "192.0.2.7"      # the TLS proxy, pinned in its compose file
+HUB = "192.0.2.9"        # the Hub, likewise
 CLIENT = "203.0.113.7"
 
 
@@ -68,8 +68,8 @@ def test_an_unnamed_peer_cannot_assert_anything(resolve):
     # The regression this rewrite exists for: any of the 14 containers on the
     # suite network can open a socket to :5006, and under the old hop count
     # this returned 1.2.3.4.
-    assert resolve(f"{NGINX}, {HUB}", "1.2.3.4", peer="172.19.0.99") == "172.19.0.99"
-    assert resolve(f"{NGINX}, {HUB}", CLIENT, peer="172.19.0.99") == "172.19.0.99"
+    assert resolve(f"{NGINX}, {HUB}", "1.2.3.4", peer="192.0.2.99") == "192.0.2.99"
+    assert resolve(f"{NGINX}, {HUB}", CLIENT, peer="192.0.2.99") == "192.0.2.99"
 
 
 def test_prepended_entries_are_ignored(resolve):
@@ -106,8 +106,8 @@ def test_a_hop_count_is_refused_not_reinterpreted(resolve):
 
 def test_garbage_entries_are_dropped_not_fatal():
     import settings
-    nets = settings._parse_trusted("172.19.255.7, not-an-address, 10.77.0.0/16")
-    assert [str(n) for n in nets] == ["172.19.255.7/32", "10.77.0.0/16"]
+    nets = settings._parse_trusted("192.0.2.7, not-an-address, 10.0.0.0/16")
+    assert [str(n) for n in nets] == ["192.0.2.7/32", "10.0.0.0/16"]
     assert settings._parse_trusted(None) == () and settings._parse_trusted(" ") == ()
 
 
