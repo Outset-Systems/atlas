@@ -37,7 +37,7 @@ const ROWS = [
   { id: 'nas', name: 'NAS', state: 'down', zone: 'core', zone_name: 'Infra', kind: 'physical',
     addresses: ['10.0.0.20', '10.0.1.20'], services: 12, confirmed_by: 'prometheus', reviewed: false, unchecked: true,
     maintenance: { now: false, next: '2026-11-15T03:00:00Z' }, cert: { name: 'nas.example', days: 5 }, sets: ['core'] },
-  { id: 'vm9', name: 'downloads', state: 'degraded', zone: 'core', zone_name: 'Infra', kind: 'vm',
+  { id: 'vm9', name: 'proxy', state: 'degraded', zone: 'core', zone_name: 'Infra', kind: 'vm',
     addresses: ['10.0.0.9'], services: 0, confirmed_by: null, reviewed: true, reviewed_at: ago(90), unchecked: false,
     maintenance: { now: true, next: null }, cert: null, sets: ['core', 'edge'] },
   { id: 'old', name: 'Kakariko', state: null, zone: 'home', zone_name: 'Home', kind: 'unknown',
@@ -195,7 +195,7 @@ test('text finds a name, an id, an address, a role or a network, any case', () =
   assert.deepEqual(ids(filterRows(ROWS, { text: '10.0.1.' }, NOW)), ['nas']);
   assert.deepEqual(ids(filterRows(ROWS, { text: 'switch' }, NOW)), ['gw']);
   assert.deepEqual(ids(filterRows(ROWS, { text: 'outset' }, NOW)), ['gw', 'mt']);
-  assert.deepEqual(ids(filterRows(ROWS, { text: '  infra   downloads ' }, NOW)), ['vm9']);   // every word must match
+  assert.deepEqual(ids(filterRows(ROWS, { text: '  infra   proxy ' }, NOW)), ['vm9']);   // every word must match
   assert.deepEqual(ids(filterRows(ROWS, { text: 'nothing-like-it' }, NOW)), []);
 });
 

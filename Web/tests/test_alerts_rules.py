@@ -63,7 +63,7 @@ def test_a_place_rule_fires_for_that_place_only(realm):
     assert realm["sent"].titles == ["Alpha is down"]
     message = realm["sent"].sent[0][1]
     assert message["priority"] == "high" and message["tags"] == ["down"]
-    assert message["ops"] == alertkit.PUBLIC + "?place=alpha"
+    assert message["link"] == alertkit.PUBLIC + "?place=alpha"
     assert "Nothing is declared to depend on it." in message["body"]
 
 
