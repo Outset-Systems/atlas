@@ -7,6 +7,7 @@
    light scheme restates the panel tokens on the panel containers only — see
    THE LIGHT SCHEME below. */
 :root {
+  --hue-on-ground: 100%;   /* a dataset hue as text: pure at night; the bar block mixes it on light */
   /* structure — Gruvbox dark */
   --abyss: #1d2021;          /* bg0_h — page/void */
   --surface: #282828;        /* bg0 — panels */
@@ -118,8 +119,8 @@
    --gilt keeps its name because every rule says `gilt`; here it is a deep
    blue, picked to clear AA at panel sizes even on glass (below). All measured
    by tests/test_scheme_css.py. The bar has its own block, next. */
-:root[data-scheme="light"] :is(#index-drawer, .ldg-panel, .trb-panel, .rel-panel, .pth-panel,
-                               .pal-panel, .gl-panel, .dsk-panel, .wiz-panel, #view-nodes,
+:root[data-scheme="light"] :is(.ldg-panel, .trb-panel, .rel-panel, .pth-panel,
+                               .pal-panel, .gl-panel, .dsk-panel, .wiz-panel, #nodes-sheet,
                                #overview-tiles, #view-alerts) {
   --abyss: #d6dae0;
   --surface: #c5cad2;
@@ -168,16 +169,17 @@
    follow the OS while the bar follows the camera (tests/test_scheme_css.py). */
 :root[data-scheme-pick="light"] :is(#scenes-list, .scene-home, .chrome, .rl-crumbs, .rl-locator, .rl-hint,
                                     .chron-fly-pop, .chron-arrow, .embed-max-arrow, #embed-max-close,
-                                    #view-menu, .view-strip, .scene-more),
+                                    #view-menu, .view-strip, .scene-more, #index-drawer),
 :root[data-scheme-pick="auto"] body.in-sky:not(.scene-open, .deck, .phone) :is(#scenes-list, .scene-home, .chrome, .rl-crumbs, .rl-locator, .rl-hint,
                                     .chron-fly-pop, .chron-arrow, .embed-max-arrow, #embed-max-close,
-                                    #view-menu, .view-strip, .scene-more),
+                                    #view-menu, .view-strip, .scene-more, #index-drawer),
 :root[data-scheme-pick="auto"][data-scheme="light"] body:not(.in-sky, .depths) :is(#scenes-list, .scene-home, .chrome, .rl-crumbs, .rl-locator, .rl-hint,
                                     .chron-fly-pop, .chron-arrow, .embed-max-arrow, #embed-max-close,
-                                    #view-menu, .view-strip, .scene-more),
+                                    #view-menu, .view-strip, .scene-more, #index-drawer),
 :root[data-scheme-pick="auto"][data-scheme="light"] body:is(.scene-open, .deck, .phone) :is(#scenes-list, .scene-home, .chrome, .rl-crumbs, .rl-locator, .rl-hint,
                                     .chron-fly-pop, .chron-arrow, .embed-max-arrow, #embed-max-close,
-                                    #view-menu, .view-strip, .scene-more) {
+                                    #view-menu, .view-strip, .scene-more, #index-drawer) {
+  --hue-on-ground: 40%;   /* a dataset hue as text on a light bar: mixed toward ink (.idx-zone) */
   --abyss: #d6dae0;
   --surface: #c5cad2;
   --surface-2: #cdd2d9;
@@ -253,12 +255,6 @@
   backdrop-filter: blur(22px) saturate(1.5);
   border-color: rgba(214, 218, 224, 0.5);
   box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28);
-}
-:root[data-scheme="light"] :is(#index-drawer) {
-  background: rgba(214, 218, 224, 0.6);
-  color: var(--text);
-  -webkit-backdrop-filter: blur(22px) saturate(1.5);
-  backdrop-filter: blur(22px) saturate(1.5);
 }
 :root[data-scheme="light"] #settings-panel { color: var(--text); }
 :root[data-scheme="light"] :is(#ledger, #calendar, #seals, #stones, #tribute, #reliquary,
@@ -1491,6 +1487,10 @@ a.sp-btn { text-decoration: none; text-align: center; display: block; }
   transition: transform 200ms var(--glide);
 }
 .sp-sec.closed > .sp-sub::after { transform: rotate(-90deg); }
+/* always open (COLOURS, owner 2026-11-13): a heading, not a fold */
+.sp-sec.sp-fixed > .sp-sub { cursor: default; }
+.sp-sec.sp-fixed > .sp-sub:hover { color: inherit; }
+.sp-sec.sp-fixed > .sp-sub::after { content: none; }
 .sp-sec.closed > .sp-sec-body { display: none; }
 /* THE SEAL YOU CARRY — who the viewer is. The name is a place-name in this
    world's voice (Cinzel caps, like every marker label); the badges reuse the
@@ -2088,10 +2088,15 @@ body.constellation #overlay .territory-tag { opacity: 0.12; }
      `right:` clearance computed against this drawer still holds. */
   position: fixed; top: calc(var(--crown-b) + 4px); right: 18px; bottom: 12px;
   width: 320px; z-index: 970;
-  background: linear-gradient(180deg, var(--surface-2), var(--surface));
-  border: 1px solid var(--ink-line);
+  /* the views menu's glass (owner, 2026-11-13): THE INDEX wears the bar's
+     tokens as the menu does (the bar block names it), so it is the same pane */
+  background: var(--bar-glass-firm);
+  border: 1px solid rgba(var(--gilt-rgb), 0.18);
+  -webkit-backdrop-filter: blur(12px) saturate(1.1);
+  backdrop-filter: blur(12px) saturate(1.1);
   border-radius: 4px 4px 14px 14px;
-  box-shadow: 0 24px 60px rgba(var(--shade-rgb), calc(0.6 * var(--shade-k)));
+  box-shadow: var(--bar-shadow-firm);
+  color: var(--text);
   clip-path: inset(0 0 100% 0);
   transform: translateY(-10px);
   transition: clip-path 400ms var(--glide), transform 400ms var(--glide), opacity 300ms;
@@ -2178,7 +2183,9 @@ body.scene-open #index-drawer { z-index: 986; }
 .idx-zone {
   font-family: 'Cinzel', serif; font-weight: 400; font-size: 0.78rem;
   text-transform: uppercase; letter-spacing: 0.28em;
-  color: var(--zone-hue, var(--text-dim));
+  /* the pure hue on a dark bar; mixed toward ink on a light one (the bar block's
+     --hue-on-ground), since THE INDEX follows the bar (2026-11-13) */
+  color: color-mix(in srgb, var(--zone-hue, var(--text-dim)) var(--hue-on-ground, 100%), var(--text));
   margin: 16px 8px 6px; display: flex; align-items: baseline; gap: 8px;
 }
 .idx-zone .sub { font-family: 'JetBrains Mono', monospace; font-style: normal; font-size: 0.62rem; color: var(--text-dim); }
@@ -2892,6 +2899,23 @@ body.constellation .card-split .cs-on { display: inline; }
 .ldg-sub, .trb-sub, .rel-sub { font-family: 'IM Fell English', 'Alegreya Sans', serif; font-style: italic; font-size: 0.9rem; color: var(--text-dim); }
 .ldg-close, .trb-close, .rel-close { margin-left: auto; background: none; border: none; color: var(--text-dim); font-size: 1.4rem; cursor: pointer; line-height: 1; padding: 0 4px; transition: color 150ms; }
 .ldg-close:hover, .trb-close:hover, .rel-close:hover { color: var(--gilt); }
+/* A scene's own on/off (owner, 2026-11-13: the tripwire watch on the map, out
+   of THE ATLAS's menu): the annals' filter pill with the menu's lamp, pushed to
+   the head's end beside ×. Lit while on, as the menu's tools light. */
+.sc-toggle {
+  align-self: center; margin-left: auto;
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: 'Cinzel', serif; font-size: 0.58rem; letter-spacing: 0.14em; text-transform: uppercase;
+  background: none; color: var(--text-dim); cursor: pointer;
+  border: 1px solid var(--ink-line); border-radius: 20px; padding: 3px 12px 3px 4px;
+  transition: color 150ms, border-color 150ms;
+}
+/* what follows it (the editor's ✎, then ×) sits beside it, not across the head */
+.ldg-head .sc-toggle ~ :is(.scene-edit, .ldg-close) { margin-left: 0; }
+.sc-toggle .vt-lamp { width: 22px; height: 22px; }
+.sc-toggle:hover { color: var(--text); }
+.sc-toggle.lit { color: var(--gilt); border-color: var(--gilt); }
+.sc-toggle.lit .vt-lamp { border-color: var(--gilt); background: var(--gilt); color: var(--abyss); }
 .ldg-list { display: flex; flex-wrap: wrap; gap: 26px 34px; padding: 24px 22px; overflow-y: auto; }
 .ldg-block { display: flex; flex-direction: column; gap: 10px; }
 .ldg-zhead { display: flex; flex-direction: column; gap: 2px; }
@@ -4641,7 +4665,6 @@ button.rl-crumb:focus-visible { outline: 2px solid var(--gilt-bright); outline-o
 /* Dataset hues (a zone's, a port's) were chosen against the night palette; as
    TEXT on a light panel the pale ones vanish. Mixed 40/60 toward ink they keep
    their family and clear AA on cream; strokes and dots keep the pure hue. */
-:root[data-scheme="light"] .idx-zone { color: color-mix(in srgb, var(--zone-hue, var(--text-dim)) 40%, var(--text)); }
 :root[data-scheme="light"] .ldg-host-ip { color: color-mix(in srgb, var(--z-hue, var(--gilt)) 40%, var(--text)); }
 :root[data-scheme="light"] .ldg-port { color: color-mix(in srgb, var(--p-hue, var(--gilt)) 40%, var(--text)); }
 
@@ -4756,30 +4779,41 @@ body.deck .atlas-view:not([hidden]) {
   background: var(--abyss);
 }
 
-/* ── OVERVIEW's lower half, the Deck: the Sky's and the Depths' charts ─────
-   views.js lifts the two sections out of the stage into `#overview-charts`
-   and puts them back. The rules below follow the lift, so they key on the
-   view, not on `body.deck` (under NODES the sections are still on the hidden
-   stage). Stage 2 called this view CHARTS; `?view=charts` still lands here.
+/* ── THE SKY ABOVE, THE DEPTHS BELOW: OVERVIEW and NODES between them ─────
+   (owner, 2026-11-13) views.js lifts the Sky's section into the band above
+   the view and the Depths' into the band below, and puts them back. The rules
+   below follow the lift, so they key on the views that have it, not on
+   `body.deck` (under ALERTS the sections stay on the hidden stage). Stage 2
+   called OVERVIEW's charts CHARTS; `?view=charts` opens it at the Sky.
    The sections forget the map: no camera scale, no seat in map space
    (camera.js still writes their `top`, which a static box ignores, and
    re-measures it the moment they go back on the stage) */
-body[data-view="overview"] #chronicle, body[data-view="overview"] #abyss {
+body:is([data-view="overview"], [data-view="nodes"]) :is(#chronicle, #abyss) {
   position: static; transform: none; width: auto; max-width: 1560px;
   margin: 0 auto 24px; border-radius: 8px;
 }
 /* the Sky's charts are drawn for a bright field; on the map the sky behind
    them is that field, here the section carries it. Each section's ground is
    its set's, so in the Deck it follows the same pick rules as on the map. */
-body[data-view="overview"] :is(#chronicle, #abyss) {
+body:is([data-view="overview"], [data-view="nodes"]) :is(#chronicle, #abyss) {
   background: var(--sec-deck-ground);
   border: 1px solid var(--sec-deck-border);
 }
 /* no map behind a frame to travel, so a frame never sleeps here */
-body[data-view="overview"] .chron-pane .chron-frame { pointer-events: auto; }
-body[data-view="overview"] .chron-pane::after { display: none; }
+body:is([data-view="overview"], [data-view="nodes"]) .chron-pane .chron-frame { pointer-events: auto; }
+body:is([data-view="overview"], [data-view="nodes"]) .chron-pane::after { display: none; }
 /* the colophon rides at the column's foot (views.js), in flow */
-body[data-view="overview"] #colophon { position: static; transform: none; margin: 4px 16px 0; text-align: center; }
+body:is([data-view="overview"], [data-view="nodes"]) #colophon { position: static; transform: none; margin: 4px 16px 0; text-align: center; }
+/* "↑ the sky" and "the depths ↓": the edges between a view and its bands, in
+   the deck foot's type. The page opens on "↑ the sky", just under the band. */
+.view-edge {
+  display: block; width: max-content; margin: 0 auto 10px; padding: 6px 12px;
+  font-family: 'Cinzel', serif; font-size: 0.66rem; letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--text-dim); text-decoration: none; transition: color 150ms;
+}
+.view-edge-down { margin: 0 auto 18px; }
+.view-edge:hover, .view-edge:focus-visible { color: var(--gilt); }
+.view-band { scroll-margin-top: var(--view-top); }
 .deck-foot {
   display: block; margin: 8px auto 0; width: max-content; padding: 10px 14px;
   font-family: 'Cinzel', serif; font-size: 0.66rem; letter-spacing: 0.2em; text-transform: uppercase;
@@ -4839,13 +4873,13 @@ body[data-view="overview"] #colophon { position: static; transform: none; margin
   color: var(--gilt); background: var(--scene-active-bg); border-color: var(--gilt);
 }
 
-/* THE MAP'S TOOLS (owner, 2026-11-13): the views menu's lower part, only while
+/* THE MAP'S TOOLS (owner, 2026-11-13): the views menu's top, only while
    MAP is the view and no scene is up (in a view or over a scene there is no map
    for them to act on). A row is a small lamp and a name; a tool that is on lights
    its lamp the way the round buttons lit, in the same tokens. */
 .view-tools {
   display: flex; flex-direction: column; gap: 2px;
-  margin-top: 3px; padding-top: 5px; border-top: 1px solid rgba(var(--gilt-rgb), 0.18);
+  margin-bottom: 3px; padding-bottom: 5px; border-bottom: 1px solid rgba(var(--gilt-rgb), 0.18);
 }
 body:is(.deck, .scene-open) .view-tools { display: none; }
 .view-tool {

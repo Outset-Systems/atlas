@@ -23,13 +23,17 @@
    `atlas:view` with detail {view, prev}; the first one fires here at import,
    before later modules listen, so a reader also takes `A.VIEW` on load.
 
-   OVERVIEW's lower half holds the SAME #chronicle and #abyss elements, moved
-   out of the camera's stage into `#overview-charts` and back again, so
-   chronicle.js draws into them exactly as it does on the map and nothing
-   about the charts forks. A comment marks the seat each one left, so it goes
-   back to precisely where it was. `Charts ↓` at the top of OVERVIEW scrolls
-   down to them, and `charts` (the Deck's stage 2 name, from `?view=` or a
-   stored pick) opens OVERVIEW there.
+   THE SKY ABOVE, THE DEPTHS BELOW (owner, 2026-11-13). OVERVIEW and NODES
+   stand between the two sections as the map does: the SAME #chronicle is
+   moved out of the camera's stage into the band above the view, and the SAME
+   #abyss (with the colophon and the way back to the map) into the band below,
+   and back again, so chronicle.js draws into them exactly as it does on the
+   map and nothing about the charts forks. A comment marks the seat each one
+   left, so it goes back to precisely where it was. The page opens on the view
+   and stays there while the Sky's charts fill in above it; "↑ the sky" and
+   "the depths ↓" between the bands and the sheet scroll to each. `charts`
+   (the Deck's stage 2 name, from `?view=` or a stored pick) opens OVERVIEW at
+   the Sky.
 
    Imported straight after scheme.js in atlas.js, so a page that opens on a
    view has it before any module looks for the sections. */
@@ -87,10 +91,9 @@ if (!deck) {
   $('viewport').after(deck);
 }
 const sheet = part(deck, 'overview-tiles', 'section', 'ov-sheet');
-const jump = part(sheet, 'charts-jump', 'a', 'ov-jump', sheet.firstChild);
-if (!jump.textContent.trim()) { jump.href = '#overview-charts'; jump.textContent = 'Charts ↓'; }
 part(sheet, 'overview-body', 'div', '');
-const charts = part(deck, 'overview-charts', 'div', 'ov-charts');
+part(deck, 'overview-charts', 'div', 'ov-charts view-band view-band-depths');
+part(deck, 'overview-sky', 'div', 'view-band view-band-sky', sheet);
 
 /* The column's foot: the way back to the map. A phone navigates to the map
    view (`?view=map`) because its own layout is not the map's; a wide screen
@@ -105,47 +108,87 @@ foot.addEventListener('click', (e) => {
   A.setView('map', { remember: true });
   A.home?.(true);
 });
-deck.append(foot);
+
+/* The views that stand between the Sky and the Depths, and each one's parts:
+   its main, the band above, the band below, and "↑ the sky" (the line the
+   page opens on, just above the view's sheet). */
+const BANDED = ['overview', 'nodes'];
+function frame(view) {
+  if (!BANDED.includes(view)) return null;
+  const main = document.querySelector(`main.atlas-view[data-view="${view}"]`);
+  const up = main?.querySelector(':scope > .view-band-sky');
+  const down = main?.querySelector(':scope > .view-band-depths');
+  if (!up || !down) return null;
+  return { main, up, down, edge: main.querySelector(':scope > .view-edge-up') || up };
+}
 
 /* The colophon is the feed's voice (signals.js turns it to an alarm), so in
-   the charts it rides at the column's foot instead of floating over a chart. */
-const MOVERS = ['chronicle', 'abyss', 'colophon'];
+   a view it rides at the column's foot instead of floating over a chart. */
+const MOVERS = [['chronicle', 'up'], ['abyss', 'down'], ['colophon', 'down']];
 const seats = new Map();
 
-function lift() {
-  for (const id of MOVERS) {
+function lift(view) {
+  const f = frame(view);
+  if (!f) return;
+  for (const [id, band] of MOVERS) {
     const el = $(id);
     if (!el || seats.has(id)) continue;
     const seat = document.createComment(` ${id} sits here on the map `);
     el.before(seat);
     seats.set(id, seat);
-    charts.append(el);
+    f[band].append(el);
   }
+  f.down.append(foot);
 }
 function settle() {
   for (const [id, seat] of seats) seat.replaceWith($(id));
   seats.clear();
+  foot.remove();
 }
 
-/** Scroll OVERVIEW down to its charts (`Charts ↓`, and `?view=charts`). The
-    charts' own `scroll-margin-top` keeps them clear of the band. */
+/** The view itself, under the band: the Sky above it out of sight, the
+    Depths below. */
+function toMiddle({ smooth = false } = {}) {
+  const f = frame(A.VIEW);
+  if (!f) return;
+  const pad = parseFloat(getComputedStyle(f.main).paddingTop) || 0;
+  f.main.scrollTo({ top: Math.max(0, f.edge.offsetTop - pad), behavior: smooth && !REDUCED ? 'smooth' : 'auto' });
+}
+/* The Sky's charts fill in after the page opens, above the view, and would
+   push it down: while the reader has not scrolled, the view is kept where the
+   page opened. Any scroll, touch or key of the reader's own lets go. */
+let holdMiddle = false;
+const keepMiddle = typeof ResizeObserver === 'function'
+  ? new ResizeObserver(() => { if (holdMiddle) toMiddle(); }) : null;
+for (const view of BANDED) {
+  const f = frame(view);
+  if (!f) continue;
+  keepMiddle?.observe(f.up);
+  for (const ev of ['wheel', 'touchstart', 'keydown']) {
+    f.main.addEventListener(ev, () => { holdMiddle = false; holdCharts = false; }, { passive: true });
+  }
+}
+/* "↑ the sky" and "the depths ↓": scroll to the band, never touch the
+   address (regions.js reads the hash). */
+for (const a of document.querySelectorAll('.view-edge')) {
+  a.addEventListener('click', (e) => {
+    e.preventDefault();
+    holdMiddle = false; holdCharts = false;
+    document.getElementById((a.getAttribute('href') || '').slice(1))
+      ?.scrollIntoView({ block: 'start', behavior: REDUCED ? 'auto' : 'smooth' });
+  });
+}
+
+/** OVERVIEW at its charts, which start with the Sky at the top (`?view=charts`). */
 A.toCharts = function toCharts({ smooth = true } = {}) {
   if (A.VIEW !== 'overview') return;
-  charts.scrollIntoView({ block: 'start', behavior: smooth && !REDUCED ? 'smooth' : 'auto' });
+  frame('overview')?.main.scrollTo({ top: 0, behavior: smooth && !REDUCED ? 'smooth' : 'auto' });
 };
 /* A page that lands on the charts lands before the tiles have their answer;
    overview.js calls this once its first drawing is in, so the charts are
-   still where the page opened. Any scroll of the reader's own lets go. */
+   still where the page opened. */
 let holdCharts = false;
 A.settleCharts = () => { if (holdCharts) { holdCharts = false; A.toCharts({ smooth: false }); } };
-for (const ev of ['wheel', 'touchstart', 'keydown']) {
-  deck.addEventListener(ev, () => { holdCharts = false; }, { passive: true });
-}
-jump.addEventListener('click', (e) => {
-  e.preventDefault();
-  holdCharts = false;
-  A.toCharts();
-});
 
 function paintHome() {
   const home = document.querySelector('[data-scene="atlas"]');
@@ -170,8 +213,8 @@ A.setView = function setView(name, { remember = false } = {}) {
     // a region's crumbs and keys belong to the map: leave it whole
     if (prev === 'map' && A.inRegion?.()) A.leaveToMap?.();
     if (prev) A.closeCard?.();
-    if (prev === 'overview') settle();
-    if (next === 'overview') lift();
+    if (BANDED.includes(prev)) settle();
+    if (BANDED.includes(next)) lift(next);
     A.VIEW = next;
     A.DECK = next !== 'map';
     document.body.classList.toggle('deck', A.DECK);
@@ -183,11 +226,12 @@ A.setView = function setView(name, { remember = false } = {}) {
     }
     // back on the stage, the sections need their map seats measured again
     if (next === 'map') A.measureWorld?.();
+    else if (BANDED.includes(next)) { holdMiddle = true; toMiddle(); }
     else if (shown) shown.scrollTop = 0;
     paintHome();   // before the news goes out, so a listener reads the marks right
     dispatchEvent(new CustomEvent('atlas:view', { detail: { view: next, prev } }));
   }
-  if (atCharts && next === 'overview') { holdCharts = true; A.toCharts({ smooth: false }); }
+  if (atCharts && next === 'overview') { holdMiddle = false; holdCharts = true; A.toCharts({ smooth: false }); }
   if (remember && !A.PHONE) writeStored(store, next);
 };
 
@@ -195,9 +239,13 @@ A.setView = function setView(name, { remember = false } = {}) {
     OVERVIEW (the charts are its lower half), off is the map. */
 A.setDeck = (on, opts) => A.setView(on ? 'overview' : 'map', opts);
 
-/** The top of whatever view is up (THE ATLAS on a phone). */
-A.deckTop = () => document.querySelector('main.atlas-view:not([hidden])')
-  ?.scrollTo({ top: 0, behavior: REDUCED ? 'auto' : 'smooth' });
+/** The start of whatever view is up (THE ATLAS on a phone): a view between
+    the Sky and the Depths goes back to itself, any other to its top. */
+A.deckTop = () => {
+  if (frame(A.VIEW)) { holdMiddle = false; toMiddle({ smooth: true }); return; }
+  document.querySelector('main.atlas-view:not([hidden])')
+    ?.scrollTo({ top: 0, behavior: REDUCED ? 'auto' : 'smooth' });
+};
 
 {
   const stored = readStored(store);
@@ -250,7 +298,7 @@ for (const id of ['chronicle', 'abyss']) {
   if (!viewer) continue;
   let x0 = 0, y0 = 0, tracking = false;
   viewer.addEventListener('touchstart', (e) => {
-    tracking = A.VIEW === 'overview' && e.touches.length === 1;
+    tracking = BANDED.includes(A.VIEW) && e.touches.length === 1;
     if (tracking) { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; }
   }, { passive: true });
   viewer.addEventListener('touchend', (e) => {

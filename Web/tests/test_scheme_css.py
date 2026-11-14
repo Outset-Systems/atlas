@@ -26,8 +26,11 @@ LIGHT_SEL = ':root[data-scheme="light"] :is('
 #: the bar block's head: its first clause
 BAR_SEL = ':root[data-scheme-pick="light"] :is('
 #: the panels: what follows the scheme
-PANELS = ["#index-drawer", ".ldg-panel", ".trb-panel", ".rel-panel", ".pth-panel",
-          ".pal-panel", ".gl-panel", ".dsk-panel", ".wiz-panel", "#view-nodes",
+PANELS = [".ldg-panel", ".trb-panel", ".rel-panel", ".pth-panel",
+          ".pal-panel", ".gl-panel", ".dsk-panel", ".wiz-panel",
+          # NODES' sheet, not its whole view (2026-11-13): the Sky's and the
+          # Depths' sections stand above and below it there, on their own ground
+          "#nodes-sheet",
           # OVERVIEW's tiles (2026-11-13 stage 3): the tiles' sheet, not the whole
           # view, because the Depths' section lifted below them reads `--surface`
           # and `--ink-line` and must keep its dark ground
@@ -38,7 +41,9 @@ PANELS = ["#index-drawer", ".ldg-panel", ".trb-panel", ".rel-panel", ".pth-panel
 BAR = ["#scenes-list", ".scene-home", ".chrome", ".rl-crumbs", ".rl-locator", ".rl-hint",
        ".chron-fly-pop", ".chron-arrow", ".embed-max-arrow", "#embed-max-close",
        # the views' menu, ATLAS's ▾ and the phone's strip (2026-11-13)
-       "#view-menu", ".view-strip", ".scene-more"]
+       "#view-menu", ".view-strip", ".scene-more",
+       # THE INDEX wears the menu's glass, so it follows the bar too (owner, 2026-11-13)
+       "#index-drawer"]
 #: the bar and what draws inside it: none of these may key on `data-scheme`
 BAR_RE = re.compile(r"#scenes-list|\.scene\b|\.scene-home|\.band-|\.chrome\b|\.ci-|#btn-|"
                     r"\.view-tool|\.vt-lamp|\.menu-tools|\.rl-crumbs?|\.rl-locator|\.rl-hint|\.rl-here|"

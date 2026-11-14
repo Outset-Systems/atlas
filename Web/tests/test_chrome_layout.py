@@ -147,24 +147,45 @@ def _view_menu(html):
     return html[start:end]
 
 
-@pytest.mark.parametrize("button", ["btn-sky", "btn-depths", "btn-decoys"])
+@pytest.mark.parametrize("button", ["btn-sky", "btn-depths"])
 def test_every_map_tool_is_in_the_views_menu(button):
-    """The owner (2026-11-13): the three map tools drop with the views menu."""
+    """The owner (2026-11-13): the sky and the depths drop with the views menu."""
     tools = re.search(r'<div class="view-tools".*?</div>', _view_menu(_read(INDEX)), re.S)
     assert tools, "the menu's tools group is gone"
     assert f'id="{button}"' in tools.group(0), button
 
 
-def test_the_map_tools_are_the_menu_s_lower_part_in_order():
-    """Top to bottom, sky, depths, tripwires, after the views; each a menu item
-    the arrows reach, with a lamp and a name from the theme."""
-    tools = re.search(r'<div class="view-tools".*?</div>', _view_menu(_read(INDEX)), re.S).group(0)
-    assert re.findall(r'id="(btn-[\w-]+)"', tools) == ["btn-sky", "btn-depths", "btn-decoys"]
-    assert tools.count('role="menuitem"') == 3 and tools.count('class="vt-lamp"') == 3
-    for word in ("theme.text.sky|upper", "theme.text.depths|upper", "theme.text.stones_watch|upper"):
+def test_the_watch_is_toggled_in_its_own_scene():
+    """The owner (2026-11-13): the tripwire watch left THE ATLAS's menu for its
+    scene's head, where it only shows or hides the marks on the map."""
+    html = _read(INDEX)
+    assert 'id="btn-decoys"' not in _view_menu(html)
+    scene = re.search(r'<div id="stones" aria-hidden="true">.*?<div class="ldg-head">(.*?)</div>', html, re.S)
+    assert scene, "the tripwires scene's head is gone"
+    head = scene.group(1)
+    button = re.search(r'<button[^>]*id="btn-decoys"[^>]*>', head)
+    assert button and 'aria-pressed="false"' in button.group(0) and "sc-toggle" in button.group(0)
+    assert head.index('id="btn-decoys"') < head.index('id="gs-close"'), "the toggle sits before ×"
+    assert "{{ theme.text.stones_on_map }}" in head
+    decoys = _read(WEB / "static" / "js" / "decoys.js")
+    assert "$('btn-decoys')?.setAttribute('aria-pressed', String(on));" in decoys
+    assert "$('btn-decoys')?.addEventListener('click', () => A.toggleDecoys());" in decoys
+
+
+def test_the_map_tools_are_the_menu_s_top_in_order():
+    """The owner (2026-11-13): the sky, then the depths, at the menu's top, before
+    the views; each a menu item the arrows reach, with a lamp and a name."""
+    menu = _view_menu(_read(INDEX))
+    tools = re.search(r'<div class="view-tools".*?</div>', menu, re.S).group(0)
+    assert re.findall(r'id="(btn-[\w-]+)"', tools) == ["btn-sky", "btn-depths"]
+    assert tools.count('role="menuitem"') == 2 and tools.count('class="vt-lamp"') == 2
+    for word in ("theme.text.sky|upper", "theme.text.depths|upper"):
         assert word in tools, word
+    assert menu.index('class="view-tools"') < menu.index('data-view="map"'), "the tools come first"
     js = _read(UI)
     assert "querySelectorAll('[role=\"menuitem\"]')" in js, "the arrows must reach the tools too"
+    assert "border-bottom: 1px solid rgba(var(--gilt-rgb), 0.18);" in re.search(
+        r"^\.view-tools \{.*?\}", _read(CSS), re.S | re.M).group(0), "the rule sits under the tools now"
 
 
 def test_the_cluster_no_longer_carries_a_pin_button():
@@ -357,10 +378,9 @@ def test_the_views_menu_is_a_sibling_of_the_band():
     assert 'id="view-menu"' not in _band(html), (
         "#view-menu is nested inside #scenes-list: the band's backdrop-filter + "
         "overflow will position it wrongly and then clip it away")
-    menu = re.search(r'<div class="view-menu" id="view-menu" role="menu"[^>]*>(.*?)</div>', html, re.S)
-    assert menu, "the menu's markup could not be found"
-    assert re.findall(r'data-view="(\w+)"', menu.group(1)) == ["map", "overview", "nodes", "alerts"]
-    assert menu.group(1).count('role="menuitem"') == 7, "four views and three map tools"
+    menu = _view_menu(html)
+    assert re.findall(r'data-view="(\w+)"', menu) == ["map", "overview", "nodes", "alerts"]
+    assert menu.count('role="menuitem"') == 6, "the two map tools and four views"
     css = _read(CSS)
     rule = re.search(r"^\.view-menu \{.*?^\}", css, re.S | re.M).group(0)
     assert "position: fixed" in rule and "var(--bar-glass-firm)" in rule
@@ -445,9 +465,8 @@ def test_alerts_is_a_view_and_an_admin_s_only():
     anyone else, so no door is offered that the routes would refuse."""
     html = _read(INDEX)
     assert '<main class="atlas-view" id="view-alerts" data-view="alerts" hidden' in html
-    for where in (r'<div class="view-menu" id="view-menu"[^>]*>(.*?)</div>',
-                  r'<nav class="view-strip" id="view-strip"[^>]*>(.*?)</nav>'):
-        block = re.search(where, html, re.S).group(1)
+    for block in (_view_menu(html),
+                  re.search(r'<nav class="view-strip" id="view-strip"[^>]*>(.*?)</nav>', html, re.S).group(1)):
         item = re.search(r'<button[^>]*data-view="alerts"[^>]*>', block).group(0)
         assert "data-admin" in item and " hidden" in item, item
         for other in re.findall(r'<button[^>]*data-view="(?:map|overview|nodes)"[^>]*>', block):
@@ -589,7 +608,8 @@ def test_the_menu_and_the_index_fade_and_roll_up_when_the_mouse_leaves():
     after a few seconds. Only a mouse makes them idle, and typing inside one
     keeps it up."""
     js, css = _read(UI), _read(CSS)
-    assert re.search(r"const ROLLUP_MS = [3-6]000;", js), "roll up after 3 to 6 seconds"
+    assert re.search(r"const ROLLUP_MS = [3-6]000;", js), "the Index rolls up after 3 to 6 seconds"
+    assert "const MENU_ROLLUP_MS = 600;" in js and "after: MENU_ROLLUP_MS," in js, "the menu after 0.6 s"
     assert ".view-menu:is(.peek, .open).idle, #index-drawer.open.idle { opacity: 0.6; }" in css
     assert "const mouse = (e) => e.pointerType === 'mouse';" in js
     assert "idleRollup(drawer, [drawer, $('btn-menu')]" in js
@@ -705,46 +725,61 @@ def test_the_menu_lamp_cannot_overflow_the_band_it_sits_in():
 
 # ── OVERVIEW (2026-11-13, stage 3) ───────────────────────────────────────────
 
-def test_overview_is_the_deck_with_its_facts_on_top():
-    """OVERVIEW is one main: the tiles' sheet, holding the `Charts ↓` jump and
-    `#overview-body` (the only thing overview.js writes into), then the charts'
-    seat that views.js lifts the Sky's and the Depths' sections into. CHARTS
-    is an old name for it."""
+def test_overview_and_nodes_stand_between_the_sky_and_the_depths():
+    """The owner (2026-11-13): OVERVIEW and NODES sit between the Sky and the
+    Depths, as the map does. Each main is the band above, "↑ the sky", the
+    view's sheet, "the depths ↓", the band below; views.js lifts #chronicle up
+    and #abyss (with the colophon and the way back) down, and the page opens
+    on the view. `charts` opens OVERVIEW at the Sky."""
     html = _read(INDEX)
-    main = re.search(r'<main class="atlas-view" id="view-overview" data-view="overview" hidden[^>]*>(.*?)</main>',
-                     html, re.S)
-    assert main, "OVERVIEW's main is gone"
-    body = main.group(1)
-    for needle in ('id="charts-jump"', 'id="overview-tiles"', 'id="overview-body"', 'id="overview-charts"'):
-        assert needle in body, needle
-    assert (body.index('id="overview-tiles"') < body.index('id="charts-jump"')
-            < body.index('id="overview-body"') < body.index('id="overview-charts"'))
-    sheet = re.search(r'<section class="ov-sheet" id="overview-tiles"[^>]*>(.*?)</section>', body, re.S).group(1)
-    assert 'id="charts-jump"' in sheet and 'id="overview-body"' in sheet, (
-        "the jump sits in the sheet, so it wears the panel's tokens over the light sheet")
-    assert 'href="#overview-charts"' in body
+    for view, sheet in (("overview", 'id="overview-tiles"'), ("nodes", 'id="nodes-sheet"')):
+        main = re.search(rf'<main class="atlas-view" id="view-{view}" data-view="{view}" hidden[^>]*>(.*?)</main>',
+                         html, re.S)
+        assert main, f"{view}'s main is gone"
+        body = main.group(1)
+        order = [body.index(n) for n in ('class="view-band view-band-sky"', 'class="view-edge view-edge-up"',
+                                         sheet, 'class="view-edge view-edge-down"', 'view-band-depths"')]
+        assert order == sorted(order), f"{view}: sky band, ↑, sheet, ↓, depths band, in that order"
+        assert "{{ theme.text.sky }}" in body and "{{ theme.text.depths }}" in body
+    assert 'id="charts-jump"' not in html, "the Sky above and the Depths below replace `Charts ↓`"
+    ov = re.search(r'<section class="ov-sheet" id="overview-tiles"[^>]*>(.*?)</section>', html, re.S).group(1)
+    assert 'id="overview-body"' in ov
     views = _read(WEB / "static" / "js" / "views.js")
-    # the lift seats: each section leaves a comment where it sat, and goes back to it
-    assert "const MOVERS = ['chronicle', 'abyss', 'colophon'];" in views
+    assert "const BANDED = ['overview', 'nodes'];" in views
+    assert "const MOVERS = [['chronicle', 'up'], ['abyss', 'down'], ['colophon', 'down']];" in views
     assert "document.createComment(` ${id} sits here on the map `)" in views
     assert "seat.replaceWith($(id))" in views
-    assert "if (prev === 'overview') settle();" in views and "if (next === 'overview') lift();" in views
-    assert "charts.append(el)" in views, "the sections must lift into #overview-charts, below the tiles"
+    assert "if (BANDED.includes(prev)) settle();" in views and "if (BANDED.includes(next)) lift(next);" in views
+    assert "else if (BANDED.includes(next)) { holdMiddle = true; toMiddle(); }" in views, "opens on the view"
+    assert "new ResizeObserver(() => { if (holdMiddle) toMiddle(); })" in views, "the Sky filling in does not push it"
     assert "A.setDeck = (on, opts) => A.setView(on ? 'overview' : 'map', opts);" in views
-    assert "tracking = A.VIEW === 'overview'" in views, "a phone's swipe pages the charts under OVERVIEW"
-    # the seats on the map still exist for the sections to go back to
+    assert "tracking = BANDED.includes(A.VIEW)" in views, "a phone's swipe pages the charts in both views"
     for sid in ('id="chronicle"', 'id="abyss"', 'id="colophon"'):
         assert sid in html, sid
     css = _read(CSS)
     assert 'body[data-view="charts"]' not in css
-    assert css.count('body[data-view="overview"]') == 6
+    assert css.count('body:is([data-view="overview"], [data-view="nodes"])') == 5
+    nodes = _read(WEB / "static" / "js" / "nodes.js")
+    assert "root = $('nodes-sheet');" in nodes, "NODES draws into its sheet, never over the bands"
     over = _read(WEB / "static" / "js" / "overview.js")
     assert "$('overview-body')" in over, "overview.js draws into #overview-body"
     for whole in ("$('view-overview')", "$('overview-tiles')"):
-        assert whole not in over, (
-            "overview.js must write into #overview-body only: the view holds the lifted charts "
-            "and the sheet holds the `Charts ↓` jump")
+        assert whole not in over, "overview.js must write into #overview-body only: the view holds the bands"
     assert "import './overview.js';" in _read(WEB / "static" / "js" / "atlas.js")
+
+
+def test_colours_is_always_open():
+    """The owner (2026-11-13): Light, Dark and Light/Dark side by side as soon as
+    Settings opens. COLOURS is a heading, not a fold, and a stored fold cannot
+    shut it."""
+    html = _read(INDEX)
+    sec = re.search(r'<div class="sp-sec sp-fixed" data-sec="colours">\s*<div class="sp-sub">', html)
+    assert sec, "COLOURS must be an always-open section with a plain heading"
+    js = _read(UI)
+    assert "if (sec.classList.contains('sp-fixed')) continue;" in js
+    assert "sec.classList.contains('sp-fixed')) return;" in js
+    css = _read(CSS)
+    assert ".sp-sec.sp-fixed > .sp-sub::after { content: none; }" in css
 
 
 def test_cancel_never_acknowledges():

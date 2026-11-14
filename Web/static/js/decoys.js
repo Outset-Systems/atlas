@@ -107,6 +107,7 @@ A.toggleDecoys = function toggleDecoys(force) {
   on = typeof force === 'boolean' ? force : !on;
   document.body.classList.toggle('decoys-on', on);
   $('btn-decoys')?.classList.toggle('lit', on);
+  $('btn-decoys')?.setAttribute('aria-pressed', String(on));
   if (!on) return;
   paint();
   // an admin's layer also hears the webhook: fetch the read, repaint when it lands

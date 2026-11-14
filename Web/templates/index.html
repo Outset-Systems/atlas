@@ -158,21 +158,30 @@
 
 <!-- THE VIEWS (2026-11-13): what stands in the map's place under the band. One
      `main.atlas-view` per view, every one `hidden` until views.js shows exactly
-     one; `body.deck` means the map is put away. OVERVIEW is the realm's facts
-     in tiles (overview.js draws #overview-body), then the Deck (v1.67.0):
-     views.js lifts the Sky's and the Depths' sections into #overview-charts.
-     `?view=charts` lands there. NODES is drawn by nodes.js. ALERTS (stage 4)
+     one; `body.deck` means the map is put away. OVERVIEW (the realm's facts
+     in tiles, overview.js) and NODES (nodes.js) stand between the Sky and
+     the Depths as the map does (owner, 2026-11-13): views.js lifts the Sky's
+     section into the band above and the Depths' into the band below, and the
+     page opens on the view. `?view=charts` opens OVERVIEW at the Sky. ALERTS (stage 4)
      is drawn by alerts.js, and is an admin's only: its menu item and strip
      entry carry `data-admin` and `hidden`, and views.js draws them for an
      admin and removes them for anyone else. -->
 <main class="atlas-view" id="view-overview" data-view="overview" hidden aria-label="{{ theme.text.view_overview|capitalize }}">
+  <div class="view-band view-band-sky" id="overview-sky"></div>
+  <a class="view-edge view-edge-up" href="#overview-sky">↑ {{ theme.text.sky }}</a>
   <section class="ov-sheet" id="overview-tiles" aria-label="{{ theme.text.view_overview|capitalize }}">
-    <a class="ov-jump" id="charts-jump" href="#overview-charts">{{ theme.text.charts_jump }}</a>
     <div id="overview-body"></div>
   </section>
-  <div class="ov-charts" id="overview-charts"></div>
+  <a class="view-edge view-edge-down" href="#overview-charts">{{ theme.text.depths }} ↓</a>
+  <div class="ov-charts view-band view-band-depths" id="overview-charts"></div>
 </main>
-<main class="atlas-view" id="view-nodes" data-view="nodes" hidden aria-label="{{ theme.text.view_nodes|capitalize }}"></main>
+<main class="atlas-view" id="view-nodes" data-view="nodes" hidden aria-label="{{ theme.text.view_nodes|capitalize }}">
+  <div class="view-band view-band-sky" id="nodes-sky"></div>
+  <a class="view-edge view-edge-up" href="#nodes-sky">↑ {{ theme.text.sky }}</a>
+  <section class="nv-sheet" id="nodes-sheet" aria-label="{{ theme.text.view_nodes|capitalize }}"></section>
+  <a class="view-edge view-edge-down" href="#nodes-depths">{{ theme.text.depths }} ↓</a>
+  <div class="view-band view-band-depths" id="nodes-depths"></div>
+</main>
 <main class="atlas-view" id="view-alerts" data-view="alerts" hidden aria-label="{{ theme.text.view_alerts|capitalize }}"></main>
 <!-- On a phone the views are named at the top of the column (there is no
      ATLAS and no map there, so no MAP either; the column's foot is the way to
@@ -288,34 +297,18 @@
      ⚠ A SIBLING of #scenes-list, never inside it: the band's backdrop-filter
      and overflow would position it against the band and clip it away. -->
 <div class="view-menu" id="view-menu" role="menu" aria-label="{{ theme.text.views }}">
+  <!-- THE MAP'S TOOLS (owner, 2026-11-13): the sky and the depths, at the
+       menu's top, shown only while MAP is the view and no scene is up
+       (atlas.css `.view-tools`). The tripwire watch left the menu for its own
+       scene's head (#btn-decoys there). Ids, the S / D keys and `.lit` stand. -->
+  <div class="view-tools" role="group" aria-label="{{ theme.text.map_tools }}">
+    <button type="button" role="menuitem" class="view-tool ci-sky" id="btn-sky" data-say-title title="Rise to {{ theme.text.sky }} · the Chronicle (S)" aria-label="{{ theme.text.sky }}"><span class="vt-lamp"><svg class="ci-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.5 18H17a4 4 0 0 0 .6-7.95a5.5 5.5 0 0 0-10.5-1a4.5 4.5 0 0 0 .4 8.95Z"/></svg></span><span class="vt-name">{{ theme.text.sky|upper }}</span></button>
+    <button type="button" role="menuitem" class="view-tool ci-depths" id="btn-depths" title="Descend into the Depths (D)" aria-label="The Depths"><span class="vt-lamp"><svg class="ci-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5v9.5M8.5 9.5 12 13l3.5-3.5"/><path d="M3.5 17.5c1.4 1 2.8 1 4.2 0s2.8-1 4.2 0 2.8 1 4.2 0 2.8-1 4.2 0"/></svg></span><span class="vt-name">{{ theme.text.depths|upper }}</span></button>
+  </div>
   <button type="button" role="menuitem" data-view="map">{{ theme.text.view_map }}</button>
   <button type="button" role="menuitem" data-view="overview">{{ theme.text.view_overview }}</button>
   <button type="button" role="menuitem" data-view="nodes">{{ theme.text.view_nodes }}</button>
   <button type="button" role="menuitem" data-view="alerts" data-admin hidden>{{ theme.text.view_alerts }}</button>
-  <!-- THE MAP'S TOOLS (owner, 2026-11-13): the sky, the depths and the watch
-       were a column standing beside the zoom; they are the menu's lower part
-       now, shown only while MAP is the view and no scene is up (atlas.css
-       `.view-tools`). The ids, the S / D / G keys and `.lit` are unchanged. -->
-  <div class="view-tools" role="group" aria-label="{{ theme.text.map_tools }}">
-    <button type="button" role="menuitem" class="view-tool ci-sky" id="btn-sky" data-say-title title="Rise to {{ theme.text.sky }} · the Chronicle (S)" aria-label="{{ theme.text.sky }}"><span class="vt-lamp"><svg class="ci-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.5 18H17a4 4 0 0 0 .6-7.95a5.5 5.5 0 0 0-10.5-1a4.5 4.5 0 0 0 .4 8.95Z"/></svg></span><span class="vt-name">{{ theme.text.sky|upper }}</span></button>
-    <button type="button" role="menuitem" class="view-tool ci-depths" id="btn-depths" title="Descend into the Depths (D)" aria-label="The Depths"><span class="vt-lamp"><svg class="ci-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5v9.5M8.5 9.5 12 13l3.5-3.5"/><path d="M3.5 17.5c1.4 1 2.8 1 4.2 0s2.8-1 4.2 0 2.8 1 4.2 0 2.8-1 4.2 0"/></svg></span><span class="vt-name">{{ theme.text.depths|upper }}</span></button>
-    <button type="button" role="menuitem" class="view-tool ci-decoys" id="btn-decoys" data-say-title title="Show the {{ theme.text.stones_watch }} — the {{ theme.text.stones }}, where they stand (G)" aria-label="{{ theme.text.stones_watch|capitalize }} layer">
-      <span class="vt-lamp"><svg class="ci-glyph tw-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
-        <path d="M2.5 11 C 6 6.4, 18 6.4, 21.5 11 C 18 15.6, 6 15.6, 2.5 11 Z"/>
-        <circle cx="12" cy="11" r="3"/>
-        <circle cx="12" cy="11" r="1.1" fill="currentColor" stroke="none"/>
-        <path d="M12 14.6 L12 19.6 l-1.7 -1.5"/>
-        <path d="M5.6 7.6 L4.2 5.8 M12 6.1 L12 4 M18.4 7.6 L19.8 5.8"/>
-      </svg>
-      <svg class="ci-glyph tw-bird" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
-           stroke-linecap="round" stroke-linejoin="round">
-        <path d="M6 16 C4.5 12 7 7.5 12 7.5 C14.5 7.5 16.2 9 16.6 10.6 L20 11.4 L16.8 12.8 C16.4 16 13.4 18 10 18 C8.4 18 7 17.4 6 16 Z"/>
-        <path d="M8 12.6 C10 11 12.5 11.5 13.5 13.5 C11.5 15 9 14.8 8 12.6 Z"/>
-        <path d="M6 16 L2.6 19 M10.4 18 V21 M13 17.6 V21"/>
-        <circle cx="13.7" cy="10.2" r="0.9" fill="currentColor" stroke="none"/>
-      </svg></span><span class="vt-name">{{ theme.text.stones_watch|upper }}</span>
-    </button>
-  </div>
 </div>
 
 
@@ -542,6 +535,24 @@
     <div class="ldg-head">
       <span class="ldg-title" data-say>{{ theme.text.stones|upper }}</span>
       <span class="ldg-sub">silent watchers — anything that touches one is an event, not a maybe</span>
+      <!-- THE WATCH ON THE MAP (owner, 2026-11-13): moved here from THE ATLAS's
+           menu. It only shows or hides the marks on the map (decoys.js
+           `toggleDecoys`; G does the same). -->
+      <button type="button" class="sc-toggle ci-decoys" id="btn-decoys" aria-pressed="false" data-say-title
+              title="Show the {{ theme.text.stones_watch }} — the {{ theme.text.stones }}, where they stand (G)"><span class="vt-lamp"><svg class="ci-glyph tw-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+        <path d="M2.5 11 C 6 6.4, 18 6.4, 21.5 11 C 18 15.6, 6 15.6, 2.5 11 Z"/>
+        <circle cx="12" cy="11" r="3"/>
+        <circle cx="12" cy="11" r="1.1" fill="currentColor" stroke="none"/>
+        <path d="M12 14.6 L12 19.6 l-1.7 -1.5"/>
+        <path d="M5.6 7.6 L4.2 5.8 M12 6.1 L12 4 M18.4 7.6 L19.8 5.8"/>
+      </svg>
+      <svg class="ci-glyph tw-bird" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+           stroke-linecap="round" stroke-linejoin="round">
+        <path d="M6 16 C4.5 12 7 7.5 12 7.5 C14.5 7.5 16.2 9 16.6 10.6 L20 11.4 L16.8 12.8 C16.4 16 13.4 18 10 18 C8.4 18 7 17.4 6 16 Z"/>
+        <path d="M8 12.6 C10 11 12.5 11.5 13.5 13.5 C11.5 15 9 14.8 8 12.6 Z"/>
+        <path d="M6 16 L2.6 19 M10.4 18 V21 M13 17.6 V21"/>
+        <circle cx="13.7" cy="10.2" r="0.9" fill="currentColor" stroke="none"/>
+      </svg></span><span>{{ theme.text.stones_on_map }}</span></button>
       <button class="ldg-close" id="gs-close" title="Close (Esc)">&times;</button>
     </div>
     <div class="rt-head" id="gs-head"></div>
@@ -729,8 +740,9 @@
            default. The band's ☀/☾ only switches Light and Dark, so this row is
            the way back to Light/Dark. Wired by scheme.js (setPick); it always
            applies, so YOU shows in every auth mode. -->
-      <div class="sp-sec" data-sec="colours">
-        <button class="sp-sub" type="button">{{ theme.text.colours }} <span class="sp-sub-plain">· {{ theme.text.colours_sub }}</span></button>
+      <!-- always open (owner, 2026-11-13): the three picks side by side, never folded -->
+      <div class="sp-sec sp-fixed" data-sec="colours">
+        <div class="sp-sub">{{ theme.text.colours }} <span class="sp-sub-plain">· {{ theme.text.colours_sub }}</span></div>
         <div class="sp-sec-body">
           <div class="sp-scheme" role="radiogroup" aria-label="{{ theme.text.colours|capitalize }}">
             <label class="sp-scheme-opt"><input type="radio" name="sp-scheme" value="light"> <span>{{ theme.text.scheme_light }}</span></label>

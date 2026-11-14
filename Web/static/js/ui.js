@@ -148,16 +148,18 @@ try {
 
 /* IDLE ROLL-UP (owner, 2026-11-13): THE INDEX and the views menu fade to 60%
    the moment the MOUSE leaves them (and what opened them), and roll up when it
-   has stayed away ROLLUP_MS. Coming back cancels both. Only a mouse makes them
+   has stayed away `after` ms (the menu 0.6 s, the Index 4 s; owner, 2026-11-13).
+   Coming back cancels both. Only a mouse makes them
    idle: a touch screen cannot hover, and a keyboard working inside one (or
    typing in its search) keeps it up — the roll-up waits until focus leaves. */
-const ROLLUP_MS = 4000;
+const ROLLUP_MS = 4000;     // THE INDEX
+const MENU_ROLLUP_MS = 600; // the views menu
 const mouse = (e) => e.pointerType === 'mouse';
 const working = (panel) => {
   const el = document.activeElement;
   return !!el && panel.contains(el) && (el.matches('input, textarea, select') || el.matches(':focus-visible'));
 };
-function idleRollup(panel, parts, { isUp, rollUp }) {
+function idleRollup(panel, parts, { isUp, rollUp, after = ROLLUP_MS }) {
   let timer = null;
   let fade = null;
   let inside = false;
@@ -173,14 +175,14 @@ function idleRollup(panel, parts, { isUp, rollUp }) {
       if (working(panel)) return;          // focusout below starts it again
       panel.classList.remove('idle');
       rollUp();
-    }, ROLLUP_MS);
+    }, after);
   };
   const leave = () => {
     inside = false;
     if (!isUp()) return;
     // a beat first, so crossing from what opened it into it does not flicker
     clearTimeout(fade);
-    fade = setTimeout(() => { if (!inside && isUp()) panel.classList.add('idle'); }, 160);
+    fade = setTimeout(() => { if (!inside && isUp()) panel.classList.add('idle'); }, Math.min(160, after / 4));
     later();
   };
   for (const el of parts) {
@@ -440,8 +442,8 @@ $('btn-net').addEventListener('click', () => A.toggleNet());
    the pointer "in", and a tap on THE ATLAS means home and nothing else. Only a
    keyboard focus peeks too, for the same reason (a click focuses as well).
    `refuse` can turn a peek down; `onChange` hears every change.
-   A mouse leaving does not shut it at once: it fades and rolls up ROLLUP_MS
-   later (idleRollup above, owner 2026-11-13); a keyboard leaving shuts it after
+   A mouse leaving does not shut it at once: it fades and rolls up
+   MENU_ROLLUP_MS later (idleRollup above, owner 2026-11-13); a keyboard leaving shuts it after
    `delay`. */
 function hoverReveal(anchor, cluster, { delay = 220, onChange = () => {}, refuse = () => false } = {}) {
   if (!anchor || !cluster) return { close() {} };
@@ -503,6 +505,7 @@ const viewReveal = hoverReveal(sceneHome, viewMenu, {
 const viewShown = () => viewMenu.classList.contains('peek') || viewMenu.classList.contains('open');
 idleRollup(viewMenu, [sceneHome, viewMenu], {
   isUp: viewShown,
+  after: MENU_ROLLUP_MS,
   rollUp: () => { viewMenu.classList.remove('open'); viewReveal.close(); },
 });
 function openViewMenu(focusFirst) {
@@ -670,6 +673,7 @@ const FOLD_DEFAULT_OPEN = new Set(['account']);
 function applyFolds() {
   const folds = getFolds();
   for (const sec of document.querySelectorAll('#settings-panel .sp-sec')) {
+    if (sec.classList.contains('sp-fixed')) continue;   // always open (COLOURS)
     const key = sec.dataset.sec;
     const closed = Object.hasOwn(folds, key)
       ? Boolean(folds[key])
@@ -680,7 +684,7 @@ function applyFolds() {
 $('settings-panel')?.addEventListener('click', (e) => {
   const head = e.target.closest('.sp-sub');
   const sec = head?.closest('.sp-sec');
-  if (!sec || !sec.dataset.sec) return;
+  if (!sec || !sec.dataset.sec || sec.classList.contains('sp-fixed')) return;
   const closed = sec.classList.toggle('closed');
   // the admin ledgers load their body on first unfold (adminSection)
   if (!closed && sec._load) { const f = sec._load; sec._load = null; f(); }

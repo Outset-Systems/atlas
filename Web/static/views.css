@@ -3,7 +3,7 @@
    What stands in the map's place under the band. The shell (which view shows,
    its seat under the crown, its scroll) is atlas.css "THE VIEWS"; this file
    is only what is drawn inside one. Tokens only: the panel tokens follow
-   `data-scheme` once `#view-nodes` (and OVERVIEW's `#overview-tiles`) sits in
+   `data-scheme` once `#nodes-sheet` (and OVERVIEW's `#overview-tiles`) sits in
    atlas.css's panel token block, so nothing here restates a colour for the
    light scheme. OVERVIEW is at the foot of this file.
 
@@ -178,8 +178,8 @@ body.phone .nv-count { margin-left: 0; flex-basis: 100%; }
 
 /* ── OVERVIEW (2026-11-13, stage 3) ───────────────────────────────────────
    The realm's facts in tiles (overview.js draws `#overview-body` inside the
-   sheet `#overview-tiles`), then the
-   Deck's charts (`#overview-charts`, atlas.css). Only the tiles' sheet sits
+   sheet `#overview-tiles`), between the Sky's charts above and the Depths'
+   below (`.view-band`, atlas.css). Only the tiles' sheet sits
    in atlas.css's panel token block, never the whole view: the Depths'
    section lifted below reads `--surface` and `--ink-line` for its own dark
    ground, and must keep the night's.
@@ -191,19 +191,6 @@ body.phone .nv-count { margin-left: 0; flex-basis: 100%; }
 
 #view-overview [hidden] { display: none !important; }
 
-/* `Charts ↓`: in the sheet's head, at its right edge, so a wall keeps every
-   pixel for the tiles. It sits in the sheet (so it wears the panel's tokens)
-   but outside `#overview-body`, which overview.js redraws. */
-.ov-jump {
-  position: absolute; z-index: 1; top: 16px; right: 20px;
-  display: block; width: max-content; padding: 2px 4px;
-  font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.72rem; letter-spacing: 0.22em;
-  text-transform: uppercase; color: var(--text-dim); text-decoration: none;
-  transition: color 150ms;
-}
-.ov-jump:hover, .ov-jump:focus-visible { color: var(--gilt); }
-/* the charts stop below the band when `Charts ↓` brings them up */
-#overview-charts { scroll-margin-top: var(--view-top); }
 
 .ov-sheet {
   position: relative;
@@ -350,10 +337,8 @@ body.phone .ov-sheet { margin: 0 12px 16px; padding: 14px 12px 16px; }
    and `Charts ↓` keeps the head's corner */
 @media (max-width: 760px) {
   .ov-stamp { margin: 0; flex-basis: 100%; }
-  .ov-jump { top: 12px; right: 10px; padding: 4px; }
 }
 body.phone .ov-stamp { margin: 0; flex-basis: 100%; }
-body.phone .ov-jump { top: 12px; right: 10px; padding: 4px; }
 body.phone .ov-title { padding-right: 96px; }
 
 /* THE HOVER GLOW (the design notes 2026-11-02), for the controls this view adds */
@@ -362,7 +347,7 @@ body.phone .ov-title { padding-right: 96px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  :is(.ov-jump, .ov-place, .ov-event) { transition: none; }
+  :is(.ov-place, .ov-event) { transition: none; }
 }
 
 /* ── ALERTS (2026-11-13, stage 4) ─────────────────────────────────────────

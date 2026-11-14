@@ -243,13 +243,12 @@ function hookRefresh() {
 /* ── the frame: built once ───────────────────────────────────────────────── */
 
 function build() {
-  root = $('view-nodes');
+  root = $('nodes-sheet');   // the sheet between the Sky and the Depths (index.html)
   if (!root || el.sheet) return Boolean(root);
   const set = parseSet(new URLSearchParams(location.search).get('set'));
   if (set) S.filter.set = set;
 
   root.innerHTML = `
-    <div class="nv-sheet">
       <header class="nv-head">
         <h2 class="nv-title">${esc(themeText('view_nodes', 'NODES'))}</h2>
         <p class="nv-sub">${esc(t('nodes_sub'))}</p>
@@ -269,10 +268,9 @@ function build() {
       <div class="nv-saved" aria-label="${esc(t('nodes_saved_label'))}"></div>
       <div class="nv-bulk"></div>
       <div class="nv-msg" aria-live="polite"></div>
-      <div class="nv-results"></div>
-    </div>`;
+      <div class="nv-results"></div>`;
   el = {
-    sheet: root.querySelector('.nv-sheet'),
+    sheet: root,
     count: root.querySelector('.nv-count'),
     search: root.querySelector('.nv-search'),
     picks: [...root.querySelectorAll('.nv-pick')],
