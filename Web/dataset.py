@@ -52,6 +52,26 @@ KEEP_REVISIONS = 50
 OPS = ("upsert", "insert", "delete", "move", provenance.REVIEW)
 
 
+def site_lock_path(site, revisions_dir=None):
+    """The sidecar every writer of a site's map contends on: the editor's
+    saves (`DatasetStore`), and in db mode the importers and the relay ingest,
+    which write rows straight into the tables (2026-11-15: they took no lock,
+    so a save that loaded before an import and wrote after it put the import
+    back as it was)."""
+    if revisions_dir is None:
+        import settings   # lazy: the CLI imports this before its env is final
+        revisions_dir = settings.REVISIONS_DIR
+    return os.path.join(revisions_dir, f"{site}-write.lock")
+
+
+def site_lock(site, revisions_dir=None):
+    """Hold a site's write lock (`site_lock_path`). Raises `filelock.LockTimeout`
+    when another writer will not let go."""
+    path = site_lock_path(site, revisions_dir)
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    return exclusive(path)
+
+
 class ConflictError(Exception):
     """The dataset moved under the client between read and write."""
 
@@ -374,13 +394,25 @@ def _apply_one(data, op):
     return handler(data, op, s, entries)
 
 
+def _copy(data):
+    """A deep copy of a JSON document. Through the C encoder and decoder, a
+    fraction of `copy.deepcopy`'s time (2026-11-15: a sixth of every save).
+    Exact for what both stores hand it (a document read from JSON: string
+    keys, lists, no tuples); a value JSON cannot hold at all falls back to
+    deepcopy."""
+    try:
+        return json.loads(json.dumps(data, ensure_ascii=False))
+    except (TypeError, ValueError):
+        return copy.deepcopy(data)
+
+
 def apply_ops(data, ops):
     """Apply a batch to a copy of `data`. Returns (new_data, [summaries])."""
     if not isinstance(ops, list) or not ops:
         raise RejectedError("no changes were sent")
     if len(ops) > 500:
         raise RejectedError("too many changes in one save (max 500)")
-    out = copy.deepcopy(data)
+    out = _copy(data)
     summaries = []
     for i, op in enumerate(ops):
         if not isinstance(op, dict):
@@ -393,6 +425,59 @@ def apply_ops(data, ops):
 
 
 # ── Stores ───────────────────────────────────────────────────────────────────
+
+def _by_label(data):
+    """{how problem lines name an entry: [that entry as JSON text, …]}: a
+    list section's entries by `validation.label_of` (an id, a title, or a
+    position), an object section by its key."""
+    out = {}
+    for key in schema.SECTION_ORDER:
+        s = schema.get(key)
+        if s is None or s["store"] != "dataset" or key not in data:
+            continue
+        value = data[key]
+        if s["kind"] == "object" or not isinstance(value, list):
+            out.setdefault(key, []).append(json.dumps(value, sort_keys=True, default=str))
+            continue
+        for i, entry in enumerate(value):
+            out.setdefault(validation.label_of(key, entry, i), []).append(
+                json.dumps(entry, sort_keys=True, default=str))
+    return out
+
+
+def _introduced(before, after, problems):
+    """(refused, tolerated): the problems a save may not land with, and those
+    it may.
+
+    `validation` refuses a *write* that would introduce problems (its own
+    doctrine), but this refused any save while any problem stood: one an
+    import or a hand edit of the file left (a NetBox device with no role, a
+    stone with no severity) made every later editor save fail, though none of
+    them could mend more than the one entry it was about (2026-11-15).
+
+    A problem is let through, and logged, only when the map already had it
+    (counted: a second identical one is new) AND the entry it names is exactly
+    what it was. Anything the save changed, inserted, renamed or moved into
+    that name is checked as new, so a form never saves a broken entry because
+    it was broken before, and a delete that frees a name (`route #29`) cannot
+    hand its old problem to a new entry. An entry named by position whose
+    position moved reads as changed: that refuses, the safe way. The map as it
+    was is validated only here, when the new one has problems: a clean save
+    pays for one validation, as before."""
+    from collections import Counter
+    old = Counter(validation.validate(before, strict=True))
+    was, now = _by_label(before), _by_label(after)
+    refused, tolerated = [], []
+    for p in problems:
+        label = p.split(": ", 1)[0]
+        unchanged = label in was and was.get(label) == now.get(label)
+        if old[p] > 0 and unchanged:
+            old[p] -= 1
+            tolerated.append(p)
+        else:
+            refused.append(p)
+    return refused, tolerated
+
 
 def content_stamp(data):
     """A short, clock-independent version token for optimistic concurrency."""
@@ -421,7 +506,7 @@ class DatasetStore:
 
     def _lock_path(self):
         """The sidecar every writer of this dataset contends on."""
-        return os.path.join(self.revisions_dir, f"{self.site}-write.lock")
+        return site_lock_path(self.site, self.revisions_dir)
 
     # -- public API ----------------------------------------------------------
     def read(self):
@@ -433,6 +518,13 @@ class DatasetStore:
         """
         data = self._load()
         return data, content_stamp(data)
+
+    def stamp(self):
+        """The stamp `read` would give, for a caller that wants only that
+        (the roster, the Desk's boot). A backend may remember it; a stale one
+        can only make the next save a 409, never a lost write, since `apply`
+        stamps the document it loads under the lock."""
+        return self.read()[1]
 
     def apply(self, ops, actor="unknown", expect=None, note="", origin=None):
         """Validate and commit a batch. Returns a result dict for the client.
@@ -475,7 +567,11 @@ class DatasetStore:
 
         problems = validation.validate(after, strict=True)
         if problems:
-            raise RejectedError(problems)
+            refused, tolerated = _introduced(before, after, problems)
+            if refused:
+                raise RejectedError(refused)
+            log.warning("dataset write by %s saved over %d problem(s) already on the map: %s",
+                        actor, len(tolerated), "; ".join(tolerated[:5]))
 
         revision = self._record(before, actor, summaries, ops, note)
         self._save(after)
@@ -539,8 +635,11 @@ class DatasetStore:
         }
         try:
             os.makedirs(self.revisions_dir, exist_ok=True)
+            # compact (2026-11-15): nobody diffs or hand-edits a snapshot, and
+            # with no indent the encoder runs in C, a fraction of the time
+            # (the indented one was a quarter of every save)
             write_json_atomic(self._snapshot_path(revision_id), before,
-                              keep_backup=False)
+                              indent=None, keep_backup=False)
             with open(self._journal_path(), "a", encoding="utf-8") as fh:
                 fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
             self._prune()
@@ -589,15 +688,29 @@ class DatasetStore:
         if expect and expect != content_stamp(before):
             raise ConflictError("the map has changed since then — use the change log "
                                 "in the Desk to see what would be undone")
-        snapshot = read_json(self._snapshot_path(int(revision_id)))
+        snapshot = schema.upgrade(read_json(self._snapshot_path(int(revision_id))))
         if not isinstance(snapshot, dict):
             raise RejectedError(
                 f"revision {revision_id} can no longer be undone — its snapshot "
                 f"has been pruned (the last {KEEP_REVISIONS} are kept)")
         problems = validation.validate(snapshot, strict=True)
+        if before is None and problems:
+            before = self._load()
         if problems:
-            raise RejectedError(
-                [f"that older version no longer validates: {p}" for p in problems[:5]])
+            # what the map has now an undo may bring back (2026-11-15: a save
+            # that landed over a problem already there snapshots it, and its
+            # undo was refused for it); only what the map does not have refuses
+            from collections import Counter
+            have = Counter(validation.validate(before, strict=True))
+            new = []
+            for p in problems:
+                if have[p] > 0:
+                    have[p] -= 1
+                else:
+                    new.append(p)
+            if new:
+                raise RejectedError(
+                    [f"that older version no longer validates: {p}" for p in new[:5]])
         if before is None:
             before = self._load()
         provenance.restamp_revert(before, snapshot, actor)
@@ -622,6 +735,22 @@ class FileDatasetStore(DatasetStore):
         super().__init__(revisions_dir, site)
         self.path = path
         self.default_path = default_path
+        self._stamp_memo = (None, None)   # (the file's (mtime_ns, size, ino), its stamp)
+
+    def stamp(self):
+        """Remembered while the file is the same file (2026-11-15, stage 5:
+        the roster re-read and hashed the whole map on every request for this
+        one string, ~45 ms at 10,000 places). Every save replaces the file,
+        which moves its mtime (`write_json_atomic` copies the mode, not the
+        times) and its inode."""
+        try:
+            st = os.stat(self.path)
+            key = (st.st_mtime_ns, st.st_size, st.st_ino)
+        except OSError:
+            return super().stamp()
+        if self._stamp_memo[0] != key:
+            self._stamp_memo = (key, super().stamp())
+        return self._stamp_memo[1]
 
     def writable(self):
         directory = os.path.dirname(self.path) or "."
@@ -640,7 +769,7 @@ class FileDatasetStore(DatasetStore):
         data = read_json(self.path)
         if not isinstance(data, dict):
             raise RejectedError(f"the dataset at {self.path} is unreadable")
-        return data
+        return schema.upgrade(data)   # an old section name is saved back as today's
 
     def _save(self, data):
         write_json_atomic(self.path, data, indent=2)
@@ -658,11 +787,25 @@ class DbDatasetStore(DatasetStore):
 
     def __init__(self, site, revisions_dir):
         super().__init__(revisions_dir, site)
+        self._stamp_memo = (None, None)   # (the site's (data_version, updated_at), its stamp)
+
+    def stamp(self):
+        """Remembered while the site's `data_version` and `updated_at` stand
+        (2026-11-15, stage 5): every write bumps them (a save, an import, the
+        importers). A stale one can only cause a 409."""
+        from store import session_scope, site_stamp
+        with session_scope() as session:
+            key = site_stamp(session, self.site)
+        if key is None:
+            return super().stamp()
+        if self._stamp_memo[0] != key:
+            self._stamp_memo = (key, super().stamp())
+        return self._stamp_memo[1]
 
     def _load(self):
         from store import dump_labdata, session_scope
         with session_scope() as session:
-            data = dump_labdata(session, self.site)
+            data = schema.upgrade(dump_labdata(session, self.site))
         if data is None:
             raise RejectedError(
                 f"site {self.site!r} has not been seeded yet — import a dataset first "
@@ -672,7 +815,9 @@ class DbDatasetStore(DatasetStore):
     def _save(self, data):
         from store import load_labdata, session_scope
         with session_scope() as session:
-            load_labdata(session, data, site_slug=self.site, source="manual")
+            # only the rows that differ (2026-11-15): the same end state as
+            # the import's full replace, which the tests hold it to
+            load_labdata(session, data, site_slug=self.site, source="manual", only_changed=True)
 
 
 def build_store(backend, *, data_path, default_path, site, revisions_dir):

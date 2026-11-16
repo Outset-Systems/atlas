@@ -200,6 +200,7 @@ function idleRollup(panel, parts, { isUp, rollUp, after = ROLLUP_MS }) {
 let drawerIdle = null;   // set just below, once ☰ exists
 A.toggleDrawer = function toggleDrawer(open) {
   const willOpen = open ?? !drawer.classList.contains('open');
+  if (willOpen && listsStale) buildLists();   // see A.buildUI
   if (!willOpen) drawerIdle?.wake();
   drawer.classList.toggle('open', willOpen);
   drawer.setAttribute('aria-hidden', String(!willOpen));
@@ -545,15 +546,6 @@ viewMenu.addEventListener('keydown', (e) => {
   else if (e.key === 'Escape') { e.preventDefault(); closeViewMenu(true); }
 });
 viewMenu.addEventListener('click', (e) => {
-  // a map tool has acted already (its own listener); the menu just goes
-  const tool = e.target.closest('.view-tool');
-  if (tool) {
-    e.stopPropagation();
-    const keyboard = e.detail === 0;
-    closeViewMenu(keyboard);
-    if (!keyboard && viewMenu.contains(document.activeElement)) document.activeElement.blur();
-    return;
-  }
   const item = e.target.closest('[data-view]');
   if (!item) return;
   e.stopPropagation();
@@ -616,8 +608,13 @@ const settingsScene = makeScene({
     clearInterval(sourcesTimer);
     sourcesTimer = setInterval(renderSources, 5000);
     A.buildCartographer?.();   // the render list is a cheap fetch, fresh per open
+    // Settings › Alerts (alert-setup.js) reads while it is up, as the watchers do
+    dispatchEvent(new CustomEvent('atlas:settings', { detail: { open: true } }));
   },
-  onClose: () => clearInterval(sourcesTimer),
+  onClose: () => {
+    clearInterval(sourcesTimer);
+    dispatchEvent(new CustomEvent('atlas:settings', { detail: { open: false } }));
+  },
 });
 A.openSettings = settingsScene.open;
 A.closeSettings = settingsScene.close;
@@ -762,9 +759,19 @@ function nameRegionHeads() {
   }
 }
 
-A.buildUI = function buildUI() {
+/* THE INDEX's two lists are a row per place and per service: rebuilt only
+   while the drawer is open, else on its next opening (2026-11-15, stage 5:
+   most of a save's redraw at 2,000 places was these lists, shut). */
+let listsStale = false;
+function buildLists() {
+  listsStale = false;
   buildIndex();
   buildServices();
+}
+
+A.buildUI = function buildUI() {
+  if (drawer.classList.contains('open')) buildLists();
+  else listsStale = true;
   buildChronicle();
   buildAbyss();
   nameRegionHeads();

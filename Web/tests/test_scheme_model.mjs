@@ -5,7 +5,7 @@
 
 import assert from 'node:assert/strict';
 import {
-  RESET_KEY, RESET_MARK, SCHEME_KEY, barScheme, buttonFace, isToggleKey, migrateOnce, nextChoice,
+  RESET_KEY, RESET_MARK, SCHEME_KEY, barScheme, isToggleKey, migrateOnce, nextChoice,
   otherScheme, parsePick, parseStored, pickAttr, readStored, resolveScheme, whereFrom, writeStored,
 } from '../static/js/scheme-model.js';
 
@@ -136,20 +136,6 @@ test('storage that throws or is absent never breaks the page', () => {
   assert.equal(writeStored(throwing, 'dark'), false);
   assert.equal(readStored(null), null);
   assert.equal(writeStored(undefined, 'dark'), false);
-});
-
-test('the button says the pick and what a press does', () => {
-  const a = buttonFace(null, true), l = buttonFace('light', false), d = buttonFace('dark', true);
-  assert.equal(a.title, 'Light/Dark: the bar follows the map. A press pins the other one (T)');
-  assert.equal(l.title, 'Light: press for Dark (T)');
-  assert.equal(d.title, 'Dark: press for Light (T)');
-  assert.equal(a.label, 'Light/Dark: the bar follows the map. A press pins the other one');
-  assert.equal(l.label, 'Light: press for Dark');
-  assert.equal(d.label, 'Dark: press for Light');
-  assert.deepEqual(buttonFace(null, false), a);   // the words do not follow the OS
-  for (const f of [a, l, d]) {
-    assert.deepEqual(Object.keys(f).sort(), ['label', 'title']);   // no pressed, no glyph
-  }
 });
 
 test('migrateOnce: clears a stored light or dark and writes the mark', () => {

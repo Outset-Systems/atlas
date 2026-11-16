@@ -106,7 +106,7 @@ admin. Atlas refuses tokens in that mode, so that nobody opens the port for one.
 | `GET /api/v2/signals` | Live health of places and services, and whether each source answered |
 | `GET /api/v2/rites` | Every scheduled job and whether it ran |
 | `GET /api/v2/events` | The history of state changes, newest first |
-| `GET /api/v2/places/roster` | Every place, one row each: live state, network, addresses, review, repairs, nearest certificate, sets |
+| `GET /api/v2/places/roster` | Every place, one row each: live state, network, addresses, review, repairs, nearest certificate, collections |
 | `GET /api/v2/overview` | The realm at a glance: places by state, what is down and what depends on it, unacknowledged events, repairs this week, lapsing certificates, review, changes, sources |
 | `GET /api/v2/maps` | The pictures the map can be drawn on |
 | `GET /api/v2/openapi.json` | The reference for this list |
@@ -198,10 +198,12 @@ other. Each row holds:
 - `cert`: the certificate tied to this place that lapses first, with `days`
   left (negative once lapsed). Only a certificate whose `place` names the
   place counts; one that names it only in `host` is not guessed at.
-- `sets`: the sets it is in, and `depends_on`.
+- `collections`: the collections it is in, and `depends_on`.
 
-Beside the rows: `zones`, `sets` (named lists of places; a set is not an
-access group) and `stamp`, the map's version.
+Beside the rows: `zones`, `collections` (named lists of places; a collection
+is not an access group) and `stamp`, the map's version. Before 2026-11-14
+the two `collections` keys were called `sets`; a map file that still has a
+`sets` section is read as collections and saved back under the new name.
 
 ### The realm at a glance: `/api/v2/overview`
 
@@ -274,7 +276,7 @@ should read the answers.
 
 ## Alerts: admins only, never a token
 
-The ALERTS view's own routes are listed here so an operator knows they exist.
+The alerts' own routes (used by NODES and Settings › Alerts) are listed here so an operator knows they exist.
 They belong to the page, not to this contract, and every one of them refuses a
 token (403): they sit behind the admin check, and an API token reads as a
 viewer with no groups. Writes need the page's write header (`X-Atlas-Write`),
@@ -290,7 +292,7 @@ turn them on. See [Alerts](configuration.md#alerts) for the settings.
 | `POST /api/v2/admin/alerts/destinations/<id>/test` | Sends "Atlas test from <the map's title>" through the same path as an alert, at most 10 a minute per admin (shared with the other connection tests). Answers `{outcome, status, why}` only: `delivered`, `refused` with the HTTP status, `unreachable` or `blocked`, never anything the receiver said. |
 | `GET /api/v2/admin/alerts/deliveries?limit=` | The delivery log, newest first, default 100, at most 1000: `at`, `rule` (its id; `test`, `digest` or `fold` for those sends), `destination` (its name), `events`, `outcome`, `status`, `why`, and `folded` on an "and N more" message. |
 
-A rule is `{id, name, note, enabled, target: {kind: place|set|network, id},
+A rule is `{id, name, note, enabled, target: {kind: place|collection|network, id},
 to: [states], for_minutes: 0-1440, destination}`. The digest is `{enabled,
 hour: 0-23 (the server's local time), destination, cert_days, review_days,
 drift, uncharted}`; `uncharted` must be false for now. A destination is `{id,

@@ -210,7 +210,7 @@
       "get": {
         "operationId": "getPlacesTable",
         "summary": "Every place, one row each",
-        "description": "The places this reader may see, each with its live state, network, addresses, review, repair windows, nearest certificate and sets. Made from the map and the live health, cut the same way as those two.",
+        "description": "The places this reader may see, each with its live state, network, addresses, review, repair windows, nearest certificate and collections. Made from the map and the live health, cut the same way as those two. Any parameter below filters, sorts and pages the rows by the places table's own rules and adds `total`, `offset` and `limit`; with none, every row comes back. Text sorts in a natural order (numbers as numbers, accents and case after the letters), which a browser's own locale may order differently for some names.",
         "responses": {
           "200": {
             "description": "The table.",
@@ -233,8 +233,140 @@
           },
           "500": {
             "$ref": "#/components/responses/Unreadable"
+          },
+          "400": {
+            "description": "A parameter it cannot use; `error` says which.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Unreadable"
+                }
+              }
+            }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "text",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Every word must appear in the name, id, an address, the role or the network."
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "examples": [
+                "down",
+                "degraded",
+                "maintenance",
+                "slumbering",
+                "healthy",
+                "unknown",
+                "unmanaged"
+              ]
+            }
+          },
+          {
+            "name": "zone",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "A network's id."
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "collection",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "A collection's id."
+          },
+          {
+            "name": "unchecked",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1",
+                "0"
+              ]
+            },
+            "description": "`1`: only places waiting for a person to check them."
+          },
+          {
+            "name": "stale_days",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "description": "Only places nobody has checked in this many days."
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": "name",
+              "enum": [
+                "state",
+                "name",
+                "zone",
+                "kind",
+                "addresses",
+                "services",
+                "confirmed_by",
+                "reviewed",
+                "maintenance",
+                "cert",
+                "collections"
+              ]
+            }
+          },
+          {
+            "name": "dir",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "default": "asc"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2000
+            },
+            "description": "The most rows to return. None: every match."
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          }
+        ]
       }
     },
     "/api/v2/overview": {
@@ -373,6 +505,10 @@
               "title": {
                 "type": "string",
                 "description": "The name of this atlas."
+              },
+              "carry_service_renames": {
+                "type": "boolean",
+                "description": "When a service is renamed (its label, its monitor, or its place's id), the collections, repair windows and alert rules naming it follow the new name. Off, they keep the old one, and Atlas says what was left behind."
               },
               "surveyed": {
                 "type": "string",
@@ -636,6 +772,10 @@
                   "type": "string",
                   "description": "Hide this place from anyone whose Hub groups don't include it."
                 },
+                "unmanaged": {
+                  "type": "boolean",
+                  "description": "Not ours to watch: it stays on the map, greyed, takes no state from any source and raises nothing. (Maintenance is 'expected down, for now'.)"
+                },
                 "links": {
                   "type": "array",
                   "items": {
@@ -692,6 +832,10 @@
                       "require_group": {
                         "type": "string",
                         "description": "Hide this service from anyone whose Hub groups don't include it."
+                      },
+                      "unmanaged": {
+                        "type": "boolean",
+                        "description": "Not ours to watch: this service takes no state and raises nothing."
                       }
                     }
                   },
@@ -1279,7 +1423,7 @@
             },
             "description": "The certs."
           },
-          "sets": {
+          "collections": {
             "type": "array",
             "items": {
               "type": "object",
@@ -1291,22 +1435,33 @@
                 },
                 "name": {
                   "type": "string",
-                  "description": "What the set is called, e.g. `Storage`."
+                  "description": "What the collection is called, e.g. `Storage`."
                 },
                 "places": {
                   "type": "array",
                   "items": {
                     "type": "string"
                   },
-                  "description": "The places in this set, by id. Names an entry in `nodes`."
+                  "description": "The places in this collection, by id. Names an entry in `nodes`."
                 },
                 "note": {
                   "type": "string",
-                  "description": "What the set is for."
+                  "description": "What the collection is for."
+                },
+                "services": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Services in this collection. By key: a Kuma monitor's name, or `<place id>/<label>` for a built-in check (the key the feed files the service under)."
+                },
+                "unmanaged": {
+                  "type": "boolean",
+                  "description": "Every place and service in it is unmanaged: on the map, greyed, watched by nothing."
                 }
               }
             },
-            "description": "The sets."
+            "description": "The collections."
           }
         },
         "description": "The whole map. No field is promised present: a hand-edited dataset is served as it is, and keys the catalogue does not know are kept. Places a token may not see are removed, with everything that names them."
@@ -1489,6 +1644,20 @@
               "type": "object",
               "additionalProperties": true
             }
+          },
+          "unmanaged": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Places by id that are not watched on purpose: they have no state here."
+          },
+          "maintenance_services": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Services by key under a repair window now, their place left watched."
           },
           "repairs": {
             "type": "object",
@@ -1695,7 +1864,7 @@
               }
             }
           },
-          "sets": {
+          "collections": {
             "type": "array",
             "description": "Named lists of places. Not access.",
             "items": {
@@ -1716,6 +1885,17 @@
                     "null"
                   ]
                 },
+                "unmanaged": {
+                  "type": "boolean",
+                  "description": "Every place and service in it is unmanaged."
+                },
+                "services": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Its services by key: a monitor's name, or <place id>/<label>."
+                },
                 "places": {
                   "type": "array",
                   "items": {
@@ -1727,7 +1907,7 @@
           },
           "rows": {
             "type": "array",
-            "description": "One per place.",
+            "description": "One per place (one page of them, when asked).",
             "items": {
               "type": "object",
               "additionalProperties": true,
@@ -1858,6 +2038,13 @@
                         "null"
                       ],
                       "description": "When the next window that names it opens, UTC."
+                    },
+                    "mode_since": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "In maintenance mode (on until turned off): when it began, UTC. Null otherwise."
                     }
                   }
                 },
@@ -1888,12 +2075,12 @@
                     }
                   }
                 },
-                "sets": {
+                "collections": {
                   "type": "array",
                   "items": {
                     "type": "string"
                   },
-                  "description": "The sets this place is in."
+                  "description": "The collections this place is in."
                 },
                 "depends_on": {
                   "type": "array",
@@ -1901,9 +2088,28 @@
                     "type": "string"
                   },
                   "description": "Places this one cannot work without."
+                },
+                "unmanaged": {
+                  "type": "boolean",
+                  "description": "Not watched on purpose (marked so, or in a collection marked so): it has no state and raises nothing."
                 }
               }
             }
+          },
+          "total": {
+            "type": "integer",
+            "description": "Asked for a page: how many rows matched in all."
+          },
+          "offset": {
+            "type": "integer",
+            "description": "Asked for a page: where it starts."
+          },
+          "limit": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Asked for a page: its most rows."
           }
         }
       },

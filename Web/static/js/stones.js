@@ -29,6 +29,8 @@
 
 import { A, $, esc, themeText, canAdminWrite } from './config.js';
 import { makeScene } from './scene.js';
+import { folds, keepFocus } from './fold.js';
+import { opensAtFirst, tripsLoud } from './fold-model.js';
 import {
   byFamily, expiryNote, legacySources, listening, roster, tripLine, ago,
 } from './tripwire-model.js';
@@ -160,10 +162,34 @@ function headHTML(rows, sources, counts) {
     ${extras.join('')}${srcs}</div>`;
 }
 
-function unmatchedHTML(list) {
+/* OPEN AND SHUT (2026-11-15, stage 4): a family's head folds it, remembered.
+   A shut head keeps the loud part: how many are touched and how many trips
+   wait. Drawn from the remembered state, so the poll's repaint keeps it. */
+const F = folds('tripwires');
+
+function familyHead(key, title, sub, loud, sections, count) {
+  const first = opensAtFirst(loud.tripped + loud.unacked + (loud.dead | 0) + (loud.expiring | 0), sections);
+  const parts = [];
+  if (loud.tripped) parts.push(`<b class="acc-flag">${loud.tripped} ${esc(word.speaking())}</b>`);
+  if (loud.unacked) parts.push(`<span class="rt-warn">${loud.unacked} to acknowledge</span>`);
+  // a calm row over a gap (review): one that cannot trip, a token running out
+  if (loud.dead) parts.push(`<span class="rt-warn">${loud.dead} cannot trip</span>`);
+  if (loud.expiring) parts.push(`<span class="rt-warn">${loud.expiring} expired or expiring</span>`);
+  return {
+    box: `class="gs-family${F.shut(key, first, 'gs-shut')}" data-fold-box data-fold-class="gs-shut"`,
+    head: `<div class="gs-family-head" ${F.head(key, first, title.toLowerCase())}>
+      <span class="ldg-fold" aria-hidden="true">▾</span>${esc(title)}
+      <span class="gs-family-sub">${esc(sub)}</span>
+      <span class="gs-family-n">${count}${parts.length ? ` · ${parts.join(' · ')}` : ''}</span></div>`,
+  };
+}
+
+function unmatchedHTML(list, sections) {
   if (!Array.isArray(list) || !list.length) return '';
-  return `<div class="gs-family"><div class="gs-family-head">UNMATCHED TRIPS
-      <span class="gs-family-sub">a sender named something this map has not charted</span></div>
+  const waiting = list.filter((x) => x.event && !x.ack).length;
+  const f = familyHead('family:unmatched', 'UNMATCHED TRIPS', 'a sender named something this map has not charted',
+    { tripped: 0, unacked: waiting }, sections, list.length);
+  return `<div ${f.box}>${f.head}
     ${list.slice(0, 8).map((x) => `<div class="gs-trip gs-trip-loose">
       <span class="gs-trip-line">${esc(x.sensor ? `${x.sensor} — ` : '')}${esc(tripLine(x))}</span>
       ${x.event && !x.ack && canAdminWrite()
@@ -290,14 +316,19 @@ function paint() {
   const sources = ov?.sources || legacySources(A.signalsSources);
   if (headEl) headEl.innerHTML = headHTML(rows, sources, ov?.counts);
   const fam = byFamily(rows);
-  const groups = ['honeypot', 'token'].filter((k) => fam[k].length).map((k) => `<div class="gs-family">
-      <div class="gs-family-head">${FAMILY[k][0]} <span class="gs-family-sub">${FAMILY[k][1]}</span></div>
-      ${fam[k].map(rowHTML).join('')}</div>`).join('');
+  const kinds = ['honeypot', 'token'].filter((k) => fam[k].length);
+  const sections = kinds.length + (Array.isArray(ov?.unmatched) && ov.unmatched.length ? 1 : 0);
+  const groups = kinds.map((k) => {
+    const f = familyHead(`family:${k}`, FAMILY[k][0], FAMILY[k][1], tripsLoud(fam[k]), sections, fam[k].length);
+    return `<div ${f.box}>${f.head}${fam[k].map(rowHTML).join('')}</div>`;
+  }).join('');
   const at = listEl.scrollTop;
-  listEl.innerHTML = unmatchedHTML(ov?.unmatched) + (groups
-    || `<div class="ldg-note">no ${esc(plural().toLowerCase())} charted yet — add a honeypot or a
-        canary token in the map editor.</div>`)
-    + setupBlock(Boolean(ov));
+  keepFocus(listEl, () => {
+    listEl.innerHTML = unmatchedHTML(ov?.unmatched, sections) + (groups
+      || `<div class="ldg-note">no ${esc(plural().toLowerCase())} charted yet — add a honeypot or a
+          canary token in the map editor.</div>`)
+      + setupBlock(Boolean(ov));
+  });
   listEl.scrollTop = at;
   wire();
 }
@@ -337,4 +368,5 @@ A.buildStonesScene = function buildStonesScene() {
   if (!root) return;
   listEl = $('gs-list');
   headEl = $('gs-head');
+  F.wire(listEl);
 };

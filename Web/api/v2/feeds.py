@@ -18,6 +18,7 @@ import dependencies
 import events
 import heartbeats
 import maintenance
+import signals
 import tripwires
 from context import atlas
 from redaction import (redact_for_groups, cleared, hidden_node_ids, sees_everything, vary_on_viewer,
@@ -83,7 +84,10 @@ def _drift(ctx, feed):
     charted = {signals.service_key(node.get("id"), link)
                for node in data.get("nodes") or [] if isinstance(node, dict)
                for link in (node.get("links") or []) if isinstance(link, dict)}
-    ignore = set(((data.get("signals") or {}).get("drift_ignore")) or [])
+    block = data.get("signals") if isinstance(data.get("signals"), dict) else {}
+    listed = block.get("drift_ignore")
+    # a hand edit's number or nested list is ignored, never a raise (round 15)
+    ignore = {n for n in listed if isinstance(n, str)} if isinstance(listed, list) else set()
     uncharted = sorted(n for n in services if n not in charted and n not in ignore)
     return {"count": len(uncharted), "uncharted": uncharted}
 
@@ -148,7 +152,20 @@ def _redact_feed(ctx, feed, groups, data=None):
 
     out["services"] = {name: info for name, info in (feed.get("services") or {}).items()
                        if name in monitors}
-    out["maintenance"] = [n for n in (feed.get("maintenance") or []) if n not in hidden]
+    # a collection's members reach these lists as written ("VAULT-01" for a
+    # hidden vault-01), so while anything is hidden they keep only the ids of
+    # places this viewer sees: an allowlist, not a blocklist (stage 3 review)
+    if hidden:
+        seen = {n["id"] for n in data.get("nodes") or []
+                if isinstance(n, dict) and isinstance(n.get("id"), str) and cleared(n, groups)}
+        keep = lambda key: [n for n in (feed.get(key) or []) if n in seen]   # noqa: E731
+    else:
+        keep = lambda key: list(feed.get(key) or [])   # noqa: E731
+    out["maintenance"] = keep("maintenance")
+    out["unmanaged"] = keep("unmanaged")
+    out["maintenance_services"] = [k for k in (feed.get("maintenance_services") or []) if k in monitors]
+    # the services' keys are the annals' bookkeeping, never a viewer's
+    out.pop("unmanaged_services", None)
     if hidden:
         out.pop("repairs", None)      # its counts and its next reason span every window
     if isinstance(out.get("rites"), dict):
@@ -182,7 +199,13 @@ def build_feed(ctx):
     # THE REPAIRS: scheduled windows decide who is under repair now, and an
     # expired window stops suppressing the moment it ends. The legacy flat node
     # list still counts — maintenance.under_repair() folds both together.
-    repairs = maintenance.summary()
+    # A window may name collections (2026-11-14): their members are read from
+    # the map now. No map: the windows that name places still count.
+    try:
+        map_now, _, _ = ctx.dataset()
+    except (OSError, ValueError):
+        map_now = None
+    repairs = maintenance.summary(data=map_now)
     if repairs["under_repair"]:
         nodes = dict(feed.get("nodes", {}))
         for node_id in repairs["under_repair"]:
@@ -196,6 +219,37 @@ def build_feed(ctx):
                                     if k not in repairs["under_repair"]}
     feed["maintenance"] = repairs["under_repair"]
     feed["repairs"] = {k: repairs[k] for k in ("active", "upcoming", "next", "next_reason")}
+
+    # UNMANAGED (2026-11-14): not ours to watch. Its sources are still asked;
+    # their answer is set aside, so it has no state, is in no maintenance,
+    # names no source, and its services say nothing. It beats maintenance.
+    # `unmanaged` (and its services) are listed so the annals forget them.
+    unmanaged = signals.unmanaged_ids(map_now) if map_now is not None else set()
+    quiet = signals.services_of(map_now, unmanaged) | (
+        signals.unmanaged_service_keys(map_now) if map_now is not None else set())
+    feed["unmanaged"] = sorted(unmanaged)
+    feed["unmanaged_services"] = sorted(quiet)
+    if unmanaged:
+        feed["nodes"] = {k: v for k, v in (feed.get("nodes") or {}).items() if k not in unmanaged}
+        feed["maintenance"] = [n for n in feed["maintenance"] if n not in unmanaged]
+        if isinstance(feed.get("confirmed_by"), dict):
+            feed["confirmed_by"] = {k: v for k, v in feed["confirmed_by"].items() if k not in unmanaged}
+    if quiet and isinstance(feed.get("services"), dict):
+        feed["services"] = {k: v for k, v in feed["services"].items() if k not in quiet}
+
+    # A SERVICE UNDER REPAIR (stage 3b): a window naming it, or a collection
+    # it is in, puts that one service in maintenance, its place left watched.
+    # Unmanaged beats it. Shown even when no source reports the service.
+    # only services on the map: a window naming one since gone covers nothing,
+    # and must not make one up (it read as an uncharted monitor; review)
+    charted = (set(signals.service_places(map_now)) | set(signals.monitor_map(map_now))) if map_now is not None else set()
+    fixing = [k for k in repairs.get("services_under_repair") or [] if k not in quiet and k in charted]
+    feed["maintenance_services"] = sorted(fixing)
+    if fixing:
+        services = dict(feed.get("services") or {})
+        for key in fixing:
+            services[key] = {**(services.get(key) or {}), "state": "maintenance"}
+        feed["services"] = services
 
     # One fault, one alarm: a place that is down behind something else that is
     # down is a consequence, not an incident. Runs after maintenance so that a
@@ -220,6 +274,8 @@ def build_feed(ctx):
             events.record(feed, _label_for(ctx))
         except Exception as e:      # noqa: BLE001 — history must never break the map
             log.warning("could not record events: %s", e)
+    # the unmanaged services' keys were for the annals alone: no reader gets them
+    feed.pop("unmanaged_services", None)
 
     drift = _drift(ctx, feed)
     if drift:

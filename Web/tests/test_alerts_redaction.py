@@ -45,7 +45,7 @@ def realm_data():
                  require_group=viewers.GROUP),                     # downstream of a visible one
                p("beta", "Beta"),
                p("talker", "Talker", role="mirrors Vaultkeep nightly")],
-        sets=[{"id": "storage", "name": "Storage", "places": ["beta", HIDDEN_ID]}],
+        collections=[{"id": "storage", "name": "Storage", "places": ["beta", HIDDEN_ID]}],
         certs=[{"name": "Inner cert", "place": HIDDEN_ID, "expires": soon},
                {"name": "Front cert", "place": "gate", "expires": soon}],
     )
@@ -84,8 +84,8 @@ def test_a_rule_on_a_hidden_place_is_refused_at_save(realm):
     _clean(realm, r.get_data(as_text=True))
 
 
-def test_a_set_with_a_hidden_member_may_be_named_and_the_member_never_matches(realm):
-    alertkit.store([rule("r-set", "set", "storage")])
+def test_a_collection_with_a_hidden_member_may_be_named_and_the_member_never_matches(realm):
+    alertkit.store([rule("r-col", "collection", "storage")])
     realm["tick"].step({**realm["ok"], HIDDEN_ID: "down"}, T0)
     assert realm["sent"].sent == []
     realm["tick"].step({**realm["ok"], HIDDEN_ID: "down", "beta": "down"}, T0 + 60)

@@ -1,7 +1,7 @@
 /* ALERTS' rules, with no DOM (2026-11-13, the views' stage 4).
 
    ALERTS is rules and destinations, not an engine. A rule says, in one
-   sentence: when this place, set or network goes to this state and stays
+   sentence: when this place, collection or network goes to this state and stays
    there this long, send to this destination. It reads the state changes the
    ANNALS already records, at the annals' own poll, and measures nothing. The
    server keeps the rules and destinations (`api/v2/admin/alerts`, admin only),
@@ -11,16 +11,18 @@
    This file words all of it: the rule's sentence, the daily digest's
    sentence, what the page checks before it posts (and so says first, in
    plain words), how to turn alerts on, the outcome of a send, and a line of
-   the delivery log. alerts.js draws; this file only decides and words. Every
-   visible phrase is a theme key with its plain fallback in ALERTS_TEXT,
-   filled by a `t` the caller passes (alerts.js passes one that reads the
-   theme first). A secret's VALUE never passes through here: a destination
+   the delivery log, and which rules reach a place. Since 2026-11-14 two
+   files draw: alert-rules.js the rules on one thing inside NODES, and
+   alert-setup.js where word goes in Settings › Alerts (the ALERTS view,
+   alerts.js, is gone); this file only decides and words. Every visible
+   phrase is a theme key with its plain fallback in ALERTS_TEXT, filled by a
+   `t` the caller passes (alert-forms.js passes one that reads the theme
+   first). A secret's VALUE never passes through here: a destination
    only names its secret, and the server reads it from the environment.
    Unit-tested by tests/test_alerts_model.mjs under plain node. */
 
 /** Every visible string, by theme key, with its plain fallback. */
 export const ALERTS_TEXT = {
-  alerts_sub: 'word sent out when the map changes, and where it goes',
   alerts_loading: 'Reading the alerts…',
   alerts_failed: 'The alerts could not be read: {why}',
 
@@ -40,14 +42,13 @@ export const ALERTS_TEXT = {
   alerts_off_both: 'Atlas sends nothing until two settings are in its environment: ATLAS_ALERTS=1, and ATLAS_ALERT_HOSTS listing the hosts it may send to, for example ntfy.example:443. No host is listed yet.',
   alerts_off_flag: 'The hosts it may send to are listed in ATLAS_ALERT_HOSTS. Set ATLAS_ALERTS=1 as well to turn alerts on.',
   alerts_off_hosts: 'ATLAS_ALERTS is set, but ATLAS_ALERT_HOSTS lists no host, so there is nowhere Atlas may send. List them as host:port, for example ntfy.example:443.',
-  alerts_off_restart: 'Restart Atlas after changing its environment. Rules and destinations are made here once it is on.',
+  alerts_off_restart: 'Restart Atlas after changing its environment. Destinations and rules can be made once it is on.',
   alerts_poll_needed: 'Alerts need the annals\' poll; it is off. Set ATLAS_ANNALS_POLL above 0 and run Atlas under gunicorn, or nothing will be sent.',
   alerts_poll_dead: 'Alerts need the annals\' poll, and it is not running: it runs under gunicorn, never under flask run. Nothing is sent until it does.',
   alerts_no_link: 'ATLAS_PUBLIC_URL is not set, so messages will carry no link to the place.',
 
   // the sections
   alerts_t_destinations: 'Destinations',
-  alerts_t_rules: 'Rules',
   alerts_t_digest: 'The daily digest',
   alerts_t_deliveries: 'Deliveries',
   alerts_add_destination: 'Add a destination',
@@ -84,19 +85,13 @@ export const ALERTS_TEXT = {
   alerts_in_use: 'Rules send here: {names}. Change them first.',
 
   // rules
-  alerts_rules_none: 'No rule yet. A rule sends word when a place, a set or a network changes.',
   alerts_f_rule_name: 'Name',
   alerts_f_note: 'Note (for you; never sent)',
-  alerts_f_watch: 'Watches',
-  alerts_f_target: 'Which',
   alerts_f_states: 'When it goes',
   alerts_f_minutes: 'And stays for (minutes; 0 sends at once)',
   alerts_f_dest: 'Send to',
   alerts_f_enabled: 'On',
   alerts_pick: 'Pick one…',
-  alerts_kind_place: 'A place',
-  alerts_kind_set: 'A set',
-  alerts_kind_network: 'A network',
   alerts_resolution: 'Atlas looks every {n} seconds, so a wait is measured to the nearest {n} seconds.',
   alerts_resolution_off: 'Atlas measures a wait at the annals\' poll, which is off.',
   alerts_rule_on: 'Send by this rule',
@@ -105,11 +100,13 @@ export const ALERTS_TEXT = {
   alerts_rule_now: 'When {target} goes {states}, send to {dest} at once.',
   alerts_rule_wait: 'When {target} goes {states} and stays for {wait}, send to {dest}.',
   alerts_t_place: '{name}',
-  alerts_t_set: 'any place in the set {name}',
+  alerts_t_collection: 'any place in the collection {name}',
   alerts_t_network: 'any place on the network {name}',
   alerts_t_gone_place: 'a place no longer on the map ({id})',
-  alerts_t_gone_set: 'a set that no longer exists ({id})',
+  alerts_t_gone_collection: 'a collection that no longer exists ({id})',
   alerts_t_gone_network: 'a network no longer on the map ({id})',
+  alerts_t_service: 'the service {name}',
+  alerts_t_gone_service: 'a service no longer on the map ({id})',
   alerts_t_nothing: 'nothing yet',
   alerts_nowhere: 'nowhere yet',
   alerts_or: 'or',
@@ -183,6 +180,26 @@ export const ALERTS_TEXT = {
   alerts_l_line: '{what} to {dest}: {outcome}.',
   alerts_l_line_n: '{what}, {count}, to {dest}: {outcome}.',
 
+  // Settings › Alerts (2026-11-14): where word goes, the digest, the log
+  alerts_setup_title: 'ALERTS',
+  alerts_setup_sub: 'where word goes, the daily digest, the log',
+  alerts_setup_note: 'Where alerts are sent, the daily digest, and what was sent. The rules are made in NODES: a place’s bell, or the ⋯ beside a collection or a network.',
+
+  // the alerts on one thing, inside NODES (2026-11-14)
+  alerts_panel_title: 'Alerts on {target}',
+  alerts_panel_shut: 'Close',
+  alerts_panel_none: 'No rule of its own yet.',
+  alerts_panel_also: 'Also reached through:',
+  alerts_panel_one: '1 rule',
+  alerts_panel_many: '{n} rules',
+  alerts_panel_no_dest: 'A rule sends to a destination, and there is none yet.',
+  alerts_panel_to_setup: 'Open Settings › Alerts',
+  alerts_panel_setup: 'Destinations, the daily digest and the log are in Settings › Alerts.',
+  alerts_t_orphans: 'Rules on something gone',
+  alerts_panel_unmanaged: 'No rule sends for this place: it is unmanaged, not ours to watch, so it has no state to send about. Its own rules are listed here to be removed.',
+  alerts_panel_held: 'No rule sends for this place: it is behind an access group, and the alerts read the map as someone with no group does. Its own rules are listed here to be removed; a new one could not be saved.',
+  alerts_orphans_note: 'These rules watch a place, a collection or a network that is no longer on the map, so NODES has no bell for them, and they send nothing. Remove them here, or bring their target back.',
+
   // the ANNALS' note beside an event that caused a send
   annals_sent: 'sent to {to}',
 };
@@ -199,8 +216,12 @@ export const plainT = (key, vars) => fill(ALERTS_TEXT[key] ?? key, vars);
 export const STATES = ['down', 'degraded', 'maintenance', 'slumbering', 'healthy'];
 /** The three shapes a destination can take (the server fixes method and body). */
 export const KINDS = ['ntfy', 'gotify', 'webhook'];
+/** Whether a rule is on, as the server reads it (alerts.py `rule_on`): no
+    `enabled` is on, `true` is on, anything else a hand edit left is off. */
+export const ruleOn = (rule) => ((rule && rule.enabled) ?? true) === true;
+
 /** What a rule can watch. */
-export const TARGETS = ['place', 'set', 'network'];
+export const TARGETS = ['place', 'collection', 'network', 'service'];
 /** The digest's four conditions. */
 export const CONDITIONS = ['cert_days', 'review_days', 'drift', 'uncharted'];
 
@@ -232,24 +253,53 @@ export const stateLabel = (s, t = plainT) => (ALERTS_TEXT[`alerts_state_${s}`] ?
 const goes = (s, t) => (ALERTS_TEXT[`alerts_go_${s}`] ? t(`alerts_go_${s}`) : String(s));
 
 /** What a rule watches, from the map the browser holds: places are `nodes`,
-    sets are `sets`, networks are `zones`. */
+    collections are `collections`, networks are `zones`. */
 export function lookup(data, kind, id) {
   const d = data || {};
-  const where = kind === 'place' ? d.nodes : kind === 'set' ? d.sets : kind === 'network' ? d.zones : null;
+  if (kind === 'service') return services(d).find((s) => s.id === id) || null;
+  const where = kind === 'place' ? d.nodes : kind === 'collection' ? d.collections : kind === 'network' ? d.zones : null;
   return list(where).find((x) => x && x.id === id) || null;
+}
+
+/** A service's key, as the server files it (signals.service_key): its Kuma
+    monitor, else `<place id>/<label>` (stage 3b, 2026-11-15). */
+export function serviceKey(placeId, link) {
+  const monitor = link?.kuma;
+  if (typeof monitor === 'string' && monitor) return monitor;
+  return `${placeId}/${typeof link?.label === 'string' ? link.label : ''}`;
+}
+
+/** Every service on the map: {id: its key, name: "UI on Alpha", place, label}.
+    Two links naming one monitor share a key; the first keeps it. */
+export function services(data) {
+  const out = [];
+  const seen = new Set();
+  for (const node of list(data?.nodes)) {
+    if (!node || typeof node.id !== 'string') continue;
+    for (const link of list(node.links)) {
+      if (!link || typeof link !== 'object') continue;
+      const id = serviceKey(node.id, link);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const label = typeof link.label === 'string' && link.label ? link.label : id;
+      out.push({ id, name: `${label} on ${node.name || node.id}`, place: node.id, label });
+    }
+  }
+  return out;
 }
 
 /** The choices for the rule form's second pick, by name. */
 export function targetOptions(data, kind) {
   const d = data || {};
-  const where = kind === 'place' ? d.nodes : kind === 'set' ? d.sets : kind === 'network' ? d.zones : null;
+  const where = kind === 'service' ? services(d)
+    : kind === 'place' ? d.nodes : kind === 'collection' ? d.collections : kind === 'network' ? d.zones : null;
   return list(where)
     .filter((x) => x && typeof x.id === 'string')
     .map((x) => [x.id, String(x.name || x.id)])
     .sort((a, b) => a[1].localeCompare(b[1]));
 }
 
-/** "Core", "any place in the set Web", "a place no longer on the map (core)". */
+/** "Core", "any place in the collection Web", "a place no longer on the map (core)". */
 export function targetPhrase(target, data, t = plainT) {
   const kind = target?.kind;
   const id = target?.id;
@@ -276,7 +326,7 @@ const destName = (id, destinations) => {
 
 /** The rule, in one sentence:
     "When Core goes down or degraded and stays for 5 minutes, send to Lab ntfy."
-    "When any place in the set Web goes down, send to Lab ntfy at once." */
+    "When any place in the collection Web goes down, send to Lab ntfy at once." */
 export function ruleSentence(rule, { data, destinations } = {}, t = plainT) {
   const r = rule || {};
   const states = list(r.to).filter((s) => !blank(s));
@@ -605,4 +655,98 @@ export function shownAddress(raw) {
   const path = u.pathname.replace(/\/+$/, '');
   if (!path) return `${u.protocol}//${u.host}`;
   return `${u.protocol}//${u.host}/…${path.slice(-4)}`;
+}
+
+/* ── which rules reach a place (2026-11-14, alerts inside NODES) ────────── */
+
+/** A rule's target as today's kind and a text id, or null when it names
+    nothing (a hand edit's list or number). A rule saved when collections were
+    sets says `set`; the server reads it back as a collection already, and so
+    does this. */
+export function targetOf(rule) {
+  const tg = rule && typeof rule === 'object' ? rule.target : null;
+  if (!tg || typeof tg !== 'object' || typeof tg.id !== 'string' || !tg.id) return null;
+  const kind = tg.kind === 'set' ? 'collection' : tg.kind;
+  return TARGETS.includes(kind) ? { kind, id: tg.id } : null;
+}
+
+/** The rules on exactly this target, in the document's order. */
+export function rulesOn(rules, kind, id) {
+  return list(rules).filter((r) => {
+    const tg = targetOf(r);
+    return tg !== null && tg.kind === kind && tg.id === id;
+  });
+}
+
+/** The rules that reach one place, as the server matches them (alerts.py
+    `_matches`): its own, each of its collections', its network's. `row` is a
+    roster row: {id, zone, collections: [ids]}. `count` is all of them, `on`
+    the ones switched on. */
+export function rulesCovering(rules, row) {
+  const own = [];
+  const network = [];
+  const byCollection = new Map();
+  const id = row && typeof row.id === 'string' ? row.id : '';
+  const zone = row && typeof row.zone === 'string' ? row.zone : '';
+  const mine = new Set(list(row?.collections).filter((c) => typeof c === 'string'));
+  for (const r of list(rules)) {
+    const tg = targetOf(r);
+    if (!tg) continue;
+    if (tg.kind === 'place' && tg.id === id) own.push(r);
+    else if (tg.kind === 'collection' && mine.has(tg.id)) {
+      if (!byCollection.has(tg.id)) byCollection.set(tg.id, []);
+      byCollection.get(tg.id).push(r);
+    } else if (tg.kind === 'network' && zone && tg.id === zone) network.push(r);
+  }
+  const all = [...own, ...[...byCollection.values()].flat(), ...network];
+  return {
+    own,
+    collections: [...byCollection].map(([cid, rs]) => ({ id: cid, rules: rs })),
+    network,
+    count: all.length,
+    on: all.filter(ruleOn).length,
+  };
+}
+
+/** The targets of a kind that some rule watches, for the rail's bell. */
+export function watchedIds(rules, kind) {
+  const out = new Set();
+  for (const r of list(rules)) {
+    const tg = targetOf(r);
+    if (tg && tg.kind === kind) out.add(tg.id);
+  }
+  return out;
+}
+
+/** The rules NODES has no bell for, so they can be reached only from
+    Settings › Alerts: they name nothing, or a place, collection or network
+    that is not on the map (a network is in THE RAIL only while a place is in
+    it). A paused rule counts too. Null while the map is not read yet. */
+export function unreachableRules(rules, data) {
+  if (!data || typeof data !== 'object') return null;
+  const nodes = list(data.nodes).filter((n) => n && typeof n.id === 'string');
+  const places = new Set(nodes.map((n) => n.id));
+  const collections = new Set(list(data.collections).filter((c) => c && typeof c.id === 'string').map((c) => c.id));
+  const zones = new Set(list(data.zones).filter((z) => z && typeof z.id === 'string').map((z) => z.id));
+  const peopled = new Set(nodes.map((n) => n.zone).filter((z) => typeof z === 'string' && zones.has(z)));
+  const keys = new Set(services(data).map((s) => s.id));
+  return list(rules).filter((r) => r && typeof r === 'object').filter((r) => {
+    const tg = targetOf(r);
+    if (!tg) return true;
+    if (tg.kind === 'place') return !places.has(tg.id);
+    if (tg.kind === 'collection') return !collections.has(tg.id);
+    if (tg.kind === 'service') return !keys.has(tg.id);
+    return !peopled.has(tg.id);
+  });
+}
+
+/** The rules that reach one service (stage 3b): its own, and each rule on a
+    collection whose `services` hold it, as the server matches them. */
+export function rulesReachingService(rules, key, collections) {
+  const holding = new Set(list(collections)
+    .filter((c) => c && typeof c.id === 'string' && list(c.services).includes(key)).map((c) => c.id));
+  return list(rules).filter((r) => {
+    const tg = targetOf(r);
+    return tg !== null && ((tg.kind === 'service' && tg.id === key) || (tg.kind === 'collection' && holding.has(tg.id)));
+  });
 }

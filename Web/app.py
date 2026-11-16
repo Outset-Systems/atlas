@@ -55,7 +55,7 @@ import settings  # noqa: E402
 import theme  # noqa: E402
 import views  # noqa: E402
 from context import AtlasContext  # noqa: E402
-from redaction import redact_for_groups  # noqa: E402
+import redaction  # noqa: E402 — through the module: tests patch redaction.viewer_groups
 from signals import build_hub_from_env  # noqa: E402
 
 # ── The logger tree ──────────────────────────────────────────────────────────
@@ -363,9 +363,13 @@ def _install_security_headers(app):
     _csp_cache = {"stamp": None, "hosts": None, "by_clearance": {}}
 
     def _csp_floor():
-        return embeddable.frame_src(None, settings.embed_hosts())
+        return embeddable.frame_list(None, settings.embed_hosts())
 
     def _frame_src():
+        """The list a page load carries (see `_frame_list`)."""
+        return _frame_list()[0]
+
+    def _frame_list():
         """The `frame-src` list: 'self', the configured embed hosts, and — when
         ATLAS_EMBED_SERVICES is on — the origins the dataset already links to,
         so THE VIEWING GLASS can show a service without leaving the map.
@@ -380,6 +384,10 @@ def _install_security_headers(app):
         changes only when the map does. A transient read error serves the last
         derived value rather than quietly narrowing the CSP to the floor,
         whose only symptom would be a blank glass pane on a few responses.
+
+        Returns (the list, the map's origins left out of it for want of room:
+        `embeddable.FRAME_SRC_BUDGET`). `/api/v2/embeddable` reads the second
+        to send a service the page's header does not name to a new tab.
         """
         hosts = settings.embed_hosts()
         if not settings.embed_services():
@@ -390,10 +398,21 @@ def _install_security_headers(app):
             return _csp_floor()
         # Per clearance: the list names the origins of the places in it, so a
         # viewer's header may hold only the places that viewer can see.
-        seen, clearance = redact_for_groups(data)
         if _csp_cache["stamp"] != stamp or _csp_cache["hosts"] != hosts:
             _csp_cache.update(stamp=stamp, hosts=hosts, by_clearance={})
-        return _csp_cache["by_clearance"].setdefault(clearance, embeddable.frame_src(seen, hosts))
+        # Look up BEFORE redacting or deriving (2026-11-13): this used to be
+        # `setdefault(clearance, frame_src(...))`, which evaluates its argument
+        # on every call, so the redaction and the list were rebuilt on every
+        # response anyway; at 10,000 places that was ~2.5 s per response.
+        groups, token = redaction.viewer_groups(), bool(api_tokens.current())
+        by_clearance = _csp_cache["by_clearance"]
+        clearance = redaction.clearance_key(groups, token)
+        if clearance not in by_clearance:
+            seen, _ = redaction.redact(data, groups, token)
+            by_clearance[clearance] = embeddable.frame_list(seen, hosts)
+        return by_clearance[clearance]
+
+    app.extensions["atlas_frame_list"] = _frame_list
 
     @app.after_request
     def _headers(resp):
@@ -425,6 +444,16 @@ def _install_security_headers(app):
             authed = atlas_auth.has_viewer()
         except Exception:      # noqa: BLE001 — never fail a response over this
             authed = False     # fail CLOSED: the narrow CSP is the safe default
+        # Only a page has frames (2026-11-15). A response's CSP governs that
+        # response's own document, so the map's origins on a script, a
+        # stylesheet or JSON frame nothing; they made every response as large
+        # as the list (130 KB a response at 2,000 places). Those get the floor.
+        if not authed:
+            frames = "'self'"
+        elif resp.mimetype == "text/html":
+            frames = _frame_src()
+        else:
+            frames = _csp_floor()[0]
         resp.headers.setdefault(
             "Content-Security-Policy",
             "default-src 'self'; style-src 'self' 'unsafe-inline'; "
@@ -433,8 +462,7 @@ def _install_security_headers(app):
             # review): no <base> rewriting, forms post only to this origin,
             # and no plugins
             "base-uri 'none'; form-action 'self'; object-src 'none'; "
-            "frame-src "
-            + (_frame_src() if authed else "'self'"),
+            "frame-src " + frames,
         )
         return resp
 

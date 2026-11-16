@@ -148,6 +148,12 @@ def _refusals(*extra):
     return out
 
 
+def _also_400(path, why):
+    """A GET that also answers 400 for a parameter it cannot use."""
+    path["get"]["responses"]["400"] = _json("Unreadable", why)
+    return path
+
+
 def _get(op_id, summary, description, ok, parameters=None, extra=()):
     op = {"operationId": op_id, "summary": summary, "description": description,
           "responses": {"200": ok, **_refusals(*extra)}}
@@ -191,24 +197,37 @@ def _roster_schema():
                                       "False for a place charted before the map kept provenance.")},
         "maintenance": {"type": "object", "properties": {
             "now": {"type": "boolean", "description": "Under repair now."},
-            "next": {**text, "description": "When the next window that names it opens, UTC."}}},
+            "next": {**text, "description": "When the next window that names it opens, UTC."},
+            "mode_since": {**text, "description": (
+                "In maintenance mode (on until turned off): when it began, UTC. Null otherwise.")}}},
         "cert": {"type": ["object", "null"], "description": (
             "The certificate tied to this place (its `place`) that lapses first. `days` is whole "
             "days left, negative once lapsed, null when its date is not charted."),
             "properties": {"name": text, "days": {"type": ["integer", "null"]}, "expires": text}},
-        "sets": {**ids, "description": "The sets this place is in."},
+        "collections": {**ids, "description": "The collections this place is in."},
         "depends_on": {**ids, "description": "Places this one cannot work without."},
+        "unmanaged": {"type": "boolean", "description": (
+            "Not watched on purpose (marked so, or in a collection marked so): it has no "
+            "state and raises nothing.")},
     }
     return {"type": "object", "properties": {
         "stamp": {**text, "description": "The dataset's version, as an editor sends it back."},
         "generated_at": {"type": "string", "description": "When this answer was made, UTC."},
         "zones": {"type": "array", "items": {"type": "object", "properties": {
             "id": {"type": "string"}, "name": text}}},
-        "sets": {"type": "array", "description": "Named lists of places. Not access.",
-                 "items": {"type": "object", "properties": {
-                     "id": {"type": "string"}, "name": text, "note": text, "places": ids}}},
-        "rows": {"type": "array", "description": "One per place.",
+        "collections": {"type": "array", "description": "Named lists of places. Not access.",
+                        "items": {"type": "object", "properties": {
+                            "id": {"type": "string"}, "name": text, "note": text,
+                            "unmanaged": {"type": "boolean",
+                                          "description": "Every place and service in it is unmanaged."},
+                            "services": {"type": "array", "items": {"type": "string"}, "description": (
+                                "Its services by key: a monitor's name, or <place id>/<label>.")},
+                            "places": ids}}},
+        "rows": {"type": "array", "description": "One per place (one page of them, when asked).",
                  "items": {"type": "object", "additionalProperties": True, "properties": row}},
+        "total": {"type": "integer", "description": "Asked for a page: how many rows matched in all."},
+        "offset": {"type": "integer", "description": "Asked for a page: where it starts."},
+        "limit": {"type": ["integer", "null"], "description": "Asked for a page: its most rows."},
     }}
 
 
@@ -326,6 +345,10 @@ def _schemas():
                                                  "its state in this feed. Absent for a place under "
                                                  "repair, whose state comes from the window.")},
                 "maintenance": {"type": "array", "items": _ANY_OBJECT},
+                "unmanaged": {"type": "array", "items": {"type": "string"}, "description": (
+                    "Places by id that are not watched on purpose: they have no state here.")},
+                "maintenance_services": {"type": "array", "items": {"type": "string"}, "description": (
+                    "Services by key under a repair window now, their place left watched.")},
                 "repairs": _ANY_OBJECT,
                 "metrics": _ANY_OBJECT,
                 "drift": _ANY_OBJECT,
@@ -430,12 +453,38 @@ def _paths():
                  "description": "How many to return. The history keeps 2,000."},
                 {"name": "unacked", "in": "query", "schema": {"type": "string", "enum": ["1"]},
                  "description": "`1` returns only events nobody has acknowledged."}]),
-        "/api/v2/places/roster": _get(
+        "/api/v2/places/roster": _also_400(_get(
             "getPlacesTable", "Every place, one row each",
             "The places this reader may see, each with its live state, network, addresses, "
-            "review, repair windows, nearest certificate and sets. Made from the map and the "
-            "live health, cut the same way as those two.",
-            _json("Roster", "The table."), extra=("500",)),
+            "review, repair windows, nearest certificate and collections. Made from the map and the "
+            "live health, cut the same way as those two. Any parameter below filters, sorts and "
+            "pages the rows by the places table's own rules and adds `total`, `offset` and "
+            "`limit`; with none, every row comes back. Text sorts in a natural order (numbers as "
+            "numbers, accents and case after the letters), which a browser's own locale may order "
+            "differently for some names.",
+            _json("Roster", "The table."), extra=("500",),
+            parameters=[
+                {"name": "text", "in": "query", "schema": {"type": "string"},
+                 "description": "Every word must appear in the name, id, an address, the role or the network."},
+                {"name": "state", "in": "query", "schema": {"type": "string", "examples": [
+                    "down", "degraded", "maintenance", "slumbering", "healthy", "unknown", "unmanaged"]}},
+                {"name": "zone", "in": "query", "schema": {"type": "string"}, "description": "A network's id."},
+                {"name": "kind", "in": "query", "schema": {"type": "string"}},
+                {"name": "collection", "in": "query", "schema": {"type": "string"},
+                 "description": "A collection's id."},
+                {"name": "unchecked", "in": "query", "schema": {"type": "string", "enum": ["1", "0"]},
+                 "description": "`1`: only places waiting for a person to check them."},
+                {"name": "stale_days", "in": "query", "schema": {"type": "integer", "minimum": 0},
+                 "description": "Only places nobody has checked in this many days."},
+                {"name": "sort", "in": "query", "schema": {"type": "string", "default": "name", "enum": [
+                    "state", "name", "zone", "kind", "addresses", "services", "confirmed_by",
+                    "reviewed", "maintenance", "cert", "collections"]}},
+                {"name": "dir", "in": "query", "schema": {"type": "string", "enum": ["asc", "desc"],
+                                                          "default": "asc"}},
+                {"name": "limit", "in": "query", "schema": {"type": "integer", "minimum": 1, "maximum": 2000},
+                 "description": "The most rows to return. None: every match."},
+                {"name": "offset", "in": "query", "schema": {"type": "integer", "minimum": 0, "default": 0}}]),
+            "A parameter it cannot use; `error` says which."),
         "/api/v2/overview": _get(
             "getOverview", "The realm at a glance",
             "Places by state, what is down and what depends on it, events nobody has "

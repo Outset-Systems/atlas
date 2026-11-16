@@ -46,7 +46,9 @@ def import_observations(session, hosts, site_slug, source="nmap", promote=False)
         session.flush()
 
     nodes = list(session.scalars(select(Node).where(Node.site_id == site.id)))
-    by_ip = {n.ip: n for n in nodes if n.ip not in NO_IP}
+    # a retired place is off the map: a device at its old address is new to
+    # the map, not a match (2026-11-15: it was never drift, never promoted)
+    by_ip = {n.ip: n for n in nodes if n.ip not in NO_IP and n.status != "retired"}
     by_slug = {n.slug: n for n in nodes}
     node_sort = max([n.sort_order for n in nodes] + [-1]) + 1
     nets = subnet_index(session, site)

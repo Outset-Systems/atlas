@@ -8,7 +8,9 @@
    work, which is often. Three separate things decide that:
 
      1. **Our CSP.** `frame-src` is widened server-side to the origins the
-        dataset links to (Web/embeddable.py, ATLAS_EMBED_SERVICES).
+        dataset links to (Web/embeddable.py, ATLAS_EMBED_SERVICES), on page
+        loads, as many as one header has room for; a frame it refuses is
+        reported to us, and goes to the tab.
      2. **Their X-Frame-Options / frame-ancestors.** Asked once per service via
         `/api/v2/embeddable` and cached. A browser cannot see this for itself: a
         refused frame paints nothing and fires no error a cross-origin parent
@@ -30,6 +32,10 @@ let memo = {};
 try { memo = JSON.parse(sessionStorage.getItem(MEM_KEY) || '{}'); } catch { memo = {}; }
 function remember(url, ok) {
   memo[url] = ok;
+  try { sessionStorage.setItem(MEM_KEY, JSON.stringify(memo)); } catch { /* private mode */ }
+}
+function forget(url) {
+  delete memo[url];
   try { sessionStorage.setItem(MEM_KEY, JSON.stringify(memo)); } catch { /* private mode */ }
 }
 
@@ -86,24 +92,29 @@ function reveal(caveat) {
   if (current && caveat) urlEl.textContent = `${host(current.abs)} · ${caveat}`;
 }
 
-/** The glass gives up: say why, and hand over the button that always works. */
-function refuse(reason) {
+/** The glass gives up: say why, and hand over the button that always works.
+    `keep` false: not remembered for the session (our own stale header, which a
+    reload mends, is not the service's answer). `ours`: the refusal is this
+    page's own header, not the service's, so it is not explained as theirs. */
+function refuse(reason, { keep = true, ours = false } = {}) {
   clearWatchdog();
   if (!current) return;
-  remember(current.key, false);
+  if (keep) remember(current.key, false);
   frame.src = 'about:blank';
   noteEl.innerHTML =
     `<div class="gl-refuse-head">${esc(current.title)} will not be shown here</div>` +
-    `<p class="gl-refuse-why">${esc(reason)}. Some services refuse to be drawn ` +
-    `inside another page — a sensible thing for them to do, and not something ` +
-    `this map can talk them out of.</p>` +
+    `<p class="gl-refuse-why">${esc(reason)}.` + (ours ? '' : ' Some services refuse to be drawn ' +
+    'inside another page — a sensible thing for them to do, and not something ' +
+    'this map can talk them out of.') + '</p>' +
     `<button class="gl-refuse-go" id="gl-refuse-go">OPEN IN A NEW TAB ›</button>`;
   noteEl.querySelector('#gl-refuse-go')
     ?.addEventListener('click', () => { const u = current.abs; close(); toTab(u); });
   setState('refused');
 }
 
+let showing = 0;   // counts each showing, so a late timer knows its own
 function show(entry) {
+  showing += 1;
   current = entry;
   entry.loaded = false;   // a ↻ re-shows the same entry; the watchdog must see THIS load
   root.hidden = false;
@@ -178,6 +189,19 @@ A.openHere = function openHere(url, title, opts = {}) {
     .then((r) => (r.ok ? r.json() : null))
     .then((v) => {
       if (!v || current?.key !== key) return;
+      // "Past the header's room" (`ours`) is judged on the map as it is now,
+      // and this page keeps the header it loaded with, which may still name
+      // the service: only the browser's own report (below) refuses for it.
+      // Once that has refused, this answer is remembered, so the next press
+      // goes straight to the tab. Otherwise the header named it after all:
+      // shown (a report arriving later still refuses it).
+      if (v.ours) {
+        if (root.dataset.state === 'refused') remember(key, false);
+        else reveal('shown without a verdict: this map has more services than the glass asks about');
+        return;
+      }
+      // already refused by our own header: a "yes" must not show a blank pane
+      if (root.dataset.state === 'refused') return;
       if (v.embeddable === false) return refuse(v.reason || 'it refuses to be framed');
       if (v.embeddable === true) { remember(key, true); return reveal(); }
       // Unknown — usually "the Atlas could not reach it". Deliberately NOT a
@@ -228,8 +252,32 @@ A.buildGlass = function buildGlass() {
     current.loaded = true;                        // the watchdog reads this
     const painted = framePainted(frame);
     if (painted === null) return;                 // cross-origin: the verdict decides
-    if (painted) { remember(current.key, true); reveal(); }
-    else refuse('it refused to be drawn inside another page');
+    if (painted) { remember(current.key, true); reveal(); return; }
+    // An empty frame for a service elsewhere may be our own header's refusal,
+    // whose report a browser can deliver after this `load` (Firefox): give
+    // it a moment, so the service is not blamed for what the page did.
+    if (sameOrigin(current.abs)) { refuse('it refused to be drawn inside another page'); return; }
+    // only if nothing else has decided by then (a verdict's reveal, the
+    // report), and only for this showing (↻ shows the same entry again)
+    const was = showing;
+    setTimeout(() => {
+      if (showing === was && root.dataset.state === 'reaching') refuse('it refused to be drawn inside another page');
+    }, 150);
+  });
+
+  // OUR OWN HEADER REFUSED IT (2026-11-15). Unlike a service's refusal, this
+  // one the browser does report: a `frame-src` violation on this document.
+  // It happens for a service past the header's room (a very large map; the
+  // server's verdict says so too) and for one charted after this page loaded
+  // (the page keeps the header it came with). Either way the tab works.
+  document.addEventListener('securitypolicyviolation', (e) => {
+    if (!current || root.dataset.state === 'refused') return;
+    if ((e.effectiveDirective || e.violatedDirective) !== 'frame-src') return;
+    let blocked = null;
+    try { blocked = new URL(e.blockedURI).origin; } catch { return; }
+    if (blocked !== new URL(current.abs).origin) return;
+    if (memo[current.key] === true) forget(current.key);   // a "yes" that landed first
+    refuse('this page was not given leave to show it: a very large map, or a service added since the page loaded', { keep: false, ours: true });
   });
 
   $('gl-close')?.addEventListener('click', close);

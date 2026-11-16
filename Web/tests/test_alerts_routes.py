@@ -84,6 +84,23 @@ def test_writes_need_the_write_proof(realm):
     assert admin.post(ALERTS, json=_saving(admin, _doc()), headers=viewers.W).status_code == 200
 
 
+def test_a_blank_secret_is_no_secret_and_never_blocks_a_save(realm):
+    """A destination written with `secret: ""` (a hand edit) was served back as
+    given, and every later save of the whole document was refused over it."""
+    admin = realm["admin"]
+    r = admin.post(ALERTS, json=_saving(admin, _doc(secret="  ")), headers=viewers.W)
+    assert r.status_code == 200, r.get_json()
+    dest = admin.get(ALERTS).get_json()["doc"]["destinations"][0]
+    assert dest["secret"] is None and dest["secret_bound"] is False
+
+
+def test_the_status_names_the_places_no_rule_sends_for(realm):
+    """A place behind an access group is not in the view the tick matches
+    against: NODES draws its bell as held, from this list (2026-11-14)."""
+    status = realm["admin"].get(ALERTS).get_json()["status"]
+    assert status["held"] == ["secret-place"]
+
+
 def test_every_answer_is_never_cached(realm):
     r = realm["admin"].get(ALERTS)
     assert "no-store" in r.headers["Cache-Control"]

@@ -1,0 +1,1253 @@
+{
+ "note": "Shared by tests/test_roster_query.py and tests/test_roster_query.mjs: the browser (roster-model.js) and the server (roster_query.py) must give each case the same ids. Expectations made by the browser model, 2026-11-15.",
+ "now": "2026-11-15T12:00:00Z",
+ "collections": [
+  {
+   "id": "c-web",
+   "name": "Web"
+  },
+  {
+   "id": "c-db",
+   "name": "Databases"
+  }
+ ],
+ "rows": [
+  {
+   "id": "p-2",
+   "name": "node-2",
+   "state": "down",
+   "cause": null,
+   "zone": "net-a",
+   "zone_name": "Net A",
+   "kind": "vm",
+   "role": null,
+   "addresses": [
+    "10.0.0.9"
+   ],
+   "services": 3,
+   "confirmed_by": null,
+   "reviewed": true,
+   "reviewed_at": "2026-11-01T00:00:00Z",
+   "changed_since_review": false,
+   "unchecked": false,
+   "maintenance": {
+    "now": false,
+    "next": null
+   },
+   "unmanaged": false,
+   "cert": null,
+   "collections": [
+    "c-web"
+   ],
+   "depends_on": []
+  },
+  {
+   "id": "p-10",
+   "name": "node-10",
+   "state": "healthy",
+   "cause": null,
+   "zone": "net-a",
+   "zone_name": "Net A",
+   "kind": "vm",
+   "role": null,
+   "addresses": [
+    "10.0.0.10",
+    "aa:bb"
+   ],
+   "services": 1,
+   "confirmed_by": null,
+   "reviewed": true,
+   "reviewed_at": "2026-11-01T00:00:00Z",
+   "changed_since_review": false,
+   "unchecked": false,
+   "maintenance": {
+    "now": false,
+    "next": null
+   },
+   "unmanaged": false,
+   "cert": null,
+   "collections": [],
+   "depends_on": []
+  },
+  {
+   "id": "p-1",
+   "name": "Node-1",
+   "state": "degraded",
+   "cause": null,
+   "zone": "net-a",
+   "zone_name": "Net A",
+   "kind": "vm",
+   "role": "Web server",
+   "addresses": [
+    "192.168.1.2"
+   ],
+   "services": 0,
+   "confirmed_by": null,
+   "reviewed": true,
+   "reviewed_at": "2026-11-01T00:00:00Z",
+   "changed_since_review": false,
+   "unchecked": false,
+   "maintenance": {
+    "now": false,
+    "next": null
+   },
+   "unmanaged": false,
+   "cert": null,
+   "collections": [
+    "c-web",
+    "c-db"
+   ],
+   "depends_on": []
+  },
+  {
+   "id": "p-u",
+   "name": "node_u",
+   "state": "healthy",
+   "cause": null,
+   "zone": "net-b",
+   "zone_name": "Net B",
+   "kind": "vm",
+   "role": null,
+   "addresses": [],
+   "services": 0,
+   "confirmed_by": null,
+   "reviewed": true,
+   "reviewed_at": "2026-11-01T00:00:00Z",
+   "changed_since_review": false,
+   "unchecked": false,
+   "maintenance": {
+    "now": false,
+    "next": null
+   },
+   "unmanaged": true,
+   "cert": null,
+   "collections": [],
+   "depends_on": []
+  },
+  {
+   "id": "p-e",
+   "name": "Élan",
+   "state": null,
+   "cause": null,
+   "zone": "net-a",
+   "zone_name": "Net A",
+   "kind": "physical",
+   "role": "Hypervisor",
+   "addresses": [
+    "elan.example"
+   ],
+   "services": 0,
+   "confirmed_by": null,
+   "reviewed": false,
+   "reviewed_at": null,
+   "changed_since_review": false,
+   "unchecked": true,
+   "maintenance": {
+    "now": false,
+    "next": null
+   },
+   "unmanaged": false,
+   "cert": null,
+   "collections": [],
+   "depends_on": []
+  },
+  {
+   "id": "p-e2",
+   "name": "elan",
+   "state": null,
+   "cause": null,
+   "zone": "net-a",
+   "zone_name": "Net A",
+   "kind": "vm",
+   "role": null,
+   "addresses": [
+    "fe80::1"
+   ],
+   "services": 0,
+   "confirmed_by": null,
+   "reviewed": true,
+   "reviewed_at": "2026-11-01T00:00:00Z",
+   "changed_since_review": false,
+   "unchecked": false,
+   "maintenance": {
+    "now": true,
+    "next": null
+   },
+   "unmanaged": false,
+   "cert": null,
+   "collections": [],
+   "depends_on": []
+  },
+  {
+   "id": "p-z",
+   "name": "zeta",
+   "state": null,
+   "cause": null,
+   "zone": null,
+   "zone_name": null,
+   "kind": null,
+   "role": null,
+   "addresses": [],
+   "services": 0,
+   "confirmed_by": null,
+   "reviewed": null,
+   "reviewed_at": null,
+   "changed_since_review": false,
+   "unchecked": false,
+   "maintenance": {
+    "now": false,
+    "next": null
+   },
+   "unmanaged": false,
+   "cert": null,
+   "collections": [],
+   "depends_on": []
+  },
+  {
+   "id": "p-blank",
+   "name": "",
+   "state": "maintenance",
+   "cause": null,
+   "zone": "net-a",
+   "zone_name": "Net A",
+   "kind": "vm",
+   "role": null,
+   "addresses": [],
+   "services": 0,
+   "confirmed_by": null,
+   "reviewed": true,
+   "reviewed_at": "2026-11-01T00:00:00Z",
+   "changed_since_review": false,
+   "unchecked": false,
+   "maintenance": {
+    "now": false,
+    "next": "2026-11-20T00:00:00Z"
+   },
+   "unmanaged": false,
+   "cert": null,
+   "collections": [],
+   "depends_on": []
+  },
+  {
+   "id": "p-old",
+   "name": "old box",
+   "state": "slumbering",
+   "cause": null,
+   "zone": "net-a",
+   "zone_name": "Net A",
+   "kind": "vm",
+   "role": null,
+   "addresses": [],
+   "services": 0,
+   "confirmed_by": "Kuma",
+   "reviewed": true,
+   "reviewed_at": "2026-01-01T00:00:00Z",
+   "changed_since_review": false,
+   "unchecked": false,
+   "maintenance": {
+    "now": false,
+    "next": null
+   },
+   "unmanaged": false,
+   "cert": null,
+   "collections": [],
+   "depends_on": []
+  },
+  {
+   "id": "p-chg",
+   "name": "changed",
+   "state": null,
+   "cause": null,
+   "zone": "net-a",
+   "zone_name": "Net A",
+   "kind": "vm",
+   "role": null,
+   "addresses": [],
+   "services": 0,
+   "confirmed_by": null,
+   "reviewed": true,
+   "reviewed_at": "2026-11-10T00:00:00Z",
+   "changed_since_review": true,
+   "unchecked": true,
+   "maintenance": {
+    "now": false,
+    "next": null
+   },
+   "unmanaged": false,
+   "cert": {
+    "name": "x",
+    "days": 12
+   },
+   "collections": [],
+   "depends_on": []
+  },
+  {
+   "id": "p-c2",
+   "name": "cert-soon",
+   "state": null,
+   "cause": null,
+   "zone": "net-a",
+   "zone_name": "Net A",
+   "kind": "network",
+   "role": "Switch",
+   "addresses": [],
+   "services": 0,
+   "confirmed_by": null,
+   "reviewed": true,
+   "reviewed_at": "2026-11-01T00:00:00Z",
+   "changed_since_review": false,
+   "unchecked": false,
+   "maintenance": {
+    "now": false,
+    "next": null
+   },
+   "unmanaged": false,
+   "cert": {
+    "name": "y",
+    "days": -3
+   },
+   "collections": [
+    "c-db"
+   ],
+   "depends_on": []
+  },
+  {
+   "id": "p-dash",
+   "name": "a-b",
+   "state": null,
+   "cause": null,
+   "zone": "net-a",
+   "zone_name": "Net A",
+   "kind": "vm",
+   "role": null,
+   "addresses": [
+    "10.0.0.9/24"
+   ],
+   "services": 0,
+   "confirmed_by": null,
+   "reviewed": true,
+   "reviewed_at": "2026-11-01T00:00:00Z",
+   "changed_since_review": false,
+   "unchecked": false,
+   "maintenance": {
+    "now": false,
+    "next": null
+   },
+   "unmanaged": false,
+   "cert": null,
+   "collections": [],
+   "depends_on": []
+  },
+  {
+   "id": "p-under",
+   "name": "a_b",
+   "state": null,
+   "cause": null,
+   "zone": "net-a",
+   "zone_name": "Net A",
+   "kind": "vm",
+   "role": null,
+   "addresses": [],
+   "services": 0,
+   "confirmed_by": null,
+   "reviewed": true,
+   "reviewed_at": "2026-11-01T00:00:00Z",
+   "changed_since_review": false,
+   "unchecked": false,
+   "maintenance": {
+    "now": false,
+    "next": null
+   },
+   "unmanaged": false,
+   "cert": null,
+   "collections": [],
+   "depends_on": []
+  },
+  {
+   "id": "p-dot",
+   "name": "a.b",
+   "state": null,
+   "cause": null,
+   "zone": "net-a",
+   "zone_name": "Net A",
+   "kind": "vm",
+   "role": null,
+   "addresses": [],
+   "services": 2,
+   "confirmed_by": null,
+   "reviewed": true,
+   "reviewed_at": "2026-11-01T00:00:00Z",
+   "changed_since_review": false,
+   "unchecked": false,
+   "maintenance": {
+    "now": false,
+    "next": null
+   },
+   "unmanaged": false,
+   "cert": null,
+   "collections": [],
+   "depends_on": []
+  },
+  {
+   "id": "p-sw1",
+   "name": "sw-1",
+   "state": null,
+   "cause": null,
+   "zone": "net-a",
+   "zone_name": "Net A",
+   "kind": "vm",
+   "role": "Switch 09",
+   "addresses": [],
+   "services": 0,
+   "confirmed_by": "kuma-01",
+   "reviewed": true,
+   "reviewed_at": "2026-11-01T00:00:00Z",
+   "changed_since_review": false,
+   "unchecked": false,
+   "maintenance": {
+    "now": false,
+    "next": null
+   },
+   "unmanaged": false,
+   "cert": null,
+   "collections": [],
+   "depends_on": []
+  },
+  {
+   "id": "p-sw01",
+   "name": "sw-01",
+   "state": null,
+   "cause": null,
+   "zone": "net-a",
+   "zone_name": "Net A",
+   "kind": "vm",
+   "role": "Switch 9",
+   "addresses": [],
+   "services": 0,
+   "confirmed_by": "kuma-1",
+   "reviewed": true,
+   "reviewed_at": "2026-11-01T00:00:00Z",
+   "changed_since_review": false,
+   "unchecked": false,
+   "maintenance": {
+    "now": false,
+    "next": null
+   },
+   "unmanaged": false,
+   "cert": null,
+   "collections": [],
+   "depends_on": []
+  },
+  {
+   "id": "p-a9",
+   "name": "9",
+   "state": null,
+   "cause": null,
+   "zone": "net-a",
+   "zone_name": "Net A",
+   "kind": "vm",
+   "role": null,
+   "addresses": [
+    "host-007"
+   ],
+   "services": 0,
+   "confirmed_by": null,
+   "reviewed": true,
+   "reviewed_at": "2026-11-01T00:00:00Z",
+   "changed_since_review": false,
+   "unchecked": false,
+   "maintenance": {
+    "now": false,
+    "next": null
+   },
+   "unmanaged": false,
+   "cert": null,
+   "collections": [],
+   "depends_on": []
+  },
+  {
+   "id": "p-a09",
+   "name": "09",
+   "state": null,
+   "cause": null,
+   "zone": "net-a",
+   "zone_name": "Net A",
+   "kind": "vm",
+   "role": null,
+   "addresses": [
+    "host-7"
+   ],
+   "services": 0,
+   "confirmed_by": null,
+   "reviewed": true,
+   "reviewed_at": "2026-11-01T00:00:00Z",
+   "changed_since_review": false,
+   "unchecked": false,
+   "maintenance": {
+    "now": false,
+    "next": null
+   },
+   "unmanaged": false,
+   "cert": null,
+   "collections": [],
+   "depends_on": []
+  }
+ ],
+ "cases": [
+  {
+   "filter": {},
+   "sort": "name",
+   "dir": "asc",
+   "expect": [
+    "p-a9",
+    "p-a09",
+    "p-under",
+    "p-dash",
+    "p-dot",
+    "p-c2",
+    "p-chg",
+    "p-e2",
+    "p-e",
+    "p-u",
+    "p-1",
+    "p-2",
+    "p-10",
+    "p-old",
+    "p-blank",
+    "p-sw1",
+    "p-sw01",
+    "p-z"
+   ]
+  },
+  {
+   "filter": {
+    "text": "node"
+   },
+   "sort": "name",
+   "dir": "asc",
+   "expect": [
+    "p-u",
+    "p-1",
+    "p-2",
+    "p-10"
+   ]
+  },
+  {
+   "filter": {
+    "text": "NODE 10.0"
+   },
+   "sort": "name",
+   "dir": "asc",
+   "expect": [
+    "p-2",
+    "p-10"
+   ]
+  },
+  {
+   "filter": {
+    "text": "net b"
+   },
+   "sort": "name",
+   "dir": "asc",
+   "expect": [
+    "p-under",
+    "p-dash",
+    "p-dot",
+    "p-u",
+    "p-1",
+    "p-10",
+    "p-old",
+    "p-blank"
+   ]
+  },
+  {
+   "filter": {
+    "text": "hyper"
+   },
+   "sort": "name",
+   "dir": "asc",
+   "expect": [
+    "p-e"
+   ]
+  },
+  {
+   "filter": {
+    "state": "down"
+   },
+   "sort": "name",
+   "dir": "asc",
+   "expect": [
+    "p-2"
+   ]
+  },
+  {
+   "filter": {
+    "state": "unknown"
+   },
+   "sort": "name",
+   "dir": "asc",
+   "expect": [
+    "p-a9",
+    "p-a09",
+    "p-under",
+    "p-dash",
+    "p-dot",
+    "p-c2",
+    "p-chg",
+    "p-e2",
+    "p-e",
+    "p-sw1",
+    "p-sw01",
+    "p-z"
+   ]
+  },
+  {
+   "filter": {
+    "state": "unmanaged"
+   },
+   "sort": "name",
+   "dir": "asc",
+   "expect": [
+    "p-u"
+   ]
+  },
+  {
+   "filter": {
+    "zone": "net-b"
+   },
+   "sort": "name",
+   "dir": "asc",
+   "expect": [
+    "p-u"
+   ]
+  },
+  {
+   "filter": {
+    "kind": "physical"
+   },
+   "sort": "name",
+   "dir": "asc",
+   "expect": [
+    "p-e"
+   ]
+  },
+  {
+   "filter": {
+    "collection": "c-db"
+   },
+   "sort": "name",
+   "dir": "asc",
+   "expect": [
+    "p-c2",
+    "p-1"
+   ]
+  },
+  {
+   "filter": {
+    "unchecked": true
+   },
+   "sort": "name",
+   "dir": "asc",
+   "expect": [
+    "p-chg",
+    "p-e"
+   ]
+  },
+  {
+   "filter": {
+    "staleDays": 90
+   },
+   "sort": "name",
+   "dir": "asc",
+   "expect": [
+    "p-e",
+    "p-old",
+    "p-z"
+   ]
+  },
+  {
+   "filter": {
+    "staleDays": 10
+   },
+   "sort": "name",
+   "dir": "asc",
+   "expect": [
+    "p-a9",
+    "p-a09",
+    "p-under",
+    "p-dash",
+    "p-dot",
+    "p-c2",
+    "p-e2",
+    "p-e",
+    "p-u",
+    "p-1",
+    "p-2",
+    "p-10",
+    "p-old",
+    "p-blank",
+    "p-sw1",
+    "p-sw01",
+    "p-z"
+   ]
+  },
+  {
+   "filter": {
+    "text": "zzz"
+   },
+   "sort": "name",
+   "dir": "asc",
+   "expect": []
+  },
+  {
+   "filter": {},
+   "sort": "state",
+   "dir": "asc",
+   "expect": [
+    "p-2",
+    "p-1",
+    "p-blank",
+    "p-old",
+    "p-u",
+    "p-10",
+    "p-a9",
+    "p-a09",
+    "p-under",
+    "p-dash",
+    "p-dot",
+    "p-c2",
+    "p-chg",
+    "p-e2",
+    "p-e",
+    "p-sw1",
+    "p-sw01",
+    "p-z"
+   ]
+  },
+  {
+   "filter": {},
+   "sort": "state",
+   "dir": "desc",
+   "expect": [
+    "p-u",
+    "p-10",
+    "p-old",
+    "p-blank",
+    "p-1",
+    "p-2",
+    "p-a9",
+    "p-a09",
+    "p-under",
+    "p-dash",
+    "p-dot",
+    "p-c2",
+    "p-chg",
+    "p-e2",
+    "p-e",
+    "p-sw1",
+    "p-sw01",
+    "p-z"
+   ]
+  },
+  {
+   "filter": {},
+   "sort": "name",
+   "dir": "asc",
+   "expect": [
+    "p-a9",
+    "p-a09",
+    "p-under",
+    "p-dash",
+    "p-dot",
+    "p-c2",
+    "p-chg",
+    "p-e2",
+    "p-e",
+    "p-u",
+    "p-1",
+    "p-2",
+    "p-10",
+    "p-old",
+    "p-blank",
+    "p-sw1",
+    "p-sw01",
+    "p-z"
+   ]
+  },
+  {
+   "filter": {},
+   "sort": "name",
+   "dir": "desc",
+   "expect": [
+    "p-z",
+    "p-sw1",
+    "p-sw01",
+    "p-blank",
+    "p-old",
+    "p-10",
+    "p-2",
+    "p-1",
+    "p-u",
+    "p-e",
+    "p-e2",
+    "p-chg",
+    "p-c2",
+    "p-dot",
+    "p-dash",
+    "p-under",
+    "p-a9",
+    "p-a09"
+   ]
+  },
+  {
+   "filter": {},
+   "sort": "zone",
+   "dir": "asc",
+   "expect": [
+    "p-a9",
+    "p-a09",
+    "p-under",
+    "p-dash",
+    "p-dot",
+    "p-c2",
+    "p-chg",
+    "p-e2",
+    "p-e",
+    "p-1",
+    "p-2",
+    "p-10",
+    "p-old",
+    "p-blank",
+    "p-sw1",
+    "p-sw01",
+    "p-u",
+    "p-z"
+   ]
+  },
+  {
+   "filter": {},
+   "sort": "zone",
+   "dir": "desc",
+   "expect": [
+    "p-u",
+    "p-a9",
+    "p-a09",
+    "p-under",
+    "p-dash",
+    "p-dot",
+    "p-c2",
+    "p-chg",
+    "p-e2",
+    "p-e",
+    "p-1",
+    "p-2",
+    "p-10",
+    "p-old",
+    "p-blank",
+    "p-sw1",
+    "p-sw01",
+    "p-z"
+   ]
+  },
+  {
+   "filter": {},
+   "sort": "kind",
+   "dir": "asc",
+   "expect": [
+    "p-c2",
+    "p-e",
+    "p-a9",
+    "p-a09",
+    "p-under",
+    "p-dash",
+    "p-dot",
+    "p-chg",
+    "p-e2",
+    "p-u",
+    "p-2",
+    "p-10",
+    "p-old",
+    "p-blank",
+    "p-sw1",
+    "p-sw01",
+    "p-1",
+    "p-z"
+   ]
+  },
+  {
+   "filter": {},
+   "sort": "kind",
+   "dir": "desc",
+   "expect": [
+    "p-1",
+    "p-sw1",
+    "p-sw01",
+    "p-a9",
+    "p-a09",
+    "p-under",
+    "p-dash",
+    "p-dot",
+    "p-chg",
+    "p-e2",
+    "p-u",
+    "p-2",
+    "p-10",
+    "p-old",
+    "p-blank",
+    "p-e",
+    "p-c2",
+    "p-z"
+   ]
+  },
+  {
+   "filter": {},
+   "sort": "addresses",
+   "dir": "asc",
+   "expect": [
+    "p-dash",
+    "p-2",
+    "p-10",
+    "p-1",
+    "p-e",
+    "p-e2",
+    "p-a9",
+    "p-a09",
+    "p-under",
+    "p-dot",
+    "p-c2",
+    "p-chg",
+    "p-u",
+    "p-old",
+    "p-blank",
+    "p-sw1",
+    "p-sw01",
+    "p-z"
+   ]
+  },
+  {
+   "filter": {},
+   "sort": "addresses",
+   "dir": "desc",
+   "expect": [
+    "p-a9",
+    "p-a09",
+    "p-e2",
+    "p-e",
+    "p-1",
+    "p-10",
+    "p-dash",
+    "p-2",
+    "p-under",
+    "p-dot",
+    "p-c2",
+    "p-chg",
+    "p-u",
+    "p-old",
+    "p-blank",
+    "p-sw1",
+    "p-sw01",
+    "p-z"
+   ]
+  },
+  {
+   "filter": {},
+   "sort": "services",
+   "dir": "asc",
+   "expect": [
+    "p-a9",
+    "p-a09",
+    "p-under",
+    "p-dash",
+    "p-c2",
+    "p-chg",
+    "p-e2",
+    "p-e",
+    "p-u",
+    "p-1",
+    "p-old",
+    "p-blank",
+    "p-sw1",
+    "p-sw01",
+    "p-z",
+    "p-10",
+    "p-dot",
+    "p-2"
+   ]
+  },
+  {
+   "filter": {},
+   "sort": "services",
+   "dir": "desc",
+   "expect": [
+    "p-2",
+    "p-dot",
+    "p-10",
+    "p-a9",
+    "p-a09",
+    "p-under",
+    "p-dash",
+    "p-c2",
+    "p-chg",
+    "p-e2",
+    "p-e",
+    "p-u",
+    "p-1",
+    "p-old",
+    "p-blank",
+    "p-sw1",
+    "p-sw01",
+    "p-z"
+   ]
+  },
+  {
+   "filter": {},
+   "sort": "confirmed_by",
+   "dir": "asc",
+   "expect": [
+    "p-old",
+    "p-sw1",
+    "p-sw01",
+    "p-a9",
+    "p-a09",
+    "p-under",
+    "p-dash",
+    "p-dot",
+    "p-c2",
+    "p-chg",
+    "p-e2",
+    "p-e",
+    "p-u",
+    "p-1",
+    "p-2",
+    "p-10",
+    "p-blank",
+    "p-z"
+   ]
+  },
+  {
+   "filter": {},
+   "sort": "confirmed_by",
+   "dir": "desc",
+   "expect": [
+    "p-sw1",
+    "p-sw01",
+    "p-old",
+    "p-a9",
+    "p-a09",
+    "p-under",
+    "p-dash",
+    "p-dot",
+    "p-c2",
+    "p-chg",
+    "p-e2",
+    "p-e",
+    "p-u",
+    "p-1",
+    "p-2",
+    "p-10",
+    "p-blank",
+    "p-z"
+   ]
+  },
+  {
+   "filter": {},
+   "sort": "reviewed",
+   "dir": "asc",
+   "expect": [
+    "p-old",
+    "p-a9",
+    "p-a09",
+    "p-under",
+    "p-dash",
+    "p-dot",
+    "p-c2",
+    "p-e2",
+    "p-u",
+    "p-1",
+    "p-2",
+    "p-10",
+    "p-blank",
+    "p-sw1",
+    "p-sw01",
+    "p-chg",
+    "p-e",
+    "p-z"
+   ]
+  },
+  {
+   "filter": {},
+   "sort": "reviewed",
+   "dir": "desc",
+   "expect": [
+    "p-chg",
+    "p-a9",
+    "p-a09",
+    "p-under",
+    "p-dash",
+    "p-dot",
+    "p-c2",
+    "p-e2",
+    "p-u",
+    "p-1",
+    "p-2",
+    "p-10",
+    "p-blank",
+    "p-sw1",
+    "p-sw01",
+    "p-old",
+    "p-e",
+    "p-z"
+   ]
+  },
+  {
+   "filter": {},
+   "sort": "maintenance",
+   "dir": "asc",
+   "expect": [
+    "p-e2",
+    "p-blank",
+    "p-a9",
+    "p-a09",
+    "p-under",
+    "p-dash",
+    "p-dot",
+    "p-c2",
+    "p-chg",
+    "p-e",
+    "p-u",
+    "p-1",
+    "p-2",
+    "p-10",
+    "p-old",
+    "p-sw1",
+    "p-sw01",
+    "p-z"
+   ]
+  },
+  {
+   "filter": {},
+   "sort": "maintenance",
+   "dir": "desc",
+   "expect": [
+    "p-blank",
+    "p-e2",
+    "p-a9",
+    "p-a09",
+    "p-under",
+    "p-dash",
+    "p-dot",
+    "p-c2",
+    "p-chg",
+    "p-e",
+    "p-u",
+    "p-1",
+    "p-2",
+    "p-10",
+    "p-old",
+    "p-sw1",
+    "p-sw01",
+    "p-z"
+   ]
+  },
+  {
+   "filter": {},
+   "sort": "cert",
+   "dir": "asc",
+   "expect": [
+    "p-c2",
+    "p-chg",
+    "p-a9",
+    "p-a09",
+    "p-under",
+    "p-dash",
+    "p-dot",
+    "p-e2",
+    "p-e",
+    "p-u",
+    "p-1",
+    "p-2",
+    "p-10",
+    "p-old",
+    "p-blank",
+    "p-sw1",
+    "p-sw01",
+    "p-z"
+   ]
+  },
+  {
+   "filter": {},
+   "sort": "cert",
+   "dir": "desc",
+   "expect": [
+    "p-chg",
+    "p-c2",
+    "p-a9",
+    "p-a09",
+    "p-under",
+    "p-dash",
+    "p-dot",
+    "p-e2",
+    "p-e",
+    "p-u",
+    "p-1",
+    "p-2",
+    "p-10",
+    "p-old",
+    "p-blank",
+    "p-sw1",
+    "p-sw01",
+    "p-z"
+   ]
+  },
+  {
+   "filter": {},
+   "sort": "collections",
+   "dir": "asc",
+   "expect": [
+    "p-c2",
+    "p-2",
+    "p-1",
+    "p-a9",
+    "p-a09",
+    "p-under",
+    "p-dash",
+    "p-dot",
+    "p-chg",
+    "p-e2",
+    "p-e",
+    "p-u",
+    "p-10",
+    "p-old",
+    "p-blank",
+    "p-sw1",
+    "p-sw01",
+    "p-z"
+   ]
+  },
+  {
+   "filter": {},
+   "sort": "collections",
+   "dir": "desc",
+   "expect": [
+    "p-1",
+    "p-2",
+    "p-c2",
+    "p-a9",
+    "p-a09",
+    "p-under",
+    "p-dash",
+    "p-dot",
+    "p-chg",
+    "p-e2",
+    "p-e",
+    "p-u",
+    "p-10",
+    "p-old",
+    "p-blank",
+    "p-sw1",
+    "p-sw01",
+    "p-z"
+   ]
+  }
+ ]
+}

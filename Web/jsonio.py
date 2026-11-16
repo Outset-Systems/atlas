@@ -100,10 +100,13 @@ def write_json_atomic(path, obj, indent=2, keep_backup=True, newline=True):
         # on Windows turns every "\n" into "\r\n" — and since these files are LF
         # in git (.gitattributes: eol=lf), changing one field would rewrite all
         # 1285 lines and bury the real change in a whole-file diff.
+        # One string, then one write (2026-11-15): `json.dump` streams through
+        # the pure-Python encoder in hundreds of thousands of small writes,
+        # while `dumps` with no indent runs in C. With an indent it is Python
+        # either way, but still one write.
+        text = json.dumps(obj, indent=indent, ensure_ascii=False)
         with open(tmp, "w", encoding="utf-8", newline="") as fh:
-            json.dump(obj, fh, indent=indent, ensure_ascii=False)
-            if newline:
-                fh.write("\n")
+            fh.write(text + "\n" if newline else text)
             fh.flush()
             os.fsync(fh.fileno())
     except BaseException:

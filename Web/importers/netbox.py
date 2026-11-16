@@ -29,7 +29,7 @@ from store.models import Node, Site, Zone
 
 from . import review
 from .wire import TIMEOUT, Refused, ok, plural
-from .common import UNCHARTED_SLUG, slugify, subnet_index, zone_for_ip
+from .common import UNCHARTED_SLUG, heal_revived, slugify, subnet_index, zone_for_ip
 from .common import ensure_uncharted as _ensure_uncharted
 # The HTTP half lives in netbox_client so the relay can import it without the
 # DB stack; re-exported here so `from importers.netbox import ...` still works.
@@ -211,18 +211,32 @@ def sync(session, snapshot, site_slug, role_map=None):
         adopted = False
         n = existing.get(ref)
         if n is None:
-            slug = slugify(name)
-            other = by_node_slug.get(slug)
-            if other is not None and other.external_source != "netbox" and (
-                    not other.ip or not ip or other.ip == ip):
-                # same slug, compatible ip: this IS the hand-charted node — adopt
-                n = other
-                n.external_source, n.external_ref = "netbox", ref
-                existing[ref] = n
-                adopted = True
-                stats["nodes_adopted"] += 1
-            elif other is not None:
-                slug = f"{slug}-{ref.replace(':', '')}"
+            # its name, then its name with its NetBox id: the first that is
+            # free, or held by a place nobody imports at a compatible address
+            # (that IS this device, charted by hand: adopt it). The second
+            # used to be inserted unchecked, and a place charted back by hand
+            # under it made every later sync fail on the slug (2026-11-15)
+            base = slugify(name)
+            candidates = [base, f"{base}-{ref.replace(':', '')}"]
+            slug = None
+            for cand in candidates:
+                other = by_node_slug.get(cand)
+                if other is None:
+                    slug = cand
+                    break
+                if other.external_source != "netbox" and (
+                        not other.ip or not ip or other.ip == ip):
+                    n = other
+                    n.external_source, n.external_ref = "netbox", ref
+                    existing[ref] = n
+                    adopted = True
+                    stats["nodes_adopted"] += 1
+                    break
+            if n is None and slug is None:
+                k = 2
+                while f"{candidates[-1]}-{k}" in by_node_slug:
+                    k += 1
+                slug = f"{candidates[-1]}-{k}"
         if n is None:
             n = Node(
                 site_id=site.id, slug=slug, name=name, kind=kind, zone_slug=zone_slug,
@@ -239,6 +253,7 @@ def sync(session, snapshot, site_slug, role_map=None):
             # NetBox-owned fields refresh; lore/links/scroll/x/y stay human
             if n.status == "retired":
                 n.status = "documented"
+                heal_revived(session, site, n, zone_slug)
                 stats["nodes_resurrected"] += 1
             elif not adopted:
                 stats["nodes_updated"] += 1

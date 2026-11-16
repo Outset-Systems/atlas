@@ -1,4 +1,4 @@
-"""A small realm for the suites that ask "who sees what" (2026-11-13: sets,
+"""A small realm for the suites that ask "who sees what" (2026-11-13: collections,
 certificates, the places table).
 
 An accounts-mode Atlas on a file dataset, with an admin (`link`), a viewer

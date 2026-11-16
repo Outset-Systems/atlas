@@ -18,7 +18,7 @@ function test(name, fn) {
 
 const DATA = {
   nodes: [{ id: 'core', name: 'Core' }, { id: 'nas', name: 'NAS' }],
-  sets: [{ id: 'web', name: 'Web', places: ['core'] }],
+  collections: [{ id: 'web', name: 'Web', places: ['core'] }],
   zones: [{ id: 'dmz', name: 'DMZ' }],
 };
 const DESTS = [{ id: 'lab-ntfy', name: 'Lab ntfy', kind: 'ntfy', url: 'https://ntfy.example/lab' }];
@@ -35,8 +35,15 @@ test('every phrase has a plain fallback, and plain.json says the same', () => {
     assert.ok(typeof v === 'string' && v.length > 0, k);
     assert.equal(plain[k], v, `plain.json text.${k}`);
   }
-  assert.equal(plain.view_alerts, 'ALERTS');
+  assert.equal(plain.view_alerts, undefined, 'ALERTS is a view no longer (2026-11-14)');
   assert.equal(M.fill('{a} and {b}', { a: 1 }), '1 and {b}');
+});
+
+test('a rule is on as the server reads it: missing or true, nothing else', () => {
+  assert.equal(M.ruleOn({}), true);
+  assert.equal(M.ruleOn({ enabled: true }), true);
+  for (const v of [false, 1, 'true', 'false', null]) assert.equal(M.ruleOn({ enabled: v }), v === null, String(v));
+  assert.equal(M.ruleOn(null), true);
 });
 
 test('the rule in one sentence, with a wait', () => {
@@ -67,8 +74,8 @@ test('several states read as a list', () => {
 });
 
 test('each kind of target', () => {
-  assert.equal(M.ruleSentence(rule({ target: { kind: 'set', id: 'web' }, for_minutes: 0 }), CTX),
-    'When any place in the set Web goes down, send to Lab ntfy at once.');
+  assert.equal(M.ruleSentence(rule({ target: { kind: 'collection', id: 'web' }, for_minutes: 0 }), CTX),
+    'When any place in the collection Web goes down, send to Lab ntfy at once.');
   assert.equal(M.ruleSentence(rule({ target: { kind: 'network', id: 'dmz' }, for_minutes: 0 }), CTX),
     'When any place on the network DMZ goes down, send to Lab ntfy at once.');
   assert.equal(M.targetPhrase({ kind: 'place', id: 'nas' }, DATA), 'NAS');
@@ -76,7 +83,7 @@ test('each kind of target', () => {
 
 test('a target the map no longer shows, an unread map, and no destination', () => {
   assert.equal(M.targetPhrase({ kind: 'place', id: 'gone' }, DATA), 'a place no longer on the map (gone)');
-  assert.equal(M.targetPhrase({ kind: 'set', id: 'old' }, DATA), 'a set that no longer exists (old)');
+  assert.equal(M.targetPhrase({ kind: 'collection', id: 'old' }, DATA), 'a collection that no longer exists (old)');
   assert.equal(M.targetPhrase({ kind: 'network', id: 'x' }, DATA), 'a network no longer on the map (x)');
   // the map not read yet: the id, never "gone"
   assert.equal(M.targetPhrase({ kind: 'place', id: 'core' }, null), 'core');
@@ -89,7 +96,7 @@ test('a target the map no longer shows, an unread map, and no destination', () =
 
 test('the targets to pick from, by name', () => {
   assert.deepEqual(M.targetOptions(DATA, 'place'), [['nas', 'NAS'], ['core', 'Core']].sort((a, b) => a[1].localeCompare(b[1])));
-  assert.deepEqual(M.targetOptions(DATA, 'set'), [['web', 'Web']]);
+  assert.deepEqual(M.targetOptions(DATA, 'collection'), [['web', 'Web']]);
   assert.deepEqual(M.targetOptions(null, 'network'), []);
 });
 
@@ -318,6 +325,103 @@ test('the list masks a destination\'s path (a topic or webhook token)', () => {
   assert.equal(M.shownAddress('http://gotify.example:8080/'), 'http://gotify.example:8080');
   assert.equal(M.shownAddress('not a url'), '');
   assert.equal(M.shownAddress(undefined), '');
+});
+
+/* ── which rules reach a place (2026-11-14, alerts inside NODES) ── */
+
+const RULES = [
+  rule({ id: 'own', target: { kind: 'place', id: 'core' } }),
+  rule({ id: 'web', target: { kind: 'collection', id: 'web' } }),
+  rule({ id: 'web-old', target: { kind: 'set', id: 'web' }, enabled: false }),
+  rule({ id: 'other', target: { kind: 'collection', id: 'storage' } }),
+  rule({ id: 'net', target: { kind: 'network', id: 'dmz' } }),
+  rule({ id: 'nas', target: { kind: 'place', id: 'nas' } }),
+  { id: 'odd-list', target: { kind: 'place', id: ['core'] } },
+  { id: 'odd-text', target: 'core' },
+  { id: 'odd-kind', target: { kind: 'host', id: 'core' } },
+  null,
+];
+
+test('the rules that reach a place: its own, its collections\', its network\'s, as the server matches', () => {
+  const c = M.rulesCovering(RULES, { id: 'core', zone: 'dmz', collections: ['web'] });
+  assert.deepEqual(c.own.map((r) => r.id), ['own']);
+  assert.deepEqual(c.collections.map((x) => [x.id, x.rules.map((r) => r.id)]), [['web', ['web', 'web-old']]]);
+  assert.deepEqual(c.network.map((r) => r.id), ['net']);
+  assert.equal(c.count, 4);
+  assert.equal(c.on, 3, 'a paused rule counts, but not as on');
+});
+
+test('a place in no collection and no network is reached only by its own', () => {
+  const c = M.rulesCovering(RULES, { id: 'nas', zone: null, collections: [] });
+  assert.deepEqual([c.own.map((r) => r.id), c.collections, c.network, c.count], [['nas'], [], [], 1]);
+  const none = M.rulesCovering(RULES, { id: 'ghost' });
+  assert.equal(none.count, 0);
+  assert.equal(M.rulesCovering(undefined, undefined).count, 0);
+  assert.equal(M.rulesCovering('x', { id: 'core', collections: 'web' }).count, 0);
+});
+
+test('the rules on exactly one target, and which targets are watched (old `set` reads as collection)', () => {
+  assert.deepEqual(M.rulesOn(RULES, 'collection', 'web').map((r) => r.id), ['web', 'web-old']);
+  assert.deepEqual(M.rulesOn(RULES, 'place', 'core').map((r) => r.id), ['own']);
+  assert.deepEqual(M.rulesOn(RULES, 'network', 'core'), []);
+  assert.deepEqual([...M.watchedIds(RULES, 'collection')].sort(), ['storage', 'web']);
+  assert.deepEqual([...M.watchedIds(RULES, 'network')], ['dmz']);
+  assert.equal(M.targetOf({ target: { kind: 'set', id: 'x' } }).kind, 'collection');
+  assert.equal(M.targetOf({ target: { kind: 'place', id: '' } }), null);
+});
+
+test('the rules NODES has no bell for: gone targets, an empty network, a target that names nothing', () => {
+  const data = {
+    nodes: [{ id: 'core', zone: 'dmz' }, { id: 'nas' }],
+    collections: [{ id: 'web', places: ['core'] }],
+    zones: [{ id: 'dmz' }, { id: 'empty' }],
+  };
+  const rules = [
+    rule({ id: 'ok-place', target: { kind: 'place', id: 'core' } }),
+    rule({ id: 'ok-col', target: { kind: 'collection', id: 'web' } }),
+    rule({ id: 'ok-old', target: { kind: 'set', id: 'web' } }),
+    rule({ id: 'ok-net', target: { kind: 'network', id: 'dmz' } }),
+    rule({ id: 'gone-place', target: { kind: 'place', id: 'old' }, enabled: false }),
+    rule({ id: 'gone-col', target: { kind: 'collection', id: 'storage' } }),
+    rule({ id: 'empty-net', target: { kind: 'network', id: 'empty' } }),
+    rule({ id: 'no-net', target: { kind: 'network', id: 'nowhere' } }),
+    { id: 'odd', target: { kind: 'place', id: ['core'] } },
+    null,
+  ];
+  assert.deepEqual(M.unreachableRules(rules, data).map((r) => r.id),
+    ['gone-place', 'gone-col', 'empty-net', 'no-net', 'odd']);
+  assert.equal(M.unreachableRules(rules, null), null, 'the map not read yet says nothing');
+  assert.deepEqual(M.unreachableRules(undefined, data), []);
+});
+
+test('a service is known by its key, named by its label and place (stage 3b)', () => {
+  const data = {
+    nodes: [{ id: 'core', name: 'Core', links: [{ label: 'UI', kuma: 'Core UI' }, { label: 'SSH' }, { label: 'Dup', kuma: 'Core UI' }] },
+      { id: 'nas', name: 'NAS', links: 'x' }],
+    collections: [], zones: [],
+  };
+  assert.equal(M.serviceKey('core', { label: 'SSH' }), 'core/SSH');
+  assert.equal(M.serviceKey('core', { kuma: 'Core UI' }), 'Core UI');
+  assert.equal(M.serviceKey('core', { kuma: ['x'], label: 5 }), 'core/');
+  assert.deepEqual(M.services(data).map((s) => [s.id, s.name]), [['Core UI', 'UI on Core'], ['core/SSH', 'SSH on Core']]);
+  assert.equal(M.targetPhrase({ kind: 'service', id: 'core/SSH' }, data), 'the service SSH on Core');
+  assert.equal(M.targetPhrase({ kind: 'service', id: 'gone/X' }, data), 'a service no longer on the map (gone/X)');
+  assert.deepEqual(M.targetOptions(data, 'service').map(([v]) => v), ['core/SSH', 'Core UI']);
+  const rules = [rule({ id: 's1', target: { kind: 'service', id: 'core/SSH' } }),
+    rule({ id: 's2', target: { kind: 'service', id: 'core/Gone' } })];
+  assert.deepEqual(M.unreachableRules(rules, data).map((r) => r.id), ['s2']);
+  assert.deepEqual(M.rulesOn(rules, 'service', 'core/SSH').map((r) => r.id), ['s1']);
+  assert.equal(M.rulesCovering(rules, { id: 'core', collections: [] }).count, 0, 'a service rule is not about its place');
+});
+
+test('the rules that reach one service: its own and its collections\' (stage 3b)', () => {
+  const rules = [rule({ id: 'own', target: { kind: 'service', id: 'k' } }),
+    rule({ id: 'col', target: { kind: 'collection', id: 'web' } }),
+    rule({ id: 'other', target: { kind: 'collection', id: 'db' } }),
+    rule({ id: 'place', target: { kind: 'place', id: 'k' } })];
+  const cols = [{ id: 'web', services: ['k'] }, { id: 'db', services: ['z'], places: ['k'] }];
+  assert.deepEqual(M.rulesReachingService(rules, 'k', cols).map((r) => r.id), ['own', 'col']);
+  assert.deepEqual(M.rulesReachingService(rules, 'none', cols), []);
 });
 
 console.log(`\n${passed} passed`);

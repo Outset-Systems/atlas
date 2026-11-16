@@ -293,6 +293,103 @@ def test_the_csp_lets_the_glass_frame_the_services_the_map_links_to(arena):
         assert origin in csp
 
 
+def test_the_frame_src_list_is_built_once_per_map_and_clearance(arena, monkeypatch):
+    """Every response carries the header, static files included, so the list
+    is memoized per map and per clearance. It once was rebuilt (and the whole
+    map redacted) on every response anyway: `setdefault(key, build())` builds
+    before it looks. 2026-11-13: ~2.5 s a response at 10,000 places."""
+    import redaction
+    calls = []
+    real = embeddable.frame_list
+    monkeypatch.setattr(embeddable, "frame_list",
+                        lambda *a, **k: calls.append(a[0] is not None) or real(*a, **k))
+    client = arena.app.test_client()
+    for _ in range(2):
+        client.get("/")
+    assert calls.count(True) == 1, calls
+    # another clearance is its own entry, built once, and the first is kept
+    monkeypatch.setattr(redaction, "viewer_groups", lambda: ["someone-else"])
+    for _ in range(2):
+        client.get("/")
+    assert calls.count(True) == 2, calls
+
+
+def test_only_a_page_carries_the_maps_origins(arena):
+    """2026-11-15: a response's CSP governs that response's own document, and
+    only a page has frames. The list on every script, stylesheet and JSON made
+    each as large as the list (130 KB a response at 2,000 places)."""
+    client = arena.app.test_client()
+    page = client.get("/").headers["Content-Security-Policy"]
+    origin = embeddable.origins(json.load(open(BUNDLED, encoding="utf-8")))[0]
+    assert origin in page
+    for path in ("/api/status", "/static/js/config.js"):
+        csp = client.get(path).headers["Content-Security-Policy"]
+        assert csp.endswith("frame-src 'self' http://grafana:3000"), (path, csp)
+
+
+def test_frame_src_lists_each_origin_once_at_any_size():
+    many = {"nodes": [{"id": f"p{i}", "links": [{"url": f"https://p{i}.example:{8000 + j}"}
+                                                 for j in range(3)]} for i in range(2000)]}
+    src = embeddable.frame_src(many, "https://p1.example:8000 https://p1.example:8000", budget=None)
+    words = src.split()
+    assert len(words) == len(set(words)) == 1 + 6000
+    assert words[:2] == ["'self'", "https://p1.example:8000"]
+
+
+def test_a_huge_map_is_cut_to_the_budget_keeping_the_most_linked():
+    """Past FRAME_SRC_BUDGET the least-linked origins are left out (and
+    named, so the probe can send them to a tab); the operator's hosts never
+    are, and one the operator already named is never "left out"."""
+    many = {"nodes": [{"id": f"p{i}", "links": [{"url": f"https://p{i}.example:8000/x"}]}
+                      for i in range(3000)]}
+    many["nodes"][0]["links"] += [{"url": f"https://busy.example:9000/{k}"} for k in range(5)]
+    src, dropped = embeddable.frame_list(many, "https://p7.example:8000 https://ops.example")
+    words = src.split()
+    assert words[:3] == ["'self'", "https://p7.example:8000", "https://ops.example"]
+    assert len(src) - len("'self' https://p7.example:8000 https://ops.example") <= embeddable.FRAME_SRC_BUDGET
+    assert "https://busy.example:9000" in words            # five links: kept first
+    assert "https://p7.example:8000" not in dropped        # the operator's, at no cost
+    assert dropped and not dropped & set(words)
+    assert len(words) - 3 + len(dropped) == 3000            # every map origin is one or the other
+    # what is kept is written sorted, after the configured hosts
+    assert words[3:] == sorted(words[3:])
+
+
+def test_the_sky_and_the_depths_are_never_cut():
+    """Their carousels frame `embed` themselves, with no tab to fall back to,
+    so a huge map must not push them out of the header."""
+    many = {"nodes": [{"id": f"p{i}", "links": [{"url": f"https://p{i}.example:8000"}] * 1}
+                      for i in range(3000)],
+            "chronicle": [{"title": "T", "url": "https://zz-sky.example/d/x",
+                           "embed": "https://zz-sky.example/d-solo/x"}],
+            "abyss": [{"title": "D", "url": "https://zz-deep.example:9000/r"}]}
+    src, dropped = embeddable.frame_list(many, "")
+    for origin in ("https://zz-sky.example", "https://zz-deep.example:9000"):
+        assert origin in src.split() and origin not in dropped
+    assert dropped                                     # the cap still bit elsewhere
+    assert len(src) - len("'self'") <= embeddable.FRAME_SRC_BUDGET
+
+
+def test_a_small_map_leaves_nothing_out():
+    src, dropped = embeddable.frame_list(DATA, "http://grafana:3000")
+    assert dropped == frozenset()
+    assert src == embeddable.frame_src(DATA, "http://grafana:3000", budget=None)
+
+
+def test_the_probe_sends_a_service_past_the_budget_to_a_tab(arena, monkeypatch):
+    """The page's own header refuses it before the service has a say, so the
+    answer is a refusal, without knocking on the service at all."""
+    monkeypatch.setattr(embeddable, "FRAME_SRC_BUDGET", 0)
+    asked = []
+    monkeypatch.setattr(embeddable, "_probe", lambda u, o: asked.append(u) or (True, embeddable.R_OK))
+    url = _a_charted_url(arena)
+    body = arena.app.test_client().get("/api/v2/embeddable?url=" + url).get_json()
+    assert body["embeddable"] is False
+    assert body["reason"] == embeddable.R_UNLISTED
+    assert body["ours"] is True          # the glass does not explain it as the service's
+    assert asked == []
+
+
 def test_the_csp_stays_narrow_when_the_widening_is_switched_off(tmp_path):
     app = _fresh(tmp_path, ATLAS_EMBED_SERVICES="0")
     csp = app.app.test_client().get("/").headers["Content-Security-Policy"]

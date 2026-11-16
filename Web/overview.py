@@ -174,9 +174,14 @@ def upcoming_maintenance(data, hidden, now):
                 continue
         elif state != "active":
             continue
-        named = [str(n) for n in window.get("nodes") or []]
+        # the places it names and its collections' members, as this reader's
+        # map lists them: a hidden member is not in it (2026-11-14)
+        named = sorted(maintenance.window_places(window, data))
         places = [_ref(by_id[n]) for n in named if n in by_id]
-        if named and not places:
+        # nothing this reader sees: not listed. A window on a collection of
+        # hidden places resolves to nothing on this reader's map (stage 3
+        # review), so "named but none seen" is not enough of a test
+        if not places:
             continue
         wid, reason = window.get("id"), window.get("reason")
         if hidden is not None and hidden.search(f"{wid or ''} {reason or ''}"):

@@ -43,8 +43,13 @@ def _ring_radius(count):
 
 
 def _zone_order(zones):
-    """Bands run by VLAN id; zones without a VLAN sink to the bottom."""
-    return sorted(zones, key=lambda z: (z.vlan is None, z.vlan if z.vlan is not None else 0, z.slug))
+    """Bands run by VLAN id; zones without a VLAN sink to the bottom. A VLAN
+    that is not a number (the dataset's "—", which SQLite keeps as text in an
+    integer column) counts as none: compared with a number it crashed every
+    import onto such a map (2026-11-15)."""
+    def numbered(z):
+        return isinstance(z.vlan, int) and not isinstance(z.vlan, bool)
+    return sorted(zones, key=lambda z: (not numbered(z), z.vlan if numbered(z) else 0, z.slug))
 
 
 def auto_layout(session, site):

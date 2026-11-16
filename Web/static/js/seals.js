@@ -16,8 +16,11 @@
 import { A, $, esc } from './config.js';
 import { say } from './words.js';
 import { makeScene } from './scene.js';
+import { folds } from './fold.js';
+import { opensAtFirst, sealsByHand, sealsDue } from './fold-model.js';
 
 let listEl, headEl;
+const F = folds('seals');
 
 const DAY = 86400000;
 const GROUPS = [
@@ -90,12 +93,23 @@ function build() {
     .sort((a, z) => (daysUntil(a.members[0].expires) ?? 1e9)
                   - (daysUntil(z.members[0].expires) ?? 1e9));
 
-  listEl.innerHTML = ordered.map(({ head, sub, members: group }) => {
-    return `<div class="ldg-block" style="--z-hue:var(--gilt)">
-      <div class="ldg-zhead">
+  // OPEN AND SHUT (2026-11-15, stage 4): a kind folds, remembered; the order
+  // above is untouched by it. A shut head still says what lapsed and what
+  // lapses within the fortnight
+  listEl.innerHTML = ordered.map(({ key, head, sub, members: group }) => {
+    const { lapsed, soon } = sealsDue(group.map((c) => daysUntil(c.expires)));
+    const byHand = sealsByHand(group);
+    const fold = `kind:${key}`;
+    const first = opensAtFirst(lapsed + soon + byHand, ordered.length);
+    return `<div class="ldg-block${F.shut(fold, first)}" data-fold-box style="--z-hue:var(--gilt)">
+      <div class="ldg-zhead" ${F.head(fold, first, say(head).toLowerCase())}>
+        <span class="ldg-fold" aria-hidden="true">▾</span>
         <span class="ldg-zname">${say(head)}</span>
         <span class="ldg-zsub">${sub}</span>
-        <span class="ldg-zcount">${group.length} ${say(group.length > 1 ? 'seals' : 'seal')}</span>
+        <span class="ldg-zcount">${group.length} ${say(group.length > 1 ? 'seals' : 'seal')}${
+          lapsed ? ` · <b class="acc-flag">${lapsed} lapsed</b>` : ''}${
+          soon ? ` · <span class="rt-warn">${soon} within a fortnight</span>` : ''}${
+          byHand ? ` · <span class="rt-warn">${byHand} by hand</span>` : ''}</span>
       </div>
       ${group.map(sealHTML).join('')}
     </div>`;
@@ -111,4 +125,5 @@ A.buildSealsScene = function buildSealsScene() {
   if (!scene.mount()) return;
   listEl = $('sl-list');
   headEl = $('sl-head');
+  F.wire(listEl);
 };

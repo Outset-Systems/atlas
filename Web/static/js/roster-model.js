@@ -96,6 +96,12 @@ export function rowStanding(row) {
 export const rowWaiting = (row) => (typeof row?.unchecked === 'boolean'
   ? row.unchecked : rowStanding(row) !== 'checked');
 
+/** What pressing a row does (2026-11-13): the card already up on
+    this place closes; any other press opens this place's card, as a marker
+    on the map does. `shownId` is the place the card shows, or null. */
+export const rowPress = (shownId, id) =>
+  (typeof shownId === 'string' && shownId !== '' && shownId === id ? 'close' : 'open');
+
 /* ── checked by a person: the writes ─────────────────────────────────────── */
 
 /** The store takes 500 changes in one save; every bulk write is cut at 400. */
@@ -178,9 +184,9 @@ function addressKey(row) {
   return n === null ? [1, String(first).toLowerCase()] : [0, n];
 }
 
-function setNames(row, sets) {
-  const names = new Map((sets || []).map((s) => [s.id, s.name || s.id]));
-  return (row.sets || []).map((id) => names.get(id) || id);
+function collectionNames(row, collections) {
+  const names = new Map((collections || []).map((s) => [s.id, s.name || s.id]));
+  return (row.collections || []).map((id) => names.get(id) || id);
 }
 
 /** What each column sorts on. Blank values (null) always sort last. */
@@ -202,10 +208,22 @@ const KEYS = {
     return blank(m.next) ? null : time(m.next);
   },
   cert: (r) => (r.cert && typeof r.cert.days === 'number' ? r.cert.days : null),
-  sets: (r, ctx) => { const n = setNames(r, ctx.sets); return n.length ? n.join(', ').toLowerCase() : null; },
+  collections: (r, ctx) => {
+    const n = collectionNames(r, ctx.collections);
+    return n.length ? n.join(', ').toLowerCase() : null;
+  },
 };
 
+/** Sort keys and filter keys under an old name -> today's (collections were
+    sets until 2026-11-14), so a sort or a filter this browser kept still works. */
+const OLD_KEYS = Object.freeze({ sets: 'collections', set: 'collection' });
+
 export const SORT_KEYS = Object.keys(KEYS);
+
+/* One collator for every comparison: `localeCompare` with options makes a new
+   one each call, which was most of a sort of 2,000 rows (stage 5). The same
+   locale and options, so the same order. */
+const COLLATOR = new Intl.Collator(undefined, { numeric: true });
 
 function compare(a, b) {
   if (Array.isArray(a)) {
@@ -213,16 +231,17 @@ function compare(a, b) {
     return 0;
   }
   if (typeof a === 'number' && typeof b === 'number') return a - b;
-  return String(a).localeCompare(String(b), undefined, { numeric: true });
+  return COLLATOR.compare(String(a), String(b));
 }
 
 /** A new array of `rows` sorted on one column. `dir` 'asc' or 'desc'; blank
     values stay last either way, and ties fall back to the name, then the id,
-    so the order never shuffles between draws. `sets` names the sets column. */
-export function sortRows(rows, key = 'name', dir = 'asc', sets = []) {
-  const pick = KEYS[key] || KEYS.name;
+    so the order never shuffles between draws. `collections` names the
+    collections column. */
+export function sortRows(rows, key = 'name', dir = 'asc', collections = []) {
+  const pick = KEYS[OLD_KEYS[key] || key] || KEYS.name;
   const sign = dir === 'desc' ? -1 : 1;
-  const ctx = { sets };
+  const ctx = { collections };
   return (rows || [])
     .map((row) => ({ row, k: pick(row, ctx) }))
     .sort((x, y) => {
@@ -251,24 +270,29 @@ export function staleFor(row, days, now = Date.now()) {
 
 /** The empty filter: everything shows. */
 export const NO_FILTER = Object.freeze({
-  text: '', state: '', zone: '', kind: '', set: '', unchecked: false, staleDays: 0,
+  text: '', state: '', zone: '', kind: '', collection: '', unchecked: false, staleDays: 0,
 });
 
 /** `rows` that pass every criterion given. `state: 'unknown'` matches a row
     the feed says nothing about. `staleDays: 90` means not checked in 90 days. */
+/** What a row's state reads as: `unmanaged` for a place nobody watches
+    (2026-11-14: it has no state, on purpose), else its state, else
+    `unknown`. The filter and the table say the same. */
+export function rowState(row) {
+  if (row && row.unmanaged === true) return 'unmanaged';
+  return SEVERITY.includes(row?.state) ? row.state : 'unknown';
+}
+
 export function filterRows(rows, filter = {}, now = Date.now()) {
   const f = { ...NO_FILTER, ...(filter || {}) };
   const words = String(f.text || '').trim().toLowerCase().split(/\s+/).filter(Boolean);
   const stale = Number(f.staleDays) || 0;
   return (rows || []).filter((row) => {
     if (words.length) { const hay = haystack(row); if (!words.every((w) => hay.includes(w))) return false; }
-    if (f.state) {
-      const s = SEVERITY.includes(row.state) ? row.state : 'unknown';
-      if (s !== f.state) return false;
-    }
+    if (f.state && rowState(row) !== f.state) return false;
     if (f.zone && row.zone !== f.zone) return false;
     if (f.kind && row.kind !== f.kind) return false;
-    if (f.set && !(row.sets || []).includes(f.set)) return false;
+    if (f.collection && !(row.collections || []).includes(f.collection)) return false;
     if (f.unchecked && !rowWaiting(row)) return false;
     if (stale > 0 && !staleFor(row, stale, now)) return false;
     return true;
@@ -278,7 +302,8 @@ export function filterRows(rows, filter = {}, now = Date.now()) {
 /** True when the filter shows everything. */
 export const isEmptyFilter = (filter) => {
   const f = { ...NO_FILTER, ...(filter || {}) };
-  return !String(f.text).trim() && !f.state && !f.zone && !f.kind && !f.set && !f.unchecked && !Number(f.staleDays);
+  return !String(f.text).trim() && !f.state && !f.zone && !f.kind && !f.collection
+    && !f.unchecked && !Number(f.staleDays);
 };
 
 /** A filter cut down to the keys it may hold, of the types they take. */
@@ -286,13 +311,108 @@ export function cleanFilter(raw) {
   const f = raw && typeof raw === 'object' ? raw : {};
   const str = (v) => (typeof v === 'string' ? v.slice(0, 200) : '');
   return {
-    text: str(f.text), state: str(f.state), zone: str(f.zone), kind: str(f.kind), set: str(f.set),
+    text: str(f.text), state: str(f.state), zone: str(f.zone), kind: str(f.kind),
+    collection: str(f.collection) || str(f.set),   // `set`: a filter kept before 2026-11-14
     unchecked: f.unchecked === true,
     staleDays: Number.isFinite(Number(f.staleDays)) && Number(f.staleDays) > 0 ? Math.floor(Number(f.staleDays)) : 0,
   };
 }
 
-/* ── what this browser remembers (a convenience, never a set) ────────────── */
+/* ── the rail: collections, networks and kinds down the side (2026-11-14) ── */
+
+/** The states that put a dot on a rail row: something inside needs a look. */
+export const TROUBLE = Object.freeze(['down', 'degraded']);
+
+function group(id, name, rows) {
+  const trouble = rows.filter((r) => TROUBLE.includes(r.state));
+  const worst = TROUBLE.find((s) => trouble.some((r) => r.state === s)) || '';
+  return { id, name: name || id, count: rows.length, trouble: trouble.length, worst };
+}
+
+/** The rail's three lists from one roster answer: each row's name, how many
+    places in it this viewer may see, and its worst trouble ('down',
+    'degraded' or ''). Made from the rows the server already cut for this
+    viewer, so a hidden place is never counted. Collections keep the order
+    the map gives them (an empty one is listed: it was made for a reason);
+    networks keep the map's order and list only those with a place in them;
+    kinds are in name order. */
+export function railGroups(roster) {
+  const r = roster || {};
+  const rows = (Array.isArray(r.rows) ? r.rows : []).filter((x) => x && typeof x === 'object');
+  const members = new Map();
+  for (const x of rows) for (const id of x.collections || []) {
+    if (!members.has(id)) members.set(id, []);
+    members.get(id).push(x);
+  }
+  const collections = (Array.isArray(r.collections) ? r.collections : [])
+    .filter((c) => c && typeof c.id === 'string')
+    .map((c) => group(c.id, c.name, members.get(c.id) || []));
+  const byZone = new Map();
+  const byKind = new Map();
+  for (const x of rows) {
+    if (!blank(x.zone)) { if (!byZone.has(x.zone)) byZone.set(x.zone, []); byZone.get(x.zone).push(x); }
+    if (!blank(x.kind)) { if (!byKind.has(x.kind)) byKind.set(x.kind, []); byKind.get(x.kind).push(x); }
+  }
+  const networks = (Array.isArray(r.zones) ? r.zones : [])
+    .filter((z) => z && typeof z.id === 'string' && byZone.has(z.id))
+    .map((z) => group(z.id, z.name, byZone.get(z.id)));
+  const kinds = [...byKind.keys()].sort((a, b) => String(a).localeCompare(String(b)))
+    .map((k) => group(k, k, byKind.get(k)));
+  return { collections, networks, kinds };
+}
+
+/** The groups a filter may name: the rail's, with every network the roster
+    lists (a phone's picker offers empty networks too, and a filter on one of
+    them must stay, not be reset by the next draw). */
+export function filterGroups(roster) {
+  const groups = railGroups(roster);
+  const zones = Array.isArray(roster?.zones) ? roster.zones : [];
+  return { ...groups, networks: zones.filter((z) => z && typeof z.id === 'string') };
+}
+
+/** A collection's `places` as a list: one id or a list of them, as the
+    server reads it (`schema.as_list`). */
+export const memberList = (places) => (Array.isArray(places) ? places
+  : (typeof places === 'string' && places ? [places] : []));
+
+/** Which filter field each rail section sets. */
+export const RAIL_FIELDS = Object.freeze({ collections: 'collection', networks: 'zone', kinds: 'kind' });
+
+/** A rail row pressed: its value, or nothing when it was already the filter
+    (a second press shows everything again). Returns the filter patch. */
+export function railPress(filter, section, id) {
+  const field = RAIL_FIELDS[section];
+  if (!field) return {};
+  return { [field]: (filter || {})[field] === id ? '' : id };
+}
+
+/** The filter with any rail value that names nothing in `groups` emptied: an
+    old saved filter, or a collection this viewer may not see, shows everything
+    rather than nothing. */
+export function dropUnknown(filter, groups) {
+  const f = { ...(filter || {}) };
+  for (const [section, field] of Object.entries(RAIL_FIELDS)) {
+    if (f[field] && !((groups || {})[section] || []).some((g) => g.id === f[field])) f[field] = '';
+  }
+  return f;
+}
+
+export const RAIL_KEY = 'atlas.nodes.rail';
+/** The rail's sections, in order. */
+export const RAIL_SECTIONS = Object.freeze(['collections', 'networks', 'kinds', 'saved']);
+
+/** Which sections this browser had shut: {section: true}. Everything is open
+    unless it was shut; junk reads as nothing shut. */
+export function readRail(storage) {
+  const raw = readJSON(storage, RAIL_KEY);
+  const out = {};
+  if (raw && typeof raw === 'object') for (const k of RAIL_SECTIONS) if (raw[k] === true) out[k] = true;
+  return out;
+}
+export const writeRail = (storage, shut) => writeJSON(storage, RAIL_KEY,
+  Object.fromEntries(RAIL_SECTIONS.filter((k) => shut?.[k] === true).map((k) => [k, true])));
+
+/* ── what this browser remembers (a convenience, never a collection) ─────── */
 
 export const SAVED_KEY = 'atlas.nodes.saved';
 export const SORT_KEY = 'atlas.nodes.sort';
@@ -310,8 +430,9 @@ function writeJSON(storage, key, value) {
 /** The current sort, or name ascending when nothing usable is stored. */
 export function readSort(storage) {
   const s = readJSON(storage, SORT_KEY);
-  return s && SORT_KEYS.includes(s.key) && (s.dir === 'asc' || s.dir === 'desc')
-    ? { key: s.key, dir: s.dir } : { key: 'name', dir: 'asc' };
+  const key = s && (OLD_KEYS[s.key] || s.key);
+  return key && SORT_KEYS.includes(key) && (s.dir === 'asc' || s.dir === 'desc')
+    ? { key, dir: s.dir } : { key: 'name', dir: 'asc' };
 }
 export const writeSort = (storage, sort) => writeJSON(storage, SORT_KEY, { key: sort.key, dir: sort.dir });
 
@@ -324,7 +445,8 @@ export function readSaved(storage) {
     .map((s) => ({
       name: s.name.trim().slice(0, 60),
       filter: cleanFilter(s.filter),
-      ...(s.sort && SORT_KEYS.includes(s.sort.key) ? { sort: { key: s.sort.key, dir: s.sort.dir === 'desc' ? 'desc' : 'asc' } } : {}),
+      ...(s.sort && SORT_KEYS.includes(OLD_KEYS[s.sort.key] || s.sort.key)
+        ? { sort: { key: OLD_KEYS[s.sort.key] || s.sort.key, dir: s.sort.dir === 'desc' ? 'desc' : 'asc' } } : {}),
     }));
 }
 export const writeSaved = (storage, list) => writeJSON(storage, SAVED_KEY, list);
@@ -358,10 +480,12 @@ export function certTone(days) {
   return '';
 }
 
-/** A short, safe id for a new set or window: lowercase, dashes, starting
-    with a letter or digit (schema.py `_SLUG_RE`), and not one already taken. */
-export function slugFor(text, taken = [], fallback = 'set') {
-  const base = String(text || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '')
+/** A short, safe id for a new collection or window: lowercase, dashes,
+    starting with a letter or digit (schema.py `_SLUG_RE`), and not one
+    already taken. */
+export function slugFor(text, taken = [], fallback = 'collection') {
+  // every mark (\p{M}), the same as redaction.slug on the server
+  const base = String(text || '').toLowerCase().normalize('NFKD').replace(/\p{M}/gu, '')
     .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || fallback;
   const used = new Set(taken);
   if (!used.has(base)) return base;
@@ -378,4 +502,71 @@ export function mergeNeeds(id, existing, more) {
     if (v && v !== id && !out.includes(v)) out.push(v);
   }
   return out;
+}
+
+/* ── maintenance mode (2026-11-14, the owner's Q4 answer) ─────────────────
+   Maintenance mode is a repair window marked `open: true`: it starts when it
+   is turned on and has no end (maintenance.py). These decide what a toggle
+   writes, as the whole list of windows the repairs store saves. */
+
+const asIds = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []);
+const openWindows = (windows) => (Array.isArray(windows) ? windows : []).filter((w) => w && w.open === true);
+
+/** True when an open (mode) window names this place (`nodes`) or this
+    collection (`collections`) itself. */
+export function inMode(windows, kind, id) {
+  const field = kind === 'collection' ? 'collections' : kind === 'service' ? 'services' : 'nodes';
+  return openWindows(windows).some((w) => asIds(w[field]).includes(id));
+}
+
+/** The collections, of those given (a place's), that are in maintenance
+    mode: the place is in it through them, and its own switch cannot end it. */
+export function modeVia(windows, collectionIds) {
+  const named = new Set(openWindows(windows).flatMap((w) => asIds(w.collections)));
+  return asIds(collectionIds).filter((c) => named.has(c));
+}
+
+/** The windows after a mode toggle on `targets` ({nodes, collections}), or
+    null when nothing would change. On: one new open window for the targets
+    not already in mode themselves, starting `now`. Off: the targets leave
+    every open window that names them; a window left naming nothing goes.
+    Scheduled windows are never touched. */
+export function modeChange(windows, targets, on, { now, reason = 'Maintenance mode', taken = [] } = {}) {
+  const list = Array.isArray(windows) ? windows : [];
+  const nodes = asIds(targets?.nodes);
+  const collections = asIds(targets?.collections);
+  const svcs = asIds(targets?.services);                     // stage 3b
+  if (on) {
+    const addNodes = nodes.filter((id) => !inMode(list, 'place', id));
+    const addCols = collections.filter((id) => !inMode(list, 'collection', id));
+    const addSvcs = svcs.filter((id) => !inMode(list, 'service', id));
+    if (!addNodes.length && !addCols.length && !addSvcs.length) return null;
+    const window = { id: slugFor('maintenance mode', [...taken, ...list.map((w) => w?.id)], 'window'),
+      reason, open: true, starts: now, repeat: 'none' };
+    if (addNodes.length) window.nodes = addNodes;
+    if (addCols.length) window.collections = addCols;
+    if (addSvcs.length) window.services = addSvcs;
+    return [...list, window];
+  }
+  let changed = false;
+  const out = [];
+  for (const w of list) {
+    if (!w || w.open !== true) { out.push(w); continue; }
+    const keepNodes = asIds(w.nodes).filter((id) => !nodes.includes(id));
+    const keepCols = asIds(w.collections).filter((id) => !collections.includes(id));
+    const keepSvcs = asIds(w.services).filter((id) => !svcs.includes(id));
+    if (keepNodes.length === asIds(w.nodes).length && keepCols.length === asIds(w.collections).length
+        && keepSvcs.length === asIds(w.services).length) {
+      out.push(w);
+      continue;
+    }
+    changed = true;
+    if (!keepNodes.length && !keepCols.length && !keepSvcs.length) continue;      // left naming nothing: it goes
+    const next = { ...w };
+    if (keepNodes.length) next.nodes = keepNodes; else delete next.nodes;
+    if (keepCols.length) next.collections = keepCols; else delete next.collections;
+    if (keepSvcs.length) next.services = keepSvcs; else delete next.services;
+    out.push(next);
+  }
+  return changed ? out : null;
 }

@@ -67,11 +67,16 @@ def test_the_sky_and_the_depths_draw_from_the_seed(tmp_path, monkeypatch, no_pro
     lab = json.load(open(DEMO_LAB, encoding="utf-8"))
     watched = {w["chart"] for part in ("chronicle", "abyss") for w in lab[part] if w.get("chart")}
     assert watched and all(index[k]["available"] for k in watched), "every watching in the demo draws"
-    now = time.time()
+    # The route stamps "now" when it answers (`int(time.time())`), so the newest
+    # point is bounded by the clock read on BOTH sides of the request: a request
+    # that crossed into the next second made the old one-sided `<= before` fail
+    # by a hair (public CI, 2026-11-14).
+    before = time.time()
     j = c.get("/api/v2/charts/containers.cpu").get_json()
+    after = time.time()
     assert j["demo"] and j["window"] == "21d" and len(j["series"]) == 8
     pts = j["series"][0]["points"]
-    assert now - 3 * 3600 <= pts[-1][0] <= now, "the newest point is now, whatever day it is"
+    assert before - 3 * 3600 <= pts[-1][0] <= after, "the newest point is now, whatever day it is"
     assert pts[-1][0] - pts[0][0] >= 20 * 86400
     assert all(p[1] >= 0 for s in j["series"] for p in s["points"])
     table = c.get("/api/v2/charts/edge.top_clients").get_json()

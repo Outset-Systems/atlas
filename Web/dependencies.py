@@ -57,7 +57,9 @@ def declared_edges(data):
         parent = node.get("parent")
         if isinstance(parent, str) and parent in known:        # a list is no parent
             ancestors.append(parent)
-        for dep in node.get("depends_on") or []:
+        deps = node.get("depends_on")
+        # a hand edit's number or text is no list of needs (2026-11-14 review)
+        for dep in deps if isinstance(deps, list) else []:
             if isinstance(dep, str) and dep in known and dep not in ancestors \
                     and dep != node.get("id"):
                 ancestors.append(dep)

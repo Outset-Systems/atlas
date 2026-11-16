@@ -71,22 +71,6 @@ export function nextChoice(pick, prefersLight, where = 'other') {
   return otherScheme(barScheme(pick, prefersLight, where));
 }
 
-const FACES = {
-  auto: 'Light/Dark: the bar follows the map. A press pins the other one (T)',
-  light: 'Light: press for Dark (T)',
-  dark: 'Dark: press for Light (T)',
-};
-
-/** What the band's button says. Its icon is not here: the button carries the
-    sun and the moon, and atlas.css shows the one that matches the bar. No
-    pressed state: with three picks and a two-way button it would lie.
-    (`prefersLight` is taken for the old signature; the words do not need it.) */
-// eslint-disable-next-line no-unused-vars
-export function buttonFace(pick, prefersLight) {
-  const title = FACES[pickAttr(pick)];
-  return { title, label: title.replace(/ \(T\)$/, '') };
-}
-
 /** Storage that may be absent or throw (private windows, blocked site data). */
 export function readStored(storage) {
   try { return parsePick(storage?.getItem(SCHEME_KEY)); } catch { return null; }

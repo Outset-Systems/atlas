@@ -100,9 +100,6 @@
   --depths-lit-fill: var(--depth);
   --depths-lit-ink: var(--card-ink);
   --depths-lit-border: var(--depth);
-  /* the scheme button carries ☀ and ☾; the bar shows the one it is wearing */
-  --bar-sun: none;
-  --bar-moon: block;
   /* THE HOVER GLOW's strength (atlas.css foot); a shade softer on pale glass */
   --hover-glow-a: 0.45;
   color-scheme: dark;
@@ -121,7 +118,7 @@
    by tests/test_scheme_css.py. The bar has its own block, next. */
 :root[data-scheme="light"] :is(.ldg-panel, .trb-panel, .rel-panel, .pth-panel,
                                .pal-panel, .gl-panel, .dsk-panel, .wiz-panel, #nodes-sheet,
-                               #overview-tiles, #view-alerts) {
+                               #overview-tiles) {
   --abyss: #d6dae0;
   --surface: #c5cad2;
   --surface-2: #cdd2d9;
@@ -228,8 +225,6 @@
   --depths-lit-fill: #0f766e;
   --depths-lit-ink: #f0fdfa;
   --depths-lit-border: #0f766e;
-  --bar-sun: block;
-  --bar-moon: none;
   color-scheme: light;
 }
 /* (THE LIGHT CHROME's literals, 2026-10-20, lived here, each keyed on
@@ -1855,7 +1850,8 @@ body.decoys-on .mk.has-stone .mk-label { opacity: 1; transform: translateX(-50%)
 #scenes-list .menu-tools {
   flex: none;
   display: inline-flex; align-items: center;
-  width: 68px; overflow: hidden;   /* two × (30 button + 4 gap): the scheme and the gear */
+  width: auto; overflow: hidden;   /* the sky, the depths and the gear; the first two go
+                                     away in a view, a scene or a region (2026-11-14) */
 }
 #scenes-list .chrome .ci-glyph { width: 16px; height: 16px; }   /* the band's 30px circles */
 /* the band is their fill; `.chrome`'s own blur would still draw a disc on it */
@@ -1867,13 +1863,19 @@ body.decoys-on .mk.has-stone .mk-label { opacity: 1; transform: translateX(-50%)
 }
 #scenes-list .ci-gear:hover,
 #scenes-list .ci-gear.active { box-shadow: none; }
-#scenes-list .ci-scheme:hover { box-shadow: none; }   /* the same clip, the same reason */
-/* ☀ wears the lit glyph while the light scheme is in force: pressed, not lamp */
-#scenes-list .ci-scheme[aria-pressed="true"] { color: var(--gilt-bright); }
-/* The button carries ☀ and ☾ and shows the one the bar is wearing: the bar block
-   flips the two tokens, so the glyph follows the camera with no write (stage 1). */
-.sch-sun { display: var(--bar-sun, none); }
-.sch-moon { display: var(--bar-moon, block); }
+/* THE SKY and THE DEPTHS in the band (owner, 2026-11-14, where ☀/☾ stood).
+   Lit, they fill in the same tokens the round buttons and the menu's lamps
+   used; the band rule above clears every .chrome's fill at id weight, so the
+   lit fill is restated here at the same weight. Only while the map is the
+   view: a view or a scene has no map for them to move (region: below). */
+#scenes-list .chrome.ci-sky.lit {
+  border-color: var(--sky-lit-border); background: var(--sky-lit-fill); color: var(--sky-lit-ink);
+}
+#scenes-list .chrome.ci-depths.lit {
+  border-color: var(--depths-lit-border); background: var(--depths-lit-fill); color: var(--depths-lit-ink);
+}
+#scenes-list .chrome:is(.ci-sky, .ci-depths).lit:hover { box-shadow: none; }
+body:is(.deck, .scene-open) #scenes-list :is(.ci-sky, .ci-depths) { display: none; }
 #scenes-list .ci-gear.active { border-color: rgba(var(--gilt-rgb), 0.7); color: var(--gilt-bright); }
 
 /* ── ☰'s scene lamp is a lamp, not a beacon (2026-08-15) ─────────────
@@ -2775,6 +2777,9 @@ body.constellation .card-split .cs-on { display: inline; }
 .mk.s-slumber { --mk-hue: var(--sem-slumber); --mk-glow: rgba(146,131,116,0.22); opacity: 0.5; }
 .mk.s-slumber .mk-ring { animation: none; opacity: 0.2; }
 /* Z2 maintenance — "under repair": calm amber, a wrench, alarms suppressed */
+/* UNMANAGED (2026-11-14): not ours to watch: greyed, still there, no ring */
+.mk.s-unmanaged { opacity: 0.38; filter: grayscale(1); }
+.mk.s-unmanaged .mk-ring { animation: none; opacity: 0; }
 .mk.s-maint { --mk-hue: var(--sem-warn); --mk-glow: rgba(250,189,47,0.3); opacity: 0.82; }
 .mk.s-maint .mk-ring { animation-duration: 5s; opacity: 0.5; }
 .mk.s-maint::after {
@@ -2943,6 +2948,44 @@ body.constellation .card-split .cs-on { display: inline; }
 .ldg-zname { font-family: 'Cinzel', serif; font-weight: 600; font-size: 0.74rem; letter-spacing: 0.12em; color: var(--text); }
 .ldg-zsub { font-family: 'JetBrains Mono', monospace; font-size: 0.64rem; color: var(--text-dim); }
 .ldg-zcount { font-family: 'JetBrains Mono', monospace; font-size: 0.6rem; color: var(--ink-soft); letter-spacing: 0.06em; }
+
+/* FOLDS ON THE ADMIN PAGES (2026-11-15, stage 4 of the NODES plan; fold.js):
+   ACCOUNTS' places and SEALS' kinds fold with the ledger's own head above;
+   the tripwires' families and the token rows take the same ▾, in flow. The
+   choice is remembered per page. A shut head keeps its loud count (the
+   `.acc-flag` / `.rt-warn` it already uses), so nothing is hidden, only
+   rolled up. No new colour or type. */
+.fold-bar { flex-basis: 100%; display: flex; justify-content: flex-end; gap: 8px; margin-bottom: -12px; }
+/* ACCOUNTS and SEALS read as one list: a section per line, its head on one
+   line (name, what it is, then its count at the right), so a page of shut
+   places is a list to scan, not a grid that reflows when one opens */
+:is(#accounts, #seals) .ldg-list { flex-direction: column; flex-wrap: nowrap; gap: 14px; }
+:is(#accounts, #seals) .ldg-folded { align-self: stretch; }
+:is(#accounts, #seals) .ldg-zhead { flex-direction: row; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; }
+:is(#accounts, #seals) .ldg-zcount { margin-left: auto; }
+#accounts .fold-bar { margin-bottom: -4px; }
+:is(.gs-family-head, .con-token)[role="button"] { cursor: pointer; }
+:is(.gs-family-head, .con-token)[role="button"]:focus-visible { outline: 1px solid var(--gilt); outline-offset: 3px; }
+:is(.gs-family-head, .con-token) > .ldg-fold { position: static; display: inline-block; width: 10px; margin-right: 5px; }
+:is(.gs-family-head, .con-token)[role="button"]:hover > .ldg-fold,
+.con-token[role="button"]:hover .con-name { color: var(--gilt); }
+.gs-shut > .gs-family-head > .ldg-fold, .con-shut > .con-token > .ldg-fold { transform: rotate(-90deg); }
+.gs-shut > :not(.gs-family-head) { display: none; }
+.gs-family-n {
+  margin-left: 8px; font-family: 'JetBrains Mono', monospace; font-size: 0.6rem; font-weight: 400;
+  letter-spacing: 0.06em; color: var(--ink-soft);
+}
+.con-tok { border-bottom: 1px solid var(--hair); }
+.con-tok > .con-token { border-bottom: none; }
+/* the kind sits by the name (Settings' `.dir-src` pushes itself right
+   elsewhere); the end date goes right, and a long row wraps on a phone */
+.con-tok > .con-token { flex-wrap: wrap; row-gap: 2px; }
+.con-token > .dir-src { margin-left: 0; }
+.con-token > .con-ends { margin-left: auto; }
+.con-shut > .con-tok-more { display: none; }
+.con-token-acts { display: flex; align-items: center; gap: 10px; padding: 0 0 8px 15px; }
+.con-token-acts .sp-btn { flex: none; }
+.con-token-acts .sp-btn:first-of-type { margin-left: auto; }
 .ldg-grid {
   display: grid; grid-template-columns: repeat(16, 11px); grid-auto-rows: 11px; gap: 2px;
   padding: 8px; border: 1px solid var(--ink-line); border-radius: 4px; background: rgba(var(--shade-rgb), calc(0.25 * var(--shade-k)));
@@ -4873,24 +4916,9 @@ body:is([data-view="overview"], [data-view="nodes"]) #colophon { position: stati
   color: var(--gilt); background: var(--scene-active-bg); border-color: var(--gilt);
 }
 
-/* THE MAP'S TOOLS (owner, 2026-11-13): the views menu's top, only while
-   MAP is the view and no scene is up (in a view or over a scene there is no map
-   for them to act on). A row is a small lamp and a name; a tool that is on lights
-   its lamp the way the round buttons lit, in the same tokens. */
-.view-tools {
-  display: flex; flex-direction: column; gap: 2px;
-  margin-bottom: 3px; padding-bottom: 5px; border-bottom: 1px solid rgba(var(--gilt-rgb), 0.18);
-}
-body:is(.deck, .scene-open) .view-tools { display: none; }
-.view-tool {
-  display: flex; align-items: center; gap: 10px;
-  background: transparent; border: 1px solid transparent; border-radius: 4px; cursor: pointer;
-  font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.66rem;
-  letter-spacing: 0.22em; color: var(--text-dim); white-space: nowrap;
-  padding: 5px 12px 5px 7px; text-align: left;
-  transition: color 200ms, background 200ms, border-color 250ms;
-}
-.view-tool:is(:hover, :focus-visible) { color: var(--gilt); }
+/* THE LAMP: a small round mark that fills when its control is on. The views
+   menu's sky and depths wore it from 2026-11-13 until they went back to the
+   band (2026-11-14); the tripwires' "On the map" pill (`.sc-toggle`) wears it. */
 .vt-lamp {
   flex: none; width: 26px; height: 26px; border-radius: 50%;
   display: inline-flex; align-items: center; justify-content: center;
@@ -4898,11 +4926,6 @@ body:is(.deck, .scene-open) .view-tools { display: none; }
   transition: border-color 250ms, background-color 400ms, color 400ms;
 }
 .vt-lamp .ci-glyph { width: 15px; height: 15px; }
-.view-tool:hover .vt-lamp { border-color: var(--gilt); }
-.view-tool.lit { color: var(--gilt); }
-.view-tool.lit .vt-lamp { border-color: var(--gilt); background: var(--gilt); color: var(--abyss); }
-.view-tool.ci-sky.lit .vt-lamp { border-color: var(--sky-lit-border); background: var(--sky-lit-fill); color: var(--sky-lit-ink); }
-.view-tool.ci-depths.lit .vt-lamp { border-color: var(--depths-lit-border); background: var(--depths-lit-fill); color: var(--depths-lit-ink); }
 
 /* IDLE (owner, 2026-11-13): the views menu and THE INDEX fade to 60% when the
    mouse leaves them and roll up after a few seconds (ui.js `idleRollup`). Only

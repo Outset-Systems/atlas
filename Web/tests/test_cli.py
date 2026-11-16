@@ -44,7 +44,12 @@ def test_a_plain_import_marks_each_new_place_unchecked_and_changes_nothing_else(
     for node in out["nodes"]:
         mark = node.pop("provenance")
         assert mark["reviewed"] is False and mark["source"] == "import-json" and mark["charted_by"] == "cli"
-    assert out == GOLDEN
+    # A plain import replaces whatever stamp a place already carried (the live
+    # map stamps places as they are edited), so compare the rest of the file.
+    golden = json.loads(json.dumps(GOLDEN))
+    for node in golden["nodes"]:
+        node.pop("provenance", None)
+    assert out == golden
     # the same file again adds nothing new: no place is re-charted or marked changed
     assert cli.main([*DB, "import-json", "--site", "stamped", GOLDEN_PATH]) == 0
     assert cli.main([*DB, "export", "--site", "stamped", "-o", out_path]) == 0

@@ -75,6 +75,9 @@ def _status(doc, data):
         "poll_running": annalist.liveness()["running"],
         "last_tick": alerts.last_tick(),
         "suspended": alerts.suspended(doc, data),
+        # the places no rule sends for (behind an access group): NODES draws
+        # their bells as held (an admin's route; admins see these places)
+        "held": alerts.held_places(data),
     }
 
 
@@ -138,7 +141,7 @@ def alerts_save():
 
     sender = _sender()
     stored, _ = alerts.read()
-    stored_by_id = {d.get("id"): d for d in stored["destinations"]}
+    stored_by_id = {d["id"]: d for d in stored["destinations"] if isinstance(d.get("id"), str)}
     raws = [r for r in raw_dests if isinstance(r, dict)] if isinstance(raw_dests, list) else []
     pairs = list(zip(raws, [sender.normalised(d) for d in doc["destinations"]]))
     doc["destinations"], notes = _bind(pairs, stored_by_id)

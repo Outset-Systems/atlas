@@ -5,7 +5,7 @@ import re
 
 from sqlalchemy import select
 
-from store.models import Zone
+from store.models import Node, Zone
 
 UNCHARTED_SLUG = "uncharted"
 
@@ -55,6 +55,22 @@ def zone_for_ip(nets, ip):
         if addr in net:
             return slug
     return None
+
+
+def heal_revived(session, site, node, zone_slug):
+    """A retired place an importer brings back may name a network or a parent
+    that was removed while it was hidden (2026-11-15). Charted as it was, the
+    map would fail validation and every editor's save after it would be
+    refused: it takes `zone_slug` (where the import would put it) for a
+    network that is gone, and no parent for one that is gone or hidden."""
+    zones = set(session.scalars(select(Zone.slug).where(Zone.site_id == site.id)))
+    if node.zone_slug not in zones:
+        node.zone_slug = zone_slug
+    if node.parent_slug:
+        alive = session.scalar(select(Node.id).where(
+            Node.site_id == site.id, Node.slug == node.parent_slug, Node.status != "retired"))
+        if alive is None:
+            node.parent_slug = None
 
 
 def ensure_uncharted(session, site):

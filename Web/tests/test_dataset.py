@@ -45,6 +45,97 @@ def a_node(nid="testhold", **over):
     return out
 
 
+# ── a save over problems already on the map (2026-11-15) ────────────────────
+# An import or a hand edit of the file can leave the map with problems; the
+# write path refused every later save until they were mended, though a save
+# writes one entry. It refuses what a save introduces, and what is still wrong
+# in an entry it wrote; what was already there is let through and logged.
+
+def _dirty(store, *nodes):
+    data, _ = store.read()
+    data["nodes"].extend(nodes)
+    with open(store.path, "w", encoding="utf-8", newline="") as fh:
+        json.dump(data, fh, indent=2)
+    return store.read()[1]
+
+
+def test_an_unrelated_save_lands_over_problems_already_there(store):
+    stamp = _dirty(store, a_node("old-one", role=""), a_node("old-two", role=""))
+    store.apply([{"op": "upsert", "section": "nodes", "id": "old-one", "body": {"role": "mended"}}],
+                expect=stamp)
+    data, stamp = store.read()
+    assert next(n for n in data["nodes"] if n["id"] == "old-one")["role"] == "mended"
+    # the other is still broken, and an edit elsewhere still lands
+    store.apply([{"op": "upsert", "section": "nodes", "id": "testless", "body": a_node("testless")}],
+                expect=stamp)
+
+
+def test_a_new_problem_is_refused_and_named_alone(store):
+    stamp = _dirty(store, a_node("old-one", role=""))
+    with pytest.raises(RejectedError) as e:
+        store.apply([{"op": "upsert", "section": "nodes", "id": "fresh",
+                      "body": a_node("fresh", role="")}], expect=stamp)
+    assert e.value.problems and all("'fresh'" in p for p in e.value.problems)
+
+
+def test_an_entry_the_save_wrote_must_be_right_though_it_was_wrong_before(store):
+    stamp = _dirty(store, a_node("old-one", role=""))
+    with pytest.raises(RejectedError) as e:
+        store.apply([{"op": "upsert", "section": "nodes", "id": "old-one",
+                      "body": {"name": "RENAMED"}}], expect=stamp)
+    assert any("'old-one'" in p for p in e.value.problems)
+
+
+def test_a_save_over_an_old_problem_can_be_undone(store):
+    """Its snapshot carries the old problem; the undo was refused for it
+    (review, 2026-11-15)."""
+    stamp = _dirty(store, a_node("old-one", role=""))
+    out = store.apply([{"op": "upsert", "section": "nodes", "id": "testhold3",
+                        "body": a_node("testhold3")}], expect=stamp)
+    store.revert(out["revision"], actor="test")
+    assert not any(n["id"] == "testhold3" for n in store.read()[0]["nodes"])
+
+
+def test_a_deleted_entry_cannot_hand_its_old_problem_to_a_new_one(store):
+    """Entries named by position: deleting the broken `route #N` and adding a
+    new broken route that lands on #N kept the count and saved (review,
+    2026-11-15). The entry under the name changed, so its problem is new."""
+    data, _ = store.read()
+    first, second = data["nodes"][0]["id"], data["nodes"][1]["id"]
+    data.setdefault("routes", []).append({"from": first, "to": "ghost"})
+    with open(store.path, "w", encoding="utf-8", newline="") as fh:
+        json.dump(data, fh, indent=2)
+    _, stamp = store.read()
+    last = len(data["routes"]) - 1
+    with pytest.raises(RejectedError):
+        # another broken route with the same problem text at the same name,
+        # then a clean route after it (an identical one would be no change)
+        store.apply([{"op": "delete", "section": "routes", "index": last},
+                     {"op": "insert", "section": "routes", "body": {"from": second, "to": "ghost"}},
+                     {"op": "insert", "section": "routes", "body": {"from": first, "to": second}}],
+                    expect=stamp)
+
+
+def test_a_rename_onto_a_broken_names_problem_is_new(store):
+    stamp = _dirty(store, a_node("c-old", role=""), a_node("a-new"))
+    with pytest.raises(RejectedError):
+        store.apply([{"op": "delete", "section": "nodes", "id": "c-old"},
+                     {"op": "upsert", "section": "nodes", "id": "a-new",
+                      "body": {"id": "c-old", "role": ""}}], expect=stamp)
+
+
+def test_an_address_two_places_claim_does_not_block_an_edit_elsewhere(store):
+    """The review's case (2026-11-15): an importer brought back a place at an
+    address a hand-charted place had taken meanwhile."""
+    # neutral ids: the public tree's demo lab has a place called `nas`
+    stamp = _dirty(store, a_node("claim-x1", ip="10.250.0.5"), a_node("claim-x2", ip="10.250.0.5"))
+    store.apply([{"op": "upsert", "section": "nodes", "id": "testhold2", "body": a_node("testhold2")}],
+                expect=stamp)
+    with pytest.raises(RejectedError):   # but a third claim is new
+        store.apply([{"op": "upsert", "section": "nodes", "id": "claim-x3",
+                      "body": a_node("claim-x3", ip="10.250.0.5")}], expect=store.read()[1])
+
+
 # ── operations ──────────────────────────────────────────────────────────────
 
 def test_insert_then_edit_then_remove(store):
@@ -202,7 +293,11 @@ def test_reverting_to_a_pruned_snapshot_says_so(store):
 
 def test_a_save_touches_only_the_lines_it_changed(store, tmp_path):
     original = (tmp_path / "lab-data.json").read_text(encoding="utf-8")
-    store.apply([{"op": "upsert", "section": "nodes", "id": "app-host",
+    # A place with no stamp yet, so the stamp arrives whole: the bundled
+    # dataset is the live map, and places there gain stamps as they are edited.
+    unstamped = [n["id"] for n in json.loads(original)["nodes"] if "provenance" not in n]
+    assert unstamped, "every place in the bundled dataset is stamped; this test needs one that isn't"
+    store.apply([{"op": "upsert", "section": "nodes", "id": unstamped[0],
                   "body": {"role": "changed · for the test"}}], actor="t")
     after = (tmp_path / "lab-data.json").read_text(encoding="utf-8")
 

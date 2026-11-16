@@ -60,8 +60,15 @@ def _now():
 def _shape(stored):
     if not isinstance(stored, dict):
         return {"seq": 0, "state": {}, "behind": {}, "events": []}
+    seq = stored.get("seq")
+    if not (isinstance(seq, int) and not isinstance(seq, bool) and seq >= 0):
+        # a hand edit's 3.5 or "x" would number every new event wrongly (and
+        # the alerts read only whole ids): the largest whole id kept, or 0
+        events = stored.get("events") if isinstance(stored.get("events"), list) else []
+        seq = max([e["id"] for e in events if isinstance(e, dict) and isinstance(e.get("id"), int)
+                   and not isinstance(e.get("id"), bool)] + [0])
     return {
-        "seq": stored.get("seq") or 0,
+        "seq": seq,
         "state": stored.get("state") if isinstance(stored.get("state"), dict) else {},
         # WHAT A FAULT WAS BEHIND (2026-11-13): {key: cause id} for every target
         # last seen down as a consequence. Kept apart from `state`, whose values
@@ -131,7 +138,12 @@ def record(feed, label_for=None):
     a human name for the annals — the place's display name rather than its id.
     """
     observed = _observed(feed)
-    if not observed:
+    # UNMANAGED (2026-11-14): its last state is forgotten, so taking it back
+    # under watch is a first sighting (seeded, not narrated), never a stale
+    # "down -> healthy"; its services' too (the feed sends their keys)
+    forget = [f"node:{n}" for n in feed.get("unmanaged") or [] if isinstance(n, str)]
+    forget += [f"service:{s}" for s in feed.get("unmanaged_services") or [] if isinstance(s, str)]
+    if not observed and not forget:
         return []
 
     with locked():
@@ -143,6 +155,11 @@ def record(feed, label_for=None):
         # would always be equal — track the change explicitly or first sightings
         # never get persisted and every poll re-seeds them.
         seeded = False
+        for key in forget:
+            if key in known or key in behind:
+                known.pop(key, None)
+                behind.pop(key, None)
+                seeded = True
 
         for key, (kind, target, state, cause) in sorted(observed.items()):
             previous = known.get(key)
@@ -318,6 +335,22 @@ def since(seq):
 def current_seq():
     """The last event id handed out."""
     return _STORE.load()["seq"]
+
+
+def readable_seq():
+    """The annals' sequence when it can be trusted: the stored number when the
+    file reads as an object, 0 when there is no file at all (a fresh start),
+    and None when a file is there but could not be read (a fault that passes:
+    nothing must be reset on it; round 15)."""
+    import os
+    from jsonio import read_json
+    path = settings.EVENTS_PATH
+    if not os.path.exists(path):
+        return 0
+    raw = read_json(path)
+    if not isinstance(raw, dict):
+        return None
+    return _shape(raw)["seq"]
 
 
 def acknowledge(event_id, actor, note=""):

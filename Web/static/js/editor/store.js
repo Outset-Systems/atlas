@@ -63,7 +63,10 @@ export const Editor = {
   storeOf(key) { return this.section(key)?.store || 'dataset'; },
 
   entries(key) {
-    if (this.storeOf(key) === 'maintenance') return this.repairs?.windows || [];
+    // the repairs are their own store whether or not the catalogue has loaded:
+    // NODES reads them (its menus' "maintenance mode" lines) on a page where
+    // the Desk was never opened, and the dataset holds no windows (2026-11-15)
+    if (this.storeOf(key) === 'maintenance' || (key === 'maintenance' && !this.ctx)) return this.repairs?.windows || [];
     const value = this.data?.[key];
     return Array.isArray(value) ? value : [];
   },
@@ -86,13 +89,18 @@ export const Editor = {
     return this.data;
   },
 
-  /** Apply operations, then refresh both the editor's copy and the map's. */
-  async apply(ops, note = '', origin = '') {
+  /** Apply operations, then refresh both the editor's copy and the map's.
+      `refresh: false` (a long run saved in parts, 2026-11-15) only takes the
+      new stamp: the caller refreshes once after its last part, and must,
+      since `data` is the copy from before. */
+  async apply(ops, note = '', origin = '', { refresh = true } = {}) {
     // `origin` names an import ('survey'): what it writes starts unreviewed
     const result = await post('ops', { ops, expect: this.stamp, note, origin });
     this.stamp = result.stamp;
-    await this.reload();
-    await A.refreshData?.();
+    if (refresh) {
+      await this.reload();
+      await A.refreshData?.();
+    }
     return result;
   },
 

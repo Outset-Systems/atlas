@@ -1,6 +1,6 @@
 """ALERTS — rules and destinations, not an engine (2026-11-13).
 
-A rule reads: when this place, set or network changes to this state and stays
+A rule reads: when this place, collection or network changes to this state and stays
 there this long, send to this destination. Nothing here measures anything. It
 reads the state changes THE ANNALS already records (events.py), from the feed
 the annalist already builds (annalist.py), and adds no thread and no fetch:
@@ -45,6 +45,7 @@ import re
 import time
 from urllib.parse import quote
 
+import schema
 import settings
 from filelock import LockTimeout, exclusive, lock_for
 from jsonio import iso_utc
@@ -53,8 +54,29 @@ from signals import NODE_STATES
 
 log = logging.getLogger("atlas.live.alerts")
 
-TARGET_KINDS = ("place", "set", "network")
+TARGET_KINDS = ("place", "collection", "network", "service")
+#: A target kind's old name -> today's. A rule saved before the rename of sets
+#: to collections (2026-11-14) still matches, and is saved back with the new name.
+OLD_TARGET_KINDS = {"set": "collection"}
+
+
+def rule_on(rule):
+    """Whether a rule is on: no `enabled` at all is on (what `normalize` has
+    always filled in), `true` is on, anything else a hand edit left (1,
+    "false", "yes") is off. The tick, `suspended` and the ALERTS page read
+    it the same way (2026-11-14 review, round 6)."""
+    return rule.get("enabled", True) is True or rule.get("enabled") is None
+
+
+def target_kind(kind):
+    """A rule target's kind under today's name. Anything that is not text
+    comes back as it was, for `validate` to name (a list there must not
+    raise: the store's load and the tick would fail with it)."""
+    return OLD_TARGET_KINDS.get(kind, kind) if isinstance(kind, str) else kind
 MAX_RULES = 100
+#: A timer that cannot be read is kept after each fault and dropped on this
+#: many faults in a row: kept twice, dropped on the third (round 7).
+TIMER_FAULTS = 3
 MAX_DESTINATIONS = 20
 MAX_FOR_MINUTES = 1440
 MAX_TIMERS = 500
@@ -95,8 +117,13 @@ def _shape(raw):
     rules = raw.get("rules")
     dests = raw.get("destinations")
     digest = raw.get("digest") if isinstance(raw.get("digest"), dict) else {}
+    rules = [r for r in rules if isinstance(r, dict)] if isinstance(rules, list) else []
+    # a rule saved when collections were sets reads (and saves) as today's
+    rules = [{**r, "target": {**r["target"], "kind": target_kind(r["target"].get("kind"))}}
+             if isinstance(r.get("target"), dict) and target_kind(r["target"].get("kind"))
+             != r["target"].get("kind") else r for r in rules]
     return {
-        "rules": [r for r in rules if isinstance(r, dict)] if isinstance(rules, list) else [],
+        "rules": rules,
         "digest": {**DIGEST_DEFAULTS, **{k: v for k, v in digest.items() if k in DIGEST_DEFAULTS}},
         "destinations": [d for d in dests if isinstance(d, dict)] if isinstance(dests, list) else [],
     }
@@ -148,10 +175,16 @@ def normalize(doc):
         r["enabled"] = True if r["enabled"] is None else r["enabled"]
         r["for_minutes"] = 0 if r["for_minutes"] is None else r["for_minutes"]
         if isinstance(r["target"], dict):
-            r["target"] = {"kind": r["target"].get("kind"), "id": r["target"].get("id")}
+            r["target"] = {"kind": target_kind(r["target"].get("kind")), "id": r["target"].get("id")}
     out["destinations"] = [{k: d.get(k) for k in ("id", "name", "kind", "url", "secret",
                                                   "secret_origin")}
                            for d in out["destinations"]]
+    for d in out["destinations"]:
+        # a blank secret is no secret: a file that says "" (a hand edit) is
+        # served back as given, and every later save of the whole document
+        # would be refused over it (2026-11-14)
+        if isinstance(d["secret"], str) and not d["secret"].strip():
+            d["secret"] = None
     return out
 
 
@@ -175,46 +208,87 @@ def public_view(data):
     return redaction.redact(clean_data(data), frozenset(), token=True)[0]
 
 
+def _objects(data):
+    """The dataset with every place that is an object, whatever its id: the
+    hidden words must include a hidden place `clean_data` would set aside."""
+    data = data if isinstance(data, dict) else {}
+    nodes = data.get("nodes") if isinstance(data.get("nodes"), list) else []
+    return {**data, "nodes": [n for n in nodes if isinstance(n, dict)]}
+
+
 def hidden_pattern(data):
     """The hidden places' names, ids and addresses, as a pattern, or None."""
     import redaction
-    return redaction.hidden_words(clean_data(data), frozenset())
+    return redaction.hidden_words(_objects(data), frozenset())
+
+
+def hidden_slug_pattern(data):
+    """`hidden_pattern` for text written as a slug (`redaction.hidden_slugs`)."""
+    import redaction
+    return redaction.hidden_slugs(_objects(data), frozenset())
 
 
 def _visible_targets(view):
     places = {n["id"]: n for n in view.get("nodes") or [] if isinstance(n, dict) and n.get("id")}
-    sets = {s["id"]: s for s in view.get("sets") or []
-            if isinstance(s, dict) and isinstance(s.get("id"), str)}
+    listed = view.get("collections")
+    # a hand edit's number or object is no list (round 11): with nothing hidden
+    # the redaction leaves it as it is, and the tick must not iterate it
+    collections = {s["id"]: s for s in (listed if isinstance(listed, list) else [])
+                   if isinstance(s, dict) and isinstance(s.get("id"), str)}
     # a zone is one id, as text: a hand-edited list there names no network
     # (2026-11-13), and it must not stop the tick
     networks = {n["zone"] for n in places.values() if isinstance(n.get("zone"), str) and n["zone"]}
-    return places, sets, networks
+    return places, collections, networks
+
+
+def _visible_services(view):
+    """{service key: place id} for the services on the no-group view: a link
+    on a visible place that is not behind its own group (stage 3b)."""
+    import signals
+    return signals.service_places(view)
+
+
+def _visible_all(view):
+    """`_visible_targets` and the visible services, for judging any target."""
+    return (*_visible_targets(view), _visible_services(view))
 
 
 def _target_in(target, visible):
-    """`target_visible` against targets already worked out (`_visible_targets`)."""
+    """`target_visible` against targets already worked out (`_visible_all`,
+    or `_visible_targets`, which knows no services)."""
     if not isinstance(target, dict):
         return False
-    places, sets, networks = visible
-    kind, tid = target.get("kind"), target.get("id")
+    places, collections, networks = visible[:3]
+    services = visible[3] if len(visible) > 3 else {}
+    kind, tid = target_kind(target.get("kind")), target.get("id")
     if not isinstance(tid, str):
         return False
-    return ((kind == "place" and tid in places) or (kind == "set" and tid in sets)
-            or (kind == "network" and tid in networks))
+    return ((kind == "place" and tid in places) or (kind == "collection" and tid in collections)
+            or (kind == "network" and tid in networks) or (kind == "service" and tid in services))
 
 
 def target_visible(target, view):
     """True when a rule's target survives the no-group view: a place in it, a
-    set that survives it, a network with a visible place in it."""
-    return _target_in(target, _visible_targets(view))
+    collection that survives it, a network with a visible place in it, a
+    service on a visible place and not behind its own group."""
+    return _target_in(target, _visible_all(view))
 
 
 def suspended(doc, data):
     """Ids of enabled rules whose target is no longer visible to a viewer with
     no access groups. They send nothing until it is again."""
-    visible = _visible_targets(public_view(data))
+    visible = _visible_all(public_view(data))
     return [r.get("id") for r in doc.get("rules") or []
-            if r.get("enabled") and not _target_in(r.get("target"), visible)]
+            if rule_on(r) and not _target_in(r.get("target"), visible)]
+
+
+def held_places(data):
+    """Ids of the places on the map that no rule ever sends for: the tick
+    matches against the view a viewer with no access groups gets, and these
+    are not in it (behind an access group). An admin sees them in NODES, so
+    NODES says so at their bell (2026-11-14). Sorted."""
+    seen = set(_visible_targets(public_view(data))[0])
+    return sorted(n["id"] for n in clean_data(data).get("nodes") or [] if n["id"] not in seen)
 
 
 def validate(doc, data):
@@ -244,10 +318,25 @@ def validate(doc, data):
                             "digits and dashes")
         elif did in dest_ids:
             problems.append(f"destination {label}: the id is used twice")
-        dest_ids.add(did)
+        if isinstance(did, str):
+            dest_ids.add(did)
         problems += [f"destination {label}: {p}" for p in sender.check_destination(d) or []]
 
-    visible = _visible_targets(public_view(data))       # once, not per rule
+    visible = _visible_all(public_view(data))       # once, not per rule
+    # A rule already saved whose target has since gone (a collection removed,
+    # a place deleted or hidden) stays as it was: it is suspended and sends
+    # nothing (`suspended`), and refusing it would refuse every other save
+    # until someone edits it (2026-11-14 review). A new or changed target is
+    # still checked.
+    stored, stored_enabled = {}, {}
+    for r in read()[0].get("rules") or []:
+        if not isinstance(r, dict):
+            continue
+        t = r.get("target")
+        if isinstance(r.get("id"), str) and isinstance(t, dict):
+            stored[r["id"]] = (target_kind(t.get("kind")), t.get("id"))
+        if isinstance(r.get("id"), str) and "enabled" in r:
+            stored_enabled[r["id"]] = r["enabled"]
     rule_ids = set()
     for i, r in enumerate(rules):
         rid = r.get("id")
@@ -256,36 +345,49 @@ def validate(doc, data):
             problems.append(f"rule {label}: its id must be lower-case letters, digits and dashes")
         elif rid in rule_ids:
             problems.append(f"rule {label}: the id is used twice")
-        rule_ids.add(rid)
+        if isinstance(rid, str):
+            rule_ids.add(rid)
         if not isinstance(r.get("name"), str) or len(r["name"]) > 80:
             problems.append(f"rule {label}: its name must be text of at most 80 characters")
         if not isinstance(r.get("note"), str) or len(r["note"]) > 300:
             problems.append(f"rule {label}: its note must be text of at most 300 characters")
-        if not isinstance(r.get("enabled"), bool):
+        # a hand edit's 1 or "false" already stored on this rule, unchanged, is
+        # kept as it is (the tick reads it as off, `rule_on`) so it never
+        # blocks every other save; a new non-boolean is refused (round 7)
+        if not isinstance(r.get("enabled"), bool) and not (
+                isinstance(rid, str) and rid in stored_enabled
+                # a boolean must stay a boolean: in Python 1 == True, and a new 1
+                # over a stored true is refused; a stored 1.0 sent back as 1 is
+                # the same value and passes (round 9)
+                and isinstance(stored_enabled[rid], bool) == isinstance(r.get("enabled"), bool)
+                and stored_enabled[rid] == r.get("enabled")):
             problems.append(f"rule {label}: enabled must be true or false")
         target = r.get("target")
-        if not (isinstance(target, dict) and target.get("kind") in TARGET_KINDS
+        if not (isinstance(target, dict) and target_kind(target.get("kind")) in TARGET_KINDS
                 and isinstance(target.get("id"), str) and target["id"]):
-            problems.append(f"rule {label}: its target must be a place, a set or a network")
-        elif not _target_in(target, visible):
-            problems.append(f"rule {label}: that {target['kind']} cannot be alerted on. It is "
+            problems.append(f"rule {label}: its target must be a place, a collection, a network or a service")
+        elif not _target_in(target, visible) and (
+                not isinstance(rid, str)
+                or stored.get(rid) != (target_kind(target.get("kind")), target.get("id"))):
+            problems.append(f"rule {label}: that {target_kind(target['kind'])} cannot be alerted on. It is "
                             "not on the map, or a viewer with no access groups cannot see it, "
                             "and a message about it could not be sent without naming it")
         to = r.get("to")
-        if not (isinstance(to, list) and to and all(s in NODE_STATES for s in to)):
+        if not (isinstance(to, list) and to and all(isinstance(s, str) and s in NODE_STATES for s in to)):
             problems.append(f"rule {label}: it needs one or more states from "
                             + ", ".join(sorted(NODE_STATES)))
         if not _int_in(r.get("for_minutes"), 0, MAX_FOR_MINUTES):
             problems.append(f"rule {label}: how long it must stay is a whole number of "
                             f"minutes from 0 to {MAX_FOR_MINUTES}")
-        if r.get("destination") not in dest_ids:
+        if not (isinstance(r.get("destination"), str) and r["destination"] in dest_ids):
             problems.append(f"rule {label}: it sends to a destination that does not exist")
 
     if not isinstance(digest.get("enabled"), bool):
         problems.append("digest: enabled must be true or false")
     if not _int_in(digest.get("hour"), 0, 23):
         problems.append("digest: the hour is a whole number from 0 to 23 (the server's local time)")
-    if digest.get("enabled") and digest.get("destination") not in dest_ids:
+    if digest.get("enabled") and not (isinstance(digest.get("destination"), str)
+                                      and digest["destination"] in dest_ids):
         problems.append("digest: it sends to a destination that does not exist")
     if not _int_in(digest.get("cert_days"), 1, 365):
         problems.append("digest: certificate days are a whole number from 1 to 365")
@@ -322,12 +424,23 @@ def _state_shape(raw):
     seq = raw.get("seq")
     return {
         "seq": seq if isinstance(seq, int) and not isinstance(seq, bool) else None,
-        "timers": [t for t in raw.get("timers") or [] if isinstance(t, dict)]
+        # only timers the tick can read: a hand edit's list as a rule or a
+        # target would raise on every tick and be saved back each time
+        "timers": [t for t in raw.get("timers") or []
+                   if isinstance(t, dict) and isinstance(t.get("rule"), str)
+                   and isinstance(t.get("target"), str)
+                   and isinstance(t.get("due"), (int, float)) and not isinstance(t.get("due"), bool)
+                   and isinstance(t.get("event"), int) and not isinstance(t.get("event"), bool)
+                   and isinstance(t.get("state"), str)]
         if isinstance(raw.get("timers"), list) else [],
         "sent": {k: times(v) for k, v in sent.items()},
         "all": times(raw.get("all")),
-        "folded": {k: v for k, v in folded.items()
-                   if isinstance(v, dict) and isinstance(v.get("count"), int)},
+        "folded": {k: {**v, "events": [e for e in v.get("events")
+                                       if isinstance(e, int) and not isinstance(e, bool)]
+                       if isinstance(v.get("events"), list) else []}
+                   for k, v in folded.items()
+                   if isinstance(v, dict) and isinstance(v.get("count"), int)
+                   and not isinstance(v.get("count"), bool) and v["count"] > 0},
         "digest_day": raw.get("digest_day") if isinstance(raw.get("digest_day"), str) else None,
         "last_tick": raw.get("last_tick") if isinstance(raw.get("last_tick"), str) else None,
     }
@@ -342,21 +455,42 @@ def last_tick():
 
 
 # ── Matching ─────────────────────────────────────────────────────────────────
-def _matches(rule, place_id, places, sets):
-    target = rule.get("target") or {}
-    kind, tid = target.get("kind"), target.get("id")
+def _matches(rule, place_id, places, collections):
+    target = rule.get("target")
+    if not isinstance(target, dict):
+        return False      # a hand edit's text, list or number: matches nothing, raises nothing
+    kind, tid = target_kind(target.get("kind")), target.get("id")
+    if not isinstance(tid, str):
+        return False      # a hand edit's list or number: matches nothing, raises nothing
     if kind == "place":
         return place_id == tid
-    if kind == "set":
-        members = (sets.get(tid) or {}).get("places")
-        return isinstance(members, list) and place_id in members
+    if kind == "collection":
+        members = schema.as_list((collections.get(tid) or {}).get("places"))
+        return place_id in members        # one id or a list, as the roster counts them
     if kind == "network":
         return bool(tid) and (places.get(place_id) or {}).get("zone") == tid
     return False
 
 
-def _rules_for(place_id, state, rules, places, sets):
-    return [r for r in rules if _matches(r, place_id, places, sets) and state in (r.get("to") or [])]
+def _matches_service(rule, key, services, collections):
+    """A rule reaches a service (stage 3b): it names the service, or a
+    collection holding it. Network and place rules are about places."""
+    target = rule.get("target")
+    if not isinstance(target, dict):
+        return False
+    kind, tid = target_kind(target.get("kind")), target.get("id")
+    if not isinstance(tid, str) or key not in services:
+        return False
+    if kind == "service":
+        return tid == key
+    if kind == "collection":
+        return key in schema.as_list((collections.get(tid) or {}).get("services"))
+    return False
+
+
+def _rules_for(place_id, state, rules, places, collections):
+    return [r for r in rules
+            if _matches(r, place_id, places, collections) and state in (r.get("to") or [])]
 
 
 # ── Composing ────────────────────────────────────────────────────────────────
@@ -423,6 +557,80 @@ def compose(subject, state, event, view, pfeed, edges, known, behind=None):
             "link": link, "tags": [state]}
 
 
+def compose_service(key, state, event, view, services):
+    """One message about a service, from the no-group view only: its label
+    and its place. Never the rule's name or note."""
+    places, _, _ = _visible_targets(view)
+    pid = services.get(key)
+    place = _name(places, pid) if pid else ""
+    label = key
+    for link in (places.get(pid) or {}).get("links") or []:
+        import signals
+        if isinstance(link, dict) and signals.service_key(pid, link) == key:
+            label = str(link.get("label") or key)
+            break
+    event = event or {}
+    lines = [f"Service: {label}" + (f" on {place}" if place else "")]
+    if event.get("from"):
+        lines.append(f"What changed: {state} at {_when(event.get('at'))}, was {event['from']}")
+    else:
+        lines.append(f"What changed: {state}")
+    link = _link("place=" + quote(pid, safe="")) if pid else _link()
+    return {"title": f"{label}{' on ' + place if place else ''} {STATE_WORDS.get(state, 'changed to ' + state)}",
+            "body": "\n".join(lines),
+            "priority": "high" if state == "down" else "default",
+            "link": link, "tags": [state, "service"]}
+
+
+#: A maintenance mode on longer than this is named in the daily digest.
+MODE_DAYS = 7
+
+
+def _mode_left_on(view, places, now):
+    """What has been in maintenance mode (an `open` window) more than
+    MODE_DAYS, oldest first: each visible place it covers by name, each
+    visible collection it names as "the collection X", with the day it began."""
+    import maintenance
+    cutoff = datetime.datetime.fromtimestamp(now - MODE_DAYS * 86400, datetime.timezone.utc)
+    listed = view.get("collections")
+    col_names = ({c["id"]: str(c.get("name") or c["id"]) for c in listed
+                  if isinstance(c, dict) and isinstance(c.get("id"), str)} if isinstance(listed, list) else {})
+    try:
+        windows = maintenance.read()["windows"]
+    except Exception:  # noqa: BLE001 — no repairs store, nothing left on
+        return []
+    found = {}
+    for window in windows:
+        if window.get("open") is not True:
+            continue
+        began = maintenance.parse_when(window.get("starts"))
+        if began is None or began > cutoff:
+            continue
+        day = began.strftime("%Y-%m-%d")
+        named = window.get("collections") if isinstance(window.get("collections"), list) else []
+        for cid in named:
+            if isinstance(cid, str) and cid in col_names:
+                found.setdefault(f"the collection {col_names[cid]}", (began, day))
+        through = set()
+        for cid in named:
+            if isinstance(cid, str) and cid in col_names:
+                through |= maintenance.window_places({"collections": [cid]}, view)
+        for pid in maintenance.window_places({"nodes": window.get("nodes")}, view):
+            if pid in places and pid not in through:
+                found.setdefault(_name(places, pid), (began, day))
+        # a service on its own (stage 3b review): by its label and its place
+        svc = _visible_services(view)
+        for key in window.get("services") if isinstance(window.get("services"), list) else []:
+            if isinstance(key, str) and key in svc:
+                label = key
+                for link in (places.get(svc[key]) or {}).get("links") or []:
+                    import signals
+                    if isinstance(link, dict) and signals.service_key(svc[key], link) == key:
+                        label = str(link.get("label") or key)
+                found.setdefault(f"{label} on {_name(places, svc[key])}", (began, day))
+    return [f"{label} (since {day})" for label, (_, day) in sorted(found.items(), key=lambda kv: kv[1][0])]
+
+
 def compose_digest(digest, view, feed, hidden, now):
     """The daily digest, from the no-group view, or None with nothing to say."""
     import certs
@@ -459,6 +667,14 @@ def compose_digest(digest, view, feed, hidden, now):
     if stale:
         sections.append(f"Not reviewed in {digest['review_days']} days: " + _listed(sorted(stale)))
 
+    # MAINTENANCE MODE LEFT ON (2026-11-14, the owner's Q4): a mode has no
+    # end, so this is its guard, always in the digest. What it covers is read
+    # from the no-group view (a hidden place is not named) and its free-text
+    # reason is not used.
+    left = _mode_left_on(view, places, now)
+    if left:
+        sections.append(f"In maintenance mode more than {MODE_DAYS} days: " + _listed(left))
+
     if digest.get("drift"):
         # UNCHARTED MONITORS ARE NAMED ONLY WHILE NOTHING IS HIDDEN (2026-11-13).
         # `feed` is the raw feed: the no-group feed has no drift at all, since an
@@ -481,8 +697,14 @@ def compose_digest(digest, view, feed, hidden, now):
 
 
 def _texts(message):
+    link = str(message.get("link") or "")
+    base = settings.PUBLIC_URL or ""
+    if base and link.startswith(base):
+        # the Atlas's own address is no place's name: an Atlas at
+        # atlas.example must not block every alert for a hidden "atlas"
+        link = link[len(base):]
     return [str(message.get("title") or ""), str(message.get("body") or ""),
-            str(message.get("link") or ""), " ".join(map(str, message.get("tags") or []))]
+            link, " ".join(map(str, message.get("tags") or []))]
 
 
 # ── The tick ─────────────────────────────────────────────────────────────────
@@ -498,8 +720,9 @@ def public_feed(feed, data, ctx=None):
 class _Run:
     """One tick's sends: the state it charges, and what to write after the lock."""
 
-    def __init__(self, state, dests, hidden, now):
+    def __init__(self, state, dests, hidden, now, hidden_slugs=None):
         self.state, self.dests, self.hidden, self.now = state, dests, hidden, now
+        self.hidden_slugs = hidden_slugs
         self.logs, self.notes, self.sent = [], [], 0
 
     def _prune(self):
@@ -534,7 +757,9 @@ class _Run:
     def deliver(self, rule_id, dest, message, event_ids, folded=None):
         """Send one message if the limit allows, else fold it. Every send is
         logged; a delivered one notes "sent to" on its events."""
-        if self.hidden and any(self.hidden.search(t) for t in _texts(message)):
+        if any((self.hidden and self.hidden.search(t))
+               or (self.hidden_slugs and self.hidden_slugs.in_text(t))
+               for t in _texts(message)):
             self.logs.append(self._entry(rule_id, dest, event_ids, "blocked",
                                          why="would name a hidden place", folded=folded))
             return "blocked"
@@ -557,21 +782,31 @@ class _Run:
         return outcome
 
     def send_folds(self):
-        """Last tick's overflow, one message per destination, if the limit allows."""
+        """Last tick's overflow, one message per destination, if the limit allows.
+        A bucket that cannot be read is dropped with a log line; the others
+        are sent or kept as always (2026-11-14 review, round 6)."""
         for dest_id, bucket in list(self.state["folded"].items()):
-            dest = self.dests.get(dest_id)
-            if dest is None:
+            try:
+                self._send_fold(dest_id, bucket)
+            except Exception:  # noqa: BLE001 — one bucket, not the tick
+                log.warning("alerts: dropped a folded message it could not read (%s)",
+                            dest_id, exc_info=True)
                 self.state["folded"].pop(dest_id, None)
-                continue
-            if not bucket.get("count") or not self.allowed(dest_id):
-                continue
-            n = bucket["count"]
-            message = {"title": f"Atlas: {n} more change{'s' if n != 1 else ''}",
-                       "body": f"and {n} more change{'s' if n != 1 else ''}, see Atlas",
-                       "priority": "default", "link": _link(), "tags": ["folded"]}
-            events_covered = [e for e in bucket.get("events") or [] if isinstance(e, int)]
+
+    def _send_fold(self, dest_id, bucket):
+        dest = self.dests.get(dest_id)
+        if dest is None:
             self.state["folded"].pop(dest_id, None)
-            self.deliver("fold", dest, message, events_covered, folded=n)
+            return
+        if not bucket.get("count") or not self.allowed(dest_id):
+            return
+        n = bucket["count"]
+        message = {"title": f"Atlas: {n} more change{'s' if n != 1 else ''}",
+                   "body": f"and {n} more change{'s' if n != 1 else ''}, see Atlas",
+                   "priority": "default", "link": _link(), "tags": ["folded"]}
+        events_covered = [e for e in bucket.get("events") or [] if isinstance(e, int)]
+        self.state["folded"].pop(dest_id, None)
+        self.deliver("fold", dest, message, events_covered, folded=n)
 
 
 def _idle():
@@ -607,7 +842,7 @@ def tick(feed, data, now=None, ctx=None):
         with exclusive(lock_for(settings.ALERTS_STATE_PATH), timeout=LOCK_WAIT):
             state = _STATE.load()
             dests = {d["id"]: d for d in doc["destinations"] if isinstance(d.get("id"), str)}
-            run = _Run(state, dests, hidden_pattern(data), now)
+            run = _Run(state, dests, hidden_pattern(data), now, hidden_slug_pattern(data))
             # WHAT WAS SENT IS KEPT, WHATEVER HAPPENS NEXT (2026-11-13). The state
             # used to be saved only when the whole tick finished, so a fault after
             # a send (a digest that raised) left it as it was, and the next poll
@@ -635,14 +870,14 @@ def _write_after(run):
         try:
             sender.log_delivery(entry)
         except Exception as e:      # noqa: BLE001
-            log.warning("alerts: could not log a delivery: %s", type(e).__name__)
+            log.warning("alerts: could not log a delivery: %s", type(e).__name__, exc_info=True)
     if run.notes:
         import events
         for ids, to, at in run.notes:
             try:
                 events.note_sent(ids, to, at)
             except Exception as e:  # noqa: BLE001
-                log.warning("alerts: could not note a send on the annals: %s", type(e).__name__)
+                log.warning("alerts: could not note a send on the annals: %s", type(e).__name__, exc_info=True)
 
 
 def _tick_locked(run, doc, feed, data, now, ctx):
@@ -654,61 +889,155 @@ def _tick_locked(run, doc, feed, data, now, ctx):
 
     state, dests = run.state, run.dests
     seq_now = events.current_seq()
+    trusted = events.readable_seq() if isinstance(state["seq"], int) and state["seq"] > seq_now else None
+    if isinstance(trusted, int) and state["seq"] > trusted:
+        # ahead of the annals (events.json restored or removed on its own, or a
+        # hand edit): nothing would ever be new again; start from now (round
+        # 14). Only when the annals were really read, or are really gone: a
+        # failed read says 0 and must never reset anything, or the next tick
+        # would replay the whole history (round 15)
+        log.warning("alerts: the sequence was ahead of the annals (%s > %s); starting from now",
+                    state["seq"], trusted)
+        state["seq"] = trusted
     if state["seq"] is None:
         # the first tick ever: start from now, never replay the annals' history
         seq = seq_now
         fresh = []
     else:
-        fresh = events.since(state["seq"])
+        fresh = [e for e in events.since(state["seq"])
+                 if isinstance(e, dict) and isinstance(e.get("id"), int) and not isinstance(e.get("id"), bool)]
         seq = max([state["seq"]] + [e["id"] for e in fresh])
 
     view = public_view(data)
     pfeed = public_feed(feed, data, ctx)
-    places, sets, _ = _visible_targets(view)
+    places, collections, _ = _visible_targets(view)
+    services = _visible_services(view)
+    # only rules the tick can read whole: a hand edit that broke one (a target
+    # that is text, "to" that is a number, minutes that are words) skips that
+    # rule, never the tick, which would replay the same event and stop every
+    # alert for good (2026-11-14 review, round 3)
     rules = [r for r in doc["rules"]
-             if r.get("enabled") and r.get("destination") in dests and isinstance(r.get("id"), str)]
+             if rule_on(r) and isinstance(r.get("destination"), str)
+             and r["destination"] in dests and isinstance(r.get("id"), str)
+             and isinstance(r.get("target"), dict) and isinstance(r.get("to"), list)
+             and all(isinstance(s, str) for s in r["to"])
+             and _int_in(r.get("for_minutes") if r.get("for_minutes") is not None else 0,
+                         0, MAX_FOR_MINUTES)]
     by_id = {r["id"]: r for r in rules}
 
     # 1. new events start (or cancel) timers. Node events only: tripwires,
     #    services and rites are out of this stage.
+    # EVERY ITEM IS GUARDED (2026-11-14 review, round 5). A stored item the
+    # tick cannot read (an event, a timer, a fold, a place's `depends_on`)
+    # is skipped with one log line and the tick goes on: before, it raised,
+    # the sequence did not move, and the next poll read the same item and
+    # raised again, so no alert was sent ever after.
     timers = state["timers"]
+    is_node = lambda t: (t.get("kind") or "node") == "node"   # noqa: E731 — a timer before 3b has none
     for ev in fresh:
-        if ev.get("kind") != "node" or ev.get("target") not in places:
+        target = ev.get("target")
+        if ev.get("kind") == "service" and isinstance(target, str) and target in services:
+            # SERVICES (stage 3b): their own timers, kind "service"
+            for rule in rules:
+                try:
+                    if not _matches_service(rule, target, services, collections):
+                        continue
+                    timers = [t for t in timers if not (t.get("kind") == "service"
+                                                        and t.get("rule") == rule["id"] and t.get("target") == target)]
+                    if isinstance(ev.get("to"), str) and ev["to"] in rule["to"]:
+                        timers.append({"rule": rule["id"], "event": ev["id"], "target": target, "kind": "service",
+                                       "state": ev["to"], "due": now + 60 * int(rule.get("for_minutes") or 0)})
+                except Exception:  # noqa: BLE001 — one rule on one event, not the tick
+                    log.warning("alerts: skipped rule %s on annals event %s it could not read",
+                                rule.get("id"), ev.get("id"), exc_info=True)
             continue
-        pid = ev["target"]
+        if ev.get("kind") != "node" or not isinstance(target, str) or target not in places:
+            continue
         for rule in rules:
-            if not _matches(rule, pid, places, sets):
-                continue
-            timers = [t for t in timers if not (t.get("rule") == rule["id"] and t.get("target") == pid)]
-            if ev.get("to") in (rule.get("to") or []):
-                timers.append({"rule": rule["id"], "event": ev["id"], "target": pid,
-                               "state": ev["to"], "due": now + 60 * int(rule.get("for_minutes") or 0)})
+            # one rule on one event: a fault there costs that pair only, never
+            # the event's other rules (round 6)
+            try:
+                if not _matches(rule, target, places, collections):
+                    continue
+                timers = [t for t in timers if not (is_node(t) and t.get("rule") == rule["id"] and t.get("target") == target)]
+                if isinstance(ev.get("to"), str) and ev["to"] in rule["to"]:
+                    timers.append({"rule": rule["id"], "event": ev["id"], "target": target,
+                                   "state": ev["to"], "due": now + 60 * int(rule.get("for_minutes") or 0)})
+            except Exception:  # noqa: BLE001 — one rule on one event, not the tick
+                log.warning("alerts: skipped rule %s on annals event %s it could not read",
+                            rule.get("id"), ev.get("id"), exc_info=True)
     timers = timers[-MAX_TIMERS:]
     state["seq"], state["timers"] = seq, timers
 
     # 2. what overflowed last tick goes first
-    run.send_folds()
+    run.send_folds()        # guards each bucket itself
 
     # 3. the timers that are due
-    annals = {e.get("id"): e for e in events.load()["events"] if isinstance(e, dict)}
+    annals = {e["id"]: e for e in events.load()["events"]
+              if isinstance(e, dict) and isinstance(e.get("id"), int)}
     nodes = pfeed.get("nodes") or {}
-    under = set(pfeed.get("maintenance") or [])
-    pending, due = [], []
+    under = {m for m in pfeed.get("maintenance") or [] if isinstance(m, str)} \
+        if isinstance(pfeed.get("maintenance"), list) else set()
+    svc_states = pfeed.get("services") if isinstance(pfeed.get("services"), dict) else {}
+    svc_under = {k for k in pfeed.get("maintenance_services") or [] if isinstance(k, str)} \
+        if isinstance(pfeed.get("maintenance_services"), list) else set()
+    pending, due, due_services = [], [], []
     for t in timers:
-        if not isinstance(t.get("due"), (int, float)) or t.get("rule") not in by_id:
-            continue                                  # a rule since deleted or switched off
-        if t["due"] > now:
-            pending.append(t)
-            continue
-        info = nodes.get(t.get("target")) or {}
-        event = annals.get(t.get("event")) or {}
-        if t.get("target") not in places or info.get("state") != t.get("state"):
-            continue                                  # hidden now, or it left that state
-        if event.get("ack"):
-            continue                                  # a person has it: no repeats
-        if t["target"] in under or info.get("planned"):
-            continue                                  # inside a maintenance window: silence
-        due.append((by_id[t["rule"]], t, info))
+        try:
+            if not isinstance(t.get("due"), (int, float)) or t.get("rule") not in by_id:
+                continue                              # a rule since deleted or switched off
+            if t["due"] > now:
+                pending.append(t)
+                continue
+            if t.get("kind") == "service":
+                key = t.get("target")
+                sinfo = svc_states.get(key) if isinstance(svc_states.get(key), dict) else {}
+                event = annals.get(t.get("event")) or {}
+                if key not in services or sinfo.get("state") != t.get("state"):
+                    continue                          # hidden now, unmanaged, or it left that state
+                if event.get("ack") or key in svc_under:
+                    continue                          # a person has it, or a window covers it
+                # A SERVICE FOLLOWS ITS PLACE: while its place is down or in
+                # maintenance, the place's own alert speaks for it. The timer
+                # is kept, not dropped: a place back up with this service still
+                # down records no new event, so a dropped timer would never
+                # send (stage 3b review)
+                pid = services[key]
+                pinfo = nodes.get(pid) if isinstance(nodes.get(pid), dict) else {}
+                if pid in under or pinfo.get("state") in ("down", "maintenance") or pinfo.get("planned"):
+                    pending.append(t)
+                    continue
+                if not _matches_service(by_id[t["rule"]], key, services, collections):
+                    continue
+                if t.get("state") not in by_id[t["rule"]]["to"]:
+                    continue
+                due_services.append((by_id[t["rule"]], t))
+                continue
+            info = nodes.get(t.get("target")) or {}
+            info = info if isinstance(info, dict) else {}
+            event = annals.get(t.get("event")) or {}
+            if t.get("target") not in places or info.get("state") != t.get("state"):
+                continue                              # hidden now, or it left that state
+            if event.get("ack"):
+                continue                              # a person has it: no repeats
+            if t["target"] in under or info.get("planned"):
+                continue                              # inside a maintenance window: silence
+            if not _matches(by_id[t["rule"]], t["target"], places, collections):
+                continue                              # retargeted, or its collection changed or went
+            if t.get("state") not in by_id[t["rule"]]["to"]:
+                continue                              # the rule no longer asks for this state
+            due.append((by_id[t["rule"]], t, info))
+        except Exception:  # noqa: BLE001 — one timer, not the tick
+            # kept, not lost: a fault that passes sends it next tick. A fault
+            # that does not pass costs three polls, then the timer goes.
+            faults = (t.get("faults") if isinstance(t.get("faults"), int) else 0) + 1
+            if faults >= TIMER_FAULTS:
+                log.warning("alerts: dropped a timer after %d faults (rule %s, place %s)",
+                            faults, t.get("rule"), t.get("target"), exc_info=True)
+            else:
+                if faults == 1:
+                    log.warning("alerts: kept a timer it could not read this tick", exc_info=True)
+                pending.append({**t, "faults": faults})
 
     # 4. ONE MESSAGE FOR A CASCADE. A consequence whose root cause is visible in
     #    the no-group feed, and which a rule also matches in its current state,
@@ -725,18 +1054,20 @@ def _tick_locked(run, doc, feed, data, now, ctx):
     for rule, t, info in due:
         pid = t["target"]
         root = info.get("cause")
+        root = root if isinstance(root, str) else None
         if root and root != pid and root in places:
-            root_state = (nodes.get(root) or {}).get("state")
-            root_rules = _rules_for(root, root_state, rules, places, sets)
+            root_info = nodes.get(root)
+            root_state = root_info.get("state") if isinstance(root_info, dict) else None
+            root_rules = _rules_for(root, root_state, rules, places, collections)
             if root_rules:
                 folded_into.append((root, root_rules, t))
                 continue
         key = (pid, rule["destination"])
         m = messages.setdefault(key, {"subject": pid, "state": t["state"], "rule": rule,
-                                      "event": annals.get(t["event"]), "events": [],
+                                      "event": annals.get(t.get("event")), "events": [],
                                       "behind": root if root in places else None})
-        m["events"].append(t["event"])
-    waiting = {(t.get("rule"), t.get("target")) for t in pending}
+        m["events"].append(t.get("event"))
+    waiting = {(t.get("rule"), t.get("target")) for t in pending if is_node(t)}
     for root, root_rules, t in folded_into:
         root_event = max((e for e in annals.values()
                           if e.get("kind") == "node" and e.get("target") == root),
@@ -749,10 +1080,15 @@ def _tick_locked(run, doc, feed, data, now, ctx):
                     continue
                 m = messages[key] = {
                     "subject": root, "rule": rule, "event": root_event, "behind": None,
-                    "state": (nodes.get(root) or {}).get("state"), "events": []}
-            m["events"].append(t["event"])
+                    "state": (nodes.get(root) or {}).get("state") if isinstance(nodes.get(root), dict) else None,
+                    "events": []}
+            m["events"].append(t.get("event"))
 
-    edges = declared_edges(view) if messages else {}
+    try:
+        edges = declared_edges(view) if messages else {}
+    except Exception:  # noqa: BLE001 — a hand-edited `depends_on`: say less, still send
+        log.warning("alerts: could not read what depends on what", exc_info=True)
+        edges = {}
     known = set(places)
     # the due timers leave the state only here (2026-11-13): the state is
     # saved however the tick ends, so a fault between taking them out and
@@ -764,24 +1100,39 @@ def _tick_locked(run, doc, feed, data, now, ctx):
                 message = compose(pid, m["state"], m["event"], view, pfeed, edges, known,
                                   behind=m["behind"])
             except Exception as e:  # noqa: BLE001 — one message, not the tick
-                log.warning("alerts: could not compose a message: %s", type(e).__name__)
+                log.warning("alerts: could not compose a message: %s", type(e).__name__, exc_info=True)
                 run.failed(m["rule"]["id"], dests[dest_id], m["events"],
                            "the message could not be put together")
                 continue
             run.deliver(m["rule"]["id"], dests[dest_id], message, m["events"])
+    svc_messages = {}
+    for rule, t in due_services:
+        m = svc_messages.setdefault((t["target"], rule["destination"]), {
+            "rule": rule, "state": t["state"], "event": annals.get(t.get("event")), "events": []})
+        m["events"].append(t.get("event"))
+    for (key, dest_id), m in sorted(svc_messages.items()):
+        try:
+            message = compose_service(key, m["state"], m["event"], view, services)
+        except Exception as e:  # noqa: BLE001 — one message, not the tick
+            log.warning("alerts: could not compose a message: %s", type(e).__name__, exc_info=True)
+            run.failed(m["rule"]["id"], dests[dest_id], m["events"], "the message could not be put together")
+            continue
+        run.deliver(m["rule"]["id"], dests[dest_id], message, m["events"])
 
     # 5. the digest, once a day at its hour (the server's local time)
     digest = doc["digest"]
-    if digest.get("enabled") and digest.get("destination") in dests:
+    if digest.get("enabled") and isinstance(digest.get("destination"), str) \
+            and digest["destination"] in dests:
         local = time.localtime(now)
         today = time.strftime("%Y-%m-%d", local)
-        if local.tm_hour >= int(digest.get("hour") or 0) and state["digest_day"] != today:
+        hour = digest.get("hour") if _int_in(digest.get("hour"), 0, 23) else None
+        if hour is not None and local.tm_hour >= hour and state["digest_day"] != today:
             state["digest_day"] = today
             dest = dests[digest["destination"]]
             try:
                 message = compose_digest(digest, view, feed, run.hidden, now)
             except Exception as e:  # noqa: BLE001 — the digest, not the tick
-                log.warning("alerts: could not compose the digest: %s", type(e).__name__)
+                log.warning("alerts: could not compose the digest: %s", type(e).__name__, exc_info=True)
                 run.failed("digest", dest, [], "the digest could not be put together")
                 message = None
             if message:

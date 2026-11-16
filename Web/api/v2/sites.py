@@ -60,12 +60,20 @@ def list_sites():
     from store import session_scope
     from store.models import Node, Site, Zone
 
+    groups = viewer_groups()
     with session_scope() as session:
         out = []
         for site in session.scalars(select(Site).order_by(Site.slug)):
-            nodes = session.scalar(
-                select(func.count(Node.id))
-                .where(Node.site_id == site.id, Node.status != "retired"))
+            if sees_everything(groups):
+                nodes = session.scalar(
+                    select(func.count(Node.id))
+                    .where(Node.site_id == site.id, Node.status != "retired"))
+            else:
+                # a count is a disclosure too (2026-11-14 review): only the
+                # places this viewer may see
+                nodes = sum(1 for n in session.scalars(
+                    select(Node).where(Node.site_id == site.id, Node.status != "retired"))
+                    if cleared(n.extra_json if isinstance(n.extra_json, dict) else {}, groups))
             zones = session.scalar(
                 select(func.count(Zone.id)).where(Zone.site_id == site.id))
             out.append({
@@ -75,7 +83,8 @@ def list_sites():
                 "updated_at": _iso(site.updated_at),
                 "counts": {"zones": zones, "nodes": nodes},
             })
-    return jsonify({"sites": out})
+    # the counts depend on who asks: never shared between viewers
+    return private_no_cache(jsonify({"sites": out}))
 
 
 @bp.route("/sites/<slug>/lab-data")

@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import {
   ADMIN_VIEWS, ALIASES, DECK_KEY, PHONE_MEDIA, PHONE_VIEWS, VIEWS, allowedView, isView, mayOpen,
-  namesCharts, openingView, opensAtCharts, parsePlace, parseSet, parseView, readStored, swipeStep, wantsPhone, withView, writeStored,
+  namesCharts, openingView, opensAtCharts, parseCollection, parsePlace, parseView, readStored, swipeStep, wantsPhone, withView, writeStored,
 } from '../static/js/views-model.js';
 
 let passed = 0;
@@ -23,12 +23,13 @@ const memory = (init = {}) => {
 const throwing = { getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); } };
 
 test('the views are one list, and phone is a layout, not a view', () => {
-  assert.deepEqual(VIEWS, ['map', 'overview', 'nodes', 'alerts']);
-  assert.deepEqual(PHONE_VIEWS, ['overview', 'nodes', 'alerts']);
-  assert.deepEqual([...ADMIN_VIEWS], ['alerts']);
+  assert.deepEqual(VIEWS, ['map', 'overview', 'nodes']);
+  assert.deepEqual(PHONE_VIEWS, ['overview', 'nodes']);
+  assert.deepEqual([...ADMIN_VIEWS], []);
   assert.equal(isView('phone'), false);
   assert.equal(isView('charts'), false, 'charts is an old name, not a view of its own');
-  assert.deepEqual(ALIASES, { charts: 'overview' });
+  assert.equal(isView('alerts'), false, 'alerts is an old name since 2026-11-14');
+  assert.deepEqual(ALIASES, { charts: 'overview', alerts: 'nodes' });
   assert.equal(isView('nodes'), true);
   assert.equal(DECK_KEY, 'atlas.view');
 });
@@ -139,15 +140,15 @@ test('blocked storage never throws: nothing read, nothing written', () => {
 });
 
 test('?set= is a slug or nothing', () => {
-  assert.equal(parseSet('edge-boxes'), 'edge-boxes');
-  assert.equal(parseSet(' core_1 '), 'core_1');
-  assert.equal(parseSet(null), null);
-  assert.equal(parseSet(''), null);
-  assert.equal(parseSet('-lead'), null);
-  assert.equal(parseSet('a b'), null);
-  assert.equal(parseSet('<x>'), null);
-  assert.equal(parseSet('x'.repeat(81)), null);
-  assert.equal(parseSet(new URLSearchParams('?view=nodes&set=dmz').get('set')), 'dmz');
+  assert.equal(parseCollection('edge-boxes'), 'edge-boxes');
+  assert.equal(parseCollection(' core_1 '), 'core_1');
+  assert.equal(parseCollection(null), null);
+  assert.equal(parseCollection(''), null);
+  assert.equal(parseCollection('-lead'), null);
+  assert.equal(parseCollection('a b'), null);
+  assert.equal(parseCollection('<x>'), null);
+  assert.equal(parseCollection('x'.repeat(81)), null);
+  assert.equal(parseCollection(new URLSearchParams('?view=nodes&collection=dmz').get('collection')), 'dmz');
 });
 
 test('the way back to the map keeps every other query value', () => {
@@ -170,30 +171,23 @@ test('a sideways swipe pages, a scroll does not', () => {
   assert.equal(swipeStep(-80, 60), 1);
 });
 
-test('ALERTS is an admin\'s: anyone else lands where nothing named a view', () => {
-  assert.equal(mayOpen('alerts', true), true);
-  assert.equal(mayOpen('alerts', false), false);
-  assert.equal(mayOpen('alerts', undefined), false);
+test('ALERTS is an old name for NODES (2026-11-14): its rules are made there', () => {
+  assert.equal(mayOpen('alerts', true), false, 'an old name is not a view');
   assert.equal(mayOpen('nodes', false), true);
   assert.equal(mayOpen('charts', true), false, 'an old name is not a view');
-  // an admin
-  assert.equal(openingView('alerts', false, null, { admin: true }), 'alerts');
-  assert.equal(openingView(null, false, 'alerts', { admin: true }), 'alerts');
-  assert.equal(openingView(null, true, 'alerts', { admin: true }), 'alerts');
-  assert.equal(openingView('phone', false, 'alerts', { admin: true }), 'alerts');
-  // anyone else: the map on a desk, OVERVIEW on a phone
-  assert.equal(openingView('alerts', false, null), 'map');
-  assert.equal(openingView('alerts', false, 'nodes', { admin: false }), 'map');
-  assert.equal(openingView('alerts', true, null, { admin: false }), 'overview');
-  assert.equal(openingView(null, false, 'alerts', { admin: false }), 'map');
-  assert.equal(openingView(null, true, 'alerts', { admin: false }), 'overview');
-  assert.equal(openingView('phone', false, 'alerts', { admin: false }), 'overview');
+  assert.equal(parseView('alerts'), 'nodes');
+  assert.equal(parseView(' ALERTS '), 'nodes');
+  // an old link or a stored pick lands on NODES, for anyone, on any screen
+  for (const admin of [true, false, undefined]) {
+    assert.equal(openingView('alerts', false, null, { admin }), 'nodes');
+    assert.equal(openingView(null, false, 'alerts', { admin }), 'nodes');
+    assert.equal(openingView(null, true, 'alerts', { admin }), 'nodes');
+    assert.equal(openingView('phone', false, 'alerts', { admin }), 'nodes');
+  }
 });
 
 test('a press asks for a view; what this viewer gets', () => {
-  assert.equal(allowedView('alerts', false, true), 'alerts');
-  assert.equal(allowedView('alerts', false, false), 'map');
-  assert.equal(allowedView('alerts', true, false), 'overview');
+  assert.equal(allowedView('alerts', false, true), 'map', 'an old name pressed is no view');
   assert.equal(allowedView('map', true, true), 'overview', 'a phone never shows the map');
   assert.equal(allowedView('nonsense', false, true), 'map');
   assert.equal(allowedView('nodes', false, false), 'nodes');

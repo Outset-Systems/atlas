@@ -389,6 +389,14 @@ dataset links to, so the viewing glass can frame them. Because that list
 describes your network, viewers who are not signed in get `frame-src 'self'`.
 The value is memoised on the dataset's mtime.
 
+Only HTML pages carry the dataset's origins; scripts, stylesheets and JSON
+get `'self'` and `ATLAS_EMBED_HOSTS`, since a response's CSP governs only its
+own document and only a page has frames. The dataset's part is capped at
+24,000 characters (some 700 origins), keeping the origins the most links
+point at, so a very large map never makes a header a browser or a proxy
+refuses. `/api/v2/embeddable` answers "open it in a tab" for a service left
+out, and the glass also takes a `frame-src` violation report as a refusal.
+
 ## The theme layer
 
 Everything that names a particular lab (the app's name, the map image, the

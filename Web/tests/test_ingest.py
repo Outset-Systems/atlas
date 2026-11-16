@@ -175,6 +175,35 @@ def test_inventory_push_applies_a_netbox_snapshot():
         assert node.external_source == "netbox"
 
 
+def test_a_push_that_writes_rows_holds_the_maps_write_lock(monkeypatch):
+    """An editor's save loads and writes under the site's lock; a push that
+    landed between the two was put back as it was by the save (2026-11-15)."""
+    from contextlib import contextmanager
+    from api.v2 import ingest_v2
+    taken = []
+
+    @contextmanager
+    def recording(site):
+        taken.append(site)
+        yield
+    monkeypatch.setattr(ingest_v2, "site_lock", recording)
+    assert _post("/observed", {"hosts": [{"ip": "10.77.33.5"}]}).status_code == 200
+    assert _post("/inventory", {"vlans": [], "prefixes": [], "devices": NETBOX_DEVICES[:1],
+                                "vms": []}).status_code == 200
+    assert taken == ["lab", "lab"]
+
+
+def test_a_push_while_the_map_is_being_saved_is_told_to_come_back(monkeypatch):
+    from filelock import LockTimeout
+    from api.v2 import ingest_v2
+
+    def busy(site):
+        raise LockTimeout("held")
+    monkeypatch.setattr(ingest_v2, "site_lock", busy)
+    r = _post("/observed", {"hosts": [{"ip": "10.77.33.5"}]})
+    assert r.status_code == 503 and r.headers["Retry-After"] == "5"
+
+
 def test_observed_push_reports_drift():
     hosts = [{"ip": "10.77.33.5", "hostname": "hypervisor.home.example"},
              {"ip": "10.77.33.222", "mac": "DE:AD:BE:EF:02:22", "hostname": "stranger"}]

@@ -495,6 +495,7 @@ A.openCard = function openCard(n) {
 
   paintTabs();
   $('card-svc').hidden = true;   // always land on the node view
+  card.dataset.place = n.id;     // which place is up: a second press on its row closes it
   card.classList.remove('svc-open');
   card.classList.add('visible');
   card.setAttribute('aria-hidden', 'false');
@@ -617,6 +618,7 @@ A.setCardSide = (left) => {
 A.closeCard = function closeCard() {
   card.classList.remove('visible');
   card.setAttribute('aria-hidden', 'true');
+  delete card.dataset.place;
   drawer.open = null; sizeDrawer();
   // a hidden card must not keep its pulse alive or answer a late vitals reply
   const vitals = $('card-vitals');
@@ -628,6 +630,8 @@ A.closeCard = function closeCard() {
 // Is a card on screen? The Escape chain asks, so it can recentre on close
 // exactly as the × does — but only when there was actually a card to leave.
 A.cardOpen = () => card.classList.contains('visible');
+// Which place the card is up on, or null (NODES: a second press on a row closes it).
+A.cardPlace = () => (A.cardOpen() ? card.dataset.place || null : null);
 
 // closing the card with the × re-centers the survey (you were glided off-center to a node)
 $('btn-card-close').addEventListener('click', (e) => { e.stopPropagation(); A.closeCard(); A.recenter?.(true); });

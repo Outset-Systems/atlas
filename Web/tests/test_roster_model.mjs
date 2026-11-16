@@ -3,10 +3,12 @@
    Run:  node tests/test_roster_model.mjs        (from Web/) */
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   NO_FILTER, REVIEW_BATCH, SAVED_KEY, SEVERITY, SORT_KEY, armedLabel, batches, certTone, cleanFilter,
-  daysSince, filterRows, inBatches, ipv4Number, isEmptyFilter, markedLine, mergeNeeds, readSaved,
-  readSort, reviewOps, rowStanding, rowWaiting, sentence, slugFor, sortRows, staleFor, standing,
+  daysSince, filterRows, inBatches, inMode, modeChange, modeVia, ipv4Number, isEmptyFilter, markedLine, mergeNeeds, readSaved,
+  RAIL_FIELDS, RAIL_KEY, dropUnknown, filterGroups, memberList, railGroups, railPress, readRail, writeRail,
+  readSort, reviewOps, rowPress, rowStanding, rowState, rowWaiting, sentence, slugFor, sortRows, staleFor, standing,
   twoPress, waiting, withSaved, withoutSaved, writeSaved, writeSort,
 } from '../static/js/roster-model.js';
 import * as viaDesk from '../static/js/editor/standing.js';
@@ -29,25 +31,25 @@ const DAY = 86400000;
 const NOW = Date.parse('2026-11-13T12:00:00Z');
 const ago = (days) => new Date(NOW - days * DAY).toISOString();
 
-const SETS = [{ id: 'core', name: 'Core' }, { id: 'edge', name: 'Edge' }];
+const COLLECTIONS = [{ id: 'core', name: 'Core' }, { id: 'edge', name: 'Edge' }];
 const ROWS = [
   { id: 'gw', name: 'GATEWAY', state: 'healthy', zone: 'dmz', zone_name: 'Outset', kind: 'network', role: 'switch',
     addresses: ['10.0.0.1'], services: 3, confirmed_by: 'kuma', reviewed: true, reviewed_at: ago(10), unchecked: false,
-    maintenance: { now: false, next: null }, cert: { name: 'gw.example', days: 45 }, sets: ['edge'] },
+    maintenance: { now: false, next: null }, cert: { name: 'gw.example', days: 45 }, collections: ['edge'] },
   { id: 'nas', name: 'NAS', state: 'down', zone: 'core', zone_name: 'Infra', kind: 'physical',
     addresses: ['10.0.0.20', '10.0.1.20'], services: 12, confirmed_by: 'prometheus', reviewed: false, unchecked: true,
-    maintenance: { now: false, next: '2026-11-15T03:00:00Z' }, cert: { name: 'nas.example', days: 5 }, sets: ['core'] },
+    maintenance: { now: false, next: '2026-11-15T03:00:00Z' }, cert: { name: 'nas.example', days: 5 }, collections: ['core'] },
   { id: 'vm9', name: 'proxy', state: 'degraded', zone: 'core', zone_name: 'Infra', kind: 'vm',
     addresses: ['10.0.0.9'], services: 0, confirmed_by: null, reviewed: true, reviewed_at: ago(90), unchecked: false,
-    maintenance: { now: true, next: null }, cert: null, sets: ['core', 'edge'] },
+    maintenance: { now: true, next: null }, cert: null, collections: ['core', 'edge'] },
   { id: 'old', name: 'Kakariko', state: null, zone: 'home', zone_name: 'Home', kind: 'unknown',
     addresses: [], services: 1, confirmed_by: 'kuma', reviewed: true, reviewed_at: ago(89), unchecked: true,
-    changed_since_review: true, maintenance: null, cert: { name: 'k.example', days: -2 }, sets: [] },
+    changed_since_review: true, maintenance: null, cert: { name: 'k.example', days: -2 }, collections: [] },
   { id: 'sl', name: 'Zora', state: 'slumbering', zone: 'home', zone_name: 'Home', kind: 'vm',
     addresses: ['zora.example'], services: 2, reviewed: true, reviewed_at: ago(91), unchecked: false,
-    maintenance: { now: false, next: '2026-11-14T03:00:00Z' }, cert: { name: 'z.example', days: 29 }, sets: [] },
+    maintenance: { now: false, next: '2026-11-14T03:00:00Z' }, cert: { name: 'z.example', days: 29 }, collections: [] },
   { id: 'mt', name: 'Edge', state: 'maintenance', zone: 'dmz', zone_name: 'Outset', kind: 'vm',
-    addresses: ['10.0.0.100'], services: 4, confirmed_by: 'unifi', unchecked: false, sets: [] },
+    addresses: ['10.0.0.100'], services: 4, confirmed_by: 'unifi', unchecked: false, collections: [] },
 ];
 const ids = (rows) => rows.map((r) => r.id);
 
@@ -84,6 +86,16 @@ test('a roster row: the server\'s `unchecked` decides waiting, the flat stamp sa
   assert.equal(rowStanding(null), 'unknown');
   assert.deepEqual(ROWS.filter(rowWaiting).map((r) => r.id), ['nas', 'old']);
   assert.equal(rowWaiting({ reviewed: false }), true);
+});
+
+/* ── a row's press ── */
+
+test('a row press closes the card already up on that place, and opens any other', () => {
+  assert.equal(rowPress('place-a', 'place-a'), 'close');
+  assert.equal(rowPress('place-a', 'place-b'), 'open');
+  assert.equal(rowPress(null, 'place-a'), 'open');
+  assert.equal(rowPress(undefined, 'place-a'), 'open');
+  assert.equal(rowPress('', ''), 'open');
 });
 
 /* ── the writes: batches of 400, two presses ── */
@@ -155,13 +167,15 @@ test('addresses sort as IPv4 numbers, names after them, none last', () => {
   assert.deepEqual(ids(sortRows(ROWS, 'addresses', 'desc')), ['sl', 'mt', 'nas', 'vm9', 'gw', 'old']);
 });
 
-test('the other columns: network, kind, services, confirmed by, sets', () => {
+test('the other columns: network, kind, services, confirmed by, collections', () => {
   assert.deepEqual(ids(sortRows(ROWS, 'zone', 'asc')), ['old', 'sl', 'nas', 'vm9', 'mt', 'gw']);
   assert.deepEqual(ids(sortRows(ROWS, 'kind', 'asc')), ['gw', 'nas', 'old', 'mt', 'vm9', 'sl']);   // ties by name
   assert.deepEqual(ids(sortRows(ROWS, 'services', 'asc')), ['vm9', 'old', 'sl', 'gw', 'mt', 'nas']);
   assert.deepEqual(ids(sortRows(ROWS, 'services', 'desc')), ['nas', 'mt', 'gw', 'sl', 'old', 'vm9']);
   assert.deepEqual(ids(sortRows(ROWS, 'confirmed_by', 'asc')), ['gw', 'old', 'nas', 'mt', 'vm9', 'sl']);
-  assert.deepEqual(ids(sortRows(ROWS, 'sets', 'asc', SETS)), ['nas', 'vm9', 'gw', 'mt', 'old', 'sl']);
+  assert.deepEqual(ids(sortRows(ROWS, 'collections', 'asc', COLLECTIONS)), ['nas', 'vm9', 'gw', 'mt', 'old', 'sl']);
+  // the name it had before 2026-11-14 sorts the same
+  assert.deepEqual(ids(sortRows(ROWS, 'sets', 'asc', COLLECTIONS)), ['nas', 'vm9', 'gw', 'mt', 'old', 'sl']);
 });
 
 test('dates: reviewed by when, never reviewed last either way', () => {
@@ -199,12 +213,12 @@ test('text finds a name, an id, an address, a role or a network, any case', () =
   assert.deepEqual(ids(filterRows(ROWS, { text: 'nothing-like-it' }, NOW)), []);
 });
 
-test('state, network, kind and set each narrow it; unknown state is its own pick', () => {
+test('state, network, kind and collection each narrow it; unknown state is its own pick', () => {
   assert.deepEqual(ids(filterRows(ROWS, { state: 'down' }, NOW)), ['nas']);
   assert.deepEqual(ids(filterRows(ROWS, { state: 'unknown' }, NOW)), ['old']);
   assert.deepEqual(ids(filterRows(ROWS, { zone: 'core' }, NOW)), ['nas', 'vm9']);
   assert.deepEqual(ids(filterRows(ROWS, { kind: 'vm' }, NOW)), ['vm9', 'sl', 'mt']);
-  assert.deepEqual(ids(filterRows(ROWS, { set: 'edge' }, NOW)), ['gw', 'vm9']);
+  assert.deepEqual(ids(filterRows(ROWS, { collection: 'edge' }, NOW)), ['gw', 'vm9']);
 });
 
 test('unchecked keeps what a person still has to look at', () => {
@@ -222,7 +236,7 @@ test('not checked in 90 days: exactly 90 days old counts, 89 does not, never alw
 
 test('the criteria combine, and an empty filter shows everything', () => {
   assert.deepEqual(ids(filterRows(ROWS, { zone: 'core', staleDays: 90, text: '10.0.0' }, NOW)), ['nas', 'vm9']);
-  assert.deepEqual(ids(filterRows(ROWS, { zone: 'core', state: 'degraded', set: 'edge' }, NOW)), ['vm9']);
+  assert.deepEqual(ids(filterRows(ROWS, { zone: 'core', state: 'degraded', collection: 'edge' }, NOW)), ['vm9']);
   assert.deepEqual(ids(filterRows(ROWS, { kind: 'vm', unchecked: true }, NOW)), []);
   assert.deepEqual(ids(filterRows(ROWS, {}, NOW)), ids(ROWS));
   assert.equal(isEmptyFilter(NO_FILTER), true);
@@ -297,10 +311,144 @@ test('days since, certificate tone, slugs and needs', () => {
   assert.equal(certTone(null), '');
   assert.equal(slugFor('Sunday patching!', []), 'sunday-patching');
   assert.equal(slugFor('Core', ['core', 'core-2']), 'core-3');
-  assert.equal(slugFor('!!!', [], 'set'), 'set');
+  assert.equal(slugFor('!!!', []), 'collection');
+  assert.equal(slugFor('!!!', [], 'window'), 'window');
   assert.match(slugFor('Été à Kakariko', []), /^[a-z0-9][a-z0-9._-]*$/);
   assert.deepEqual(mergeNeeds('vm9', ['gw'], ['nas', 'gw', 'vm9']), ['gw', 'nas']);   // never itself, never twice
   assert.deepEqual(mergeNeeds('vm9', undefined, ['vm9']), []);
+});
+
+/* ── the rail (2026-11-14) ── */
+
+const ROSTER = {
+  zones: [{ id: 'core', name: 'Core net' }, { id: 'dmz', name: 'Outset' }, { id: 'empty', name: 'Nothing here' }],
+  collections: [{ id: 'edge', name: 'Edge' }, { id: 'core', name: 'Core' }, { id: 'none', name: 'Nobody yet' }],
+  rows: ROWS,
+};
+
+test('the rail counts what this viewer can see, and dots only trouble', () => {
+  const g = railGroups(ROSTER);
+  // collections keep the map's order; an empty one is still listed
+  assert.deepEqual(g.collections.map((c) => [c.id, c.count, c.worst, c.trouble]),
+    [['edge', 2, 'degraded', 1], ['core', 2, 'down', 2], ['none', 0, '', 0]]);
+  // networks keep the map's order and list only those with a place in them
+  assert.deepEqual(g.networks.map((n) => n.id), ['core', 'dmz']);
+  assert.equal(g.networks.find((n) => n.id === 'core').name, 'Core net');
+  // kinds in name order, each counted
+  assert.deepEqual(g.kinds.map((k) => [k.id, k.count]), [['network', 1], ['physical', 1], ['unknown', 1], ['vm', 3]]);
+  // a down place outranks a degraded one
+  const worse = railGroups({ ...ROSTER, rows: ROWS.map((r) => (r.id === 'gw' ? { ...r, state: 'down' } : r)) });
+  assert.equal(worse.collections[0].worst, 'down');
+  assert.equal(worse.collections[0].trouble, 2);
+  // junk in, nothing thrown
+  assert.deepEqual(railGroups(null), { collections: [], networks: [], kinds: [] });
+  assert.deepEqual(railGroups({ collections: [null, { name: 'no id' }], zones: 'x', rows: [null] }).collections, []);
+});
+
+test('a rail row filters to itself, and a second press shows everything', () => {
+  assert.deepEqual(railPress({}, 'collections', 'edge'), { collection: 'edge' });
+  assert.deepEqual(railPress({ collection: 'edge' }, 'collections', 'edge'), { collection: '' });
+  assert.deepEqual(railPress({ collection: 'edge' }, 'collections', 'core'), { collection: 'core' });
+  assert.deepEqual(railPress({}, 'networks', 'dmz'), { zone: 'dmz' });
+  assert.deepEqual(railPress({ kind: 'vm' }, 'kinds', 'vm'), { kind: '' });
+  assert.deepEqual(railPress({}, 'saved', 'x'), {});
+  assert.deepEqual(RAIL_FIELDS, { collections: 'collection', networks: 'zone', kinds: 'kind' });
+});
+
+test('a phone keeps a filter on an empty network; members read as one id or a list', () => {
+  const g = filterGroups(ROSTER);
+  assert.deepEqual(g.networks.map((n) => n.id), ['core', 'dmz', 'empty']);
+  assert.deepEqual(dropUnknown({ zone: 'empty' }, g), { zone: 'empty' });
+  assert.deepEqual(dropUnknown({ zone: 'gone' }, g), { zone: '' });
+  assert.deepEqual(memberList('beta'), ['beta']);
+  assert.deepEqual(memberList(['a', 'b']), ['a', 'b']);
+  assert.deepEqual(memberList(''), []);
+  assert.deepEqual(memberList(null), []);
+});
+
+test('a rail filter naming nothing here shows everything, not nothing', () => {
+  const g = railGroups(ROSTER);
+  assert.deepEqual(dropUnknown({ text: 'x', collection: 'gone', zone: 'empty', kind: 'vm' }, g),
+    { text: 'x', collection: '', zone: '', kind: 'vm' });
+  assert.deepEqual(dropUnknown({ collection: 'edge' }, g), { collection: 'edge' });
+});
+
+test('a filter or sort kept before collections were named still works', () => {
+  assert.equal(cleanFilter({ set: 'edge' }).collection, 'edge');
+  assert.equal(cleanFilter({ set: 'old', collection: 'new' }).collection, 'new');
+  assert.equal('set' in cleanFilter({ set: 'edge' }), false);
+  const mem = new Map();
+  const storage = { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => mem.set(k, v) };
+  storage.setItem(SORT_KEY, JSON.stringify({ key: 'sets', dir: 'desc' }));
+  assert.deepEqual(readSort(storage), { key: 'collections', dir: 'desc' });
+  storage.setItem(SAVED_KEY, JSON.stringify([{ name: 'Edges', filter: { set: 'edge' }, sort: { key: 'sets', dir: 'asc' } }]));
+  assert.deepEqual(readSaved(storage), [{ name: 'Edges', filter: { ...cleanFilter({}), collection: 'edge' },
+    sort: { key: 'collections', dir: 'asc' } }]);
+});
+
+test('the rail remembers which sections were shut, and nothing else', () => {
+  const mem = new Map();
+  const storage = { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => mem.set(k, v) };
+  assert.deepEqual(readRail(storage), {});
+  writeRail(storage, { kinds: true, networks: false, bogus: true });
+  assert.equal(mem.get(RAIL_KEY), JSON.stringify({ kinds: true }));
+  assert.deepEqual(readRail(storage), { kinds: true });
+  mem.set(RAIL_KEY, '{not json');
+  assert.deepEqual(readRail(storage), {});
+  const broken = { getItem: () => { throw new Error('blocked'); }, setItem: () => { throw new Error('blocked'); } };
+  assert.deepEqual(readRail(broken), {});
+  assert.equal(writeRail(broken, { kinds: true }), false);
+});
+
+test("NODES' words: every one has its plain twin in plain.json", () => {
+  const src = readFileSync(new URL('../static/js/nodes.js', import.meta.url), 'utf8');
+  const body = src.match(/export const NODES_TEXT = \{([\s\S]*?)\n\};/)[1];
+  const words = Function(`return {${body}}`)();
+  const plain = JSON.parse(readFileSync(new URL('../themes/plain.json', import.meta.url), 'utf8')).text;
+  const plainNodes = Object.fromEntries(Object.entries(plain).filter(([k]) => k.startsWith('nodes_')));
+  assert.deepEqual(plainNodes, words);
+  // nothing still calls a collection a set ("Set what these need" is the verb)
+  for (const [k, v] of Object.entries(words)) {
+    assert.doesNotMatch(k, /_sets?(_|$)/, k);
+    assert.doesNotMatch(v, /\bsets\b|\b(a|the|new|any) set\b|\{set\}/i, k);
+  }
+});
+
+test('maintenance mode: on writes one open window for what is not already in mode', () => {
+  const sched = { id: 'patch', reason: 'Patch', nodes: ['a'], starts: '2026-01-01T00:00:00Z', ends: '2026-01-02T00:00:00Z' };
+  const now = '2026-11-14T12:00:00Z';
+  const on = modeChange([sched], { nodes: ['a', 'b'] }, true, { now });
+  assert.equal(on.length, 2);
+  assert.deepEqual(on[1], { id: 'maintenance-mode', reason: 'Maintenance mode', open: true, starts: now, repeat: 'none', nodes: ['a', 'b'] });
+  assert.ok(inMode(on, 'place', 'b') && !inMode([sched], 'place', 'a'), 'a scheduled window is not mode');
+  // already in mode: nothing to write
+  assert.equal(modeChange(on, { nodes: ['b'] }, true, { now }), null);
+  // a collection, and a second window gets its own id
+  const col = modeChange(on, { collections: ['web'] }, true, { now });
+  assert.equal(col[2].id, 'maintenance-mode-2');
+  assert.deepEqual(col[2].collections, ['web']);
+  assert.ok(inMode(col, 'collection', 'web'));
+  assert.deepEqual(modeVia(col, ['web', 'db']), ['web']);
+});
+
+test('maintenance mode: off takes them out of every open window, and an empty one goes', () => {
+  const sched = { id: 'patch', reason: 'Patch', nodes: ['a'], ends: 'x' };
+  const w1 = { id: 'm1', open: true, nodes: ['a', 'b'] };
+  const w2 = { id: 'm2', open: true, nodes: ['a'], collections: ['web'] };
+  const off = modeChange([sched, w1, w2], { nodes: ['a'] }, false, {});
+  assert.deepEqual(off, [sched, { id: 'm1', open: true, nodes: ['b'] }, { id: 'm2', open: true, collections: ['web'] }]);
+  assert.deepEqual(modeChange(off, { nodes: ['b'], collections: ['web'] }, false, {}), [sched]);
+  assert.equal(modeChange([sched], { nodes: ['a'] }, false, {}), null, 'a schedule is never turned off here');
+  assert.equal(modeChange(undefined, { nodes: ['a'] }, false, {}), null);
+});
+
+test('maintenance mode on a service: its own window field, on and off (stage 3b)', () => {
+  const on = modeChange([], { services: ['core/SSH'] }, true, { now: 'x' });
+  assert.deepEqual(on[0].services, ['core/SSH']);
+  assert.ok(inMode(on, 'service', 'core/SSH') && !inMode(on, 'place', 'core/SSH'));
+  assert.deepEqual(modeChange(on, { services: ['core/SSH'] }, false, {}), []);
+  const mixed = [{ id: 'm', open: true, nodes: ['a'], services: ['k'] }];
+  assert.deepEqual(modeChange(mixed, { services: ['k'] }, false, {}), [{ id: 'm', open: true, nodes: ['a'] }]);
 });
 
 await Promise.all(pending);

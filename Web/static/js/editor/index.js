@@ -11,7 +11,7 @@
 
 import { A } from '../config.js';
 import Editor from './store.js';
-import { buildDesk, closeDesk, deskOpen, editPlace, openDesk } from './panel.js';
+import { buildDesk, closeDesk, deskOpen, editPlace, newPlace, openDesk, removePlace } from './panel.js';
 import { buildWizard, close as closeWizard, openWizard } from './wizard.js';
 
 /** Every scene that can be edited: where its ✎ goes, and what it opens.
@@ -138,4 +138,6 @@ if (document.readyState === 'loading') {
 
 A.editorReady = () => editable();
 A.editPlace = (id) => (editable() ? editPlace(id) : undefined);
+A.newPlace = () => (editable() ? newPlace() : undefined);          // NODES' Add a place
+A.removePlace = (id) => (editable() ? removePlace(id) : undefined); // NODES' row menu
 export { Editor };

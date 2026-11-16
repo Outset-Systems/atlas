@@ -24,7 +24,7 @@ from store.layout import auto_layout
 from store.models import Node, NodeLink, Site, Zone
 
 from .common import (
-    UNKNOWN_ZONE_FIELDS, ensure_uncharted, slugify, subnet_index, zone_for_ip,
+    UNKNOWN_ZONE_FIELDS, ensure_uncharted, heal_revived, slugify, subnet_index, zone_for_ip,
 )
 
 KNOWN_HEADERS = ("name", "ip", "kind", "zone", "role", "url", "url_label", "notes")
@@ -193,6 +193,11 @@ def import_rows(session, rows, site_slug, retire_missing=False):
                 n.lore = r["notes"]  # fill a blank, never overwrite a human's words
             if n.status == "retired":
                 n.status = "documented"
+                heal_revived(session, site, n, zone_slug)
+                # it stays the importer's that owned it (2026-11-15, after a
+                # review): taken over, a NetBox device coming back elsewhere
+                # became a second place at a clashing address. NetBox decides
+                # for what it owns: absent there, its next sync retires it again
             stats["updated"] += 1
         n.last_imported = now
         session.flush()

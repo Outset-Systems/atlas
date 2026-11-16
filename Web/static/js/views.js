@@ -5,10 +5,11 @@
    `#overview-body`, inside the tiles' sheet) and, below them, THE DECK (v1.66.0 phone, v1.67.0
    everywhere): one scrolling column of the watchings, the Sky's charts and
    then the Depths'. NODES is one table of every place (nodes.js draws it into
-   `#view-nodes`). ALERTS is the rules and destinations that send word out
-   when the map changes (alerts.js draws `#view-alerts`), an admin's only:
-   its menu item and its strip entry are removed here for anyone else, and
-   a stored or addressed `alerts` lands on the map (OVERVIEW on a phone).
+   `#view-nodes`). ALERTS was a view (2026-11-13) and is not since
+   2026-11-14: its rules are made in NODES (alert-rules.js) and where word
+   goes is Settings › Alerts (alert-setup.js); a stored or addressed `alerts`
+   opens NODES. An admin's menu item or strip entry (`data-admin`) is drawn
+   here for an admin and removed for anyone else.
    `?place=<id>` (the link an alert carries) opens the map on that place's
    card once the opening shot is over; a place this viewer may not see, or
    one that is gone, gives the map and nothing else. The rules (which view a
@@ -56,7 +57,7 @@ let store = null;
 try { store = localStorage; } catch { /* blocked: the choice simply is not remembered */ }
 
 A.PHONE = wantsPhone(param, screenIsPhone);
-A.MAY_ALERTS = ADMIN;   // alerts.js reads the same answer
+A.MAY_ALERTS = ADMIN;   // NODES' bells and Settings › Alerts read the same answer
 
 /* An admin's views: drawn for an admin, and not there at all for anyone else
    (so the menu's arrow keys never land on a door that is not drawn). */

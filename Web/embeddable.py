@@ -35,6 +35,7 @@ import logging
 import re
 import threading
 import time
+from collections import Counter
 from urllib.parse import urlsplit
 
 log = logging.getLogger("atlas.web.embeddable")
@@ -58,6 +59,7 @@ R_UNREACHABLE = "it could not be reached to ask"
 R_NOT_HTTP = "it is not an http(s) address"
 R_OK = "it allows framing"
 R_OFF = "probing is switched off"
+R_UNLISTED = "this map links to more services than one page may list for the glass"
 
 
 def origin_of(url):
@@ -128,8 +130,52 @@ def charted(data, stamp=None):
     return _charted["urls"]
 
 
-def frame_src(data, configured=""):
-    """The full `frame-src` source list for the CSP header.
+#: The most characters the map's own origins may add to `frame-src`.
+#: 2026-11-15: the list rode every response whole, ~34 characters an origin,
+#: so 130 KB at 2,000 places and 337 KB at 5,000; a browser refuses a header
+#: past 256 KB and the page did not load at all from about 3,800 places, and a
+#: proxy's header buffer gives out far sooner (nginx's is 4 to 8 KB by
+#: default). 24,000 is some 700 origins, many times a real lab (~90 on this
+#: one). Past it, the origins the most links point at are kept; the rest open
+#: in a new tab (`/api/v2/embeddable` says so), which always works.
+FRAME_SRC_BUDGET = 24_000
+
+
+def ranked_origins(data):
+    """The map's origins, the most linked-to first (then by name)."""
+    counts = Counter(o for o in map(origin_of, urls_of(data)) if o)
+    return sorted(counts, key=lambda o: (-counts[o], o))
+
+
+def pinned_origins(data):
+    """The sky's and the depths' origins: their carousels put `embed` in an
+    iframe of their own, not through the glass, so there is no tab to fall
+    back to. These are never cut for room (a handful, written by hand)."""
+    out = set()
+    for key in ("chronicle", "abyss"):
+        for item in data.get(key) or []:
+            if isinstance(item, dict):
+                out.update(o for o in (origin_of(item.get("url")), origin_of(item.get("embed"))) if o)
+    return out
+
+
+_BUDGET = object()   # "FRAME_SRC_BUDGET as it is when called"
+
+
+def frame_src(data, configured="", budget=_BUDGET):
+    """The `frame-src` source list for the CSP header (see `frame_list`)."""
+    return frame_list(data, configured, budget)[0]
+
+
+def frame_list(data, configured="", budget=_BUDGET):
+    """(the `frame-src` source list for the CSP header, the map's origins left
+    out of it for want of room). `budget=None` leaves nothing out.
+
+    The map's origins that fit within `budget` are chosen most-linked first
+    and written sorted, after 'self' and the configured hosts (never cut: an
+    operator typed them). The sky's and the depths' origins are never cut
+    either (`pinned_origins`). An origin the configured hosts already name
+    costs nothing and is never "left out".
 
     `configured` is `ATLAS_EMBED_HOSTS`, kept first and kept in whatever form it
     was typed: an operator may legitimately write a bare host, a wildcard or a
@@ -151,17 +197,38 @@ def frame_src(data, configured=""):
                   "ignored entirely — it is a space-separated list of origins, "
                   "not a CSP fragment")
         raw = ""
+    # `have` mirrors `parts` for membership: a list scan made this quadratic in
+    # the number of service origins (2026-11-13: ~2 s at 20,000 origins)
+    have = set(parts)
     for token in raw.split():
-        if token not in parts:
+        if token not in have:
+            have.add(token)
             parts.append(token)
     # `data=None` IS the "configured hosts only" switch — the caller passing no
     # dataset (ATLAS_EMBED_SERVICES=0, or an unreadable read) is the whole story,
     # so there is no separate flag for it to disagree with.
+    kept, dropped = [], set()
     if data:
-        for origin in origins(data):
-            if origin not in parts:
-                parts.append(origin)
-    return " ".join(parts)
+        room = FRAME_SRC_BUDGET if budget is _BUDGET else budget
+        # the carousels' origins first and uncut (`pinned_origins`); they
+        # still use up room, so the cap holds for everything else
+        for origin in sorted(pinned_origins(data) - have):
+            have.add(origin)
+            kept.append(origin)
+            if room is not None:
+                room -= len(origin) + 1
+        for origin in ranked_origins(data):
+            if origin in have:
+                continue
+            have.add(origin)
+            if room is not None:
+                if dropped or len(origin) + 1 > room:
+                    dropped.add(origin)   # once one is cut, the rest are (least linked)
+                    continue
+                room -= len(origin) + 1
+            kept.append(origin)
+    parts.extend(sorted(kept))
+    return " ".join(parts), frozenset(dropped)
 
 
 # ── The probe ────────────────────────────────────────────────────────────────
@@ -254,6 +321,13 @@ def _probe(url, self_origin):
 def _answer(url, ok, reason):
     """The verdict shape, defined once — see `verdict()`'s docstring."""
     return {"url": url, "embeddable": ok, "reason": reason, "checked": time.time()}
+
+
+def unlisted(url):
+    """The verdict for a service our own header leaves out (`frame_list`):
+    refused, and not cached, since it is the map's size and not the
+    service's answer. `ours` tells the glass not to explain it as theirs."""
+    return {**_answer(url, False, R_UNLISTED), "ours": True}
 
 
 def verdict(url, self_origin="", enabled=True):

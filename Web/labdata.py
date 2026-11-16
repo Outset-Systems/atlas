@@ -17,6 +17,7 @@ import json
 import logging
 import os
 
+import schema
 import settings
 from validation import validate
 
@@ -36,7 +37,7 @@ def fallback_dataset(default_path):
     """The dataset for an instance that has never been seeded."""
     if settings.FALLBACK == "bundled":
         with open(default_path, encoding="utf-8") as fh:
-            return json.load(fh)
+            return schema.upgrade(json.load(fh))
     return copy.deepcopy(EMPTY_DATASET)
 
 
@@ -47,10 +48,13 @@ def _checked(data, prefix, where, *args):
     problems = validate(data)
     for problem in problems:
         log.warning(prefix + ": %s", problem)
+    def count(key):   # a hand edit's 5 is no list and counts as none (round 13)
+        value = data.get(key)
+        return len(value) if isinstance(value, list) else 0
+
     log.info(
         where + " (%d zones, %d nodes, %d routes%s)",
-        *args, len(data.get("zones", [])), len(data.get("nodes", [])),
-        len(data.get("routes", [])),
+        *args, count("zones"), count("nodes"), count("routes"),
         f", {len(problems)} PROBLEMS" if problems else "",
     )
     return problems
@@ -80,8 +84,9 @@ class FileLabData:
         mtime = os.path.getmtime(path)
         if self._data is None or self._mtime != mtime:
             with open(path, encoding="utf-8") as fh:
-                data = json.load(fh)
+                data = schema.upgrade(json.load(fh))   # old section names read as today's
             problems = _checked(data, "lab-data", "lab-data loaded: %s", path)
+            schema.servable(data)   # after the problems are named: every reader can walk it
             self._mtime = mtime
             self._data, self._problems = data, problems
         return self._data, self._mtime, self._problems
@@ -137,10 +142,11 @@ class DbLabData:
                     data = fallback_dataset(self.default_path)
                     return data, 0, validate(data)
                 if self._data is None or stamp != self._stamp_seen:
-                    data = self._dump(session, self._site)
+                    data = schema.upgrade(self._dump(session, self._site))
                     problems = _checked(
                         data, "lab-data(db)",
                         "lab-data loaded from db: site=%s v%d", self._site, stamp[0])
+                    schema.servable(data)
                     self._stamp_seen, self._data, self._problems = stamp, data, problems
         except SQLAlchemyError as e:
             raise ValueError(f"db backend unavailable: {e}") from e

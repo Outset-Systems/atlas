@@ -162,10 +162,11 @@
      in tiles, overview.js) and NODES (nodes.js) stand between the Sky and
      the Depths as the map does (owner, 2026-11-13): views.js lifts the Sky's
      section into the band above and the Depths' into the band below, and the
-     page opens on the view. `?view=charts` opens OVERVIEW at the Sky. ALERTS (stage 4)
-     is drawn by alerts.js, and is an admin's only: its menu item and strip
-     entry carry `data-admin` and `hidden`, and views.js draws them for an
-     admin and removes them for anyone else. -->
+     page opens on the view. `?view=charts` opens OVERVIEW at the Sky. ALERTS
+     (stage 4, 2026-11-13) is a view no longer (owner, 2026-11-14): its rules
+     are made in NODES and where word goes is Settings › Alerts; `?view=alerts`
+     opens NODES. A menu item or strip entry with `data-admin` and `hidden` is
+     drawn by views.js for an admin and removed for anyone else. -->
 <main class="atlas-view" id="view-overview" data-view="overview" hidden aria-label="{{ theme.text.view_overview|capitalize }}">
   <div class="view-band view-band-sky" id="overview-sky"></div>
   <a class="view-edge view-edge-up" href="#overview-sky">↑ {{ theme.text.sky }}</a>
@@ -182,14 +183,12 @@
   <a class="view-edge view-edge-down" href="#nodes-depths">{{ theme.text.depths }} ↓</a>
   <div class="view-band view-band-depths" id="nodes-depths"></div>
 </main>
-<main class="atlas-view" id="view-alerts" data-view="alerts" hidden aria-label="{{ theme.text.view_alerts|capitalize }}"></main>
 <!-- On a phone the views are named at the top of the column (there is no
      ATLAS and no map there, so no MAP either; the column's foot is the way to
      the map). Shown only under body.phone. -->
 <nav class="view-strip" id="view-strip" aria-label="{{ theme.text.views }}">
   <button type="button" data-view="overview">{{ theme.text.view_overview }}</button>
   <button type="button" data-view="nodes">{{ theme.text.view_nodes }}</button>
-  <button type="button" data-view="alerts" data-admin hidden>{{ theme.text.view_alerts }}</button>
 </nav>
 
 <!-- Floating chrome — ONE menu (2026-08-10). The ◆ scene flyout and the ⚙
@@ -274,12 +273,15 @@
        the cluster no longer hides until ☰ is hovered. -->
   <span class="band-tail" id="band-tail">
   <span class="menu-tools" id="menu-tools">
-    <!-- ☀/☾ — the colour scheme (v1.52.0, scheme.js; three picks, stage 1, 2026-11-13). A two-way switch between Light and Dark; Settings › YOU ›
-         COLOURS holds Light/Dark too. It carries both icons and atlas.css
-         shows the sun exactly when the bar is light; scheme.js sets the title
-         on a pick. The T key is the same control. -->
-    <button class="chrome ci-scheme" id="btn-scheme" type="button"
-            title="Colour scheme (T)" aria-label="Colour scheme"><svg class="ci-glyph sch-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M18.5 5.5l-1.7 1.7M7.2 16.8l-1.7 1.7"/></svg><svg class="ci-glyph sch-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19.5 14.6A7.8 7.8 0 1 1 9.4 4.5a6.2 6.2 0 0 0 10.1 10.1Z"/></svg></button>
+    <!-- THE SKY and THE DEPTHS (owner, 2026-11-14): back in the band, where ☀/☾
+         stood; the colour scheme lives in Settings › YOU › COLOURS only. In flow
+         like ⚙, never positioned (the band's backdrop-filter/overflow trap).
+         Shown only while the map is the view and no scene is up (atlas.css).
+         Ids, the S / D keys and `.lit` (world.js) are unchanged. -->
+    <button class="chrome ci-sky" id="btn-sky" type="button" data-say-title
+            title="Rise to {{ theme.text.sky }} · the Chronicle (S)" aria-label="{{ theme.text.sky }}"><svg class="ci-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.5 18H17a4 4 0 0 0 .6-7.95a5.5 5.5 0 0 0-10.5-1a4.5 4.5 0 0 0 .4 8.95Z"/></svg></button>
+    <button class="chrome ci-depths" id="btn-depths" type="button"
+            title="Descend into the Depths (D)" aria-label="The Depths"><svg class="ci-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5v9.5M8.5 9.5 12 13l3.5-3.5"/><path d="M3.5 17.5c1.4 1 2.8 1 4.2 0s2.8-1 4.2 0 2.8 1 4.2 0 2.8-1 4.2 0"/></svg></button>
     <button class="chrome ci-gear" id="btn-menu-settings" data-scene="settings"
             title="Settings" aria-label="Settings"><svg class="ci-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="5.6"/><circle cx="12" cy="12" r="2.1"/><path stroke-width="3" stroke-linecap="butt" d="M12 3.2v3.2M12 17.6v3.2M3.2 12h3.2M17.6 12h3.2M5.78 5.78l2.26 2.26M15.96 15.96l2.26 2.26M18.22 5.78l-2.26 2.26M8.04 15.96l-2.26 2.26"/></svg></button>
   </span>
@@ -297,18 +299,11 @@
      ⚠ A SIBLING of #scenes-list, never inside it: the band's backdrop-filter
      and overflow would position it against the band and clip it away. -->
 <div class="view-menu" id="view-menu" role="menu" aria-label="{{ theme.text.views }}">
-  <!-- THE MAP'S TOOLS (owner, 2026-11-13): the sky and the depths, at the
-       menu's top, shown only while MAP is the view and no scene is up
-       (atlas.css `.view-tools`). The tripwire watch left the menu for its own
-       scene's head (#btn-decoys there). Ids, the S / D keys and `.lit` stand. -->
-  <div class="view-tools" role="group" aria-label="{{ theme.text.map_tools }}">
-    <button type="button" role="menuitem" class="view-tool ci-sky" id="btn-sky" data-say-title title="Rise to {{ theme.text.sky }} · the Chronicle (S)" aria-label="{{ theme.text.sky }}"><span class="vt-lamp"><svg class="ci-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.5 18H17a4 4 0 0 0 .6-7.95a5.5 5.5 0 0 0-10.5-1a4.5 4.5 0 0 0 .4 8.95Z"/></svg></span><span class="vt-name">{{ theme.text.sky|upper }}</span></button>
-    <button type="button" role="menuitem" class="view-tool ci-depths" id="btn-depths" title="Descend into the Depths (D)" aria-label="The Depths"><span class="vt-lamp"><svg class="ci-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5v9.5M8.5 9.5 12 13l3.5-3.5"/><path d="M3.5 17.5c1.4 1 2.8 1 4.2 0s2.8-1 4.2 0 2.8 1 4.2 0 2.8-1 4.2 0"/></svg></span><span class="vt-name">{{ theme.text.depths|upper }}</span></button>
-  </div>
+  <!-- (The sky and the depths stood at this menu's top from 2026-11-13; they
+       went back to the band on 2026-11-14, where the colour switch was.) -->
   <button type="button" role="menuitem" data-view="map">{{ theme.text.view_map }}</button>
   <button type="button" role="menuitem" data-view="overview">{{ theme.text.view_overview }}</button>
   <button type="button" role="menuitem" data-view="nodes">{{ theme.text.view_nodes }}</button>
-  <button type="button" role="menuitem" data-view="alerts" data-admin hidden>{{ theme.text.view_alerts }}</button>
 </div>
 
 
@@ -737,8 +732,8 @@
            identity, nothing honest to say. -->
       <div class="sp-account sp-sec" id="sp-account" data-sec="account" hidden></div>
       <!-- COLOURS (stage 1, 2026-11-13): Light, Dark, and Light/Dark, the
-           default. The band's ☀/☾ only switches Light and Dark, so this row is
-           the way back to Light/Dark. Wired by scheme.js (setPick); it always
+           default. Since 2026-11-14 (owner) this row is the only control on
+           screen for the colours; the band's ☀/☾ is gone (T still switches). Wired by scheme.js (setPick); it always
            applies, so YOU shows in every auth mode. -->
       <!-- always open (owner, 2026-11-13): the three picks side by side, never folded -->
       <div class="sp-sec sp-fixed" data-sec="colours">
@@ -815,6 +810,11 @@
            itself admins-only. Keys are write-only — the form never sees one. -->
       <div class="sp-sec" id="sp-connections" data-sec="connections" hidden></div>
       <div class="sp-sec" id="sp-integrations" data-sec="integrations" hidden></div>
+      <!-- ALERTS (2026-11-14, owner: "put destinations in settings › alerts"):
+           where word goes, the daily digest, the log and whether alerts are on.
+           An admin's on an instance that writes; drawn by alert-setup.js. The
+           rules are made in NODES, where their target is (alert-rules.js). -->
+      <div class="sp-sec" id="sp-alerts" data-sec="alerts" hidden></div>
       <!-- Diagnostics: which signal sources are actually reporting. The feed already
            carries this; surfacing it answers "why does the map look wrong?" here
            instead of by curling /api/signals. -->

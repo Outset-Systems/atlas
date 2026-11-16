@@ -150,7 +150,10 @@ def test_an_event_does_not_name_a_hidden_cause(viewer):
 
 
 def test_the_csp_lists_only_what_this_viewer_can_see(viewer):
-    csp = viewer.get("/api/v2/lab-data").headers["Content-Security-Policy"]
+    # read off the page: only a page carries the map's origins (2026-11-15)
+    page = viewer.get("/")
+    assert page.mimetype == "text/html"
+    csp = page.headers["Content-Security-Policy"]
     assert "pub.internal" in csp and "secret.internal" not in csp
 
 

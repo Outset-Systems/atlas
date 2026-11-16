@@ -35,6 +35,10 @@ def _label(section_key, entry, index):
     return f"{noun} #{index + 1}"
 
 
+#: How the write path finds the problems of the entries a save touched.
+label_of = _label
+
+
 def _ids(data, section_key):
     """The set of identities in a section, for reference checking."""
     s = schema.get(section_key)
@@ -42,7 +46,11 @@ def _ids(data, section_key):
         return set()
     # an id that is a list or an object is not an identity; the field check says so,
     # and this must not crash on it first (a set cannot hold one)
-    return {e.get(s["id_field"]) for e in data.get(section_key, []) or []
+    entries = data.get(section_key)
+    # a list section written as a number or an object is none here (round 13);
+    # the field checks name the problem
+    entries = entries if isinstance(entries, list) else []
+    return {e.get(s["id_field"]) for e in entries
             if isinstance(e, dict) and isinstance(e.get(s["id_field"]), (str, int, float, type(None)))}
 
 
@@ -50,7 +58,8 @@ def _check_refs(problems, label, section_key, entry, known):
     """Every dangling reference in one entry."""
     for path, inner, target, _ in schema.ref_fields(section_key):
         if inner is not None:                # a reference inside a sub-object
-            for i, sub in enumerate(entry.get(path) or []):
+            subs = entry.get(path)
+            for i, sub in enumerate(subs if isinstance(subs, list) else []):   # links: 5 (round 14)
                 if not isinstance(sub, dict):
                     continue
                 for val in schema.as_list(sub.get(inner)):
@@ -85,7 +94,8 @@ def _check_addressing(problems, data):
     unmodelled segments. THE LEDGER surfaces those visually instead.
     """
     seen = {}
-    for n in data.get("nodes", []) or []:
+    nodes = data.get("nodes")
+    for n in nodes if isinstance(nodes, list) else []:   # nodes: 5 (round 14)
         if not isinstance(n, dict) or n.get("kind") not in _ADDRESS_OWNING_KINDS:
             continue
         ip = n.get("ip")
@@ -142,6 +152,10 @@ def validate(data, strict=False):
     then the cross-entry addressing checks.
     """
     problems = []
+    if isinstance(data, dict) and any(k in data for k in schema.RENAMED_SECTIONS):
+        # an import or a hand-made file may still use an old section name: check
+        # it as it will be stored, without touching the caller's dict
+        data = schema.upgrade(dict(data))
     if not isinstance(data, dict):
         return ["dataset must be an object"]
 
@@ -184,7 +198,9 @@ def validate(data, strict=False):
                 continue
             if id_field:
                 eid = entry.get(id_field)
-                if eid is not None:
+                # a list or object id cannot be held in a set: the field check
+                # names it, and this must not raise first (round 15)
+                if eid is not None and isinstance(eid, (str, int, float)):
                     if eid in seen_ids:
                         problems.append(f"{label}: duplicate {id_field}")
                     seen_ids.add(eid)

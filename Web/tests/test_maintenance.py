@@ -253,3 +253,117 @@ def test_a_monthly_window_is_still_found_years_later(store):
     assert store.under_repair(later) == set(), "nothing stored yet"
     write(store, {"windows": [window]})
     assert store.under_repair(later) == {"downloads"}
+
+
+# ── collections and maintenance mode (2026-11-14, the owner's Q4 answer) ────
+MAP = {"collections": [{"id": "storage", "name": "Storage", "places": ["nas", "backup"]},
+                       {"id": "one", "name": "One", "places": "solo"}]}
+
+
+def test_a_window_covers_its_places_and_its_collections_members(store):
+    w = {"nodes": ["downloads"], "collections": ["storage", "one", "gone", 5]}
+    assert store.window_places(w, MAP) == {"downloads", "nas", "backup", "solo"}
+    # no map (it could not be read): the places it names still count
+    assert store.window_places(w, None) == {"downloads"}
+    assert store.window_places({"collections": "storage"}, MAP) == set()
+    assert store.window_places("x", MAP) == set()
+
+
+def test_a_place_added_to_a_collection_later_is_covered(store):
+    write(store, {"windows": [{"id": "w", "reason": "r", "collections": ["storage"],
+                               "starts": "2026-07-27T00:00:00Z", "ends": "2026-07-28T00:00:00Z"}]})
+    assert store.under_repair(NOW, MAP) == {"nas", "backup"}
+    later = {"collections": [{"id": "storage", "places": ["nas", "backup", "new"]}]}
+    assert store.under_repair(NOW, later) == {"nas", "backup", "new"}
+    assert store.summary(NOW, MAP)["under_repair"] == ["backup", "nas"]
+
+
+MODE = {"id": "mode", "reason": "maintenance mode", "nodes": ["downloads"], "open": True,
+        "starts": "2026-07-27T11:00:00Z"}
+
+
+def test_maintenance_mode_has_no_end_and_is_on_until_removed(store):
+    assert store.problems([MODE]) == []
+    write(store, {"windows": [MODE]})
+    assert store.under_repair(NOW) == {"downloads"}
+    assert store.under_repair(datetime(2030, 1, 1, tzinfo=timezone.utc)) == {"downloads"}
+
+
+@pytest.mark.parametrize("window,said", [
+    ({**MODE, "ends": "2026-07-28T00:00:00Z"}, "maintenance mode has no end"),
+    ({**MODE, "starts": None}, "starts"),
+    ({**MODE, "open": False}, "missing ends"),
+    ({k: v for k, v in MODE.items() if k != "open"}, "missing ends"),
+    ({**MODE, "nodes": [], "open": True}, "names no place, no collection and no service"),
+    ({**MODE, "nodes": None}, "names no place, no collection and no service"),
+])
+def test_only_maintenance_mode_may_lack_an_end_and_every_window_names_something(store, window, said):
+    found = store.problems([window])
+    assert any(said in p for p in found), found
+
+
+def test_a_window_on_a_collection_is_refused_nothing_and_covers_it_in_the_feed(tmp_path, monkeypatch):
+    import viewers
+    data = viewers.dataset(collections=[{"id": "pair", "name": "Pair", "places": ["alpha", "secret-place"]}])
+    handle = viewers.build(tmp_path, monkeypatch, data)
+    admin = viewers.signed_in(handle, "ops")
+    stamp = admin.get("/api/v2/admin/maintenance").get_json()["stamp"]
+    r = admin.post("/api/v2/admin/maintenance", headers={**viewers.W},
+                   json={"windows": [{"id": "pair-mode", "reason": "maintenance mode",
+                                      "collections": ["pair"], "open": True,
+                                      "starts": "2020-01-01T00:00:00Z"}], "expect": stamp})
+    assert r.status_code == 200, r.get_json()
+    assert set(admin.get("/api/v2/signals").get_json()["maintenance"]) == {"alpha", "secret-place"}
+    # a reader without the group: the visible member only, in the feed and the overview
+    alice = viewers.signed_in(handle, "alice")
+    assert alice.get("/api/v2/signals").get_json()["maintenance"] == ["alpha"]
+    listed = alice.get("/api/v2/overview").get_json()["maintenance"]
+    assert [p["id"] for w in listed for p in w["places"]] == ["alpha"]
+    assert "secret" not in json.dumps(listed).lower()
+    monkeypatch.undo()
+
+
+def test_a_new_collection_cannot_take_an_id_a_window_still_names(tmp_path, monkeypatch):
+    import viewers
+    handle = viewers.build(tmp_path, monkeypatch, viewers.dataset(), windows=[
+        {"id": "w", "reason": "r", "collections": ["gone"], "starts": "2020-01-01T00:00:00Z",
+         "ends": "2099-01-01T00:00:00Z"}])
+    admin = viewers.signed_in(handle, "ops")
+    r = admin.post("/api/v2/admin/ops", headers=viewers.W,
+                   json={"ops": [{"op": "insert", "section": "collections", "body": {"id": "gone", "name": "Gone"}}]})
+    assert r.status_code == 422 and "maintenance window" in r.get_json()["error"]
+    monkeypatch.undo()
+
+
+def test_the_roster_says_how_long_a_maintenance_mode_has_been_on(tmp_path, monkeypatch):
+    import viewers
+    data = viewers.dataset(collections=[{"id": "pair", "name": "Pair", "places": ["beta"]}])
+    handle = viewers.build(tmp_path, monkeypatch, data, windows=[
+        {"id": "m1", "reason": "r", "open": True, "starts": "2020-01-01T00:00:00Z", "nodes": ["alpha"]},
+        {"id": "m2", "reason": "r", "open": True, "starts": "2021-01-01T00:00:00Z", "collections": ["pair"]},
+        {"id": "s", "reason": "r", "starts": "2020-01-01T00:00:00Z", "ends": "2099-01-01T00:00:00Z", "nodes": ["beta"]}])
+    rows = {r["id"]: r for r in viewers.signed_in(handle, "ops").get("/api/v2/places/roster").get_json()["rows"]}
+    assert rows["alpha"]["maintenance"]["mode_since"] == "2020-01-01T00:00:00Z"
+    assert rows["beta"]["maintenance"] == {"now": True, "next": None, "mode_since": "2021-01-01T00:00:00Z"}
+    monkeypatch.undo()
+
+
+def test_a_mode_started_by_a_fast_clock_is_on_at_once(store):
+    """Stage 3 review: `starts` is the browser's clock; a mode is on when made."""
+    fast = {**MODE, "starts": "2026-07-27T12:05:00Z"}      # five minutes ahead of NOW
+    write(store, {"windows": [fast]})
+    assert store.under_repair(NOW) == {"downloads"}
+
+
+def test_a_window_on_a_collection_of_hidden_places_is_not_listed_to_a_reader_without_the_group(tmp_path, monkeypatch):
+    """Stage 3 review: it resolved to nothing on the reader's map and was
+    listed with no places ("maintenance-mode, now")."""
+    import viewers
+    data = viewers.dataset(collections=[{"id": "vault", "name": "Vault", "places": ["secret-place"]}])
+    handle = viewers.build(tmp_path, monkeypatch, data, windows=[
+        {"id": "maintenance-mode", "reason": "Maintenance mode", "open": True,
+         "starts": "2020-01-01T00:00:00Z", "collections": ["vault"]}])
+    assert viewers.signed_in(handle, "alice").get("/api/v2/overview").get_json()["maintenance"] == []
+    admin = viewers.signed_in(handle, "ops").get("/api/v2/overview").get_json()["maintenance"]
+    assert [p["id"] for p in admin[0]["places"]] == ["secret-place"]
+    monkeypatch.undo()

@@ -34,9 +34,9 @@ PANELS = [".ldg-panel", ".trb-panel", ".rel-panel", ".pth-panel",
           # OVERVIEW's tiles (2026-11-13 stage 3): the tiles' sheet, not the whole
           # view, because the Depths' section lifted below them reads `--surface`
           # and `--ink-line` and must keep its dark ground
-          "#overview-tiles",
-          # ALERTS (2026-11-13 stage 4): one sheet, so the whole view, as NODES
-          "#view-alerts"]
+          "#overview-tiles"]
+          # (ALERTS' own sheet, `#view-alerts`, left with the view on
+          # 2026-11-14: its pieces now sit inside `.ldg-panel` and `#nodes-sheet`)
 #: the bar: 10-20's list; the chart pop-ups and arrows go with it
 BAR = ["#scenes-list", ".scene-home", ".chrome", ".rl-crumbs", ".rl-locator", ".rl-hint",
        ".chron-fly-pop", ".chron-arrow", ".embed-max-arrow", "#embed-max-close",
@@ -54,8 +54,8 @@ BAR_TOKENS = ["--bar-glass", "--bar-glass-firm", "--bar-shadow-firm", "--chrome-
               "--chrome-glass-firm", "--crumb-glass", "--crumb-shadow", "--hint-glass",
               "--hint-shadow", "--pop-shadow", "--scene-shadow", "--scene-active-bg",
               "--sky-lit-fill", "--sky-lit-ink", "--sky-lit-border", "--depths-lit-fill",
-              "--depths-lit-ink", "--depths-lit-border", "--bar-sun", "--bar-moon",
-              "--hover-glow-a"]
+              "--depths-lit-ink", "--depths-lit-border", "--hover-glow-a"]
+# (`--bar-sun` / `--bar-moon` went with the band's ☀/☾ button, 2026-11-14)
 #: tokens the light block must restate, or a panel keeps a night value
 MUST_FLIP = ["--abyss", "--surface", "--surface-2", "--ink-line", "--ink-soft", "--text",
              "--text-dim", "--text-soft", "--gilt", "--gilt-bright", "--gilt-rgb", "--on-gilt",
@@ -443,7 +443,8 @@ def test_no_panel_rule_keeps_a_literal_that_should_flip():
 def test_the_toggle_is_in_the_band_and_boots_first():
     html = _read(INDEX)
     m = re.search(r'<span class="menu-tools" id="menu-tools">(.*?)</span>', html, re.S)
-    assert m and 'id="btn-scheme"' in m.group(1), "☀/☾ is not in the ⚙ cluster"
+    # the switch left the band on 2026-11-14 (owner); scheme.js still boots first
+    assert m and 'id="btn-scheme"' not in m.group(1), "☀/☾ came back to the ⚙ cluster"
     boot = _read(BOOT)
     imports = re.findall(r"^import (?:[^'\n]* from )?'\./([^']+)'", boot, re.M)
     assert imports[:2] == ["config.js", "scheme.js"], (

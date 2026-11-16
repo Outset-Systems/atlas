@@ -17,25 +17,32 @@ The answer:
     {"stamp": the dataset's stamp, as the Desk sends it back in `expect`,
      "generated_at": when this answer was made, UTC,
      "zones": [{"id", "name"}],
-     "sets": [{"id", "name", "note", "places": [ids]}],
+     "collections": [{"id", "name", "note", "places": [ids]}],
      "rows": [{"id", "name", "state", "cause", "zone", "zone_name", "kind",
                "role", "addresses", "services", "confirmed_by",
                "charted_source", "reviewed", "reviewed_at", "reviewed_by"
                (admins only), "changed_since_review", "unchecked",
-               "maintenance": {"now", "next"}, "cert", "sets", "depends_on"}]}
+               "maintenance": {"now", "next"}, "cert", "collections", "depends_on"}]}
 
 `addresses` lists the place's `ip` and `mac` (the catalogue's two address
 fields), then `ipv6`, `hostname` and `fqdn` when a hand edit has added them,
 each only when it holds a value.
+
+**One page of it** (2026-11-15, stage 5): any of `text`, `state`, `zone`,
+`kind`, `collection`, `unchecked`, `stale_days`, `sort`, `dir`, `limit`,
+`offset` filters, sorts and pages the rows by NODES' own rules
+(`roster_query.py`), and adds `total` (how many matched), `offset` and
+`limit`. With none, the answer is every row, as it always was.
 """
 
 import logging
 
-from flask import jsonify, make_response
+from flask import jsonify, make_response, request
 
 import certs
 import maintenance
 import provenance
+import roster_query
 import schema
 import signals
 from context import atlas
@@ -68,48 +75,82 @@ def _ids(value):
     return [v for v in schema.as_list(value) if isinstance(v, str) and v]
 
 
-def _upcoming(windows):
-    """{place id: the soonest upcoming start of a window that names it}."""
+def _upcoming(windows, data=None):
+    """{place id: the soonest upcoming start of a window that covers it}: the
+    places it names and the members of the collections it names, as this
+    viewer's map lists them (2026-11-14)."""
     out = {}
     for window in windows:
         if window.get("state") != "upcoming" or not window.get("occurrence_start"):
             continue
-        for node_id in window.get("nodes") or []:
-            node_id = str(node_id)
+        for node_id in maintenance.window_places(window, data):
             start = window["occurrence_start"]
             if node_id not in out or start < out[node_id]:
                 out[node_id] = start
     return out
 
 
-def _sets(data):
+def _mode_since(windows, data=None):
+    """{place id: when the oldest maintenance mode covering it began}: the
+    `open` windows active now (2026-11-14). NODES shows how long, since a
+    mode has no end and only the digest (with alerts on) names one left on."""
+    out = {}
+    for window in windows:
+        if window.get("open") is not True or window.get("state") != "active":
+            continue
+        began = window.get("starts")
+        if not isinstance(began, str) or not began:
+            continue
+        for node_id in maintenance.window_places(window, data):
+            if node_id not in out or began < out[node_id]:
+                out[node_id] = began
+    return out
+
+
+def _section(data, key):
+    """A list section, or none when a hand edit wrote it as a number or an
+    object (round 13: the roster 500'd for every reader)."""
+    value = data.get(key)
+    return value if isinstance(value, list) else []
+
+
+def _collections(data):
     out = []
-    for entry in data.get("sets") or []:
+    listed = data.get("collections")
+    for entry in listed if isinstance(listed, list) else []:   # a hand edit's 5 is none
         if not isinstance(entry, dict) or not isinstance(entry.get("id"), str):
             continue
         out.append({"id": entry["id"], "name": entry.get("name"), "note": entry.get("note"),
-                    "places": _ids(entry.get("places"))})
+                    "unmanaged": entry.get("unmanaged") is True,
+                    # each member once: a hand edit's ["a", "a"] counts one
+                    "places": list(dict.fromkeys(_ids(entry.get("places")))),
+                    # its services by key (stage 3b); this viewer's map, so their own
+                    "services": list(dict.fromkeys(_ids(entry.get("services"))))})
     return out
 
 
 def build(data, feed, admin, stamp, now=None):
     """The roster from a dataset and a feed that are already this viewer's."""
     zones = [{"id": z.get("id"), "name": z.get("name")}
-             for z in data.get("zones") or [] if isinstance(z, dict)]
+             for z in _section(data, "zones") if isinstance(z, dict)]
     zone_names = {z["id"]: z["name"] for z in zones}
-    sets = _sets(data)
+    collections = _collections(data)
     member_of = {}
-    for s in sets:
+    for s in collections:
         for place in s["places"]:
             member_of.setdefault(place, []).append(s["id"])
     live = feed.get("nodes") or {}
     confirmed = feed.get("confirmed_by") or {}
     under = set(feed.get("maintenance") or [])
-    upcoming = _upcoming(maintenance.annotated())
-    cert_list = [c for c in data.get("certs") or [] if isinstance(c, dict)]
+    unmanaged = signals.unmanaged_ids(data)   # this viewer's map: its own places only
+    windows = maintenance.annotated()
+    upcoming = _upcoming(windows, data)
+    mode_since = _mode_since(windows, data)
+    # indexed once, not scanned per row (stage 5: places × certificates)
+    nearest_cert = certs.nearest_by_place([c for c in _section(data, "certs") if isinstance(c, dict)], now)
 
     rows = []
-    for node in data.get("nodes") or []:
+    for node in _section(data, "nodes"):
         if not isinstance(node, dict) or not isinstance(node.get("id"), str):
             continue
         nid = node["id"]
@@ -136,9 +177,11 @@ def build(data, feed, admin, stamp, now=None):
             "reviewed_at": mark.get("reviewed_at") if isinstance(mark.get("reviewed_at"), str) else None,
             "changed_since_review": described.get(provenance.UNSEEN) is True,
             "unchecked": provenance.unchecked(node),
-            "maintenance": {"now": nid in under, "next": upcoming.get(nid)},
-            "cert": certs.nearest_for_place(cert_list, nid, now),
-            "sets": member_of.get(nid, []),
+            "maintenance": {"now": nid in under, "next": upcoming.get(nid),
+                            "mode_since": mode_since.get(nid) if nid in under else None},
+            "unmanaged": nid in unmanaged,
+            "cert": nearest_cert.get(nid),
+            "collections": member_of.get(nid, []),
             "depends_on": _ids(node.get("depends_on")),
         }
         if admin:
@@ -146,7 +189,8 @@ def build(data, feed, admin, stamp, now=None):
             by = mark.get("reviewed_by")
             row["reviewed_by"] = by if isinstance(by, str) else None
         rows.append(row)
-    return {"stamp": stamp, "generated_at": iso_utc(), "zones": zones, "sets": sets, "rows": rows}
+    return {"stamp": stamp, "generated_at": iso_utc(), "zones": zones, "collections": collections,
+            "rows": rows}
 
 
 @bp.route(ROSTER_PATH)
@@ -158,7 +202,7 @@ def places_roster():
         log.error("v2 roster: lab data unreadable: %s", e)
         return jsonify({"error": f"lab data unreadable: {e}"}), 500
     try:
-        _, stamp = ctx.store.read()
+        stamp = ctx.store.stamp()
     except Exception as e:  # noqa: BLE001 — a store that cannot say its stamp still has rows
         log.warning("v2 roster: no stamp: %s", e)
         stamp = None
@@ -167,8 +211,19 @@ def places_roster():
     # a look-only standalone Atlas shows every place to every visitor
     # (groups None) but has no admin: what is an admin's stays an admin's
     admin = sees_everything(groups) and is_admin()
+    # asked for one page (stage 5): checked before the work, so a bad
+    # parameter costs nothing
+    query = None
+    if roster_query.wanted(request.args):
+        try:
+            query = roster_query.parse(request.args)
+        except roster_query.QueryError as e:
+            return jsonify({"error": str(e)}), 400
     data = redact_for_groups(raw)[0]
     feed = build_feed(ctx)
     if not admin:
         feed = _redact_feed(ctx, feed, groups, data=raw)
-    return no_store(make_response(jsonify(build(data, feed, admin, stamp))))
+    roster = build(data, feed, admin, stamp)
+    if query:
+        roster = roster_query.apply(roster, query)
+    return no_store(make_response(jsonify(roster)))

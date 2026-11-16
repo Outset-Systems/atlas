@@ -35,6 +35,42 @@ def _store():
     return store
 
 
+def _site_lock(site):
+    """The map's write lock for `site`, which an editor's save holds while it
+    loads and writes (`dataset.site_lock`, 2026-11-15): an import must not land
+    between the two. It is only shared when this command sees the server's
+    revisions folder (`docker exec` does; ATLAS_REVISIONS points elsewhere):
+    with no such folder there is no server here to share it with, so the
+    import runs as it always did and says so, rather than making a lock
+    nobody else reads (or failing to, as a user who cannot write /data)."""
+    import contextlib
+    from dataset import site_lock, site_lock_path
+    folder = os.path.dirname(site_lock_path(site))
+    if not os.path.isdir(folder):
+        print(f"note: no revisions folder at {folder}, so no write lock is shared with a "
+              "running Atlas; set ATLAS_REVISIONS to its folder, or run this inside it",
+              file=sys.stderr)
+        return contextlib.nullcontext()
+    return site_lock(site)
+
+
+def _locked(fn):
+    """A command that writes a site's rows, under its write lock; a lock held
+    too long is exit code 4, nothing written."""
+    def run(args, *more):
+        from filelock import LockTimeout
+        try:
+            with _site_lock(args.site):
+                return fn(args, *more)
+        except LockTimeout as e:
+            print(f"error: the map is being saved ({e}) — nothing imported; run it again",
+                  file=sys.stderr)
+            return 4
+    run.__name__ = fn.__name__
+    run.__doc__ = fn.__doc__
+    return run
+
+
 #: Who a stamp names for a write made at the command line (provenance.py).
 ACTOR = "cli"
 
@@ -62,6 +98,7 @@ def _read_token_file(path, label):
         return None
 
 
+@_locked
 def cmd_import_json(args):
     try:
         with open(args.path, encoding="utf-8") as f:
@@ -92,7 +129,7 @@ def cmd_import_json(args):
 
 def cmd_import_netbox(args):
     from importers.netbox import (
-        NetBoxClient, NetBoxError, fetch_snapshot, parse_role_map, sync,
+        NetBoxClient, NetBoxError, fetch_snapshot, parse_role_map,
     )
     token = args.token
     if not token and args.token_file:
@@ -121,6 +158,12 @@ def cmd_import_netbox(args):
         print(f"error: {e} — nothing imported", file=sys.stderr)
         return 2
 
+    return _write_netbox(args, snapshot, role_map)
+
+
+@_locked   # the fetch above runs without the lock; only the write holds it
+def _write_netbox(args, snapshot, role_map):
+    from importers.netbox import sync
     st = _store()
     with st.session_scope() as s:
         before = st.dump_labdata(s, args.site)
@@ -132,6 +175,7 @@ def cmd_import_netbox(args):
     return 0
 
 
+@_locked
 def cmd_import_nmap(args):
     from importers.nmap import (
         NmapError, import_observations, parse_nmap_xml, undocumented,
@@ -167,6 +211,7 @@ def cmd_import_nmap(args):
     return 0
 
 
+@_locked
 def cmd_import_csv(args):
     from importers.csv_import import import_rows, parse_csv
     try:

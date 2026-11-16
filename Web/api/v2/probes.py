@@ -15,7 +15,7 @@ here is modelled. The engines live in their own modules:
 import logging
 import re
 
-from flask import jsonify, make_response, request
+from flask import current_app, jsonify, make_response, request
 
 import atlas_auth
 import embeddable
@@ -66,8 +66,18 @@ def embeddable_verdict():
         log.warning("refused an embeddable probe for an uncharted url: %s", url[:120])
         return jsonify({"error": "that address is not on this map"}), 400
 
-    out = embeddable.verdict(url, self_origin=request.host_url.rstrip("/"),
-                             enabled=settings.embed_probe())
+    # A map with more services than one header may name (2026-11-15): the
+    # page's own CSP refuses the frame before the service has a say, so there
+    # is nobody to ask. Not cached with the verdicts: it is this map's size,
+    # not the service's answer. (A wildcard in ATLAS_EMBED_HOSTS that covers it
+    # would have framed it; the tab still works, which is the rule.)
+    frame_list = current_app.extensions.get("atlas_frame_list")
+    dropped = frame_list()[1] if frame_list else frozenset()
+    if embeddable.origin_of(url) in dropped:
+        out = embeddable.unlisted(url)
+    else:
+        out = embeddable.verdict(url, self_origin=request.host_url.rstrip("/"),
+                                 enabled=settings.embed_probe())
     resp = make_response(jsonify(out))
     # The verdict is already cached server-side for its own TTL; letting the
     # browser cache it too would outlive a service turning framing back on.

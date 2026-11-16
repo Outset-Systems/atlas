@@ -43,6 +43,64 @@
   color: var(--text-dim); font-variant-numeric: tabular-nums;
 }
 
+/* ── the rail (2026-11-14): collections, networks, kinds and saved filters down
+   the left of the table. Its rows are THE INDEX's (`.idx-item`), its heads
+   THE INDEX's zone heads in Cinzel caps, its dots the cards' (`.svc-health`),
+   its buttons the Desk's. No new colour, type or shape. On a phone there is
+   no rail: the filter row keeps its pickers (`.nv-pick-rail`). ── */
+.nv-body {
+  display: grid; grid-template-columns: 236px minmax(0, 1fr); gap: 0 22px;
+  align-items: start; margin-top: 16px;
+}
+.nv-main { min-width: 0; }
+.nv-main > .nv-filters { margin-top: 0; }
+.nv-rail {
+  position: sticky; top: 12px; max-height: calc(100vh - 150px); overflow-y: auto;
+  padding: 2px 14px 4px 0; border-right: 1px solid var(--ink-line);
+}
+.nv-rail-sec + .nv-rail-sec { margin-top: 14px; }
+.nv-rail-h { margin: 0; font: inherit; }
+.nv-rail-head {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  background: none; border: none; padding: 4px 2px; cursor: pointer; text-align: left;
+  font-family: 'Cinzel', serif; font-weight: 400; font-size: 0.72rem;
+  text-transform: uppercase; letter-spacing: 0.28em; color: var(--text-dim);
+}
+.nv-rail-head:hover { color: var(--gilt); }
+.nv-rail-chev { width: 10px; font-size: 0.68rem; letter-spacing: 0; }
+.nv-rail-list { list-style: none; margin: 4px 0 0; padding: 0; }
+.nv-rail-li { display: flex; align-items: center; gap: 2px; }
+.nv-rail-row { padding: 6px 8px; gap: 9px; min-width: 0; }
+.nv-rail-row.on { background: rgba(var(--gilt-rgb), 0.10); border-color: rgba(var(--gilt-rgb), 0.35); }
+.nv-rail-row.on .nv-rail-name { color: var(--gilt); }
+/* the dot, or a blank of its width, so the names line up */
+.nv-rail-dot { width: 7px; height: 7px; flex-shrink: 0; }
+.nv-rail-dot.svc-health { margin-left: 0; }
+.nv-rail-name {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: 'Alegreya Sans', sans-serif; font-size: 0.88rem;
+}
+.nv-rail-n {
+  font-family: 'JetBrains Mono', monospace; font-size: 0.72rem;
+  color: var(--text-dim); font-variant-numeric: tabular-nums;
+}
+.nv-rail-more {
+  flex-shrink: 0; background: none; border: 1px solid transparent; border-radius: 4px;
+  padding: 2px 7px; cursor: pointer; color: var(--text-dim); font-size: 0.9rem; line-height: 1.2;
+}
+.nv-rail-more:hover, .nv-rail-more[aria-expanded="true"] { color: var(--gilt); border-color: rgba(var(--gilt-rgb), 0.3); }
+.nv-rail-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 4px 4px 10px 24px; }
+.nv-rail-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 8px 0; }
+.nv-rail-input { flex: 1 1 100%; width: 100%; }
+.nv-rail-note { flex-basis: 100%; margin: 2px 0 0; font-size: 0.8rem; color: var(--text-dim); }
+.nv-rail-warn { color: var(--sem-warn); }
+.nv-rail-empty { margin: 4px 8px; font-size: 0.82rem; color: var(--text-dim); }
+.nv-rail .nv-saved { margin: 6px 0 0; padding: 0 6px; }
+/* a wide screen has the rail; a phone has the pickers and the chip row */
+body:not(.phone) .nv-pick-rail, body:not(.phone) .nv-saved-row { display: none; }
+body.phone .nv-body { display: block; }
+body.phone .nv-rail { display: none; }
+
 /* ── the filter bar ── */
 .nv-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin: 16px 0 10px; }
 .nv-filters .dsk-input { width: auto; }
@@ -86,6 +144,107 @@
 }
 .nv-bulk .dsk-btn.on { border-color: var(--gilt); color: var(--gilt); }
 .nv-bulk-clear { margin-left: auto; }
+
+/* ── stage 3 (2026-11-14): the place menu ──
+   The ⋯ beside a place's name (the rail's own `.nv-rail-more`), one menu for
+   every row, seated under the ⋯ pressed (fixed: the table scrolls inside
+   `.nv-scroll`); the panel's frame and the Desk's buttons. */
+.nv-name-cell { display: inline-flex; align-items: center; gap: 4px; }
+.nv-row-more { padding: 0 6px; }
+.nv-add-place { margin-left: 10px; }
+/* maintenance mode on more than a week: the digest's guard, said here too */
+.nv-now.nv-mode-long { color: var(--sem-warn); font-weight: 600; }
+.nv-menu {
+  position: fixed; z-index: 60; min-width: 230px; max-width: 320px;
+  display: flex; flex-direction: column; gap: 2px; padding: 6px;
+  background: var(--surface-2); color: var(--text);
+  border: 1px solid var(--ink-line); border-radius: 6px;
+  box-shadow: 0 14px 40px rgba(var(--shade-rgb), calc(0.6 * var(--shade-k)));
+}
+.nv-menu[hidden] { display: none; }
+.nv-menu-item {
+  text-align: left; background: none; border: 1px solid transparent; border-radius: 4px;
+  padding: 6px 10px; cursor: pointer; color: var(--text);
+  font-family: 'Alegreya Sans', sans-serif; font-size: 0.92rem;
+}
+.nv-menu-item:hover, .nv-menu-item:focus-visible { color: var(--gilt); border-color: rgba(var(--gilt-rgb), 0.3); outline: none; }
+.nv-menu-item:disabled { opacity: 0.5; cursor: default; }
+.nv-menu-note {
+  margin: 0; padding: 6px 10px; font-family: 'Alegreya Sans', sans-serif; font-size: 0.86rem; color: var(--text-dim);
+}
+
+/* ── stage 3b (2026-11-15): a place's services, under its row ── */
+.nv-svc-toggle {
+  background: none; border: 1px solid transparent; border-radius: 4px; padding: 1px 6px;
+  cursor: pointer; color: var(--text);
+}
+.nv-svc-toggle:hover, .nv-svc-toggle[aria-expanded="true"] { color: var(--gilt); border-color: rgba(var(--gilt-rgb), 0.3); }
+/* THE WINDOW (2026-11-15, stage 5): a long table draws the rows on screen;
+   a spacer above and below stands in for the rest (its height set by
+   nodes.js). It has no padding, border or shade of its own. */
+.nv-table tr.nv-gap > td { padding: 0; border: 0; background: none; }
+.nv-table[tabindex="-1"]:focus { outline: none; }   /* holding the keyboard for a row scrolled away */
+.nv-more-cards { display: block; margin: 12px auto 0; }
+.nv-svc-row > td { padding: 4px 8px 10px 40px; background: rgba(var(--shade-rgb), calc(0.12 * var(--shade-k))); }
+.nv-svc-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.nv-svc {
+  /* the bell and the ⋯ follow the name, never the far end of a wide table */
+  display: grid; grid-template-columns: 9.5rem minmax(8rem, 16rem) minmax(0, 16rem) auto auto;
+  justify-content: start; align-items: center; gap: 10px;
+  padding: 3px 0; border-bottom: 1px solid color-mix(in srgb, var(--ink-line) 40%, transparent);
+}
+.nv-svc:last-child { border-bottom: none; }
+.nv-svc-name { font-family: 'Alegreya Sans', sans-serif; font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nv-svc-cols { font-size: 0.82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nv-svc.nv-unmanaged > :not(.nv-rail-more):not(.nv-bell) { opacity: 0.5; }
+
+/* UNMANAGED (2026-11-14): the row stays, greyed; it is not ours to watch */
+.nv-row.nv-unmanaged > td:not(.dsk-td-pick):not(.nv-td-alerts) { opacity: 0.5; }
+
+/* ── alerts inside NODES (2026-11-14, stage 3A) ──
+   A place's bell in the Alerts column and a bell on each collection and
+   network in the rail: dim with no rule, ink while a rule is on, gilt while
+   its panel is open. The panel stands where the bulk forms do, in the bulk
+   bar's frame, and is alert-rules.js's (the `al-*` pieces). */
+.nv-bell {
+  display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0;
+  background: none; border: 1px solid transparent; border-radius: 4px;
+  padding: 2px 6px; cursor: pointer; color: var(--text-dim); line-height: 1;
+}
+.nv-bell-i { width: 13px; height: 13px; opacity: 0.55; }
+.nv-bell-lit { color: var(--text); }
+.nv-bell-lit .nv-bell-i { opacity: 1; }
+.nv-bell-n { font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; font-variant-numeric: tabular-nums; }
+.nv-bell:hover, .nv-bell.on { color: var(--gilt); border-color: rgba(var(--gilt-rgb), 0.3); }
+.nv-bell.on .nv-bell-i { opacity: 1; }
+/* behind an access group: no rule sends for it (the server's `held`) */
+.nv-bell-held .nv-bell-i { opacity: 0.3; }
+.nv-bell-held .nv-bell-n { color: var(--sem-warn); }
+.nv-td-alerts, .nv-th-alerts { width: 1%; white-space: nowrap; }
+.nv-rail-bell { padding: 3px 5px; }
+.nv-alerts {
+  margin: 0 0 12px; padding: 10px 14px 12px;
+  border: 1px solid var(--ink-line); border-left: 3px solid var(--gilt); border-radius: 3px;
+  background: rgba(var(--shade-rgb), calc(0.2 * var(--shade-k)));
+}
+.nv-alerts[hidden] { display: none; }
+.al-panel-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding-bottom: 8px; border-bottom: 1px solid color-mix(in srgb, var(--ink-line) 60%, transparent);
+}
+.al-panel-title {
+  margin: 0; font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.78rem;
+  letter-spacing: 0.18em; text-transform: uppercase; color: var(--text);
+}
+.al-panel-title:focus { outline: none; }
+.al-panel-title:focus-visible { outline: 1px dotted var(--gilt); outline-offset: 3px; }
+.al-panel-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
+.al-also { margin-top: 10px; }
+.al-also .al-quiet { margin: 0 0 6px; }
+.al-also-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+:is(.nv-bell):is(:hover, :focus-visible):not(:disabled) {
+  box-shadow: 0 0 14px rgba(var(--gilt-rgb), var(--hover-glow-a));
+}
 
 .nv-form {
   display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 14px;
@@ -350,38 +509,16 @@ body.phone .ov-title { padding-right: 96px; }
   :is(.ov-place, .ov-event) { transition: none; }
 }
 
-/* ── ALERTS (2026-11-13, stage 4) ─────────────────────────────────────────
-   Rules and destinations, an admin's (alerts.js draws the whole of
-   `#view-alerts`, so the whole view sits in atlas.css's panel token block,
-   as NODES does). A scene panel laid flat, like NODES: the same sheet, the
+/* ── THE ALERTS' PIECES (2026-11-13; since 2026-11-14 in two places) ─────
+   The ALERTS view (2026-11-13) drew these; it left on 2026-11-14 (owner),
+   and they are drawn now by Settings › Alerts (alert-setup.js, inside the
+   settings panel) and by the panel on one thing inside NODES (alert-rules.js,
+   inside `#nodes-sheet`). Both sit in atlas.css's panel token block. The
    Desk's inputs, buttons and notices, NODES' form fields (`.nv-field`,
    `.nv-label`, `.nv-toggle`, `.nv-form-note`, `.nv-form-bar`), the card's
    status dots. No new colour, type or shape. A rule reads as a sentence in
    Alegreya Sans; addresses and times in JetBrains Mono; section heads in
    Cinzel micro-caps, the tiles' own. Gilt only where NODES spends it. */
-
-#view-alerts [hidden] { display: none !important; }
-
-.al-sheet {
-  max-width: 1180px; margin: 0 auto 24px;
-  padding: 18px 22px 26px;
-  background: linear-gradient(180deg, var(--surface-2), var(--surface));
-  border: 1px solid var(--ink-line); border-radius: 8px;
-  box-shadow: 0 28px 80px rgba(var(--shade-rgb), calc(0.75 * var(--shade-k)));
-  color: var(--text);
-}
-.al-head {
-  display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 14px;
-  padding-bottom: 14px; border-bottom: 1px solid var(--ink-line);
-}
-.al-title {
-  margin: 0; font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.9rem;
-  letter-spacing: 0.3em; color: var(--gilt);
-}
-.al-sub {
-  margin: 0; font-family: 'IM Fell English', 'Alegreya Sans', serif; font-style: italic;
-  font-size: 0.9rem; color: var(--text-dim);
-}
 
 /* the status strip: On or Off, the allowed hosts, the poll, the last look */
 .al-strip:empty { display: none; }
@@ -504,7 +641,6 @@ body.phone .ov-title { padding-right: 96px; }
 .al-log-line .svc-health { margin-left: 0; flex: none; align-self: center; }
 
 /* on a phone: one column, the actions under the name */
-body.phone .al-sheet { margin: 0 12px 16px; padding: 14px 12px 18px; }
 body.phone .al-acts { margin-left: 0; flex-basis: 100%; }
 body.phone .al-log-row { grid-template-columns: 1fr; gap: 2px; }
 body.phone .al-form .nv-field, body.phone .al-form .dsk-input { min-width: 0; width: 100%; }

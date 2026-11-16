@@ -19,10 +19,11 @@
    On a PHONE there is no map (v1.66.0), so the phone opens on OVERVIEW, or on
    NODES when that was the last pick, and ignores a stored MAP.
 
-   ALERTS is in ADMIN_VIEWS: a viewer who is not an admin never gets it, from
-   the address or from a stored pick, and lands where nothing named a view
-   (the map; OVERVIEW on a phone). The callers pass `admin`; this file reads
-   no page.
+   A view in ADMIN_VIEWS is never given to a viewer who is not an admin, from
+   the address or from a stored pick: they land where nothing named a view
+   (the map; OVERVIEW on a phone). ALERTS was the one such view; since
+   2026-11-14 it is an old name for NODES, where its rules are made. The
+   callers pass `admin`; this file reads no page.
 
    `?place=<id>` opens the map on that place's card (an alert's link). It
    wins over a stored pick and a phone's default, never over `?view=`.
@@ -40,12 +41,14 @@ export const DECK_KEY = 'atlas.view';
 
 /** Every view, in the menu's order. The ONE list: a later stage adds its view
     here and the menu, the address and the stored pick all know it. */
-export const VIEWS = ['map', 'overview', 'nodes', 'alerts'];
-/** The views only an admin may open (and only an admin sees in the menu). */
-export const ADMIN_VIEWS = Object.freeze(['alerts']);
+export const VIEWS = ['map', 'overview', 'nodes'];
+/** The views only an admin may open (and only an admin sees in the menu).
+    None since 2026-11-14: ALERTS was the one, and it left for NODES. */
+export const ADMIN_VIEWS = Object.freeze([]);
 /** Old names that still mean a view: CHARTS (stage 2's Deck) is OVERVIEW,
-    landing on its charts. */
-export const ALIASES = Object.freeze({ charts: 'overview' });
+    landing on its charts; ALERTS (2026-11-13) is NODES, where the rules are
+    made since 2026-11-14 (a stored pick or an old link lands there). */
+export const ALIASES = Object.freeze({ charts: 'overview', alerts: 'nodes' });
 /** The views a phone can show: everything but the map. */
 export const PHONE_VIEWS = VIEWS.filter((v) => v !== 'map');
 
@@ -114,9 +117,10 @@ export function opensAtCharts(viewParam, isPhone, stored, opts = {}) {
   return namesCharts(stored) && openingView(viewParam, isPhone, stored, opts) === 'overview';
 }
 
-/** The `set` query value (`?view=nodes&set=<id>`, a saved set of places), or
-    null. A set's id is a slug; anything else is ignored, not obeyed. */
-export function parseSet(raw) {
+/** The `collection` query value (`?view=nodes&collection=<id>`, a named list
+    of places), or null. Its id is a slug; anything else is ignored, not
+    obeyed. NODES also reads `?set=`, the name before 2026-11-14. */
+export function parseCollection(raw) {
   const s = String(raw ?? '').trim();
   return /^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$/.test(s) ? s : null;
 }

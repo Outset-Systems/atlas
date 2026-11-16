@@ -297,7 +297,7 @@ Security Policy, which the app builds from these settings.
 | Variable | Default | What it does | Secret | Settings screen |
 |---|---|---|---|---|
 | `ATLAS_EMBED_HOSTS` | (empty) | Extra origins the map may frame, space separated, for example `https://grafana.home.example`. | no | yes (Realm) |
-| `ATLAS_EMBED_SERVICES` | `1` | `1` also allows framing the origins your dataset already links to. `0` limits framing to `ATLAS_EMBED_HOSTS`, and every service button opens a new tab. | no | yes (Realm) |
+| `ATLAS_EMBED_SERVICES` | `1` | `1` also allows framing the origins your dataset already links to, up to about 24,000 characters of them (some 700; the most linked-to first). A service past that opens in a new tab. `0` limits framing to `ATLAS_EMBED_HOSTS`, and every service button opens a new tab. | no | yes (Realm) |
 | `ATLAS_EMBED_PROBE` | `1` | `1` asks a service whether it allows framing before offering the pane. `0` skips the check and falls back to a tab when the pane stays blank. | no | yes (Realm) |
 | `ATLAS_DEFAULT_STYLE` | (unset) | A map style, by filename, that a browser wears until its viewer picks another. A public demo uses it. If the file is gone the map falls back to its own art. | no | no |
 | `ATLAS_DEMO_TRUST` | (unset) | Path to an **invented** trust map to show every visitor, for a public demo. The trust map is admin-only because a real one says where to aim a forged header, so never point this at one. | no | no |
@@ -358,9 +358,11 @@ in it.
 ## Alerts
 
 Alerts send a short message to ntfy, Gotify or a JSON webhook when a place, a
-set or a network changes state and stays in it for as long as a rule says,
-plus an optional daily digest. Rules and destinations are made by an admin in
-the ALERTS view. They are **off** until the operator sets both `ATLAS_ALERTS=1`
+collection or a network changes state and stays in it for as long as a rule says,
+plus an optional daily digest. An admin makes a rule in NODES, from the bell
+beside a place or beside a collection or a network, and sets up where word goes
+(the destinations, the daily digest, and the log of sends) in Settings › Alerts.
+They are **off** until the operator sets both `ATLAS_ALERTS=1`
 and a non-empty `ATLAS_ALERT_HOSTS`. While either is missing nothing is sent,
 and the admin routes that save or test answer 403 with that reason.
 
@@ -373,7 +375,7 @@ long a state must last is measured in polls, so a rule's minutes are only as
 fine as the poll interval (60 seconds by default).
 
 What a message may say is what a viewer with no access groups may see. A rule
-on a place, set or network that viewer cannot see is refused when it is saved.
+on a place, collection or network that viewer cannot see is refused when it is saved.
 A place they cannot see is never named, listed or counted in a message, and a
 rule's own name and note are never sent. A message about a place behind
 another place that is down names that root once and lists what went with it,
@@ -390,11 +392,11 @@ carries them.
 
 | Variable | Default | What it does | Secret | Settings screen |
 |---|---|---|---|---|
-| `ATLAS_ALERTS` | (unset) | `1` lets alerts send. Off, the ALERTS view says how to turn them on and saves nothing. | no | no |
+| `ATLAS_ALERTS` | (unset) | `1` lets alerts send. Off, NODES and Settings › Alerts say how to turn them on and save nothing. | no | no |
 | `ATLAS_ALERT_HOSTS` | (unset) | The hosts a destination may name, as `host:port`, comma separated, for example `ntfy.example.internal:443,gotify.example.internal:8080`. An admin can only send to a host listed here. Loopback, link-local, multicast and unspecified addresses, the cloud metadata addresses (`fd00:ec2::254`, `100.100.100.200`, `192.0.0.192`), Atlas's own address and the addresses this machine's name resolves to are refused even when listed. The name is resolved once per send, given up after 3 seconds, and the connection goes to that address. Empty, nothing is sent. | no | no |
-| `ATLAS_ALERT_SECRET_<NAME>` | (unset) | A destination's key, named in the ALERTS view by `<NAME>` alone (`NTFY_LAB` reads `ATLAS_ALERT_SECRET_NTFY_LAB`). Sent as `Authorization: Bearer` to ntfy and a webhook, and as `X-Gotify-Key` to Gotify. Atlas never stores it, shows it or logs it, and sends it only to the address it was named for: change the address and the admin names the secret again. The prefix the app reads is `ATLAS_ALERT_SECRET_`. | yes, `ATLAS_ALERT_SECRET_<NAME>_FILE` | no |
+| `ATLAS_ALERT_SECRET_<NAME>` | (unset) | A destination's key, named in Settings › Alerts by `<NAME>` alone (`NTFY_LAB` reads `ATLAS_ALERT_SECRET_NTFY_LAB`). Sent as `Authorization: Bearer` to ntfy and a webhook, and as `X-Gotify-Key` to Gotify. Atlas never stores it, shows it or logs it, and sends it only to the address it was named for: change the address and the admin names the secret again. The prefix the app reads is `ATLAS_ALERT_SECRET_`. | yes, `ATLAS_ALERT_SECRET_<NAME>_FILE` | no |
 | `ATLAS_PUBLIC_URL` | (unset) | The address people reach this Atlas by, for example `https://atlas.example.internal/`. A message links to `<address>?place=<id>`. Atlas cannot know its own address behind a proxy, so unset, messages carry no link. | no | no |
-| `ATLAS_ALERTS_FILE` | `<data dir>/alerts.json` | The rules, the digest and the destinations (secrets by name only). Written by the ALERTS view. Never exported and never shown to a token. | no | no |
+| `ATLAS_ALERTS_FILE` | `<data dir>/alerts.json` | The rules, the digest and the destinations (secrets by name only). Written from NODES (rules) and Settings › Alerts (the rest). Never exported and never shown to a token. | no | no |
 | `ATLAS_ALERTS_STATE` | `<data dir>/alerts-state.json` | The poll's own record for alerts: the last event handled, rules waiting out their minutes, the rate limit and the last digest day. Written under a lock so two workers send once. | no | no |
 | `ATLAS_ALERT_LOG` | `<data dir>/alert-deliveries.jsonl` | One line per send: when, the rule's id, the destination's name, the events, and how it went (delivered, refused with the HTTP status, unreachable, blocked). Never a message's words or a secret. Mode 0600, kept 90 days, read by admins at `GET /api/v2/admin/alerts/deliveries`. | no | no |
 

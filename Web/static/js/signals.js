@@ -72,10 +72,13 @@ function apply(feed) {
   A.signalsFeed = feed;
   const nodes = feed?.nodes || {};
   const darkNames = [];
+  // UNMANAGED (2026-11-14): not ours to watch, so greyed and with no state
+  const unmanaged = new Set(Array.isArray(feed?.unmanaged) ? feed.unmanaged : []);
 
   for (const mk of markersEl().children) {
     const info = nodes[mk.dataset.id];
     mk.classList.remove(...ALL_STATE_CLASSES, CAUSED_CLASS);
+    mk.classList.toggle('s-unmanaged', unmanaged.has(mk.dataset.id));
     mk.title = '';   // "behind …" belongs to one poll, not to the marker forever
     if (!info || !info.state || info.state === 'healthy') {
       restoreBase(mk);
@@ -86,19 +89,25 @@ function apply(feed) {
     const sh = stateHue(info.state) || mk.dataset.hue;         // fully recolour (blue → red, etc.)
     mk.style.setProperty('--mk-hue', sh);
     mk.style.setProperty('--mk-glow', sh + '66');
-    if (info.state === 'down') {
-      if (info.cause) {
-        // a consequence: still red, but not its own alarm
-        mk.classList.add(CAUSED_CLASS);
-        mk.title = `behind ${info.cause}`;
-      } else {
-        const label = mk.querySelector('.mk-label');
-        if (label) darkNames.push(label.textContent);
-      }
+    if (info.state === 'down' && info.cause) {
+      // a consequence: still red, but not its own alarm
+      mk.classList.add(CAUSED_CLASS);
+      mk.title = `behind ${info.cause}`;
     }
   }
+  // The colophon counts the charted places from the data, not from the
+  // markers (2026-11-15, stage 5): behind NODES the markers are redrawn only
+  // when the map comes back, and the colophon is on screen there. The same
+  // set either way: a marker is drawn for every place not `off_map`, in order
+  // (`off_map` as places.js `applyOverrides` leaves it, which refreshData runs
+  // behind a view too, so a folded region's places stay out of the count).
+  const charted = (A.DATA?.nodes || []).filter((n) => !n.off_map);
+  for (const n of charted) {
+    const info = nodes[n.id];
+    if (info?.state === 'down' && !info.cause) darkNames.push(n.name);
+  }
   // `dark`: faults that are their own cause; `caused`: faults explained by one of those
-  const { dark, caused } = tally([...markersEl().children].map((mk) => mk.dataset.id), nodes);
+  const { dark, caused } = tally(charted.map((n) => n.id), nodes);
 
   A.paintServiceHealth();   // K4 — refresh per-service dots
   A.paintConstellationHealth?.();   // a split ring reddens where it stands

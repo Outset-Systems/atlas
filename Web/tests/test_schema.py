@@ -108,6 +108,7 @@ def test_catalogue_covers_every_key_the_real_dataset_uses():
     """
     if not os.path.exists(REAL):
         pytest.skip("the real dataset is not in this checkout")
+    import provenance
     data = load(REAL)
     missing = []
     for key, section in schema.SECTIONS.items():
@@ -117,7 +118,9 @@ def test_catalogue_covers_every_key_the_real_dataset_uses():
         for entry in entries or []:
             if not isinstance(entry, dict):
                 continue
-            known = {f["name"] for f in section["fields"]}
+            # the stamp is the server's to write (provenance.py), never a field
+            # the editor shows; the live map carries it since the 11-15 sync
+            known = {f["name"] for f in section["fields"]} | {provenance.KEY}
             missing += [f"{key}.{k}" for k in entry if k not in known]
             for field in section["fields"]:
                 if field["type"] != "objects":

@@ -39,7 +39,7 @@ def _data():
             {"name": "vault.example", "kind": "tls", "issuer": "step-ca", "expires": SOON,
              "place": "secret-place"},
         ],
-        sets=[{"id": "core-set", "name": "Core boxes", "places": ["alpha", "secret-place"]}],
+        collections=[{"id": "core-set", "name": "Core boxes", "places": ["alpha", "secret-place"]}],
     )
     alpha, beta, _secret = data["nodes"]
     alpha.update(mac="00:11:32:aa:bb:cc", provenance=REVIEWED,
@@ -167,21 +167,21 @@ def test_the_nearest_certificate_and_its_days(realm):
 
 def test_maintenance_now_and_next(realm):
     rows = _rows(_as(realm, "alice").get_json())
-    assert rows["gamma"]["maintenance"] == {"now": True, "next": None}
-    assert rows["alpha"]["maintenance"] == {"now": False,
+    assert rows["gamma"]["maintenance"] == {"now": True, "next": None, "mode_since": None}
+    assert rows["alpha"]["maintenance"] == {"now": False, "mode_since": None,
                                             "next": LATER.strftime("%Y-%m-%dT%H:%M:%SZ")}
-    assert rows["beta"]["maintenance"] == {"now": False, "next": None}
+    assert rows["beta"]["maintenance"] == {"now": False, "next": None, "mode_since": None}
 
 
-def test_sets_are_listed_and_a_hidden_member_dropped(realm):
+def test_collections_are_listed_and_a_hidden_member_dropped(realm):
     body = _as(realm, "alice").get_json()
-    assert body["sets"] == [{"id": "core-set", "name": "Core boxes", "note": None,
-                             "places": ["alpha"]}]
+    assert body["collections"] == [{"id": "core-set", "name": "Core boxes", "note": None,
+                             "unmanaged": False, "places": ["alpha"], "services": []}]
     rows = _rows(body)
-    assert rows["alpha"]["sets"] == ["core-set"] and rows["beta"]["sets"] == []
+    assert rows["alpha"]["collections"] == ["core-set"] and rows["beta"]["collections"] == []
     admin = _as(realm, "ops").get_json()
-    assert admin["sets"][0]["places"] == ["alpha", "secret-place"]
-    assert _rows(admin)["secret-place"]["sets"] == ["core-set"]
+    assert admin["collections"][0]["places"] == ["alpha", "secret-place"]
+    assert _rows(admin)["secret-place"]["collections"] == ["core-set"]
 
 
 def test_the_rest_of_a_row(realm):
@@ -204,7 +204,8 @@ def test_the_rest_of_a_row(realm):
     assert body["generated_at"].endswith("Z")
     expected = {"id", "name", "state", "cause", "zone", "zone_name", "kind", "role", "addresses",
                 "services", "confirmed_by", "charted_source", "reviewed", "reviewed_at",
-                "changed_since_review", "unchecked", "maintenance", "cert", "sets", "depends_on"}
+                "changed_since_review", "unchecked", "maintenance", "cert", "collections", "depends_on",
+                "unmanaged"}
     assert set(alpha) == expected
     assert set(_rows(_as(realm, "ops").get_json())["alpha"]) == expected | {"reviewed_by"}
 

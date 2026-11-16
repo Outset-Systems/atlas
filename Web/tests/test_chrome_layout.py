@@ -50,11 +50,15 @@ def test_the_map_tools_are_not_inside_the_band():
     of the hover did exactly that.
     """
     html = _read(INDEX)
-    for button in ("btn-sky", "btn-depths", "btn-decoys"):
+    for button in ("btn-decoys",):
         assert f'id="{button}"' in html, f"{button} is gone"
         assert f'id="{button}"' not in _band(html), (
             f"#{button} is nested inside #scenes-list — backdrop-filter + "
             "overflow on the band will position it wrongly and then clip it away")
+    # the sky and the depths are in the band again (2026-11-14), in flow like ⚙:
+    # the next test is their belt
+    for button in ("btn-sky", "btn-depths"):
+        assert f'id="{button}"' in _band(html), f"{button} left the band"
     assert 'id="atlas-tools"' not in html, "the standing column came back"
 
 
@@ -100,12 +104,15 @@ def test_the_gear_is_in_the_band_and_in_flow():
     # PINNED since 2026-10-31: a hover-revealed control is no control on a touch
     # screen, and on a desktop it is one you forget exists. So the cluster is
     # out at every width, with no hover wiring left behind.
-    # 68px since v1.52.0: two buttons, the colour scheme and the gear
-    assert "width: 68px" in rule.group(0), "the gear is not pinned beside the menu"
+    # auto since 2026-11-14: the sky, the depths and the gear, and the first two
+    # go away in a view, a scene or a region, so a fixed width would leave a hole
+    assert "width: auto" in rule.group(0), "the cluster must size to what it shows"
     assert "opacity: 0" not in rule.group(0) and "width: 0" not in rule.group(0)
     assert "hoverReveal($('btn-menu')" not in _read(UI), "the pinned cluster is still wired to hover"
-    assert 'id="btn-scheme"' in band and band.index('id="btn-scheme"') < band.index('id="btn-menu-settings"'), (
-        "☀/☾ must sit in the cluster, before ⚙")
+    tools = re.search(r'<span class="menu-tools" id="menu-tools">(.*?)</span>', band, re.S).group(1)
+    assert re.findall(r'id="(btn-[\w-]+)"', tools) == ["btn-sky", "btn-depths", "btn-menu-settings"], (
+        "the sky, then the depths, then ⚙ (owner, 2026-11-14)")
+    assert 'id="btn-scheme"' not in _read(INDEX), "☀/☾ came back to the band"
 
 
 def test_the_band_still_has_the_properties_that_make_that_trap_real():
@@ -148,11 +155,15 @@ def _view_menu(html):
 
 
 @pytest.mark.parametrize("button", ["btn-sky", "btn-depths"])
-def test_every_map_tool_is_in_the_views_menu(button):
-    """The owner (2026-11-13): the sky and the depths drop with the views menu."""
-    tools = re.search(r'<div class="view-tools".*?</div>', _view_menu(_read(INDEX)), re.S)
-    assert tools, "the menu's tools group is gone"
-    assert f'id="{button}"' in tools.group(0), button
+def test_the_sky_and_the_depths_are_round_buttons_in_the_band(button):
+    """The owner (2026-11-14): out of the views menu, into the band where ☀/☾
+    was. A round `.chrome` button with its glyph and its key in the title."""
+    html = _read(INDEX)
+    assert f'id="{button}"' not in _view_menu(html), f"{button} is still in the views menu"
+    tag = re.search(rf'<button class="chrome ci-(?:sky|depths)" id="{button}"[^>]*>', html, re.S)
+    assert tag, f"{button} is not a band button"
+    assert 'type="button"' in tag.group(0) and "aria-label=" in tag.group(0)
+    assert ("(S)" if button == "btn-sky" else "(D)") in tag.group(0)
 
 
 def test_the_watch_is_toggled_in_its_own_scene():
@@ -172,20 +183,15 @@ def test_the_watch_is_toggled_in_its_own_scene():
     assert "$('btn-decoys')?.addEventListener('click', () => A.toggleDecoys());" in decoys
 
 
-def test_the_map_tools_are_the_menu_s_top_in_order():
-    """The owner (2026-11-13): the sky, then the depths, at the menu's top, before
-    the views; each a menu item the arrows reach, with a lamp and a name."""
+def test_the_views_menu_holds_only_the_views():
+    """The owner (2026-11-14): the sky and the depths left the menu for the
+    band; the menu is the views, each a menu item the arrows reach."""
     menu = _view_menu(_read(INDEX))
-    tools = re.search(r'<div class="view-tools".*?</div>', menu, re.S).group(0)
-    assert re.findall(r'id="(btn-[\w-]+)"', tools) == ["btn-sky", "btn-depths"]
-    assert tools.count('role="menuitem"') == 2 and tools.count('class="vt-lamp"') == 2
-    for word in ("theme.text.sky|upper", "theme.text.depths|upper"):
-        assert word in tools, word
-    assert menu.index('class="view-tools"') < menu.index('data-view="map"'), "the tools come first"
+    assert 'class="view-tools"' not in menu and 'class="view-tool' not in menu
+    assert re.findall(r'data-view="(\w+)"', menu)[:3] == ["map", "overview", "nodes"]
     js = _read(UI)
-    assert "querySelectorAll('[role=\"menuitem\"]')" in js, "the arrows must reach the tools too"
-    assert "border-bottom: 1px solid rgba(var(--gilt-rgb), 0.18);" in re.search(
-        r"^\.view-tools \{.*?\}", _read(CSS), re.S | re.M).group(0), "the rule sits under the tools now"
+    assert "querySelectorAll('[role=\"menuitem\"]')" in js, "the arrows must reach every view"
+    assert ".closest('.view-tool')" not in js, "the menu's tool branch is dead"
 
 
 def test_the_cluster_no_longer_carries_a_pin_button():
@@ -334,7 +340,9 @@ def test_settings_is_a_scene_wired_like_every_other():
     assert any("#settings" in b.split("}")[0] for b in blocks), "no reduced-motion block names #settings"
     # THE WATCHERS' clock must start on open and stop on close — it used to be
     # started by the drawer tab and stopped by the drawer closing
-    assert re.search(r"onClose: \(\) => clearInterval\(sourcesTimer\)", ui)
+    assert re.search(r"onClose: \(\) => \{?\s*clearInterval\(sourcesTimer\)", ui)
+    # Settings › Alerts reads only while Settings is up (alert-setup.js, 2026-11-14)
+    assert ui.count("new CustomEvent('atlas:settings'") == 2, "Settings › Alerts never hears open and close"
 
 
 def test_the_in_band_gear_is_a_lamp_not_a_beacon():
@@ -361,10 +369,12 @@ def test_settings_sections_default_closed_except_account():
 
 
 def test_the_map_tools_show_only_while_the_map_is_the_view():
-    """The owner (2026-11-13): in the views menu, but only when MAP is selected.
-    A view (`body.deck`) or a scene over the map has nothing for them to act on."""
+    """The owner (2026-11-13), kept when they moved to the band (2026-11-14):
+    only when MAP is the view. A view (`body.deck`) or a scene over the map has
+    nothing for them to act on, and a region has its own way back."""
     css = _read(CSS)
-    assert "body:is(.deck, .scene-open) .view-tools { display: none; }" in css
+    assert "body:is(.deck, .scene-open) #scenes-list :is(.ci-sky, .ci-depths) { display: none; }" in css
+    assert "body.region-open #btn-sky, body.region-open #btn-depths { display: none; }" in css
     assert ".atlas-tools" not in re.sub(r"/\*.*?\*/", "", css, flags=re.S), "the standing column's rules came back"
 
 
@@ -379,8 +389,9 @@ def test_the_views_menu_is_a_sibling_of_the_band():
         "#view-menu is nested inside #scenes-list: the band's backdrop-filter + "
         "overflow will position it wrongly and then clip it away")
     menu = _view_menu(html)
-    assert re.findall(r'data-view="(\w+)"', menu) == ["map", "overview", "nodes", "alerts"]
-    assert menu.count('role="menuitem"') == 6, "the two map tools and four views"
+    assert re.findall(r'data-view="(\w+)"', menu) == ["map", "overview", "nodes"]
+    assert menu.count('role="menuitem"') == 3, (
+        "the three views (the map's tools went to the band, and ALERTS into NODES, 2026-11-14)")
     css = _read(CSS)
     rule = re.search(r"^\.view-menu \{.*?^\}", css, re.S | re.M).group(0)
     assert "position: fixed" in rule and "var(--bar-glass-firm)" in rule
@@ -447,39 +458,36 @@ def test_every_view_has_a_main_and_one_shows_at_a_time():
 
 
 def test_the_phone_names_the_views_in_a_strip():
-    """No ATLAS and no map on a phone: OVERVIEW · NODES · ALERTS at the top of
-    the column (ALERTS for an admin only)."""
+    """No ATLAS and no map on a phone: OVERVIEW · NODES at the top of the
+    column."""
     html = _read(INDEX)
     strip = re.search(r'<nav class="view-strip" id="view-strip"[^>]*>(.*?)</nav>', html, re.S)
     assert strip, "the phone's strip is gone"
-    assert re.findall(r'data-view="(\w+)"', strip.group(1)) == ["overview", "nodes", "alerts"]
+    assert re.findall(r'data-view="(\w+)"', strip.group(1)) == ["overview", "nodes"]
     css = _read(CSS)
     assert "body.phone .view-strip { display: flex; }" in css
     assert "body.phone :is(.scene-more, .view-menu) { display: none; }" in css
 
 
-def test_alerts_is_a_view_and_an_admin_s_only():
-    """ALERTS (2026-11-13, stage 4): a view like the others, with its own main;
-    its menu item and strip entry are marked admin-only and start hidden, and
-    views.js draws them for an admin (NODES' bulk gate) and removes them for
-    anyone else, so no door is offered that the routes would refuse."""
+def test_alerts_left_the_views_for_nodes_and_settings():
+    """ALERTS (2026-11-13) was a view; since 2026-11-14 (owner: "i wanted it
+    built into the node view"; "put destinations in settings › alerts") the
+    rules are made in NODES and where word goes is Settings › Alerts. No main,
+    no menu item, no strip entry; the two new homes are wired, admin-only."""
     html = _read(INDEX)
-    assert '<main class="atlas-view" id="view-alerts" data-view="alerts" hidden' in html
-    for block in (_view_menu(html),
-                  re.search(r'<nav class="view-strip" id="view-strip"[^>]*>(.*?)</nav>', html, re.S).group(1)):
-        item = re.search(r'<button[^>]*data-view="alerts"[^>]*>', block).group(0)
-        assert "data-admin" in item and " hidden" in item, item
-        for other in re.findall(r'<button[^>]*data-view="(?:map|overview|nodes)"[^>]*>', block):
-            assert "data-admin" not in other and "hidden" not in other, other
-    assert "{{ theme.text.view_alerts }}" in html
+    assert 'id="view-alerts"' not in html and 'data-view="alerts"' not in html
+    assert '<div class="sp-sec" id="sp-alerts" data-sec="alerts" hidden></div>' in html
+    atlas = _read(WEB / "static" / "js" / "atlas.js")
+    assert "import './alerts.js';" not in atlas and "import './alert-setup.js';" in atlas
+    assert not (WEB / "static" / "js" / "alerts.js").exists()
+    nodes = _read(WEB / "static" / "js" / "nodes.js")
+    assert "import * as Rules from './alert-rules.js';" in nodes
+    assert "const mayAlert = () => Boolean(A.MAY_ALERTS) && !phone();" in nodes
     views = _read(WEB / "static" / "js" / "views.js")
     assert "const ADMIN = canAdminWrite() && document.body.dataset.editable === '1';" in views
+    assert "A.MAY_ALERTS = ADMIN;" in views
     assert "if (ADMIN) el.removeAttribute('hidden'); else el.remove();" in views
-    assert "allowedView(named, A.PHONE, ADMIN)" in views, "a press must not open ALERTS for anyone else"
-    assert "import './alerts.js';" in _read(WEB / "static" / "js" / "atlas.js")
-    css = _read(CSS)
-    light = css[css.index(':root[data-scheme="light"] :is('):]
-    assert "#view-alerts" in light[:light.index("{")], "the ALERTS sheet must follow the light scheme"
+    assert "#view-alerts" not in _read(CSS)
 
 
 def test_a_place_link_waits_for_the_opening_shot():
@@ -594,13 +602,19 @@ def test_the_drift_note_fades_and_returns_to_the_middle_of_the_map():
     assert "if (onCentre) A.wakeDrift?.();" in shades
 
 
-def test_a_lit_tool_lights_its_lamp_in_the_menu():
-    """A tool that is on says so in the menu: its lamp fills, in the same tokens
-    the round buttons used (the Sky and the Depths in reverse)."""
+def test_a_lit_tool_fills_in_the_band():
+    """A tool that is on says so in the band: it fills in the same tokens the
+    round buttons and the menu's lamps used (the Sky and the Depths in
+    reverse). The band clears every `.chrome` fill at id weight, so the lit
+    fill has to be said at that weight too."""
     css = _read(CSS)
-    assert ".view-tool.lit .vt-lamp {" in css
-    assert re.search(r"\.view-tool\.ci-sky\.lit \.vt-lamp \{[^}]*var\(--sky-lit-fill\)", css)
-    assert re.search(r"\.view-tool\.ci-depths\.lit \.vt-lamp \{[^}]*var\(--depths-lit-fill\)", css)
+    assert "#scenes-list .chrome { background: transparent;" in css
+    sky = re.search(r"#scenes-list \.chrome\.ci-sky\.lit \{[^}]*\}", css)
+    depths = re.search(r"#scenes-list \.chrome\.ci-depths\.lit \{[^}]*\}", css)
+    assert sky and "var(--sky-lit-fill)" in sky.group(0) and "var(--sky-lit-ink)" in sky.group(0)
+    assert depths and "var(--depths-lit-fill)" in depths.group(0) and "var(--depths-lit-ink)" in depths.group(0)
+    assert css.index("#scenes-list .chrome { background: transparent;") < css.index("#scenes-list .chrome.ci-sky.lit")
+    assert ".vt-lamp {" in css, "the tripwires' pill still wears the lamp"
 
 
 def test_the_menu_and_the_index_fade_and_roll_up_when_the_mouse_leaves():
@@ -646,22 +660,15 @@ def test_the_sky_lights_as_the_depths_do_in_reverse():
     assert css.index(".chrome.lit {") < css.index(":root .chrome.ci-sky.lit")
 
 
-def test_the_scheme_button_shows_the_bar_s_own_glyph():
-    """Both icons ride in the button; the bar block flips which one shows, so
-    the glyph follows the camera with no write (stage 1, 2026-11-13)."""
-    css = _read(CSS)
-    assert ".sch-sun { display: var(--bar-sun, none); }" in css
-    assert ".sch-moon { display: var(--bar-moon, block); }" in css
-    # after `.ci-glyph`, which says `display: block` at the same weight
-    assert css.index(".ci-glyph { width: 20px") < css.index(".sch-sun {")
-    root = re.search(r"^:root \{.*?^\}", css, re.S | re.M).group(0)
-    bar = re.search(r'^:root\[data-scheme-pick="light"\] :is\(.*?^\}', css, re.S | re.M).group(0)
-    assert "--bar-sun: none;" in root and "--bar-moon: block;" in root
-    assert "--bar-sun: block;" in bar and "--bar-moon: none;" in bar
-    m = re.search(r'<button class="chrome ci-scheme" id="btn-scheme".*?</button>', _read(INDEX), re.S)
-    assert m and "sch-sun" in m.group(0) and "sch-moon" in m.group(0), "the button carries both icons"
-    tools = re.search(r'<span class="menu-tools" id="menu-tools">(.*?)</span>', _read(INDEX), re.S).group(1)
-    assert tools.index('id="btn-scheme"') < tools.index('id="btn-menu-settings"'), "the button sits before ⚙"
+def test_the_colours_are_only_in_settings():
+    """The owner (2026-11-14): no ☀/☾ in the band; Settings › YOU › COLOURS is
+    the control on screen (the T key still switches)."""
+    html, css = _read(INDEX), _read(CSS)
+    assert 'id="btn-scheme"' not in html and "sch-sun" not in html
+    assert ".ci-scheme" not in css and ".sch-sun" not in css and "--bar-sun" not in css
+    assert html.count('name="sp-scheme"') == 3
+    js = _read(WEB / "static" / "js" / "scheme.js")
+    assert "btn-scheme" not in js and "isToggleKey(e)" in js
 
 
 def test_the_colours_row_offers_light_dark_and_light_dark():

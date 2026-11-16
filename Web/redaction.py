@@ -133,8 +133,13 @@ def cleared(entry, groups):
     """True if `entry` (a node or link dict) is visible to `groups`."""
     if sees_everything(groups):
         return True
+    if not isinstance(entry, dict):
+        return False      # a stray entry is no place (round 10): hidden, never a raise
     required = entry.get("require_group")
-    return not required or required in groups
+    if not required:
+        return True
+    # a hand edit's list or object: nobody's group, so hidden (closed), never a raise
+    return isinstance(required, str) and required in groups
 
 
 def group_key(groups):
@@ -218,21 +223,32 @@ _ORDERED_REF_FIELDS = {"path"}
 
 #: Sections whose references to places are attributes of the entry rather than
 #: its reason to exist (see `_scrub_entry`'s `defining`): a hidden id is taken
-#: out and the entry stays. A set (2026-11-13) is a list of places by name of
-#: its own; one hidden member must not hide the other members from the viewer.
-_FILTERED_SECTIONS = {"nodes", "sets"}
+#: out and the entry stays. A collection (2026-11-13, then called a set) is a
+#: list of places by name of its own; one hidden member must not hide the
+#: other members from the viewer.
+_FILTERED_SECTIONS = {"nodes", "collections"}
 
 #: Free text that can name a place in words, by section. No reference walker
 #: can read prose, so an entry whose words name a hidden place goes whole, the
-#: way rites always have (2026-11-13: certificates, sets, a rite's name and a
+#: way rites always have (2026-11-13: certificates, collections, a rite's name and a
 #: rack slot's words joined them; the 11-12 audit found each of them open).
 _FREE_TEXT = {
     "rites": ("name", "host", "note"),
     "certs": ("name", "host", "note"),
-    "sets": ("name", "note"),
+    # the id too: it is made from the name, and a rename keeps it (2026-11-14)
+    "collections": ("id", "name", "note"),
     "rack": ("name", "desc"),
     "rack_rear": ("name", "desc"),
 }
+
+
+#: The free-text fields that are ids the rail made from a name (`slugFor`):
+#: matched against hidden slugs as ids are made, dashes only.
+_ID_FIELDS = frozenset({"id"})
+
+#: Sections that name places as the KEYS of a mapping, which the reference
+#: walker cannot read (regions' `places`): the shape guard covers them too.
+_PINNED = frozenset({"regions"})
 
 
 def _node_refs(section_key):
@@ -245,6 +261,29 @@ def _node_refs(section_key):
             if sub.get("ref") == "nodes":
                 out.append((fld["name"], sub["name"], sub["type"]))
     return out
+
+
+class _Unseen:
+    """"Is this reference one this viewer may not follow?" while anything is
+    hidden: yes for every value that is not a visible place's id, so a hidden
+    id written another way ("SECRET-PLACE", " secret-place") is withheld like
+    the id itself (round 14). Empty values are no reference. Truthy exactly
+    when something is hidden."""
+
+    def __init__(self, visible, hidden):
+        self._visible, self._hidden = visible, hidden
+        self.exact = hidden      # the hidden ids as they are, for a malformed value
+
+    def __contains__(self, value):
+        if value is None or value == "":
+            return False
+        try:
+            return value not in self._visible
+        except TypeError:
+            return True
+
+    def __bool__(self):
+        return bool(self._hidden)
 
 
 def _scrub_entry(entry, refs, hidden, defining):
@@ -297,7 +336,10 @@ def _scrub_value(holder, name, ftype, hidden, defining):
         # `value in hidden` raised on it (a 500 for every restricted reader).
         # It names no place anyone can look up, so it is never served to a
         # restricted reader, and an entry it ties to a hidden place goes.
-        if defining and _holds_hidden(value, hidden):
+        # the value itself is never served (popped below), so whether the
+        # entry goes is judged by the exact hidden ids: a field name inside it
+        # ("id") is no reference (round 14)
+        if defining and _holds_hidden(value, getattr(hidden, "exact", hidden)):
             return False
         holder.pop(name, None)
         return True
@@ -353,7 +395,19 @@ def hidden_node_ids(data, groups):
     """Ids of the places this viewer may not see. Empty when they see everything."""
     if sees_everything(groups):
         return set()
-    return {n.get("id") for n in data.get("nodes", []) if not cleared(n, groups)}
+    out = set()
+    for n in data.get("nodes", []):
+        # any scalar id (a hand edit's 7 is still hidden; round 10 had kept
+        # only text and let it through), never a list (unhashable)
+        if not (isinstance(n, dict) and isinstance(n.get("id"), (str, int, float))
+                and not isinstance(n.get("id"), bool)) or cleared(n, groups):
+            continue
+        out.add(n["id"])
+        if not isinstance(n["id"], str):
+            # and as text: a region pin is a JSON key, always text, and a
+            # member may be written "7" for the place 7 (round 12)
+            out.add(str(n["id"]))
+    return out
 
 
 def hidden_words(data, groups):
@@ -364,7 +418,7 @@ def hidden_words(data, groups):
         return None
     words = set()
     for n in data.get("nodes", []):
-        if not cleared(n, groups):
+        if isinstance(n, dict) and not cleared(n, groups):
             ip = str(n.get("ip") or "").split("/")[0].strip()
             # every "no value" mark, not only the dash: a hidden place whose ip
             # is "-" made "-" a hidden word and dropped every rite with a hyphen
@@ -384,6 +438,125 @@ def hidden_words(data, groups):
                       + rf")(?!{edge})", re.IGNORECASE)
 
 
+#: List punctuation: the marks that join one name to the next ("Core, Switch",
+#: "Rack (A)", "kept for: X"). In a list-aware slug a run of separators that
+#: holds one becomes `~`, every other run a dash.
+_LIST_MARKS = re.compile(r"[\n,;:()\[\]]")
+
+
+def slug(text, lists=False):
+    """`text` as a slug, the way the rail makes a collection's id
+    (`roster-model.slugFor`): accents dropped, lower case, every run of
+    anything but a letter or a digit one dash, no dash at either end.
+
+    `lists=True` is for free text: a run of separators that holds list
+    punctuation becomes `~` instead, so "Core, Switch" is `core~switch`,
+    which a hidden "Core Switch" (`core-switch`) never matches, while
+    "Rack(A)" and "Rack (A)" are both `rack~a` (2026-11-14 review, round 7)."""
+    import unicodedata
+    # lower case first, then NFKD, the rail's order (`slugFor`): "NAS™" is
+    # `nas` there, and `nastm` the other way round (round 9)
+    plain = unicodedata.normalize("NFKD", str(text or "").lower())
+    # every mark (category M), as the rail's `\p{M}`: combining class alone
+    # keeps U+20E3 and U+FE0F (round 12)
+    plain = "".join(ch for ch in plain if unicodedata.category(ch)[0] != "M")
+    if not lists:
+        return re.sub(r"[^a-z0-9]+", "-", plain).strip("-")
+    return re.sub(r"[^a-z0-9]+", lambda m: "~" if _LIST_MARKS.search(m.group()) else "-",
+                  plain).strip("-~")
+
+
+def _slug_worthy(word):
+    """Whether a hidden id, name or address gets a slug at all. Not when it
+    has a letter of another script than Latin that a slug drops (東京 Alpha
+    and 東京Alpha would both become plain `alpha` and withhold the visible
+    Alpha; 客厅NAS would become `nas`; Сервер 1 would become `1`), nor when the
+    slug is under three characters (C++ -> `c`) or has no letter (an address:
+    a date can spell 10-12-13-45). The exact pattern (`hidden_words`) still
+    covers every one of those. A Latin letter the slug drops (ø, ß) keeps the
+    slug, because the rail's ids drop it the same way (Søren -> `s-ren`,
+    Straße -> `stra-e`). Rounds 7 and 8 of the 2026-11-14 review."""
+    import unicodedata
+    symbol = False
+    # every apostrophe is the ASCII one here: ʼ (a modifier letter) must not
+    # read as a letter of another script (round 12)
+    word = _APOSTROPHES.sub("'", str(word))
+    for ch in word:
+        if slug(ch) or ch.isspace():
+            continue
+        # it decomposes to plain ASCII the rail drops the same way (™ -> TM)
+        if all(c.isascii() for c in unicodedata.normalize("NFKD", ch)):
+            continue
+        kind = unicodedata.category(ch)
+        # a dropped letter or digit of another script shrinks the name to its
+        # Latin part (東京Alpha -> `alpha`, ٣ Alpha -> `alpha`); Latin letters
+        # (ø, ß) and punctuation do not
+        if (kind[0] == "L" and not unicodedata.name(ch, "").startswith("LATIN")) or kind[0] == "N":
+            return False
+        if kind == "So":
+            symbol = True
+    s = slug(word)
+    if symbol and "-" not in s:
+        # a symbol leaves a single word ("🔒 Alpha" -> `alpha`, which would
+        # withhold "Alpha team"); with two or more words left the slug still
+        # names the place ("📺 Living Room TV" -> `living-room-tv`), and
+        # leaking it is the worse mistake (round 10)
+        return False
+    return sum(ch.isalnum() for ch in s) >= 3 and any(ch.isalpha() for ch in s)
+
+
+_APOSTROPHES = re.compile(r"['\u2019\u02bc]")
+
+
+class HiddenSlugs:
+    """The hidden places' ids, names and addresses as slugs, in two forms:
+    for an id (made by the rail, dashes only, cut at 48 characters) and for
+    free text (list-aware). `in_id` and `in_text` take the text as written."""
+
+    def __init__(self, words):
+        bound = r"(?<![a-z0-9])(?:{})(?![a-z0-9])"
+        # each name also without its apostrophes: "Dad's PC" is `dad-s-pc`
+        # and `dads-pc` (round 11)
+        words = set(words) | {s for s in (_APOSTROPHES.sub("", w) for w in words)
+                              if _slug_worthy(s)}   # "🔒 Moms" is no slug, nor is "🔒 Mom's" stripped
+        ids = {slug(w) for w in words}
+        ids |= {s[:48].strip("-") for s in ids if len(s) > 48}
+        self._ids = re.compile(bound.format("|".join(map(re.escape, sorted(ids)))))
+        # free text matches both: the list-aware slug ("Rack(A)" is a hidden
+        # "Rack (A)") and the dash-only one ("mirror of nas-backup" is a hidden
+        # "NAS (Backup)"); a list of two names ("Core, Switch") is `core~switch`
+        # and contains neither form of a hidden "Core Switch" (round 8)
+        texts = {slug(w, lists=True) for w in words} | {slug(w) for w in words}
+        self._texts = re.compile(bound.format("|".join(map(re.escape, sorted(texts)))))
+
+    def in_id(self, text):
+        bare = _APOSTROPHES.sub("", str(text or ""))
+        return bool(self._ids.search(slug(text)) or self._ids.search(slug(bare)))
+
+    def in_text(self, text):
+        # the text without its apostrophes too: "Dad's PC" names a hidden "Dads PC"
+        bare = _APOSTROPHES.sub("", str(text or ""))
+        return bool(self._texts.search(slug(text, lists=True))
+                    or self._texts.search(slug(bare, lists=True)))
+
+
+def hidden_slugs(data, groups):
+    """`hidden_words` for text written as a slug: an id made from a name
+    ("Vault Box" -> `vault-box-backups`, "Café" -> `cafe-server`) does not
+    contain the name as written. A `HiddenSlugs`, or None when nothing is
+    hidden or no hidden word gets a slug (rounds 4 to 7)."""
+    if sees_everything(groups):
+        return None
+    words = set()
+    for n in data.get("nodes", []):
+        if isinstance(n, dict) and not cleared(n, groups):
+            ip = str(n.get("ip") or "").split("/")[0].strip()
+            for w in (n.get("id"), n.get("name"), ip):
+                if w and str(w).strip() not in schema.NONE_MARKS and _slug_worthy(w):
+                    words.add(str(w))
+    return HiddenSlugs(words) if words else None
+
+
 def visible_monitors(data, groups):
     """Kuma monitor names charted on a service this viewer is cleared for.
 
@@ -399,12 +572,18 @@ def visible_monitors(data, groups):
     for node in data.get("nodes", []):
         if not cleared(node, groups):
             continue
-        for link in node.get("links") or []:
-            if cleared(link, groups):
+        links = node.get("links") if isinstance(node.get("links"), list) else []
+        for link in links:
+            if isinstance(link, dict) and cleared(link, groups):
                 out.add(signals.service_key(node.get("id"), link))
     hidden = hidden_node_ids(data, groups)
+    # while anything is hidden, a monitor counts only when its place is a
+    # visible place: "SECRET-PLACE" for a hidden secret-place is withheld,
+    # as /lab-data withholds it (round 15)
+    visible = {n.get("id") for n in data.get("nodes", [])
+               if isinstance(n, dict) and isinstance(n.get("id"), str) and cleared(n, groups)}
     for monitor, node_id in signals.monitor_map(data).items():
-        if node_id not in hidden:
+        if (node_id in visible) if hidden else True:
             out.add(monitor)
     return out
 
@@ -415,13 +594,31 @@ def redact_for_groups(data):
     return redact(data, viewer_groups(), bool(api_tokens.current()))
 
 
+def clearance_key(groups, token=False):
+    """The cache key `redact` returns for this viewer, without redacting: a
+    memo keyed per clearance (the CSP's frame-src list) can look itself up
+    before paying for a deep copy of the whole map (2026-11-13: at 10,000
+    places that copy ran on every response, static files included)."""
+    if sees_everything(groups):
+        return ""
+    return group_key(groups) + ("+token" if token else "")
+
+
 def redact(data, groups, token=False):
     """`redact_for_groups` for a viewer handed in rather than read from the
     request: `groups` as `viewer_groups` gives them, `token` true when the
     reader is an API token. Reads nothing but its arguments."""
     if sees_everything(groups):
-        return data, ""
+        return data, clearance_key(groups, token)
     d = copy.deepcopy(data)
+    # the monitors the operator chose to ignore are an admin's list (the feed
+    # keeps drift for admins only): no viewer below admin gets it (round 15)
+    if isinstance(d.get("signals"), dict):
+        d["signals"].pop("drift_ignore", None)
+    # A section under an old name would pass the walkers below untouched (they
+    # know today's names only), hidden members and all: read it as today's
+    # first. Every loader already does; this is the belt (2026-11-14 review).
+    schema.upgrade(d)
     # TRIPWIRES ARE ADMIN-ONLY, WHOLESALE (v0.1). Where a honeypot sits and
     # where a canary token is planted is the deception layout itself: there
     # is no per-entry version of it worth giving, and a scrubbed stone still
@@ -430,22 +627,59 @@ def redact(data, groups, token=False):
     d.pop("stones", None)
     hidden = hidden_node_ids(d, groups)
     names = hidden_words(d, groups)
-    d["nodes"] = [n for n in d.get("nodes", []) if cleared(n, groups)]
+    slugs = hidden_slugs(d, groups)
+    # a stray non-object entry (validation only warns) is no place: dropped,
+    # never a raise that 500s every restricted reader (round 9)
+    d["nodes"] = [n for n in d.get("nodes", []) if isinstance(n, dict) and cleared(n, groups)]
     # PROVENANCE: when and whether, not who. The change log is admin-only because
     # it names people, and a stamp's `*_by` is the same names on another page.
     import provenance
     provenance.for_viewer(d["nodes"])
+    # A COLLECTION LISTS ONLY PLACES THIS VIEWER MAY SEE (round 13): a member
+    # written in another case or with a space ("SECRET-PLACE") is no place's
+    # id, and the reference walker below matches ids exactly. While anything
+    # is hidden, keep only the members that are visible places' ids.
+    visible_ids = {n.get("id") for n in d["nodes"] if isinstance(n.get("id"), (str, int, float))}
+    if isinstance(d.get("collections"), list) and len(d["nodes"]) < len(data.get("nodes") or []):
+        for c in d["collections"]:
+            if isinstance(c, dict) and "places" in c:
+                c["places"] = [p for p in schema.as_list(c["places"])
+                               if isinstance(p, (str, int, float)) and p in visible_ids]
+    # A COLLECTION'S SERVICES (stage 3b) are keys, and `<place>/<label>` carries
+    # the place's id: keep only the keys of links on this viewer's own map
+    # (an allowlist), whatever else is hidden. The feed's own allowlist, on the
+    # whole map: here `d` still holds a link behind its own group and the
+    # monitors `signals.kuma` charts on hidden places (stage 3b review)
+    if isinstance(d.get("collections"), list):
+        seen_keys = visible_monitors(data, groups)
+        for c in d["collections"]:
+            if isinstance(c, dict) and "services" in c:
+                c["services"] = [k for k in schema.as_list(c["services"])
+                                 if isinstance(k, str) and k in seen_keys]
     # a rite's `host` is free text, so no node reference covers it: a rite that
     # names a hidden place in words goes as surely as one that points at it.
     # The same for a certificate, a set and a rack slot (`_FREE_TEXT`).
     if names:
+        def says_hidden(entry, fields):
+            # field by field: the gap between two fields is neither a space in
+            # a hidden name nor a dash in its slug ("lab" + "Core switches"
+            # is not "Lab core", 2026-11-14 review)
+            for f in fields:
+                text = str(entry.get(f) or "")
+                if names.search(text):
+                    return True
+                # an id is matched as the rail makes ids, free text list-aware
+                if slugs and (slugs.in_id(text) if f in _ID_FIELDS else slugs.in_text(text)):
+                    return True
+            return False
+
         for key, fields in _FREE_TEXT.items():
             if isinstance(d.get(key), list):
-                d[key] = [e for e in d[key] if not (isinstance(e, dict) and names.search(
-                    " ".join(str(e.get(f) or "") for f in fields)))]
+                d[key] = [e for e in d[key] if not (isinstance(e, dict) and says_hidden(e, fields))]
     for n in d["nodes"]:
         if n.get("links"):
-            n["links"] = [l for l in n["links"] if cleared(l, groups)]
+            links = n["links"] if isinstance(n["links"], list) else []
+            n["links"] = [l for l in links if isinstance(l, dict) and cleared(l, groups)]
         # THE ACCOUNT ROSTER IS ADMIN-ONLY, WHOLESALE (2026-08-25).
         #
         # Deliberately NOT per-entry `require_group` the way links are: a list
@@ -462,6 +696,29 @@ def redact(data, groups, token=False):
         # clearance, not full clearance.
         n.pop("accounts", None)
     if hidden:
+        visible = set()
+        for n in d["nodes"]:
+            if isinstance(n.get("id"), (str, int, float)) and not isinstance(n.get("id"), bool):
+                visible.add(n["id"])
+                if not isinstance(n["id"], str):
+                    visible.add(str(n["id"]))   # a pin key is text: "7" for the place 7
+        unseen = _Unseen(visible, hidden)
+        # A LIST SECTION THAT IS NOT A LIST, OR HOLDS SOMETHING NOT AN ENTRY
+        # (2026-11-14 review, round 4). Validation only warns, so a hand edit
+        # is served; the walkers below read lists of objects and would pass
+        # anything else through whole. While something is hidden, a section
+        # that names places (by reference or in words) and is not a list of
+        # objects goes, and so does an entry that is not an object.
+        for key in list(d):
+            section = schema.get(key)
+            if not section or section.get("kind", "list") != "list":
+                continue
+            if not (_node_refs(key) or key in _FREE_TEXT or key in _PINNED):
+                continue
+            if not isinstance(d[key], list):
+                d.pop(key)
+            else:
+                d[key] = [e for e in d[key] if isinstance(e, dict)]
         for key, value in list(d.items()):
             if not isinstance(value, list):
                 continue
@@ -471,8 +728,8 @@ def redact(data, groups, token=False):
             defining = key not in _FILTERED_SECTIONS
             d[key] = [e for e in value
                       if not isinstance(e, dict)
-                      or _scrub_entry(e, refs, hidden, defining)]
-        _scrub_signals_block(d, hidden)
+                      or _scrub_entry(e, refs, unseen, defining)]
+        _scrub_signals_block(d, unseen)
         # A PORT'S WORDS (2026-11-11). `peer` and `note` say what is on the other
         # end in prose, and a connection import now writes them: "VAULT and 3
         # guests" on a visible switch names a hidden place, its port and what it
@@ -490,10 +747,12 @@ def redact(data, groups, token=False):
         for r in d.get("regions") or []:
             pins = r.get("places") if isinstance(r, dict) else None
             if isinstance(pins, dict):
-                r["places"] = {k: v for k, v in pins.items() if k not in hidden}
+                r["places"] = {k: v for k, v in pins.items() if k not in unseen}
+            elif isinstance(r, dict) and "places" in r:
+                r.pop("places")             # a hand edit's list: no pins rather than a guess
     if token:
         # A TOKEN READS A LITTLE LESS THAN A PERSON WITH NO GROUPS (2026-11-11), so
         # it must not share that person's cache key: an ETag or a cache built on
         # the group set alone would hand one of them the other's body.
-        return bare_urls(d), group_key(groups) + "+token"
-    return d, group_key(groups)
+        return bare_urls(d), clearance_key(groups, token)
+    return d, clearance_key(groups, token)

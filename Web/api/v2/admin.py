@@ -29,6 +29,7 @@ from flask import Blueprint, jsonify, request
 import dataset as ds
 import events
 import maintenance
+import renames
 import schema
 import settings
 from context import atlas
@@ -154,7 +155,7 @@ def context():
     ctx = atlas()
     store = ctx.store
     try:
-        _, stamp = store.read()
+        stamp = store.stamp()
         readable = True
     except ds.RejectedError as e:
         stamp, readable = None, False
@@ -242,17 +243,138 @@ def _clear_superseded_overlays(ctx, ops):
     return cleared
 
 
+def _rule_collection_ids():
+    """The collection ids stored alert rules name (kind `collection`, or the
+    old `set`). Empty when there are none or the store cannot be read."""
+    try:
+        import alerts
+        doc, _ = alerts.read()
+    except Exception:  # noqa: BLE001 — no alerts store, no rule to protect
+        return set()
+    return {r["target"]["id"] for r in doc.get("rules") or []
+            if isinstance(r, dict) and isinstance(r.get("target"), dict)
+            and alerts.target_kind(r["target"].get("kind")) == "collection"
+            and isinstance(r["target"].get("id"), str)}
+
+
+def _window_collection_ids():
+    """The collection ids stored maintenance windows name (2026-11-14). A new
+    collection taking one of these would land in that window unseen."""
+    try:
+        stored = maintenance.read()
+    except Exception:  # noqa: BLE001 — no repairs store, no window to protect
+        return set()
+    return {c for w in stored["windows"] for c in (w.get("collections") if isinstance(w.get("collections"), list) else [])
+            if isinstance(c, str)}
+
+
 @admin_bp.route("/ops", methods=["POST"])
 @write_required
 def apply_ops():
     body = request.get_json(silent=True)
     if not isinstance(body, dict):
         return jsonify({"error": "expected {ops, expect}"}), 400
+    # A NEW COLLECTION NEVER TAKES AN ID AN ALERT RULE STILL NAMES (round 14).
+    # Removing a collection suspends its rules; inserting one with the same
+    # id from anywhere (the rail, the Desk, a script) would quietly revive
+    # them on new members. Pick another id, or point the rule elsewhere first.
+    rule_ids, window_ids = _rule_collection_ids(), _window_collection_ids()
+    taken = rule_ids | window_ids
+    if taken:
+        data, _, refused = _read(atlas())
+        if refused:
+            return refused
+        listed = data.get("collections")
+        current = {c.get("id") for c in listed if isinstance(c, dict)} if isinstance(listed, list) else set()
+        for op in body.get("ops") if isinstance(body.get("ops"), list) else []:
+            if not (isinstance(op, dict) and op.get("op") in ("insert", "upsert")
+                    and op.get("section") == "collections"):
+                continue
+            # the id the entry will have: the body's (an insert, or an edit
+            # that renames the id), else the one the upsert names (round 15)
+            fields = op.get("body") if isinstance(op.get("body"), dict) else {}
+            new_id = fields.get("id") if isinstance(fields.get("id"), str) else op.get("id")
+            if isinstance(new_id, str) and new_id in taken and new_id not in current:
+                if new_id in rule_ids:
+                    return jsonify({"error": "that collection id is still named by an alert rule",
+                                    "problems": [f"collection {new_id!r}: an alert rule on a removed "
+                                                 "collection still names this id, and would start "
+                                                 "watching this one; choose another id, or remove that "
+                                                 "rule first (with alerts on: Settings › Alerts, Rules on something gone)"]}), 422
+                return jsonify({"error": "that collection id is still named by a maintenance window",
+                                "problems": [f"collection {new_id!r}: a maintenance window still "
+                                             "names this id, and would put this collection in "
+                                             "maintenance; choose another id, or take it out of "
+                                             "that window first"]}), 422
+    # CARRYING RENAMES (2026-11-15, the owner's toggle): with the map's
+    # `carry_service_renames` on, a write that renames a service (its label,
+    # its monitor, its place's id) takes the collections naming it along in
+    # this same save, and the windows and alert rules straight after
+    ops = body.get("ops")
+    moves, data = _service_moves(ops)
+    if moves:
+        ops = list(ops) + renames.collection_ops(data, moves)
     # `origin` lets the page say "these came from a survey": it can only lower
     # the standing of what it writes (unreviewed), never raise it
-    result, refused = _commit(atlas(), body.get("ops"), body.get("expect"),
+    result, refused = _commit(atlas(), ops, body.get("expect"),
                               str(body.get("note") or "")[:200], body.get("origin"))
-    return refused or jsonify(result)
+    if refused:
+        return refused
+    if moves:
+        result["carried"] = _carry_elsewhere(moves)
+    return jsonify(result)
+
+
+def _service_moves(ops):
+    """({old key: new key}, the map as read) for the services these ops
+    rename, when the map asks for renames to be carried; ({}, None) otherwise."""
+    if not isinstance(ops, list):
+        return {}, None
+    try:
+        data, _, refused = _read(atlas())
+    except Exception:  # noqa: BLE001 — no map, nothing to carry
+        return {}, None
+    if refused or not renames.enabled(data):
+        return {}, None
+    by_id = {n.get("id"): n for n in data.get("nodes") or [] if isinstance(n, dict)}
+    moves = {}
+    for op in ops:
+        if not (isinstance(op, dict) and op.get("op") == "upsert" and op.get("section") == "nodes"):
+            continue
+        before = by_id.get(op.get("id")) if isinstance(op.get("id"), str) else None
+        fields = op.get("body") if isinstance(op.get("body"), dict) else {}
+        if before is None or not ("links" in fields or isinstance(fields.get("id"), str)):
+            continue
+        new_id = fields["id"] if isinstance(fields.get("id"), str) and fields["id"] else op["id"]
+        moves.update(renames.key_moves(before, fields.get("links"), op["id"], new_id))
+    return moves, data
+
+
+def _carry_elsewhere(moves):
+    """Carry `moves` in the repair windows and the alert rules, each under its
+    own store's lock; what moved where, for the answer. A store that cannot
+    be read or written is said, never raised: the map is already saved."""
+    out = {"services": [f"{a} -> {b}" for a, b in sorted(moves.items())], "windows": 0, "rules": 0}
+    try:
+        stored = maintenance.read()
+        windows = renames.carried_windows(stored["windows"], moves)
+        if windows is not None:
+            maintenance.save(windows, actor=actor(), expect=maintenance.stamp())
+            out["windows"] = sum(1 for w, was in zip(windows, stored["windows"]) if w is not was)
+    except Exception as e:  # noqa: BLE001
+        log.warning("v2: could not carry renames into the repairs: %s", e)
+        out["windows_failed"] = True
+    try:
+        import alerts
+        doc, stamp = alerts.read()
+        carried = renames.carried_rules(doc, moves)
+        if carried is not None:
+            alerts.save(carried, expect=stamp)
+            out["rules"] = sum(1 for r, was in zip(carried["rules"], doc.get("rules") or []) if r is not was)
+    except Exception as e:  # noqa: BLE001
+        log.warning("v2: could not carry renames into the alert rules: %s", e)
+        out["rules_failed"] = True
+    return out
 
 
 @admin_bp.route("/dependents")

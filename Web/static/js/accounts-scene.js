@@ -34,8 +34,11 @@
 
 import { A, $, esc, zoneById, FALLBACK_HUE } from './config.js';
 import { makeScene } from './scene.js';
+import { folds } from './fold.js';
+import { opensAtFirst } from './fold-model.js';
 
 let listEl, headEl;
+const F = folds('accounts');
 
 /* The three sudo states, loudest first. `nopasswd` takes the map's existing
    alarm tone (`--sem-down`); `password` is ordinary and quiet; `none` is the
@@ -120,10 +123,20 @@ function build() {
     }))
     .sort((a, z) => z.loud - a.loud || a.node.name.localeCompare(z.node.name));
 
-  listEl.innerHTML = blocks.map(({ node, rows, loud: n }) => {
+  // OPEN AND SHUT (2026-11-15, stage 4): each place's roster folds, and the
+  // choice is remembered. A short list opens whole; a long one opens only the
+  // places carrying the finding, and a shut head still counts it
+  const bar = blocks.length > 1
+    ? `<div class="fold-bar"><button type="button" class="dsk-btn dsk-btn-sm" data-fold-all="open">Open all</button>
+        <button type="button" class="dsk-btn dsk-btn-sm" data-fold-all="shut">Shut all</button></div>`
+    : '';
+  listEl.innerHTML = bar + blocks.map(({ node, rows, loud: n }) => {
     const hue = zoneById(node.zone)?.hue || FALLBACK_HUE;
-    return `<div class="ldg-block" style="--z-hue:${esc(hue)}">
-      <div class="ldg-zhead">
+    const key = `place:${node.id}`;
+    const first = opensAtFirst(n, blocks.length);
+    return `<div class="ldg-block${F.shut(key, first)}" data-fold-box style="--z-hue:${esc(hue)}">
+      <div class="ldg-zhead" ${F.head(key, first, `${node.name}'s accounts`)}>
+        <span class="ldg-fold" aria-hidden="true">▾</span>
         <span class="ldg-zname">${esc(node.name)}</span>
         <span class="ldg-zsub">${esc(node.role || '')}</span>
         <span class="ldg-zcount">${rows.length} account${rows.length === 1 ? '' : 's'}${
@@ -145,4 +158,5 @@ A.buildAccountsScene = function buildAccountsScene() {
   if (!scene.mount()) return;
   listEl = $('acc-list');
   headEl = $('acc-head');
+  F.wire(listEl);
 };

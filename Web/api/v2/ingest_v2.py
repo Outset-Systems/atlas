@@ -17,6 +17,8 @@ import logging
 from flask import Blueprint, abort, jsonify, g
 
 import ingest
+from dataset import site_lock
+from filelock import LockTimeout
 
 from . import bp
 
@@ -24,6 +26,14 @@ log = logging.getLogger("atlas.api.v2")
 
 #: Who a stamp names for what a relay pushed in (provenance.py).
 RELAY = "relay"
+
+
+def _busy():
+    """An editor's save holds the map: the relay sends again on its next run."""
+    resp = jsonify({"error": "the map is being saved; send again shortly"})
+    resp.headers["Retry-After"] = "5"
+    return resp, 503
+
 
 ingest_bp = Blueprint("ingest", __name__, url_prefix="/ingest")
 
@@ -95,11 +105,16 @@ def ingest_inventory():
     except ValueError as e:
         return jsonify({"error": str(e)}), 422
 
-    with session_scope() as session:
-        before = dump_labdata(session, g.site_slug)
-        stats = sync(session, snapshot, site_slug=g.site_slug,
-                     role_map=role_map or DEFAULT_ROLE_MAP)
-        restamp(session, g.site_slug, before, RELAY, "netbox")
+    try:
+        # the map's own write lock, held until the rows are committed: an
+        # editor's save loads and writes under it too (2026-11-15)
+        with site_lock(g.site_slug), session_scope() as session:
+            before = dump_labdata(session, g.site_slug)
+            stats = sync(session, snapshot, site_slug=g.site_slug,
+                         role_map=role_map or DEFAULT_ROLE_MAP)
+            restamp(session, g.site_slug, before, RELAY, "netbox")
+    except LockTimeout:
+        return _busy()
     log.info("ingest inventory: site=%s %s", g.site_slug, stats)
     return jsonify({"ok": True, "site": g.site_slug, "stats": stats})
 
@@ -123,11 +138,14 @@ def ingest_observed():
     if source not in ("nmap", "arp", "relay"):
         return jsonify({"error": "source must be nmap, arp or relay"}), 422
 
-    with session_scope() as session:
-        before = dump_labdata(session, g.site_slug)
-        stats = import_observations(session, hosts, site_slug=g.site_slug,
-                                    source=source, promote=bool(payload.get("promote")))
-        restamp(session, g.site_slug, before, RELAY, source)
+    try:
+        with site_lock(g.site_slug), session_scope() as session:
+            before = dump_labdata(session, g.site_slug)
+            stats = import_observations(session, hosts, site_slug=g.site_slug,
+                                        source=source, promote=bool(payload.get("promote")))
+            restamp(session, g.site_slug, before, RELAY, source)
+    except LockTimeout:
+        return _busy()
     if stats["undocumented"]:
         log.warning("ingest observed: site=%s %d undocumented device(s)",
                     g.site_slug, stats["undocumented"])

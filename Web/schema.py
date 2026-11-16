@@ -167,6 +167,8 @@ LINK_FIELDS = [
            "it — for anything that only works with the whole window."),
     f("require_group", "text", label="Requires group",
       help="Hide this service from anyone whose Hub groups don't include it."),
+    f("unmanaged", "bool", label="Unmanaged",
+      help="Not ours to watch: this service takes no state and raises nothing."),
 ]
 
 # Who can get into a place, and how far in. Charted by hand from the
@@ -330,6 +332,9 @@ SECTIONS = {
               help="Charted, but not drawn. Its services still list in THE INDEX; its marker and its routes are skipped. For a place that is decided but not yet laid."),
             f("require_group", "text", label="Requires group",
               help="Hide this place from anyone whose Hub groups don't include it."),
+            f("unmanaged", "bool", label="Unmanaged",
+              help="Not ours to watch: it stays on the map, greyed, takes no state from "
+                   "any source and raises nothing. (Maintenance is 'expected down, for now'.)"),
             f("links", "objects", of=LINK_FIELDS, label="Services",
               help="Everything hosted here. Each becomes a card button and an Index row."),
             f("monitors", "strings", label="Kuma monitors",
@@ -586,21 +591,29 @@ SECTIONS = {
                    "out, a document past its story). YYYY-MM-DD; blank = never."),
         ]),
 
-    # SETS (2026-11-13): a named list of places, kept in one record so renaming
-    # or deleting it is one write and a rule elsewhere can name it by id. Not
-    # access: `require_group` decides who sees a place, and redaction drops a
-    # member this viewer may not see while keeping the set.
-    "sets": section(
-        "sets", "set", "sets", noun="set",
+    # COLLECTIONS (2026-11-13 as "sets", renamed 2026-11-14): a named list of
+    # places, kept in one record so renaming or deleting it is one write and a
+    # rule elsewhere can name it by id. A place may be in more than one; a
+    # collection holds no collections. Not access: `require_group` decides who
+    # sees a place, and redaction drops a member this viewer may not see while
+    # keeping the collection. A dataset that still says `sets` is read as
+    # collections (`upgrade`).
+    "collections": section(
+        "collections", "collection", "collections", noun="collection",
         lore="named lists of places, for the table and for alerts",
         subtitle="Named lists of places, for the table and for alerts. Not access: "
                  "who may see a place is its access group.",
         fields=[
             f("id", "slug", required=True, help="Short unique key, e.g. `storage`."),
-            f("name", "text", required=True, help="What the set is called, e.g. `Storage`."),
+            f("name", "text", required=True,
+              help="What the collection is called, e.g. `Storage`."),
             f("places", "strings", ref="nodes", label="Places",
-              help="The places in this set, by id."),
-            f("note", "longtext", help="What the set is for."),
+              help="The places in this collection, by id."),
+            f("note", "longtext", help="What the collection is for."),
+            f("services", "strings", label="Services",
+              help="Services in this collection. By key: a Kuma monitor's name, or `<place id>/<label>` for a built-in check (the key the feed files the service under)."),
+            f("unmanaged", "bool", label="Unmanaged",
+              help="Every place and service in it is unmanaged: on the map, greyed, watched by nothing."),
         ]),
 
     "chronicle": section(
@@ -671,12 +684,21 @@ SECTIONS = {
             f("id", "slug", required=True, help="Short unique key, e.g. `sunday-patching`."),
             f("reason", "text", required=True,
               help="What the work is. Shown wherever the window is."),
-            f("nodes", "strings", ref="nodes", required=True, label="Places",
-              help="Which places are down for it. Their alarms stay quiet while it's open."),
+            f("nodes", "strings", ref="nodes", label="Places",
+              help="Which places are down for it. Their alarms stay quiet while it's open. "
+                   "Name places, collections, or both."),
+            f("collections", "strings", ref="collections", label="Collections",
+              help="Whole collections: whatever is in one when the window is open is covered."),
+            f("services", "strings", label="Services",
+              help="Single services, its place left watched. By key: a Kuma monitor's name, or `<place id>/<label>` for a built-in check (the key the feed files the service under)."),
             f("starts", "datetime", required=True, help="When it opens (UTC)."),
-            f("ends", "datetime", required=True,
-              help="When it closes (UTC). Required on purpose — a window with no "
-                   "end is a suppression somebody has to remember to remove."),
+            f("ends", "datetime",
+              help="When it closes (UTC). Required on purpose for every window but "
+                   "maintenance mode: a window with no end is a suppression somebody "
+                   "has to remember to remove."),
+            f("open", "bool", label="Maintenance mode",
+              help="On until someone turns it off: no end. The daily digest names one "
+                   "left on more than a week."),
             f("repeat", "select", options=list(MAINTENANCE_REPEATS),
               default="none", help="Recurring windows re-open on the same schedule."),
             f("note", "text", help="Anything the next person should know."),
@@ -689,6 +711,10 @@ SECTIONS = {
         subtitle="Names and constants for the whole map.",
         fields=[
             f("title", "text", required=True, help="The name of this atlas."),
+            f("carry_service_renames", "bool", label="Carry service renames",
+              help="When a service is renamed (its label, its monitor, or its place's id), "
+                   "the collections, repair windows and alert rules naming it follow the new "
+                   "name. Off, they keep the old one, and Atlas says what was left behind."),
             f("surveyed", "text", help="When the map was last walked, `YYYY-MM-DD`."),
             f("art", "text", help="Which base render is in use — a note to your future self."),
             f("map_image", "text", label="Base render",
@@ -730,7 +756,7 @@ SIGNAL_FIELDS = [
 
 # Order the editor presents them in — inventory first, then the wiring.
 SECTION_ORDER = ["nodes", "zones", "regions", "prefixes", "routes", "interfaces",
-                 "racks", "rack", "rack_rear", "vms", "rites", "certs", "sets", "stones",
+                 "racks", "rack", "rack_rear", "vms", "rites", "certs", "collections", "stones",
                  "maintenance", "chronicle", "abyss", "meta"]
 
 # Order they sit in the *file*, which is a different question: the dataset is
@@ -739,7 +765,81 @@ SECTION_ORDER = ["nodes", "zones", "regions", "prefixes", "routes", "interfaces"
 # presentation order put the first `prefixes[]` above `meta`.
 FILE_ORDER = ("meta", "zones", "regions", "nodes", "routes", "prefixes", "interfaces",
               "racks", "rack", "rack_rear", "vms", "signals", "chronicle", "abyss", "rites",
-              "certs", "sets", "stones")
+              "certs", "collections", "stones")
+
+
+#: Section keys that were renamed: old key -> new key. A dataset written before
+#: the rename is read as if it used the new key (`upgrade`), and its next save
+#: writes the new one.
+RENAMED_SECTIONS = {"sets": "collections"}   # 2026-11-14
+
+
+def upgrade(data):
+    """Bring a dataset read from disk, a database or an import up to today's
+    section names, in place, and return it. An old key's entries join the new
+    key's, after them, skipping an id the new key already has, so a file that
+    somehow carries both loses nothing it can keep. The section keeps its place
+    in the file (a hand-edited map does not see a whole block move on its first
+    save), and no list the caller holds is changed: a merge makes a new list,
+    so `upgrade(dict(data))` leaves `data` exactly as it was. Anything that is
+    not a dict passes through untouched for the validator to name."""
+    if not isinstance(data, dict):
+        return data
+    for old, new in RENAMED_SECTIONS.items():
+        if old not in data:
+            continue
+        legacy = data[old]
+        current = data.get(new)
+        if new not in data:
+            merged = legacy
+        elif isinstance(current, list) and isinstance(legacy, list):
+            have = {e["id"] for e in current if isinstance(e, dict) and isinstance(e.get("id"), str)}
+            merged = current + [e for e in legacy
+                                if not (isinstance(e, dict) and isinstance(e.get("id"), str)
+                                        and e["id"] in have)]
+        elif isinstance(legacy, list):
+            merged = legacy         # the new key holds no list: the old one's stands
+        else:
+            merged = current        # the new key's value stands; the old one goes
+        # rebuild in order: the new key where the old one was (or where it
+        # already stood, when both were there)
+        keep_at = new if new in data else old
+        rebuilt = {}
+        for k, v in data.items():
+            if k == keep_at:
+                rebuilt[new] = merged
+            elif k not in (old, new):
+                rebuilt[k] = v
+        data.clear()
+        data.update(rebuilt)
+    return data
+
+
+def servable(data):
+    """The loaded map in a shape every reader can walk, in place, AFTER
+    validation has named its problems (round 14 of the 2026-11-14 review). A
+    hand edit can write a list section as a number (`"nodes": 5`) or a list
+    field of a place as one (`"links": 5`); validation only warns, so the map
+    is served, and dozens of readers loop over those. Each becomes an empty
+    list. A `strings` field written as one id stays: it is read as a list of
+    one (`as_list`)."""
+    if not isinstance(data, dict):
+        return data
+    for key, sec in SECTIONS.items():
+        if sec.get("kind", "list") == "list" and key in data and not isinstance(data[key], list):
+            data[key] = []
+    node_fields = [(f["name"], f["type"]) for f in fields_of("nodes")]
+    for node in data.get("nodes") or []:
+        if not isinstance(node, dict):
+            continue
+        for name, ftype in node_fields:
+            if name not in node:
+                continue
+            if ftype == "objects" and not isinstance(node[name], list):
+                node[name] = []
+            elif ftype == "strings" and not isinstance(node[name], (list, str)):
+                node[name] = []
+    return data
 
 
 def get(key):

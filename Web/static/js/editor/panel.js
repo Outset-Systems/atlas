@@ -434,6 +434,21 @@ export async function editPlace(id) {
   if (entry) drawForm('nodes', entry, { id });
 }
 
+/** NODES' "Add a place" (2026-11-14): the Desk on an empty place form, the
+    same form and Save as the PLACES list's Add. */
+export async function newPlace() {
+  await openDesk('nodes');
+  drawForm('nodes', null, null);
+}
+
+/** NODES' row menu "Remove…" (2026-11-14): the Desk's own remove page for
+    one place, which says what points at it and offers to unhook it first. */
+export async function removePlace(id) {
+  await openDesk('nodes');
+  const entry = (Editor.data?.nodes || []).find((n) => n.id === id);
+  if (entry) await confirmDelete('nodes', entry, { id });
+}
+
 export function closeDesk() {
   if (!root) return;
   root.classList.remove('open');

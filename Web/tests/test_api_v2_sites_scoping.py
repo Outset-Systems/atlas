@@ -120,6 +120,44 @@ def test_lab_data_is_scoped_and_matches_the_map_shape():
     assert acme["meta"]["title"] == "Acme HQ"
 
 
+def test_a_site_stored_with_the_old_sets_name_is_served_as_collections_and_redacted(hub_mode):
+    """A db site written while collections were `sets` (before 2026-11-14):
+    the multi-site route serves it under today's name, with a member the
+    viewer may not see taken out (round 1 of the 2026-11-14 review)."""
+    from store.labdata import get_site
+    old = copy.deepcopy(ACME)
+    old["collections"] = [{"id": "money", "name": "Money", "places": ["acme-switch", "acme-secret"]}]
+    with session_scope() as s:
+        load_labdata(s, old, site_slug="acme-old", site_name="Acme, before the rename")
+    with session_scope() as s:
+        site = get_site(s, "acme-old")
+        stored = dict(site.settings_json)
+        stored["sets"] = stored.pop("collections")
+        stored["_top_keys"] = ["sets" if k == "collections" else k for k in stored["_top_keys"]]
+        site.settings_json = stored
+    outsider = _get("/api/v2/sites/acme-old/lab-data", groups="ACME-Staff").get_json()
+    assert outsider is not None and "sets" not in outsider
+    assert outsider["collections"] == [{"id": "money", "name": "Money", "places": ["acme-switch"]}]
+    assert "acme-secret" not in json.dumps(outsider)
+    try:
+        admin = _get("/api/v2/sites/acme-old/lab-data", groups="atlas-admins").get_json()
+        assert admin["collections"][0]["places"] == ["acme-switch", "acme-secret"]
+    finally:
+        # the module's other tests count exactly two sites
+        with session_scope() as s:
+            s.delete(get_site(s, "acme-old"))
+
+
+def test_the_sites_list_counts_only_places_the_viewer_may_see(hub_mode):
+    """A count is a disclosure too (round 5 of the 2026-11-14 review)."""
+    outsider = _get("/api/v2/sites", groups="ACME-Staff")
+    by_slug = {s["slug"]: s for s in outsider.get_json()["sites"]}
+    assert by_slug["acme"]["counts"]["nodes"] == 1
+    assert "private" in outsider.headers["Cache-Control"]
+    admin = {s["slug"]: s for s in _get("/api/v2/sites", groups="atlas-admins").get_json()["sites"]}
+    assert admin["acme"]["counts"]["nodes"] == len(ACME["nodes"])
+
+
 def test_lab_data_etag_revalidates_and_is_per_site():
     a = _get("/api/v2/sites/lab/lab-data")
     etag = a.headers["ETag"]

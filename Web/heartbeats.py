@@ -305,7 +305,7 @@ def status_for(rites, now=None):
     now = now if now is not None else _now()
     store = _STORE.load()
     out = []
-    for rite in rites or []:
+    for rite in rites if isinstance(rites, list) else []:   # a hand edit's 5 is no list
         if not isinstance(rite, dict):
             continue
         key = key_for(rite)
@@ -364,9 +364,10 @@ def as_feed(rites, now=None):
     Only verdicts with a marker state appear, so `awaited` and `unwatched`
     never reach the history.
     """
+    rites = rites if isinstance(rites, list) else []   # a hand edit's 5 is no list (round 13)
     feed = {}
     by_key = {}
-    for rite in rites or []:
+    for rite in rites:
         if isinstance(rite, dict):
             by_key.setdefault(key_for(rite), rite.get("name") or "")
     for row in status_for(rites, now=now):

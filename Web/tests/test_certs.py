@@ -129,6 +129,30 @@ def test_the_nearest_certificate_for_a_place():
     assert certs.nearest_for_place(pile, "", today) is None
 
 
+def test_the_index_gives_every_place_the_same_answer():
+    """Stage 5 (2026-11-15): the roster indexes certificates by place once.
+    For every place, the index says what `nearest_for_place` says."""
+    import certs
+    today = date(2026, 11, 13)
+    pile = [
+        {"name": "far", "place": "alpha", "expires": "2027-11-13"},
+        {"name": "tie-1", "place": "beta", "expires": "2026-12-13"},
+        {"name": "tie-2", "place": "beta", "expires": "2026-12-13"},
+        {"name": "undated", "place": "gamma", "expires": "soon"},
+        {"name": "near", "place": "alpha", "expires": "2026-12-01"},
+        {"name": "lapsed", "place": "delta", "expires": "2026-11-01"},
+        {"name": "words only", "host": "alpha", "expires": "2026-11-14"},
+        {"name": "odd place", "place": ["alpha"], "expires": "2026-11-14"},
+        {"name": "blank", "place": "", "expires": "2026-11-14"},
+        "not a cert",
+    ]
+    index = certs.nearest_by_place(pile, today)
+    for place in ("alpha", "beta", "gamma", "delta", "epsilon", ""):
+        assert index.get(place) == certs.nearest_for_place(pile, place, today), place
+    assert index["beta"]["name"] == "tie-1"
+    assert certs.nearest_by_place(None) == {}
+
+
 # ── the catalogue ────────────────────────────────────────────────────────────
 
 def test_a_certificate_can_name_its_place():

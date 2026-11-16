@@ -135,3 +135,18 @@ def nearest_for_place(certs, place_id, today=None):
             best, best_key = {"name": cert.get("name"), "days": days,
                               "expires": cert.get("expires")}, key
     return best
+
+
+def nearest_by_place(certs, today=None):
+    """`nearest_for_place` for every place at once: {place id: nearest}.
+
+    One pass to group the certificates by the place they name, then the same
+    rule within each group, in the same order, so the answer for a place is
+    exactly `nearest_for_place(certs, place)`. The roster asked once per row,
+    scanning every certificate each time (places × certificates: most of its
+    601 ms at 10,000 places, measured 2026-11-13)."""
+    groups = {}
+    for cert in certs or []:
+        if isinstance(cert, dict) and isinstance(cert.get("place"), str) and cert["place"]:
+            groups.setdefault(cert["place"], []).append(cert)
+    return {place: nearest_for_place(group, place, today) for place, group in groups.items()}

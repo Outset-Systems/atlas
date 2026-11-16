@@ -23,6 +23,15 @@ editor can both own part of the same file without fighting. Anything in it is
 treated as an open-ended window with no end — because that is exactly what it
 has always meant.
 
+**Collections and maintenance mode (2026-11-14, the owner's Q4 answer).** A
+window may name collections as well as places (`collections: [...]`), and
+reaches whatever is in them whenever it is read (`window_places`), so a
+place added to a collection later is covered. A window marked `open: true`
+is MAINTENANCE MODE: it starts when it is made and has no end, on until
+someone turns it off. That reverses "an end is required" for that one kind
+on purpose; `problems` still requires an end of every other window, and the
+daily digest names a mode left on more than a week.
+
 Deliberately NOT part of `lab-data.json`: a window is operational state that
 changes at 2am, not inventory. Putting it in the dataset would make every
 scheduled reboot a git commit and let a map revert resurrect a stale window.
@@ -113,6 +122,12 @@ def occurrence(window, now=None):
     start = parse_when(window.get("starts"))
     end = parse_when(window.get("ends"))
 
+    # MAINTENANCE MODE is on from the moment it is turned on: its `starts`
+    # is the browser's clock, and a clock a few minutes fast must not leave
+    # it "upcoming" while faults raise alerts (stage 3 review)
+    if window.get("open") is True:
+        return "active", start, None
+
     if end is None:
         # open-ended, with or without a start
         if start is not None and now < start:
@@ -199,15 +214,71 @@ def annotated(now=None):
     return out
 
 
-def under_repair(now=None):
-    """Node ids currently suppressed — active windows plus the legacy list."""
+def window_places(window, data=None):
+    """The place ids a window covers: the ones it names, and the members of
+    each collection it names as `data` (the map the caller holds) lists them
+    now. A collection `data` does not have, or no `data` at all, covers
+    nothing: a window naming places still works when the map cannot be read.
+    A caller holding a viewer's redacted map gets only that viewer's places."""
+    out = set()
+    if not isinstance(window, dict):
+        return out
+    named = window.get("nodes")
+    out.update(str(n) for n in (named if isinstance(named, list) else []))   # a hand edit's 5 (round 14)
+    wanted = window.get("collections")
+    if isinstance(wanted, list) and isinstance(data, dict):
+        import schema
+        listed = data.get("collections")
+        by_id = ({c["id"]: c for c in listed if isinstance(c, dict) and isinstance(c.get("id"), str)}
+                 if isinstance(listed, list) else {})
+        for cid in wanted:
+            found = by_id.get(cid) if isinstance(cid, str) else None
+            if found:
+                out.update(p for p in schema.as_list(found.get("places")) if isinstance(p, str) and p)
+    return out
+
+
+def window_services(window, data=None):
+    """The service keys a window covers (stage 3b): the ones it names, and the
+    `services` of each collection it names as `data` lists them now."""
+    out = set()
+    if not isinstance(window, dict):
+        return out
+    named = window.get("services")
+    out.update(k for k in (named if isinstance(named, list) else []) if isinstance(k, str) and k)
+    wanted = window.get("collections")
+    if isinstance(wanted, list) and isinstance(data, dict):
+        import schema
+        listed = data.get("collections")
+        by_id = ({c["id"]: c for c in listed if isinstance(c, dict) and isinstance(c.get("id"), str)}
+                 if isinstance(listed, list) else {})
+        for cid in wanted:
+            found = by_id.get(cid) if isinstance(cid, str) else None
+            if found:
+                out.update(k for k in schema.as_list(found.get("services")) if isinstance(k, str) and k)
+    return out
+
+
+def services_under_repair(now=None, data=None):
+    """Service keys under an active window now (stage 3b)."""
+    now = now or _now()
+    out = set()
+    for window in read()["windows"]:
+        if occurrence(window, now)[0] == "active":
+            out.update(window_services(window, data))
+    return out
+
+
+def under_repair(now=None, data=None):
+    """Node ids currently suppressed — active windows plus the legacy list.
+    `data` resolves the collections a window names (`window_places`)."""
     now = now or _now()
     stored = read()
     ids = set(stored["nodes"])
     for window in stored["windows"]:
         state, _start, _end = occurrence(window, now)
         if state == "active":   # "invalid" deliberately suppresses nothing
-            ids.update(str(n) for n in (window.get("nodes") or []))
+            ids.update(window_places(window, data))
     return ids
 
 
@@ -231,6 +302,18 @@ def problems(windows):
         state, _s, _e = occurrence(window)
         if state == "invalid":
             found.append(f"window {label}: it ends before it starts")
+        # what it covers: places, collections, or both (2026-11-14)
+        names = [window.get(k) for k in ("nodes", "collections", "services")]
+        if not any(isinstance(v, list) and v for v in names):
+            found.append(f"window {label}: it names no place, no collection and no service")
+        # maintenance mode (`open`) is the one window with no end, and has none
+        if window.get("open") is True:
+            if window.get("ends"):
+                found.append(f"window {label}: maintenance mode has no end; turn it off instead")
+            if not window.get("starts"):
+                found.append(f"window {label}: maintenance mode starts when it is turned on")
+        elif not window.get("ends"):
+            found.append(f"window {label}: missing ends (only maintenance mode is on until turned off)")
     return found
 
 
@@ -273,14 +356,16 @@ def stamp():
     return _stamp_of(read())
 
 
-def summary(now=None):
-    """Counts for the chrome: how many places are under repair, what's next."""
+def summary(now=None, data=None):
+    """Counts for the chrome: how many places are under repair, what's next.
+    `data` resolves the collections a window names."""
     now = now or _now()
     windows = annotated(now)
     active = [w for w in windows if w["state"] == "active"]
     upcoming = [w for w in windows if w["state"] == "upcoming"]
     return {
-        "under_repair": sorted(under_repair(now)),
+        "under_repair": sorted(under_repair(now, data)),
+        "services_under_repair": sorted(services_under_repair(now, data)),
         "active": len(active),
         "upcoming": len(upcoming),
         "next": upcoming[0]["occurrence_start"] if upcoming else None,

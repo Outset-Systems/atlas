@@ -18,6 +18,7 @@
 import { A, CFG, $, esc, WRITE_HEADERS } from './config.js';
 import { bindNote, fromWords, kindNote, readLine, readsHead, setups } from './connections-model.js';
 import { post, reviewSystem } from './connection-review.js';
+import { folds } from './fold.js';
 
 const SOURCE = { file: 'saved', env: 'deployment', default: 'default' };
 const LIFETIME = (d) => (d ? `${d} days` : 'never expires');
@@ -37,19 +38,38 @@ function lifeOptions(tok) {
     `<option value="${d ?? ''}"${d === p.default_days ? ' selected' : ''}>${LIFETIME(d)}</option>`).join('');
 }
 
+/* A token is a row that opens (2026-11-15, stage 4 of the NODES plan): shut,
+   its name, its kind and when it ends; open, when it was last used, where
+   from, What it read and Revoke. Every row starts shut, whatever the count
+   (review: a default tied to the count shut every row when a ninth token was
+   made); the choice is remembered in this browser and survives the redraw
+   after any change. The token just made (`#con-fresh`) is above the rows,
+   never inside one. */
+const F = folds('tokens');
+
 function tokenRow(t) {
   const when = t.last_used ? `last used ${esc(t.last_used)}` : 'not used yet';
   const ends = t.expired ? 'expired' : t.expires ? `expires ${esc(t.expires)}` : 'never expires';
   const view = t.profile === 'cloud' ? 'cloud view'
     : t.untyped ? 'full view, made before tokens had a kind' : 'full view';
-  return `<div class="con-token${t.expired ? ' con-dead' : ''}">
+  const key = `token:${t.id}`;
+  const first = false;
+  return `<div class="con-tok${F.shut(key, first, 'con-shut')}" data-fold-box data-fold-class="con-shut">
+    <div class="con-token${t.expired ? ' con-dead' : ''}" ${F.head(key, first, t.name)}>
+      <span class="ldg-fold" aria-hidden="true">▾</span>
       <span class="con-name">${esc(t.name)}</span>
       <span class="dir-src">${view}</span>
-      <span class="con-meta">${when} · ${ends} · ${esc(fromWords(t.networks))}</span>
-      <button class="sp-btn" type="button" data-reads="${esc(t.id)}" data-name="${esc(t.name)}" aria-expanded="false">What it read</button>
-      <button class="sp-btn sp-btn-warn" type="button" data-revoke="${esc(t.id)}" data-name="${esc(t.name)}">Revoke</button>
+      <span class="con-meta con-ends">${ends}</span>
     </div>
-    <div class="acct-note" data-reads-for="${esc(t.id)}" hidden></div>`;
+    <div class="con-tok-more">
+      <div class="con-token-acts">
+        <span class="con-meta">${when} · ${esc(fromWords(t.networks))}</span>
+        <button class="sp-btn" type="button" data-reads="${esc(t.id)}" data-name="${esc(t.name)}" aria-expanded="false">What it read</button>
+        <button class="sp-btn sp-btn-warn" type="button" data-revoke="${esc(t.id)}" data-name="${esc(t.name)}">Revoke</button>
+      </div>
+      <div class="acct-note" data-reads-for="${esc(t.id)}" hidden></div>
+    </div>
+  </div>`;
 }
 
 /* The switch for agent access as a whole. It starts off, and off refuses every
@@ -227,7 +247,7 @@ export async function renderConnections() {
      ${accessHTML(access, tok.tokens.length)}
      <div id="con-fresh" class="con-fresh" ${issued ? '' : 'hidden'}>Copy this now. It will not be shown again.
        <pre class="con-code">${esc(issued)}</pre></div>
-     <div class="con-tokens">${tok.tokens.map(tokenRow).join('') || '<div class="acct-note">No tokens yet.</div>'}</div>
+     <div class="con-tokens" id="con-tokens">${tok.tokens.map((t) => tokenRow(t)).join('') || '<div class="acct-note">No tokens yet.</div>'}</div>
      ${making}
      <div class="sp-sub-h">Let this Atlas read a system</div>
      <div class="acct-note">Test makes one or two read-only calls and reports what it found. Review lists
@@ -237,6 +257,7 @@ export async function renderConnections() {
      </div>`;
 
   wireSetup(el);
+  F.wire($('con-tokens'));
   $('con-access')?.addEventListener('click', async (e) => {
     const on = e.target.dataset.on === '1';
     if (!on && !confirm('Turn agent access off? Every tool reading this map stops at once. Tokens are kept.')) return;

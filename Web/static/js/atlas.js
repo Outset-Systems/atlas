@@ -29,9 +29,11 @@ import './trust.js';           // THE TRUST scene (generated view; admin only)
 import './whois.js';
 import './decoys.js';
 import './regions.js';   // REGIONS (v1.49.0): after world.js — it wraps buildWorld + onCameraMove
+import { applyOverrides } from './places.js';
 import './nodes.js';     // NODES (2026-11-13): the table view; reads A.VIEW on load and hears `atlas:view`
 import './overview.js';  // OVERVIEW (2026-11-13): the facts above the Deck's charts; reads A.VIEW on load too
-import './alerts.js';    // ALERTS (2026-11-13, stage 4): rules and destinations, an admin's; reads A.VIEW on load too
+import './alert-setup.js';   // Settings › Alerts (2026-11-14): destinations, the digest, the log; hears `atlas:settings`
+// (the ALERTS view, alerts.js, 2026-11-13, left on 2026-11-14: its rules are made in NODES, alert-rules.js)
 import './editor/index.js';
 
 const mapBase = $('map-base');
@@ -61,12 +63,35 @@ async function loadData() {
     panel the moment it saves — the map is the confirmation. */
 A.refreshData = async function refreshData() {
   await loadData();
-  A.buildWorld();
+  // The world (markers, routes, territories, frames) is drawn only while the
+  // map is the view; behind NODES or OVERVIEW it is marked stale and drawn
+  // when the map comes back (2026-11-15, stage 5: a save from NODES at 2,000
+  // places rebuilt a map nobody could see, ~130 ms of every save).
+  if (!A.VIEW || A.VIEW === 'map') drawWorld();
+  else {
+    // where each place stands and which are folded away (`off_map`) is set
+    // here, not in the drawing: the colophon and a region's reveal read it
+    // behind any view (stage 5 review)
+    applyOverrides();
+    worldStale = true;
+  }
   A.buildUI();
   A.buildPalette();
-  A.paintRoutes?.();
-  A.repaintSignals?.();
+  A.repaintSignals?.();   // the colophon and the service dots are seen in every view
 };
+
+let worldStale = false;
+function drawWorld() {
+  worldStale = false;
+  A.buildWorld();
+  A.paintRoutes?.();
+}
+addEventListener('atlas:view', (e) => {
+  if (e.detail?.view !== 'map' || !worldStale) return;
+  drawWorld();
+  A.repaintSignals?.();
+  A.measureWorld?.();   // setView measured the old one just before telling us
+});
 
 /** The stage takes a picture of this size. A region's map comes through here too. */
 A.sizeWorld = function sizeWorld(src, w, h) {
