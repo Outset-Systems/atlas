@@ -123,7 +123,7 @@ def test_a_good_destination_passes(on, d):
 
 @pytest.mark.parametrize("d, words", [
     ("not a dict", "an object"),
-    (dest(kind="email"), "ntfy, gotify or webhook"),
+    (dest(kind="email"), "ntfy, gotify, webhook or discord"),
     (dest(name=""), "name"),
     (dest(name="   "), "name"),
     (dest(name="x" * 61), "at most 60"),

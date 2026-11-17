@@ -233,16 +233,20 @@ def test_nothing_under_the_crown_hand_bakes_its_own_top(rule):
         "deriving it from --crown-b / --crown-clear")
 
 
-def test_the_path_no_longer_buries_the_scene_band():
-    """THE PATH sat at z-1200, over the band's own z-988 — so the switcher was
-    unclickable in the one scene you most want to leave from it. It joins the
-    other scenes at 985."""
+def test_topology_never_buries_the_scene_band():
+    """THE PATH sat at z-1200, over the band's own z-988, so the switcher was
+    unclickable in the one scene you most want to leave from it; it joined the
+    other scenes at 985. Since 2026-11-17 TOPOLOGY is a view, which stands in
+    the map's place under the band (`body.deck .atlas-view`, z-index 1): the
+    old scene and its rule are gone, and nothing of the view's own may climb
+    back to the band's height."""
     css = _read(CSS)
-    m = re.search(r"^#path \{.*?\}", css, re.S | re.M)
-    assert m, "#path rule is gone"
-    assert "z-index: 985;" in m.group(0), (
-        "#path is not at z-985 — check it against `body.scene-open "
-        "#scenes-list`'s 988, or the band is buried again")
+    assert not re.search(r"^#path \{", css, re.M), "the retired scene's overlay came back"
+    assert 'data-scene="path"' not in _read(INDEX), "the band has a door to a scene that is gone"
+    for sheet in ("topology.css", "topology-canvas.css"):
+        text = _read(WEB / "static" / sheet)
+        for z in re.findall(r"z-index:\s*(\d+)", text):
+            assert int(z) < 985, f"{sheet} sets z-index {z}, at or over the scenes and the band"
 
 
 # ── The behaviour that has no other home ─────────────────────────────────────
@@ -389,9 +393,10 @@ def test_the_views_menu_is_a_sibling_of_the_band():
         "#view-menu is nested inside #scenes-list: the band's backdrop-filter + "
         "overflow will position it wrongly and then clip it away")
     menu = _view_menu(html)
-    assert re.findall(r'data-view="(\w+)"', menu) == ["map", "overview", "nodes"]
-    assert menu.count('role="menuitem"') == 3, (
-        "the three views (the map's tools went to the band, and ALERTS into NODES, 2026-11-14)")
+    assert re.findall(r'data-view="(\w+)"', menu) == ["map", "overview", "nodes", "topology"]
+    assert menu.count('role="menuitem"') == 4, (
+        "the four views (the map's tools went to the band, and ALERTS into NODES, 2026-11-14; "
+        "TOPOLOGY joined them 2026-11-17)")
     css = _read(CSS)
     rule = re.search(r"^\.view-menu \{.*?^\}", css, re.S | re.M).group(0)
     assert "position: fixed" in rule and "var(--bar-glass-firm)" in rule
@@ -458,12 +463,12 @@ def test_every_view_has_a_main_and_one_shows_at_a_time():
 
 
 def test_the_phone_names_the_views_in_a_strip():
-    """No ATLAS and no map on a phone: OVERVIEW · NODES at the top of the
-    column."""
+    """No ATLAS and no map on a phone: OVERVIEW · NODES · TOPOLOGY (2026-11-17)
+    at the top of the column."""
     html = _read(INDEX)
     strip = re.search(r'<nav class="view-strip" id="view-strip"[^>]*>(.*?)</nav>', html, re.S)
     assert strip, "the phone's strip is gone"
-    assert re.findall(r'data-view="(\w+)"', strip.group(1)) == ["overview", "nodes"]
+    assert re.findall(r'data-view="(\w+)"', strip.group(1)) == ["overview", "nodes", "topology"]
     css = _read(CSS)
     assert "body.phone .view-strip { display: flex; }" in css
     assert "body.phone :is(.scene-more, .view-menu) { display: none; }" in css
@@ -480,7 +485,7 @@ def test_alerts_left_the_views_for_nodes_and_settings():
     atlas = _read(WEB / "static" / "js" / "atlas.js")
     assert "import './alerts.js';" not in atlas and "import './alert-setup.js';" in atlas
     assert not (WEB / "static" / "js" / "alerts.js").exists()
-    nodes = _read(WEB / "static" / "js" / "nodes.js")
+    nodes = "".join(_read(p) for p in sorted((WEB / "static" / "js").glob("nodes*.js")))   # nodes.js and its parts (2026-11-16)
     assert "import * as Rules from './alert-rules.js';" in nodes
     assert "const mayAlert = () => Boolean(A.MAY_ALERTS) && !phone();" in nodes
     views = _read(WEB / "static" / "js" / "views.js")
@@ -553,7 +558,8 @@ def test_every_section_sits_on_the_dark_dim_in_the_light_scheme():
     css = _read(CSS)
     dim = re.search(r'#accounts, #trust, #settings\) \{\s*background: rgba\(13, 11, 7, 0\.82\)', css)
     assert dim, "the light scheme's sections are not on Topology's dim"
-    assert "background: rgba(13,11,7,0.82); backdrop-filter: blur(6px);" in css
+    # Topology's own overlay (`#path`) that set the dim retired 2026-11-17: it
+    # is a view now, with no dim behind it; the sections keep the value above
 
 
 def test_the_addresses_grid_reads_in_the_light_scheme():
@@ -794,7 +800,8 @@ def test_nodes_stands_alone():
     assert "nodes: [['colophon', 'foot']]," in views
     assert "(parts.foot || parts.down)?.append(foot);" in views, "the way back sits at NODES' foot"
     css = _read(CSS)
-    assert 'body:is([data-view="overview"], [data-view="nodes"]) #colophon' in css, "the colophon in flow in both"
+    assert 'body:is([data-view="overview"], [data-view="nodes"], [data-view="topology"]) #colophon' in css, (
+        "the colophon in flow in OVERVIEW, NODES and TOPOLOGY (2026-11-17)")
     assert '[data-view="nodes"]) :is(#chronicle, #abyss)' not in css
     nodes = _read(WEB / "static" / "js" / "nodes.js")
     for piece in ('class="nv-summary"', 'class="nv-recent"', "R.stateCounts(counted)",
@@ -808,7 +815,7 @@ def test_nodes_lists_containers_and_services():
     Services. Each is a list of service links (rows, never markers on the
     map), drawn with the same line a place's services draw under its row; a
     link says what it is with `kind`, or is a container when it names one."""
-    nodes = _read(WEB / "static" / "js" / "nodes.js")
+    nodes = "".join(_read(p) for p in sorted((WEB / "static" / "js").glob("nodes*.js")))   # nodes.js and its parts (2026-11-16)
     for piece in ("function serviceItem(svc, row, s, rules, flat = '', menu = true)",
                   "list.map((svc) => serviceItem(svc, row, serviceState(svc, row), rules))",
                   "if (S.filter.things) { drawThings(); return; }",

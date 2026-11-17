@@ -211,7 +211,103 @@ def validate(data, strict=False):
     _check_regions(problems, data)
     _check_tripwire_sensors(problems, data)
     _check_watch(problems, data)
+    _check_cables(problems, data, strict)
     return problems
+
+
+def _end(cable, side):
+    """(kind, id) for one end of a cable: ("place", id), ("stub", id), or None
+    when the end names neither or both (the caller says which)."""
+    place, stub = cable.get(side), cable.get(side + "_stub")
+    place = place if place not in (None, "") else None
+    stub = stub if stub not in (None, "") else None
+    if (place is None) == (stub is None):
+        return None
+    return ("place", place) if place is not None else ("stub", stub)
+
+
+def _port(cable, side):
+    """The port name at one end, trimmed and in one case, or "" for none."""
+    port = cable.get(side + "_port")
+    return port.strip().casefold() if isinstance(port, str) else ""
+
+
+def _check_cables(problems, data, strict):
+    """CABLES (2026-11-16). That each end names one thing (whether it exists
+    is the reference check's), that no cable runs from a port to itself, that
+    the VLANs are VLANs, and that a stub is not also a place.
+
+    A port two cables use is said only on the READ path (`strict` false), as
+    a warning: a person moving a cable from one port to another may save the
+    new one first, and the write must not refuse that. Like every read-path
+    problem it is logged and counted on `/api/status`. A port that names no
+    interface of its place is not a problem: a cable may be charted before
+    the ports are."""
+    cables = data.get("cables")
+    used = {}
+    for i, c in enumerate(cables if isinstance(cables, list) else []):
+        if not isinstance(c, dict):
+            continue
+        label = _label("cables", c, i)
+        ends = {}
+        for side in ("a", "b"):
+            place, stub = c.get(side), c.get(side + "_stub")
+            if place not in (None, "") and stub not in (None, ""):
+                problems.append(f"{label}: end {side.upper()} names both a place and a stub; "
+                                "an end is one or the other")
+            elif place in (None, "") and stub in (None, ""):
+                problems.append(f"{label}: end {side.upper()} names no place and no stub")
+            ends[side] = _end(c, side)
+        a, b = ends["a"], ends["b"]
+        if a is not None and a == b and _port(c, "a") == _port(c, "b"):
+            problems.append(f"{label}: runs from {a[0]} {a[1]!r} to itself, "
+                            "port to the same port")
+        vlan = c.get("vlan")
+        untagged = None
+        if vlan is not None and not (isinstance(vlan, str) and vlan.strip() in schema.NONE_MARKS):
+            untagged = schema.vlan_number(vlan)
+            if untagged is None:
+                problems.append(f"{label}: vlan {vlan!r} is not a VLAN number "
+                                f"({schema.VLAN_MIN} to {schema.VLAN_MAX})")
+        tagged = c.get("tagged")
+        if tagged is not None and tagged != "":
+            if not isinstance(tagged, list):
+                problems.append(f"{label}: tagged must be a list of VLAN numbers, e.g. [10, 20]")
+            else:
+                seen = set()
+                for v in tagged:
+                    n = schema.vlan_number(v)
+                    if n is None:
+                        problems.append(f"{label}: tagged VLAN {v!r} is not a VLAN number "
+                                        f"({schema.VLAN_MIN} to {schema.VLAN_MAX})")
+                    elif n in seen:
+                        problems.append(f"{label}: tagged lists VLAN {n} twice")
+                    elif n == untagged:
+                        problems.append(f"{label}: tagged repeats the untagged VLAN {n}")
+                    seen.add(n)
+        if strict:
+            continue
+        for side in ("a", "b"):
+            end, port = ends[side], _port(c, side)
+            if end is None or not port:
+                continue
+            try:
+                key = (end, port)
+                hash(key)
+            except TypeError:
+                continue                     # not an id: the field check says so
+            if key in used and used[key] != label:
+                problems.append(f"{label}: port {c.get(side + '_port')!r} of {end[0]} "
+                                f"{end[1]!r} is also used by {used[key]} (a warning: "
+                                "one of the two is likely mid-move)")
+            used.setdefault(key, label)
+
+    stubs = data.get("stubs")
+    places = _ids(data, "nodes")
+    for i, s in enumerate(stubs if isinstance(stubs, list) else []):
+        if isinstance(s, dict) and isinstance(s.get("id"), str) and s["id"] in places:
+            problems.append(f"{_label('stubs', s, i)}: id {s['id']!r} is also a place's id; "
+                            "a cable's end would read as either")
 
 
 def _check_watch(problems, data):

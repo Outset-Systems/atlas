@@ -94,6 +94,36 @@ export function follow(rows, key, checked) {
   return { tick, untick };
 }
 
+/* CABLES (2026-11-17). A system's cable is offered only between two places
+   already on the map, so it stands on nothing a tick could bring. Where the
+   map's cable says otherwise and someone else wrote it, the row is blocked and
+   carries the words (`differs`): listed for a person to act on by hand. */
+export const differs = (r) => r.type === 'cable' && r.blocked === true
+  && Array.isArray(r.differs) && r.differs.length > 0 && r.status !== 'ignored';
+
+/** What a cable row says beside its name when it has no note of its own. */
+export function cableState(r) {
+  if (r.updates) return 'updates the cable it gave before';
+  return 'a new cable, port to port';
+}
+
+/** The line above the list: how many can be added, how many are on the map
+    already, how many cables the map has otherwise, how many are ignored. */
+export function reviewCounts(rows) {
+  return {
+    fresh: rows.filter(tickable).length,
+    charted: rows.filter((r) => r.status === 'charted').length,
+    differ: rows.filter(differs).length,
+    ignored: rows.filter((r) => r.status === 'ignored').length,
+  };
+}
+
+export function countsLine({ fresh, charted, differ, ignored }) {
+  return [`${fresh} new`, `${charted} already on the map`,
+    differ ? `${differ} cable${differ === 1 ? '' : 's'} the map has otherwise` : '',
+    ignored ? `${ignored} ignored` : ''].filter(Boolean).join(' · ');
+}
+
 export function ignoreLocally(view, key, ignoring) {
   const row = view.rows.find((r) => r.key === key);
   if (ignoring) { row.was = row.status; row.status = 'ignored'; } else { row.status = row.was || 'new'; }

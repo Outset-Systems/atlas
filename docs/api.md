@@ -120,6 +120,12 @@ One JSON document. The sections you will use most:
   and a `role`, and `links`, which are the services on it.
 - `zones`: the network segments places sit in.
 - `routes`: which place connects to which, as `from` and `to`.
+- `cables`: the physical wiring, port to port. Each end is a place (`a`, `b`)
+  or a stub (`a_stub`, `b_stub`), with its port (`a_port`, `b_port`), and the
+  cable's `kind`, `vlan`, `tagged`, `poe_w`, `speed` and `state`. `stubs` are
+  the gear the cables reach that is not a place (`id`, `name`, `kind`). A cable
+  with a place you may not see at either end is not sent, and while anything is
+  hidden from you a cable's `note` is not sent either.
 - `prefixes`, `interfaces`, `racks`, `certs`, `rites`: addresses, ports, the
   rack, certificates and scheduled jobs.
 
@@ -287,7 +293,7 @@ turn them on. See [Alerts](configuration.md#alerts) for the settings.
 
 | Route | What it does |
 |---|---|
-| `GET /api/v2/admin/alerts` | `{doc, stamp, status, states}`. `doc` holds `rules`, `digest` and `destinations`. A destination's `secret` is the secret's name only, with `secret_bound` saying whether it is bound to the destination's address; the value is never returned. `status` says whether alerts are on, which hosts are allowed, whether `ATLAS_PUBLIC_URL` is set, the poll's interval, whether it runs in the worker that answered, when any worker last ran the alerts, and the ids of rules suspended because their target is no longer visible to a viewer with no groups. `states` are the states a rule may name. |
+| `GET /api/v2/admin/alerts` | `{doc, stamp, status, states, kinds}`. `doc` holds `rules`, `digest` and `destinations`. A destination's `secret` is the secret's name only, with `secret_bound` saying whether it is bound to the destination's address; the value is never returned. `status` says whether alerts are on, which hosts are allowed, whether `ATLAS_PUBLIC_URL` is set, the poll's interval, whether it runs in the worker that answered, when any worker last ran the alerts, and the ids of rules suspended because their target is no longer visible to a viewer with no groups. `states` are the states a rule may name. `kinds` are the kinds of destination that can send, in the order offered, each `{kind, label, fields}` as declared in `Web/senders/`; Settings › Alerts draws its destination form from them. |
 | `POST /api/v2/admin/alerts` | `{doc, expect}`: replace the whole document. `expect` is the `stamp` you read, and is required (400 without it); a document changed since answers 409. Problems answer 422 with `problems`. A secret is bound to the destination's address when it is named; a changed address drops the binding (the answer's `notes` say so) until the secret is named again: a new name, or `"bind": true` on that destination. |
 | `POST /api/v2/admin/alerts/destinations/<id>/test` | Sends "Atlas test from <the map's title>" through the same path as an alert, at most 10 a minute per admin (shared with the other connection tests). Answers `{outcome, status, why}` only: `delivered`, `refused` with the HTTP status, `unreachable` or `blocked`, never anything the receiver said. |
 | `GET /api/v2/admin/alerts/deliveries?limit=` | The delivery log, newest first, default 100, at most 1000: `at`, `rule` (its id; `test`, `digest` or `fold` for those sends), `destination` (its name), `events`, `outcome`, `status`, `why`, and `folded` on an "and N more" message. |
@@ -299,6 +305,33 @@ drift, uncharted}`; `uncharted` must be false for now. A destination is `{id,
 name, kind: ntfy|gotify|webhook, url, secret}`; its URL may carry no user name,
 password or query string, and its host and port must be in
 `ATLAS_ALERT_HOSTS`.
+
+## One check: the page's, never a token
+
+Atlas's own checks answer through `/api/v2/signals`; the first two routes here ask about one of them, the third asks one place's chain. They belong to the page, and none is a token's door: a token is not looked at on them, so the request is refused as one with no session.
+
+| Route | What it does |
+|---|---|
+| `GET /api/v2/checks/<key>` | The last answer of the check the map gives `key` (a place id, or a service key: `<place id>/<label>`, or the monitor its link names), for any signed-in viewer: `key`, `thing` (place or service), `authority` (`place`, `service`, or `shadow`/`shadow-place` beside a monitor, admins only), `type`, `asks` (the URL, address and port, or name, in words), `url`, `host`, `port`, `expect`, `every`, `retries`, `timeout`, `state` (what the live feed serves now), `stale`, `said` (the last answer), `fails`, `since`, `asked_at`, `heard_at`, `ms`, `error` (fixed words, never what the service sent), `status`, `tls` (the certificate seen; its `names` only for a viewer who sees everything) and `on` (the checks source is on). An unknown key, a thing with no check and a thing the viewer may not see all answer the same 404 `{"error": "no such check"}`. |
+| `POST /api/v2/admin/checks/run` | `{"key": ...}` and nothing else (400 otherwise): ask that check now and store the answer where a round would, so one failed ask is one failure of its retries. Admins only, with the write rules of every admin POST. Answers the GET's shape plus `asked: true`; `asked: false, stored: true` with the stored answer when another worker holds the store; 429 with `Retry-After` when the check was asked less than 20 seconds ago or `ATLAS_CHECKS_PER_MINUTE` checks were asked in the last minute; 409 with `why` when a Kuma monitor watches it (`kuma`, and the `monitor`) and "Check beside Kuma" is off, when it is unmanaged, or when the checks source is off; 404 as above. |
+| `POST /api/v2/admin/diagnose` | Where does it break? `{"id": "<place id>"}` and nothing else (400 otherwise: the body names a place, never an address). Asks one place's chain from the Atlas host, in order, and stops at the first step that fails: each thing on its path from the head of the network down to it, nearest the head first (`hop`); its charted DNS name, when its own check or one of its services names one (`dns`); the place itself, by its own check asked as `checks/run` asks it (and stored the same way), else a tcp connection to its address on a port the map charts for it (`place`); and, only when `ATLAS_DIAGNOSE_OUTSIDE` names an outside address, that address (`internet`). Each step asked costs one check of the `ATLAS_CHECKS_PER_MINUTE` budget; only the place's own check is stored. Admins only, with the write rules of every admin POST. Answers `{id, name, asked: true, steps, broke_at, path}`: each step is `{step, thing, name, asks, state, why, ms, error}`, `state` is `up`, `down` or `skipped`, `why` says why a step was skipped (`stub`, `no-address`, `no-port` (no check of its own, and no service Atlas asks at its address to lend a port), `off` (its check is `off`), `hidden` (its `thing` and `name` are null), `planned`, `unmanaged`, `kuma` (a Kuma monitor watches it and "Check beside Kuma" is off), `not-asked` (its address may not be asked, or it gave no answer at all), `busy` (another worker asked its check a moment ago), `stopped` (an earlier step failed), `late` (the steps before it took the chain past 45 seconds)), `error` says in fixed words why a step was down; `broke_at` is the index of the step that failed, or null; `path` is `{things, links}`, head first, null in place of anything that names a place the viewer may not see, and empty for a place nothing reaches. 429 with `Retry-After` and `why`: `soon` when the place, or its own check, was asked less than 20 seconds ago, `spent` when the minute's budget cannot cover every step (nothing is asked). The steps are weighed and counted against the budget together, before the first is asked. A hop asked less than 20 seconds ago is not asked again: its last answer stands. 409 with `why`: `unmanaged`, `planned`, or `off` (the checks source is off). 404 `{"error": "no such place"}` for an id that is no place the viewer may see. |
+
+## TOPOLOGY's layout: the page's, never a token
+
+Where an admin put each card on the TOPOLOGY canvas (2026-11-17), kept in its own file (`ATLAS_TOPOLOGY_LAYOUT`) beside the marker positions. It is not map data: a write makes no revision and has no undo. Neither route is a token's door.
+
+| Route | What it does |
+|---|---|
+| `GET /api/v2/topology/layout` | `{v: 1, cards: {<id>: {x, y}}, stamp}` for any signed-in viewer: the cards of the places and stubs on that viewer's own map only, so a place hidden from them, and a stub whose every cable reaches one, is left out. `x` and `y` are the card's top-left corner in the canvas's units (a card is 176 by 64). `stamp` is a short hash of the file. A thing with no card here is laid out by the canvas itself. |
+| `POST /api/v2/topology/layout` | `{cards, expect, replace}`. `cards` maps an id to `{x, y}` (finite numbers within 1,000,000, kept to a tenth) or to `null` (forget that card, so it is laid out again); `replace: true` makes `cards` the whole layout, so `{"cards": {}, "replace": true}` throws it away. `expect` is the `stamp` you read: a layout changed since answers 409 `{error, stamp}` with the stamp on file now, and nothing is saved. An id that is no place or stub on the map is not kept. Answers `{ok, saved, total, stamp}`. A body of another shape is a 400 with one sentence. Admins only, with the write rules of every admin POST (`X-Atlas-Write`, same origin, `ATLAS_READONLY` refuses it). |
+
+## TOPOLOGY's connections sheet: the page's, never a token
+
+The TOPOLOGY view's Connections CSV button (2026-11-17). Any signed-in viewer may ask, and gets the rows of their own map: it is built from the dataset as `/api/v2/lab-data` gives that viewer, so a place hidden from them is in no column, not as a row, not as what a row is connected to, and not inside another row's path (its cables went with it, and the row that hung from it is left blank). It is not a token's door: a token is not looked at here, so a request with only a token is refused as one with no session. A tool reads the same thing from `/api/v2/lab-data`.
+
+| Route | What it does |
+|---|---|
+| `GET /api/v2/topology/connections.csv` | One row per place, and per stub that has a cable, sorted by name. The columns are Device, Connected to, Port, Far port, VLAN, PoE (W) and Path to the head: the cable the device hangs from on its way up to the head of the network, its own port and the port at the other end, the cable's VLANs as the canvas writes them (`U10`, `U1 T10,20`), its watts, and the names from the device up to the head joined with ` › `. A device that hangs by no cable (a head, or one joined only by a route or a host) has those columns blank: never a guess. A cell that starts with `=`, `+`, `-`, `@`, a tab or a carriage return is written with a `'` before it, so a spreadsheet does not run it. UTF-8 with a byte-order mark, CRLF lines, `Content-Disposition: attachment; filename="<map>-connections-<YYYY-MM-DD>.csv"` (the server's own day), `Cache-Control: no-store`. |
 
 ## Errors
 

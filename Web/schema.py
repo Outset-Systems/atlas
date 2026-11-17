@@ -78,6 +78,13 @@ def section(key, singular, plural, fields, id_field="id", title_field="name",
 NODE_KINDS = ["physical", "vm", "network", "unknown"]
 NODE_SHAPES = ["", "diamond", "triangle"]
 ROUTE_KINDS = ["wan", "edge", "vlan", "mesh", "telemetry"]
+#: CABLES (2026-11-16): what a cable is made of, and how sure the map is of it.
+CABLE_KINDS = ["copper", "fibre", "dac", "wireless", "virtual"]
+CABLE_STATES = ["confirmed", "assumed"]
+#: STUBS (2026-11-16): gear a cable reaches that is not charted as a place.
+STUB_KINDS = ["internet", "switch", "patch", "outlet", "other"]
+#: The lowest and highest VLAN id a cable may carry.
+VLAN_MIN, VLAN_MAX = 1, 4094
 VM_STATES = ["on", "off"]
 #: `parked` is deliberately NOT a period. heartbeats.CADENCE_SECONDS knows the
 #: other four and does not know this one, so `expectations()` returns
@@ -406,6 +413,76 @@ SECTIONS = {
             f("kind", "select", options=ROUTE_KINDS, default="vlan",
               help="wan = the world · edge = the way in · vlan = inside a realm · "
                    "mesh = Tailscale · telemetry = a scrape path."),
+        ]),
+
+    # CABLES (2026-11-16): a physical connection, port to port. A route says two
+    # places talk; a cable says which port is plugged into which. Each end is a
+    # place (`a`) or a stub (`a_stub`), never both, and a port name (`a_port`)
+    # that is the `name` of one of that place's `interfaces` when there is one.
+    # The ends are `follows`: renaming the place or stub they name carries
+    # them, and removing it (with cascade) removes the cable in the same save
+    # (`dataset.py`). Two fields per end, not one, because a `ref` names one
+    # section and every reader of the catalogue (the Desk's pickers, the
+    # validator, redaction) is built on that.
+    "cables": section(
+        "cables", "cable", "cables", noun="cable",
+        title_field=None,
+        lore="the cables between places, port to port, as they are laid",
+        subtitle="Physical connections: which port is plugged into which. "
+                 "Each end is a place or a stub.",
+        fields=[
+            f("id", "slug", required=True,
+              help="Short unique key, e.g. `gw-to-switch`. How the cable is named in the change log."),
+            f("a", "ref", ref="nodes", label="End A: place", follows=True,
+              help="The place at one end. Leave blank when this end is a stub."),
+            f("a_stub", "ref", ref="stubs", label="End A: stub", follows=True,
+              help="The stub at this end, when it is not a place."),
+            f("a_port", "text", label="End A: port",
+              help="The port at this end, e.g. `8` or `eth0`. The name of one of the "
+                   "place's ports when it has them; any name is allowed."),
+            f("b", "ref", ref="nodes", label="End B: place", follows=True,
+              help="The place at the other end. Leave blank when this end is a stub."),
+            f("b_stub", "ref", ref="stubs", label="End B: stub", follows=True,
+              help="The stub at this end, when it is not a place."),
+            f("b_port", "text", label="End B: port",
+              help="The port at this end."),
+            f("kind", "select", options=CABLE_KINDS, default="copper",
+              help="copper = an ordinary patch lead · fibre · dac = a direct-attach "
+                   "copper cable · wireless = a radio link · virtual = inside one box."),
+            f("vlan", "scalar", label="Untagged VLAN",
+              help="The VLAN carried untagged, e.g. `10`. Blank for none."),
+            f("tagged", "json", label="Tagged VLANs",
+              help="The VLANs carried tagged, as a list, e.g. `[10, 20]`. Blank for "
+                   "none. A cable with both is a trunk, drawn `U1 T10,20`."),
+            f("poe_w", "number", label="PoE (W)", min=0,
+              help="Watts of power over the cable, when it carries any."),
+            f("speed", "text", help="e.g. `1G`, `2.5G`, `10G`."),
+            f("state", "select", options=CABLE_STATES, default="confirmed",
+              help="confirmed = someone has seen it · assumed = believed, not checked "
+                   "(drawn dashed)."),
+            f("source", "text", default="hand",
+              help="Who says this cable is there: `hand` when a person charted it, "
+                   "or the connection that reported it, e.g. `unifi`."),
+            f("note", "text"),
+        ]),
+
+    # STUBS (2026-11-16): gear a cable reaches that nobody charts as a place:
+    # the provider's line, a wall jack, a small switch under a desk. Kept with
+    # the cables and drawn only in TOPOLOGY: no marker on the map, no row in
+    # NODES, no state, never watched. Not "unmanaged", which is a place that is
+    # not ours to watch. Anything with an address or a rack slot is a place.
+    "stubs": section(
+        "stubs", "stub", "stubs", noun="stub",
+        lore="what the cables reach that is not a place",
+        subtitle="Gear on the wiring that is not charted as a place: the line in, a "
+                 "wall jack, a desk switch. No marker, no row in NODES, never watched.",
+        fields=[
+            f("id", "slug", required=True, help="Short unique key, e.g. `isp-line`."),
+            f("name", "text", required=True, help="What it is called, e.g. `Fibre line in`."),
+            f("kind", "select", options=STUB_KINDS, default="other",
+              help="internet = the provider's line · switch = a small switch nobody "
+                   "watches · patch = a patch panel · outlet = a wall jack · other."),
+            f("note", "text"),
         ]),
 
     "prefixes": section(
@@ -806,7 +883,7 @@ SIGNAL_FIELDS = [
 
 # Order the editor presents them in — inventory first, then the wiring.
 SECTION_ORDER = ["nodes", "zones", "regions", "prefixes", "routes", "interfaces",
-                 "racks", "rack", "rack_rear", "vms", "rites", "certs", "collections", "stones",
+                 "cables", "stubs", "racks", "rack", "rack_rear", "vms", "rites", "certs", "collections", "stones",
                  "maintenance", "chronicle", "abyss", "meta"]
 
 # Order they sit in the *file*, which is a different question: the dataset is
@@ -814,7 +891,7 @@ SECTION_ORDER = ["nodes", "zones", "regions", "prefixes", "routes", "interfaces"
 # The write path uses this to decide where a brand-new section goes; using the
 # presentation order put the first `prefixes[]` above `meta`.
 FILE_ORDER = ("meta", "zones", "regions", "nodes", "routes", "prefixes", "interfaces",
-              "racks", "rack", "rack_rear", "vms", "signals", "chronicle", "abyss", "rites",
+              "cables", "stubs", "racks", "rack", "rack_rear", "vms", "signals", "chronicle", "abyss", "rites",
               "certs", "collections", "stones")
 
 
@@ -1228,6 +1305,29 @@ def ref_fields(section_key):
             if sub.get("ref"):
                 out.append((fld["name"], sub["name"], sub["ref"], sub["type"]))
     return out
+
+
+def followers(target):
+    """[(section, field)] for every reference marked `follows` that points at
+    `target`: the entry holding it is renamed with what it names, and removed
+    with it (a cable's ends, 2026-11-16)."""
+    return [(key, fld["name"]) for key in SECTIONS for fld in fields_of(key)
+            if fld.get("follows") and fld.get("ref") == target]
+
+
+def vlan_number(value):
+    """`value` as a VLAN id (an int from VLAN_MIN to VLAN_MAX), or None when it
+    is not one. A whole number and the same number as text (`10`, `"10"`) are
+    the same VLAN, as a zone's `vlan` is written either way."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, float) and value.is_integer():
+        value = int(value)
+    if isinstance(value, str) and value.strip().isascii() and value.strip().isdigit():
+        value = int(value.strip())
+    if isinstance(value, int) and VLAN_MIN <= value <= VLAN_MAX:
+        return value
+    return None
 
 
 def refs_of(section_key):

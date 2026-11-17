@@ -154,8 +154,11 @@ def test_the_comparison_is_an_admins_to_read(realm):
 
 def test_nodes_shows_who_watches_and_the_comparison():
     web = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    with open(os.path.join(web, "static", "js", "nodes.js"), encoding="utf-8") as fh:
-        nodes = fh.read()
+    js = os.path.join(web, "static", "js")
+    nodes = ""
+    for name in sorted(n for n in os.listdir(js) if n.startswith("nodes") and n.endswith(".js")):   # nodes.js and its parts (2026-11-16)
+        with open(os.path.join(js, name), encoding="utf-8") as fh:
+            nodes += fh.read()
     for piece in ("nodes_col_confirmed: 'Watched by'", "`<td>${watchedCell(row)}</td>`",
                   "fetch('api/v2/admin/shadow'", "if (!mayWrite()) { S.shadow = null; return null; }",
                   'class="nv-recent nv-shadow"', "serviceWatcher(svc)"):

@@ -201,8 +201,16 @@ was declared, not that nothing depends on it.
 
 Three more fields describe how things connect. None of them is a dependency:
 
-- `wired_to` is cabling and routing. It has one entry per road, so a place
-  joined to this one by two roads is listed twice; `road` is that road's kind.
+- `wired_to` is cabling and routing. It has one entry per cable with this
+  place at an end, then one per road, so a place joined to this one by a cable
+  and a road is listed twice. A cable entry carries `cable` (its id), `port`
+  (this place's), `far_port`, `vlans` in switch notation (`U10`, `U1 T10,20`)
+  and `medium` (copper, fibre…); where the far end is a stub (gear nobody
+  charts as a place, such as the provider's line) it carries `stub` (its kind)
+  instead of a state. A road entry carries `road`, that road's kind. At most 50
+  entries, cables first; `wired_to_total` counts them all. A cable to a place
+  the token may not see is not there at all, and a cloud token is given no
+  cables, so its `wired_to` is roads only.
 - `services_reached_through_it` lists services on other places whose charted
   path passes through this one. If this place goes down, those are the ones to
   look at first.

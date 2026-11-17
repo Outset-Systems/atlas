@@ -23,14 +23,16 @@ const memory = (init = {}) => {
 const throwing = { getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); } };
 
 test('the views are one list, and phone is a layout, not a view', () => {
-  assert.deepEqual(VIEWS, ['map', 'overview', 'nodes']);
-  assert.deepEqual(PHONE_VIEWS, ['overview', 'nodes']);
+  assert.deepEqual(VIEWS, ['map', 'overview', 'nodes', 'topology']);
+  assert.deepEqual(PHONE_VIEWS, ['overview', 'nodes', 'topology']);
   assert.deepEqual([...ADMIN_VIEWS], []);
   assert.equal(isView('phone'), false);
   assert.equal(isView('charts'), false, 'charts is an old name, not a view of its own');
   assert.equal(isView('alerts'), false, 'alerts is an old name since 2026-11-14');
   assert.deepEqual(ALIASES, { charts: 'overview', alerts: 'nodes' });
   assert.equal(isView('nodes'), true);
+  assert.equal(isView('topology'), true, 'TOPOLOGY is a view since 2026-11-17, not a scene');
+  assert.equal(isView('path'), false, 'the old scene id never named a view');
   assert.equal(DECK_KEY, 'atlas.view');
 });
 
@@ -217,6 +219,20 @@ test('?place= opens the map over a stored pick, never over ?view=', () => {
   assert.equal(openingView('nodes', false, null, { place: 'core' }), 'nodes');
   // a place that is not an id says nothing
   assert.equal(openingView(null, false, 'nodes', { place: 'a b' }), 'nodes');
+});
+
+test('TOPOLOGY opens from the address, a stored pick and a press, on a phone too (2026-11-17)', () => {
+  assert.equal(parseView('topology'), 'topology');
+  assert.equal(parseView(' TOPOLOGY '), 'topology');
+  assert.equal(openingView('topology', false, null), 'topology');
+  assert.equal(openingView('topology', true, null), 'topology', 'a phone can look at it');
+  assert.equal(openingView(null, false, 'topology'), 'topology');
+  assert.equal(openingView(null, true, 'topology'), 'topology');
+  assert.equal(allowedView('topology', true, false), 'topology');
+  assert.equal(mayOpen('topology', false), true, 'anyone who may see the map');
+  // `at` is read with the place rule: an id, or nothing
+  assert.equal(parsePlace('core-switch'), 'core-switch');
+  assert.equal(parsePlace('../x'), null);
 });
 
 console.log(`\n${passed} passed`);

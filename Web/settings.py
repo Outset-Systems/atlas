@@ -46,7 +46,7 @@ APP_NAME = _theme.T["app_name"]
 # a public door (atlas.example.com) and again for the hosted edition, where
 # one login page fronts many realms and must not leak which one you asked for.
 APP_BRAND = os.environ.get("ATLAS_BRAND", "").strip() or "The Atlas"
-APP_VERSION = "0.2.0-dev.19"
+APP_VERSION = "0.2.0-dev.20"
 ACCENT_COLOR = "#C9A554"
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -129,6 +129,10 @@ FALLBACK = os.environ.get("ATLAS_FALLBACK", "empty").lower().strip()
 # Deliberately never shipped, so a deploy can't clobber a hand-placed layout.
 POSITIONS_PATH = os.environ.get("ATLAS_POSITIONS", os.path.join(DATA_DIR, "positions.json"))
 RACK_PATH = os.environ.get("ATLAS_RACK", os.path.join(DATA_DIR, "rack.json"))
+# Where an admin put each card on TOPOLOGY's canvas (2026-11-17,
+# topology_layout.py). Beside positions.json, and never shipped for the same reason.
+TOPOLOGY_LAYOUT_PATH = os.environ.get("ATLAS_TOPOLOGY_LAYOUT",
+                                      os.path.join(DATA_DIR, "topology-layout.json"))
 REVISIONS_DIR = os.environ.get("ATLAS_REVISIONS", os.path.join(DATA_DIR, "revisions"))
 OBSERVED_PATH = os.environ.get("ATLAS_OBSERVED", os.path.join(DATA_DIR, "observed.json"))
 EVENTS_PATH = os.environ.get("ATLAS_EVENTS", os.path.join(DATA_DIR, "events.json"))
@@ -192,6 +196,22 @@ def auth_mode():
     several modes in one process and a test may set the mode after the app.
     """
     return (envnames.env("ATLAS_AUTH_MODE") or "standalone").lower().strip()
+
+
+def env_int(name, default, floor, zero_off=False):
+    """A whole number from the environment, read LIVE: `default` when unset
+    or not a number, or when below `floor`. With `zero_off`, 0 is kept (it
+    turns the thing off). No upper bound. Read straight from `os.environ`,
+    never through the old names. One reader for the poll and budget knobs
+    that watch.py and annalist.py each parsed for themselves (2026-11-16)."""
+    raw = os.environ.get(name, str(default)).strip()
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    if zero_off and value == 0:
+        return 0
+    return value if value >= floor else default
 
 
 def beat_token():
@@ -384,6 +404,16 @@ def embed_probe():
 def whois_enabled():
     import integrations
     return integrations.flag("ATLAS_WHOIS", default=True)
+
+
+# ATLAS_DIAGNOSE_OUTSIDE (2026-11-17): the one address outside the chart that
+#                       "Where does it break?" (diagnose.py) may ask, as
+#                       `host:port` (`[v6]:port` for an IPv6 address). Unset,
+#                       the internet step is absent and Atlas reaches nothing
+#                       outside the chart on its own: the operator's choice.
+def diagnose_outside():
+    """The raw `host:port` the internet step asks, or '' when unset."""
+    return (os.environ.get("ATLAS_DIAGNOSE_OUTSIDE") or "").strip()
 
 # (GRAFANA_URL — `ATLAS_GRAFANA` — lived here until v1.36.0. Grafana was
 # decommissioned 2026-09-03: the card vitals and the watchings both draw from

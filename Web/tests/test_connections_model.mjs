@@ -9,7 +9,8 @@
 
 import assert from 'node:assert/strict';
 import {
-  follow, groupsOf, ignoreLocally, kindNote, setups, standsOn, tickable,
+  cableState, countsLine, differs, follow, groupsOf, ignoreLocally, kindNote, reviewCounts, setups,
+  standsOn, tickable,
 } from '../static/js/connections-model.js';
 
 let passed = 0;
@@ -144,6 +145,56 @@ test('a row that arrived ignored comes back as new', () => {
   const view = { rows: [{ key: 'x', type: 'node', status: 'ignored', name: 'x' }] };
   ignoreLocally(view, 'x', false);
   assert.equal(view.rows[0].status, 'new');
+});
+
+/* CABLES (2026-11-17): a system's cables, offered, updated, or the map's otherwise. */
+const CABLES = () => [
+  { key: 'k1', type: 'cable', status: 'new', blocked: false, group: 'Cables', name: 'SW port 24 ↔ GW port 9',
+    parent: 'h1', peer: 'h2' },
+  { key: 'k2', type: 'cable', status: 'new', blocked: false, group: 'Cables', name: 'SW port 1 ↔ AP port 1',
+    updates: 'ap', note: 'updates the cable UniFi gave before: speed 1G, was 100M' },
+  { key: 'k3', type: 'cable', status: 'new', blocked: true, group: 'Cables the map has otherwise',
+    name: 'SW port 8 ↔ NAS', differs: ['the map says port 8 on SW, UniFi says port 12'],
+    note: 'the map says port 8 on SW, UniFi says port 12. The map’s cable stays as it is.' },
+  { key: 'k4', type: 'cable', status: 'charted', blocked: false, group: 'Cables', name: 'old', matched: 'old' },
+];
+
+test('a new cable and an update can be ticked; the map’s otherwise cannot', () => {
+  const rows = CABLES();
+  assert.deepEqual(rows.filter(tickable).map((r) => r.key), ['k1', 'k2']);
+  assert.deepEqual(rows.filter(differs).map((r) => r.key), ['k3']);
+  assert.ok(!differs({ type: 'cable', blocked: true, status: 'new' }), 'blocked for another reason is not a disagreement');
+  assert.ok(!differs({ type: 'route', blocked: true, differs: ['x'] }));
+});
+
+test('a cable says whether it is new or an update', () => {
+  assert.equal(cableState(CABLES()[0]), 'a new cable, port to port');
+  assert.equal(cableState(CABLES()[1]), 'updates the cable it gave before');
+});
+
+test('a cable stands on nothing: ticking it ticks no place, and a place’s untick leaves it', () => {
+  const rows = [...ROWS(), ...CABLES()];
+  assert.deepEqual(follow(rows, 'k1', true), { tick: [], untick: [] });
+  assert.ok(!follow(rows, 'h1', false).untick.includes('k1'));
+});
+
+test('the counts line says how many cables the map has otherwise, and only when there are some', () => {
+  const rows = [...ROWS(), ...CABLES()];
+  const counts = reviewCounts(rows);
+  assert.deepEqual(counts, { fresh: 7, charted: 3, differ: 1, ignored: 0 });
+  assert.equal(countsLine(counts), '7 new · 3 already on the map · 1 cable the map has otherwise');
+  assert.equal(countsLine({ fresh: 0, charted: 3, differ: 2, ignored: 1 }),
+    '0 new · 3 already on the map · 2 cables the map has otherwise · 1 ignored');
+  assert.equal(countsLine(reviewCounts(ROWS())), '5 new · 2 already on the map');
+});
+
+test('an ignored disagreement is counted as ignored, and comes back still blocked', () => {
+  const view = { rows: CABLES() };
+  ignoreLocally(view, 'k3', true);
+  assert.deepEqual(reviewCounts(view.rows), { fresh: 2, charted: 1, differ: 0, ignored: 1 });
+  ignoreLocally(view, 'k3', false);
+  assert.equal(view.rows[2].status, 'new');
+  assert.ok(view.rows[2].blocked && !tickable(view.rows[2]) && differs(view.rows[2]));
 });
 
 console.log(`\n${passed} passed`);

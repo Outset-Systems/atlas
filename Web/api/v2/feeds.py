@@ -191,15 +191,23 @@ def _redact_feed(ctx, feed, groups, data=None):
     return out
 
 
-def build_feed(ctx):
-    """The full, UNREDACTED live feed, with every once-per-poll side effect:
-    repairs, consequences, the rites sweep, THE ANNALS and drift.
+def compose(ctx, before_rites=None):
+    """The reading half of `build_feed` (2026-11-16): ask the sources, then lay
+    over their answer what the map and the stores say. In order: the repairs
+    (maintenance), unmanaged places and services, a service under repair,
+    consequences (dependencies), and the rites' verdicts.
 
-    Request-free on purpose (it needs only an app context): the signals route
-    redacts it per viewer, and the background annalist (`annalist.py`, started
-    from gunicorn.conf.py) drives it on a timer so an outage nobody is watching
-    still reaches the annals. Before v1.46.0 the only caller was a browser, so
-    the 09-17 and 09-24 fleet outages recorded nothing.
+    Returns `(feed, map_now)`. `map_now` is the map as read here, or None when
+    it could not be read; `record` needs it. The feed is not yet a reader's: it
+    still carries `unmanaged_services` (the annals' bookkeeping) and has no
+    drift. `build_feed` drops the one and adds the other after `record`.
+
+    `before_rites` is the one write that has to land in the middle of the
+    read: a callable run just before the rites' verdicts are read, so a beat
+    dropped since the last poll is in this same answer. `build_feed` passes the
+    rites sweep. Left out, nothing is swept, and this function appends nothing
+    to the annals and counts no shadow answer either way. (The sources keep
+    their own notes when they are asked; that is theirs, not this function's.)
     """
     _apply_kuma_map(ctx)
     feed = dict(ctx.signals.feed())
@@ -266,14 +274,30 @@ def build_feed(ctx):
         data, _, _ = ctx.dataset()
         dependencies.apply_to(data, feed)
         # THE RITES: adopt anything dropped since the last poll, then fold the
-        # verdicts in so a rite that stopped turning becomes an event below,
-        # exactly like a place that went dark. Swept here rather than on a
-        # timer because this is already the once-per-poll path.
-        heartbeats.sweep_dropped_files()
+        # verdicts in so a rite that stopped turning becomes an event in
+        # `record`, exactly like a place that went dark. Swept here (the sweep
+        # is `before_rites`) rather than on a timer because this is already
+        # the once-per-poll path.
+        if before_rites is not None:
+            before_rites()
         feed["rites"] = heartbeats.as_feed(data.get("rites"))
     except (OSError, ValueError):
         feed["causes"] = {}
+    return feed, map_now
 
+
+def record(ctx, feed, map_now):
+    """The writing half of `build_feed` (2026-11-16), given what `compose`
+    returned: append the state changes to THE ANNALS and count the shadow
+    answers. Both only on a freshly built feed, so once per source poll and
+    never on a cached read. Shadow also needs the map, so it is skipped when
+    `map_now` is None. Returns nothing. A failure to write the annals is
+    logged, never raised: history must never break the map.
+
+    The third write, the rites sweep, is not here: it has to happen before
+    the rites are read, so `build_feed` hands it to `compose` as
+    `before_rites`. Unlike these two it runs on a cached read as well.
+    """
     # THE ANNALS: record transitions, but only on a freshly built feed. The hub
     # caches for 30s and flags a cached read, so this runs once per source poll
     # rather than once per browser refresh.
@@ -286,6 +310,27 @@ def build_feed(ctx):
     # beside Kuma's, counted once per answer (shadow.py; never raises)
     if not feed.get("cached") and map_now is not None:
         shadow.observe(feed, map_now)
+
+
+def build_feed(ctx):
+    """The full, UNREDACTED live feed, with every once-per-poll side effect:
+    repairs, consequences, the rites sweep, THE ANNALS and drift.
+
+    Request-free on purpose (it needs only an app context): the signals route
+    redacts it per viewer, and the background annalist (`annalist.py`, started
+    from gunicorn.conf.py) drives it on a timer so an outage nobody is watching
+    still reaches the annals. Before v1.46.0 the only caller was a browser, so
+    the 09-17 and 09-24 fleet outages recorded nothing.
+
+    It is `compose` then `record` (2026-11-16): the read and the overlays, then
+    the writes, in the order and at the moment they always ran. An install with
+    no timer still depends on a read to advance the annals, so every caller
+    keeps calling this and not `compose` alone.
+    """
+    # the rites sweep is looked up here, at call time, and handed to `compose`
+    # to run where it always ran: after the consequences, before the rites
+    feed, map_now = compose(ctx, before_rites=heartbeats.sweep_dropped_files)
+    record(ctx, feed, map_now)
     # the unmanaged services' keys were for the annals alone: no reader gets them
     feed.pop("unmanaged_services", None)
 

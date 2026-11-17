@@ -87,10 +87,14 @@ def _off():
 
 @admin_bp.route("/alerts")
 def alerts_read():
+    import senders
     doc, stamp = alerts.read()
     data = _data()
+    # `kinds` (2026-11-16): each kind of destination that can send, as it
+    # declares itself in Web/senders/; Settings › Alerts draws its form from it
     return jsonify({"doc": alerts.for_reading(doc), "stamp": stamp,
-                    "status": _status(doc, data), "states": sorted(NODE_STATES)})
+                    "status": _status(doc, data), "states": sorted(NODE_STATES),
+                    "kinds": senders.declarations()})
 
 
 def _bind(incoming, stored_by_id):

@@ -25,6 +25,7 @@ import heartbeats
 import overview as realm_overview
 import provenance
 import signals
+import topology
 import tripwires
 from api.v2.feeds import _redact_feed, build_feed
 from context import atlas
@@ -89,8 +90,10 @@ TOOLS = [
      "description": "Before acting on a place: what it needs to work, what stops working if "
                     "it does, and what it is wired to. Dependencies are only the ones a "
                     "person declared; wiring is topology, not need. `wired_to` has one "
-                    "entry per road, so a place joined by two roads appears twice, and "
-                    "`road` is that road's kind. `services_reached_through_it` are "
+                    "entry per cable (with `cable`, `port`, `far_port`, `vlans` as U1 "
+                    "T10,20, and `stub` when the far end is uncharted gear), then one per "
+                    "road (with `road`, that road's kind), so a place joined twice "
+                    "appears twice. `services_reached_through_it` are "
                     "services on other places whose charted path passes through this one.",
      "inputSchema": _PLACE_ARG, "annotations": READ_ONLY},
     {"name": "atlas_health", "title": "What is wrong",
@@ -324,6 +327,54 @@ def _brief(node, feed):
                           "reviewed": provenance.describe(node)["reviewed"]}, ("name", "role"))
 
 
+def _cable_end(cable, side):
+    """("place" | "stub", id, port) for one end of a cable, or None."""
+    port = cable.get(f"{side}_port")
+    port = str(port).strip() if isinstance(port, (str, int)) and not isinstance(port, bool) else ""
+    for what, key in (("place", side), ("stub", f"{side}_stub")):
+        if isinstance(cable.get(key), str) and cable[key]:
+            return what, cable[key], port
+    return None
+
+
+def _cabled_to(data, node_id, by_id, feed):
+    """CABLES (2026-11-17): one entry per cable with this place at an end.
+
+    `data` is the asker's redacted map: a cable with a hidden place at either
+    end has already gone, and so has a stub only hidden places are wired to.
+    The checks here are a second lock on that door, not the first: a far end
+    that is not a place or stub on this map is left out. A cable's `note` is
+    never read: the import that wrote it may name anything."""
+    stubs = {s["id"]: s for s in data.get("stubs") or []
+             if isinstance(s, dict) and isinstance(s.get("id"), str)} \
+        if isinstance(data.get("stubs"), list) else {}
+    cables = data.get("cables") if isinstance(data.get("cables"), list) else []
+    rows = []
+    for cable in cables:
+        if not isinstance(cable, dict):
+            continue
+        ends = (_cable_end(cable, "a"), _cable_end(cable, "b"))
+        if None in ends:
+            continue
+        for here, there in (ends, ends[::-1]):
+            if here[:2] != ("place", node_id) or there[:2] == ("place", node_id):
+                continue
+            if there[0] == "place" and there[1] in by_id:
+                row = _brief(by_id[there[1]], feed)
+            elif there[0] == "stub" and there[1] in stubs:
+                stub = stubs[there[1]]
+                row = {"id": there[1], "name": stub.get("name"), "stub": stub.get("kind") or "other"}
+            else:
+                continue
+            row["cable"] = cable.get("id")
+            wiring = {"port": here[2], "far_port": there[2], "vlans": topology.vlan_label(cable),
+                      "medium": cable.get("kind")}
+            row.update({k: v for k, v in wiring.items() if v})
+            rows.append(row)
+            break                              # one entry per cable
+    return rows
+
+
 def impact(args):
     """What a place needs, what needs it, and what it is wired to. Read from the
     redacted map, so a hidden place is simply not part of the answer."""
@@ -335,7 +386,8 @@ def impact(args):
     edges = dependencies.declared_edges(data)        # {place: [what it needs]}
     needs = dependencies.needs(edges, node_id, by_id)
     needed_by = dependencies.needed_by(edges, node_id, by_id)
-    wired = []
+    # cables first (what is plugged into what), then routes (what talks to what)
+    wired = _cabled_to(data, node_id, by_id, feed)
     for road in data.get("routes") or []:
         if not isinstance(road, dict):
             continue
@@ -362,10 +414,16 @@ def impact(args):
         "services_on_it": on_it,
         "services_reached_through_it": through[:MAX_ROWS],
         "wired_to": wired[:MAX_ROWS],
+        "wired_to_total": len(wired),
         "note": ("needs and stops_working_if_this_does are only what a person declared "
                  "(parent, depends_on). An empty list means nothing was declared, not "
                  "that nothing depends on it. wired_to is topology, not need: one entry "
-                 "per road, so a place joined by two roads is listed twice. "
+                 "per cable, then one per road, so a place joined by a cable and a road "
+                 "is listed twice. A cable entry has `cable` (its id), `port` (this "
+                 "place's), `far_port`, `vlans` (U10 untagged, T10,20 tagged) and "
+                 "`medium`; a far end that is a stub (gear nobody charts as a place) "
+                 "has `stub` and no state. A road entry has `road`, its kind. "
+                 f"At most {MAX_ROWS} entries, cables first; wired_to_total counts them all. "
                  "services_reached_through_it are services on other places whose charted "
                  "path passes through this one."),
     }

@@ -23,7 +23,6 @@ does (`liveness()`: per worker, since each worker polls for itself).
 """
 
 import logging
-import os
 import threading
 import time
 
@@ -38,14 +37,8 @@ _last_tick = None
 
 def interval():
     """Seconds between polls; 0 disables. Garbage or negative -> default."""
-    raw = os.environ.get("ATLAS_ANNALS_POLL", "60").strip()
-    try:
-        value = int(raw)
-    except ValueError:
-        return 60
-    if value == 0:
-        return 0
-    return value if value >= 15 else 60        # never hammer the sources
+    import settings
+    return settings.env_int("ATLAS_ANNALS_POLL", 60, 15, zero_off=True)   # never hammer the sources
 
 
 def poll_once(app):

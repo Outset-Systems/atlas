@@ -261,6 +261,43 @@ ROUTES = [
     {"from": "workstation", "to": "monitor", "kind": "mesh"},
 ]
 
+# ── cables and stubs: the wiring under the routes ─────────────────────────────
+# Port to port, as a person would chart it from the back of the rack. Two
+# stubs: the provider's line, and a small switch under the office desk that
+# has no address and is nobody's to watch.
+STUBS = [
+    {"id": "fibre-line", "name": "Fibre line in", "kind": "internet",
+     "note": "The provider's box on the hall wall. Not ours to log into."},
+    {"id": "desk-switch", "name": "Desk switch", "kind": "switch",
+     "note": "Five ports under the office desk. No address, no VLANs of its own."},
+]
+
+CABLES = [
+    {"id": "wan-in", "a_stub": "fibre-line", "a_port": "lan", "b": "gateway", "b_port": "igc0",
+     "kind": "copper", "speed": "1G", "state": "confirmed", "source": "hand",
+     "note": "The provider's box to the router's WAN port."},
+    {"id": "gw-trunk", "a": "gateway", "a_port": "igc1", "b": "core-switch", "b_port": "24",
+     "kind": "copper", "vlan": 1, "tagged": [10, 30, 33, 66, 90], "speed": "1G",
+     "state": "confirmed", "source": "hand", "note": "Every VLAN, one cable."},
+    {"id": "hv-uplink", "a": "hypervisor", "a_port": "enp1s0f0", "b": "core-switch", "b_port": "sfp1",
+     "kind": "dac", "vlan": 33, "tagged": [30, 90], "speed": "10G", "state": "confirmed",
+     "source": "hand"},
+    {"id": "nas-fibre", "a": "nas", "a_port": "eth2", "b": "core-switch", "b_port": "sfp2",
+     "kind": "fibre", "vlan": 33, "speed": "10G", "state": "confirmed", "source": "hand"},
+    {"id": "camera-poe", "a": "camera-hub", "a_port": "eth0", "b": "core-switch", "b_port": "8",
+     "kind": "copper", "vlan": 66, "poe_w": 12, "speed": "1G", "state": "confirmed",
+     "source": "hand", "note": "Powered from the switch; no plug of its own."},
+    {"id": "desk-run", "a": "core-switch", "a_port": "12", "b_stub": "desk-switch", "b_port": "1",
+     "kind": "copper", "vlan": 10, "speed": "1G", "state": "confirmed", "source": "hand",
+     "note": "The run through the wall to the office."},
+    {"id": "workstation-desk", "a": "workstation", "a_port": "eth0", "b_stub": "desk-switch",
+     "b_port": "2", "kind": "copper", "vlan": 10, "speed": "1G", "state": "confirmed",
+     "source": "hand"},
+    {"id": "gpu-desk", "a": "gpu-box", "a_port": "eth0", "b_stub": "desk-switch", "b_port": "3",
+     "kind": "copper", "vlan": 10, "speed": "1G", "state": "assumed", "source": "hand",
+     "note": "Probably port 3; nobody has looked behind the desk."},
+]
+
 VMS = [
     {"id": "dc", "host": "hypervisor", "vcpu": 2, "ram_gb": 4, "demand_gb": 1.9, "state": "on"},
     {"id": "monitor", "host": "hypervisor", "vcpu": 4, "ram_gb": 8, "demand_gb": 5.1, "state": "on"},
@@ -427,7 +464,8 @@ def dataset():
                  "art": "demo-lab render (build.py), label-free",
                  "map_image": "demo-lab.webp",
                  "tribute": {"total_gb": 128, "host_reserve_gb": 8, "cpu_cores": 16, "cpu_threads": 32}},
-        "zones": ZONES, "nodes": NODES, "routes": ROUTES, "racks": RACKS, "rack": RACK, "vms": VMS,
+        "zones": ZONES, "nodes": NODES, "routes": ROUTES, "cables": CABLES, "stubs": STUBS,
+        "racks": RACKS, "rack": RACK, "vms": VMS,
         "signals": {"kuma": KUMA, "drift_ignore": ["offsite", "nas-2"]},
         "rack_rear": RACK_REAR, "chronicle": CHRONICLE, "abyss": ABYSS,
         "rites": RITES, "certs": CERTS,

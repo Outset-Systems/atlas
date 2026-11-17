@@ -26,8 +26,11 @@ LIGHT_SEL = ':root[data-scheme="light"] :is('
 #: the bar block's head: its first clause
 BAR_SEL = ':root[data-scheme-pick="light"] :is('
 #: the panels: what follows the scheme
-PANELS = [".ldg-panel", ".trb-panel", ".rel-panel", ".pth-panel",
+PANELS = [".ldg-panel", ".trb-panel", ".rel-panel",
           ".pal-panel", ".gl-panel", ".dsk-panel", ".wiz-panel",
+          # TOPOLOGY's sheet (2026-11-17), where THE PATH's `.pth-panel` was:
+          # its `--tp-*` values map from the tokens this block restates
+          "#topology-sheet",
           # NODES' sheet, not its whole view (2026-11-13): the Sky's and the
           # Depths' sections stand above and below it there, on their own ground
           "#nodes-sheet",
@@ -410,7 +413,7 @@ def test_a_label_on_a_gilt_fill_is_legible_in_both_schemes():
 
 #: panel rules (excluding the rack's dark-metal devices and the parchment form,
 #: constant by design) must not carry the literal families the tokens replaced
-_PANEL_RE = re.compile(r"(#index-drawer|\.drawer-|\.dtab|\.idx-|\.svc-|\.ldg-|\.rel-|\.trb-|\.pth-|"
+_PANEL_RE = re.compile(r"(#index-drawer|\.drawer-|\.dtab|\.idx-|\.svc-|\.ldg-|\.rel-|\.trb-|\.tp-|"
                        r"\.pal-|\.gl-|\.sp-|\.dir-|\.acct-|\.rt-|\.cal-|\.ann-|\.seal|\.gs-|\.tr-|"
                        r"\.acc-|#settings-panel|\.dsk-|\.wiz-|\.rep-)")
 _EXEMPT_RE = re.compile(r"(\.rel-dev|\.fp-|\.rel-niche|\.rel-gateway|\.rel-forge|\.rel-patch|\.rel-port|"

@@ -1,4 +1,4 @@
-"""ALERTS' SENDER — destinations, the allow-list, pinned resolution, three shapes, the log.
+"""ALERTS' SENDER — destinations, the allow-list, pinned resolution, each kind's shape, the log.
 
 The first thing Atlas pushes outward to an address someone typed (2026-11-13).
 `alerts.py` decides WHAT to say and WHEN; this module decides WHETHER a given
@@ -23,11 +23,18 @@ What bounds it, each one a test in `tests/test_alerts_send.py`:
     reserved, the cloud metadata addresses that sit outside those ranges, and
     this machine's own addresses are not, even when listed. The name is
     resolved on a worker thread, waited for at most `RESOLVE_S` seconds.
-  * **Fixed shapes.** ntfy, Gotify, a JSON webhook. Always POST, never a
+  * **Fixed shapes.** ntfy, Gotify, a JSON webhook, Discord (2026-11-16,
+    its token a named secret put on the end of the path at send time, so
+    the stored address never holds it). Always POST, never a
     redirect, 3s to connect and 5s in all on a wall clock, a body of at most
     4 KB, at most 1 KB of the answer read and thrown away. What comes back is
     "delivered", "refused" with the status, or "unreachable" with a fixed
     reason; never a body, a header or an exception's own text.
+    Each kind is declared once in `senders/` (2026-11-16): its form, its
+    secret, its path rule and its request. Every kind passes through this
+    module's one path: the kind says what its request looks like, and the
+    guard here cleans the message, cuts it to fit, and checks what the kind
+    built before anything leaves.
   * **Secrets by name, bound to an origin.** A destination names its secret
     (`NTFY_LAB` → `ATLAS_ALERT_SECRET_NTFY_LAB`, or its `_FILE`). The name is
     bound to the URL's origin when the admin names it; when the URL moves to
@@ -43,6 +50,7 @@ What bounds it, each one a test in `tests/test_alerts_send.py`:
 
 import base64
 import calendar
+import collections
 import http.client
 import ipaddress
 import json
@@ -57,13 +65,22 @@ import urllib.parse
 
 import envnames
 import schema
+import senders
 import settings
 from filelock import exclusive, lock_for
 from jsonio import iso_utc
 
 log = logging.getLogger("atlas.live.alerts.send")   # a child of atlas.live.alerts, which calls it
 
-KINDS = ("ntfy", "gotify", "webhook")
+
+def __getattr__(name):
+    # `KINDS` is read from the registry each time (2026-11-16), so it is never
+    # a stale copy of what `senders` can send
+    if name == "KINDS":
+        return senders.kinds()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
 OUTCOMES = ("delivered", "refused", "unreachable", "blocked")
 SECRET_PREFIX = "ATLAS_ALERT_SECRET_"
 SECRET_NAME = re.compile(r"^[A-Z0-9_]{1,40}$")
@@ -250,10 +267,17 @@ def origin(url):
 
 
 def _path_for(kind, path):
-    if kind == "gotify":
-        bare = path.rstrip("/")
-        return bare if bare.endswith("/message") else "/message"
-    return path
+    """The path a kind posts to: its own rule (`send_path`), else the address's."""
+    return senders.send_path(kind, path)
+
+
+def _kind_words():
+    """"ntfy, gotify, webhook or discord": the kinds that can send, as a
+    sentence says them."""
+    names = list(senders.kinds())
+    if len(names) <= 1:
+        return "".join(names)
+    return f"{', '.join(names[:-1])} or {names[-1]}"
 
 
 def check_destination(dest):
@@ -268,12 +292,21 @@ def check_destination(dest):
     elif len(name.strip()) > NAME_MAX:
         problems.append(f"A destination's name is at most {NAME_MAX} characters.")
     kind = dest.get("kind")
-    if kind not in KINDS:
-        problems.append("The kind must be ntfy, gotify or webhook.")
+    entry = senders.find(kind)
+    if entry is None:
+        problems.append(f"The kind must be {_kind_words()}." if senders.kinds()
+                        else "No kind of destination can send.")
     secret = dest.get("secret")
     if secret is not None and (not isinstance(secret, str) or not SECRET_NAME.match(secret)):
         problems.append("A secret is named in capitals, digits and underscores, at most "
                         "40 characters, as NTFY_LAB; Atlas reads ATLAS_ALERT_SECRET_<name>.")
+    elif secret and entry is not None and entry.secret_use.get("in") == "none":
+        problems.append("This kind of destination takes no secret.")
+    elif not secret and entry is not None and senders.secret_in_path(kind):
+        # its key is the end of the path (Discord's token): without a secret
+        # there is nothing to send to, and nothing is sent bare (2026-11-16)
+        problems.append("This kind of destination needs a secret: name it, and the "
+                        "server reads ATLAS_ALERT_SECRET_<name>.")
     problems.extend(_check_url(dest.get("url"), kind))
     return problems
 
@@ -312,15 +345,15 @@ def _check_url(url, kind):
     target = _target(url)
     if target is None:
         return ["The address's host is not a host name or an address."]
-    _, host, port, path = target
+    scheme, host, port, path = target
     if not _PATH_CHARS.match(path):
         problems.append("The address's path has characters a URL cannot carry.")
-    if kind == "gotify":
-        bare = path.rstrip("/")
-        if bare and not bare.endswith("/message"):
-            problems.append("A Gotify address is the server itself or ends in /message.")
-    if kind == "ntfy" and path.strip("/") == "":
-        problems.append("An ntfy address names its topic, as https://ntfy.example/atlas.")
+    # THE SEAM (2026-11-16): the kind's own rule for the path, and for the
+    # whole address (a kind that speaks only to its service's hosts), in the
+    # place it always had; everything before and after is the guard's, and a
+    # kind's rule only adds problems, never removes one
+    problems.extend(senders.check_path(kind, path))
+    problems.extend(senders.check_address(kind, scheme, host, port, path))
     ip = _ip(host)
     if ip is not None and _refused_ip(ip):
         problems.append("Alerts may not be sent to a loopback, link-local, multicast, "
@@ -339,15 +372,17 @@ def _check_url(url, kind):
 
 
 def normalised(dest):
-    """A copy of `dest` with its URL written the way it is sent: a Gotify
-    address ends in /message. For the save, after `check_destination`."""
+    """A copy of `dest` with its URL written the way it is sent, for a kind
+    that says so (`rewrites_url`): a Gotify address ends in /message. For the
+    save, after `check_destination`."""
     out = dict(dest)
     target = _target(dest.get("url"))
-    if target is not None and dest.get("kind") == "gotify":
+    kind = dest.get("kind")
+    if target is not None and senders.rewrites_url(kind):
         scheme, host, port, path = target
         default = DEFAULT_PORTS[scheme] == port
         hostport = _bracket(host) if default else f"{_bracket(host)}:{port}"
-        out["url"] = f"{scheme}://{hostport}{_path_for('gotify', path)}"
+        out["url"] = f"{scheme}://{hostport}{_path_for(kind, path)}"
     return out
 
 
@@ -505,7 +540,7 @@ def _vet(host, port, resolver):
     return addresses[0], None
 
 
-# ── The three shapes ────────────────────────────────────────────────────────
+# ── The shapes: what every kind's request is cleaned and cut by ─────────────
 
 def _text(value):
     """Text that encodes as UTF-8 (a lone surrogate becomes '?')."""
@@ -576,46 +611,76 @@ def _fit_json(build, text):
     return encode(text[:lo] + "…")
 
 
-def build_request(kind, message, secret=None):
-    """`(headers, body_bytes)` for one of the three shapes. Public so a test can
-    read exactly what would be sent."""
+#: A message as the guard cleaned it: `title` one line of at most TITLE_MAX
+#: characters, `body` text that encodes, `high`, `link` (None unless it is a
+#: plain http(s) address with no credentials) and `tags`.
+Prepared = collections.namedtuple("Prepared", "title body high link tags")
+
+
+def prepared(message):
+    """`message` cleaned for any kind (a `Prepared` is returned as it is), so a
+    kind's `build` never sees a raw title, link or tag."""
+    if isinstance(message, Prepared):
+        return message
     message = message if isinstance(message, dict) else {}
-    title = _one_line(message.get("title"), TITLE_MAX)
-    body = _text(message.get("body"))
-    high = message.get("priority") == "high"
-    link = _link(message.get("link"))
-    tags = _tags(message.get("tags"))
-    headers = {"User-Agent": "Atlas-alerts"}
-    if kind == "ntfy":
-        headers["Content-Type"] = "text/plain; charset=utf-8"
-        if title:
-            headers["Title"] = _header(title)
-        headers["Priority"] = "5" if high else "3"
-        if tags:
-            headers["Tags"] = ",".join(tags)
-        if link:
-            headers["Click"] = link
-        if secret:
-            headers["Authorization"] = f"Bearer {secret}"
-        return headers, _cut_bytes(body, MAX_BODY).encode("utf-8")
-    headers["Content-Type"] = "application/json"
-    if kind == "gotify":
-        if secret:
-            headers["X-Gotify-Key"] = secret
+    return Prepared(_one_line(message.get("title"), TITLE_MAX), _text(message.get("body")),
+                    message.get("priority") == "high", _link(message.get("link")),
+                    _tags(message.get("tags")))
 
-        def build(text):
-            doc = {"title": title, "message": text, "priority": 8 if high else 5}
-            if link:
-                doc["extras"] = {"client::notification": {"click": {"url": link}}}
-            return doc
-        return headers, _fit_json(build, body)
-    if secret:
-        headers["Authorization"] = f"Bearer {secret}"
 
-    def build(text):
-        return {"title": title, "body": text, "priority": "high" if high else "default",
-                "link": link, "tags": tags, "source": "atlas"}
-    return headers, _fit_json(build, body)
+def base_headers(content_type):
+    """The headers every kind starts from."""
+    return {"User-Agent": "Atlas-alerts", "Content-Type": content_type}
+
+
+#: A header value, ASCII, as RFC 2047 when it is not.
+header_text = _header
+
+
+def plain_body(text):
+    """A text body in at most MAX_BODY bytes, ending in '…' when cut."""
+    return _cut_bytes(text, MAX_BODY).encode("utf-8")
+
+
+def json_body(build, text):
+    """The JSON of `build(text)` in at most MAX_BODY bytes, cutting only the text."""
+    return _fit_json(build, text)
+
+
+class ShapeError(ValueError):
+    """What a kind built cannot be sent. The guard raises it with a fixed text."""
+
+
+_HEADER_NAME = re.compile(r"^[A-Za-z0-9-]{1,64}$")
+_HEADER_VALUE = re.compile(r"^[\x20-\x7e]*$")
+
+
+def _checked(headers, body):
+    """The guard's look at what a kind built, before anything leaves: a body
+    of bytes within MAX_BODY, and headers of plain names and one-line ASCII
+    values. Never refuses what the three first kinds build."""
+    if not isinstance(body, bytes) or len(body) > MAX_BODY:
+        raise ShapeError(f"the message is not a body of at most {MAX_BODY} bytes")
+    if not isinstance(headers, dict) or not all(
+            isinstance(k, str) and isinstance(v, str) and _HEADER_NAME.fullmatch(k)
+            and _HEADER_VALUE.fullmatch(v) for k, v in headers.items()):
+        raise ShapeError("the message has a header that cannot be sent")
+    return headers, body
+
+
+def build_request(kind, message, secret=None):
+    """`(headers, body_bytes)` in `kind`'s shape (`senders/`). Public so a test
+    can read exactly what would be sent.
+
+    THE SEAM (2026-11-16): the cleaning (`prepared`) and the cut to 4 KB
+    (`plain_body`, `json_body`) are the guard's, and so is the look `send`
+    takes at the result (`_checked`); the kind only chooses its headers and
+    the shape of its body. A kind no entry declares is built as a webhook, as
+    it always was; `send` never gets that far with one."""
+    entry = senders.find(kind) or senders.find("webhook")
+    if entry is None:
+        raise ShapeError("no kind of destination can send")
+    return entry.build(prepared(message), secret)
 
 
 # ── The transport ───────────────────────────────────────────────────────────
@@ -757,16 +822,28 @@ def _send(dest, message, resolver, transport):
         secret, why = _secret_state(dest)
         if secret is None:
             return _result("blocked", why=why)
+    elif senders.secret_in_path(kind):      # check_destination says so first
+        return _result("blocked", why="this kind of destination needs a secret")
     address, refused = _vet(host, port, resolver)
     if address is None:
         return _result(refused[0], why=refused[1])
-    headers, body = build_request(kind, message, secret)
+    try:
+        headers, body = _checked(*build_request(kind, message, secret))
+        # a kind that keeps its secret in the path (Discord's token) gets it
+        # added here, after every check of the stored address, and the result
+        # is held to the same rule as any path (2026-11-16)
+        path = senders.secret_path(kind, _path_for(kind, path), secret)
+        if not (isinstance(path, str) and path.startswith("/") and _PATH_CHARS.fullmatch(path)):
+            raise ShapeError("the kind's path cannot be sent")
+    except ShapeError as e:
+        log.warning("alert to %s: blocked (%s)", dest.get("id"), e)
+        return _result("blocked", why=str(e))
     headers["Host"] = (_bracket(host) if DEFAULT_PORTS[scheme] == port
                        else f"{_bracket(host)}:{port}")
     deadline = time.monotonic() + TOTAL_S
     try:
         resp = transport(method="POST", address=str(address), port=port, scheme=scheme, host=host,
-                         path=_path_for(kind, path), headers=headers, body=body,
+                         path=path, headers=headers, body=body,
                          connect_timeout=CONNECT_S, total_timeout=TOTAL_S)
     except Exception as e:  # noqa: BLE001 — mapped to a fixed reason
         why = _why(e, time.monotonic() >= deadline)

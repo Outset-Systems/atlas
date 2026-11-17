@@ -12,7 +12,9 @@ integrations/unifi, read 2026-11-02): the controller's own lists, never a scan.
 
 Devices and clients become places, networks become realms, a port table becomes
 `interfaces`, and an uplink, an LLDP neighbour or a client's port becomes a route.
-Every one is a row in the review, and nothing lands until it is ticked.
+The same three also become `cables` (2026-11-17), port to port, offered only
+where both ends are already places on the map (`review._annotate_cables`). Every
+one is a row in the review, and nothing lands until it is ticked.
 
 These are the controller's unofficial endpoints, which is what every UniFi tool
 reads, Scanopy included. They are not promised to stay put. Two ways in, both
@@ -246,6 +248,30 @@ def _on_ports(snapshot, devices, names, host_of, client_names):
     return {k: ", ".join(v)[:120] for k, v in heard.items()}
 
 
+def _port_name(idx):
+    """A port index as the review names the port (`review.port`'s name), or ""."""
+    if idx is None or isinstance(idx, bool):
+        return ""
+    return review.clean(idx, 40)
+
+
+def _poe_watts(port):
+    """What a port is drawing over PoE now, in watts, or None. `poe_power` is
+    written as text (`"4.52"`) where a port powers something."""
+    try:
+        watts = float(port.get("poe_power"))
+    except (TypeError, ValueError):
+        return None
+    return round(watts, 1) if 0 < watts < 1000 else None
+
+
+def _one(values):
+    """The one value every stating end agrees on, or None when they differ or
+    none states it: two ends that disagree are not a fact to write."""
+    told = {v for v in values if v not in (None, "")}
+    return told.pop() if len(told) == 1 else None
+
+
 def _networks(snapshot):
     """(zone rows, {network id: vlan})."""
     rows, vlan_of = [], {}
@@ -392,6 +418,99 @@ class _Reading:
                                       detail=" · ".join(b for b in (vendor, where) if b)))
         self.adds(key, self.client_names[mac], mac=mac)
 
+    # ── cables: the same wires as the links, port to port (2026-11-17) ──────
+    def _sightings(self):
+        """Every wire the controller states, as (end, port, end, port, wireless),
+        an end being ("device" | "client", mac) and a port "" where none is said.
+
+        A device's uplink names both ports (its own and the upstream's), or no
+        port for a wireless uplink. An LLDP neighbour names only the port it was
+        heard on. A wired client names its switch port; its own port is never
+        said. A client gets no cable when a device's link is on that port (it is
+        behind that device), when it is a hypervisor's guest (its host's cable
+        is the wire), or when another client shares the port (something nobody
+        charted sits between them, and guessing which is worse than nothing)."""
+        seen = []
+        for mac, d in self.devices.items():
+            up = d.get("uplink") or {}
+            upstream = _mac(up.get("uplink_mac"))
+            if upstream in self.devices and upstream != mac:
+                air = up.get("type") == "wireless"
+                seen.append((("device", mac), "" if air else _port_name(up.get("port_idx")),
+                             ("device", upstream), "" if air else _port_name(up.get("uplink_remote_port")),
+                             air))
+            for n in d.get("lldp_table") or []:
+                other = _mac(n.get("chassis_id")) if isinstance(n, dict) else ""
+                if other in self.devices and other != mac:
+                    seen.append((("device", mac), _port_name(n.get("local_port_idx")),
+                                 ("device", other), "", False))
+        held = {(end[1], port) for s in seen for end, port in ((s[0], s[1]), (s[2], s[3])) if port}
+        on_port = {}
+        for c in self.clients:
+            mac = _mac(c.get("mac"))
+            if not mac or mac in self.devices or mac in self.host_of or not c.get("is_wired"):
+                continue
+            switch, port = _mac(c.get("sw_mac")), _port_name(c.get("sw_port"))
+            if switch in self.devices and port:
+                on_port.setdefault((switch, port), []).append(mac)
+        for (switch, port), macs in on_port.items():
+            if len(macs) == 1 and (switch, port) not in held:
+                seen.append((("device", switch), port, ("client", macs[0]), "", False))
+        return seen
+
+    def _port_row(self, end, port):
+        """The port table's entry for a device's port, or {}."""
+        if end[0] != "device" or not port:
+            return {}
+        for p in self.devices[end[1]].get("port_table") or []:
+            if isinstance(p, dict) and _port_name(p.get("port_idx")) == port:
+                return p
+        return {}
+
+    def cables(self):
+        """One cable row per wire, however many records mention it: sightings
+        between the same two things are one wire when no port they name differs,
+        and each fills in the ports the others left blank."""
+        wires = {}
+        for a, a_port, b, b_port, air in self._sightings():
+            pair = tuple(sorted((a, b)))
+            ports = {a: a_port, b: b_port}
+            for w in wires.setdefault(pair, []):
+                if w["air"] == air and all(not w["ports"][e] or not ports[e] or w["ports"][e] == ports[e]
+                                           for e in pair):
+                    w["ports"] = {e: w["ports"][e] or ports[e] for e in pair}
+                    break
+            else:
+                wires[pair].append({"ports": ports, "air": air})
+        out = []
+        for pair, found in wires.items():
+            for w in found:
+                out.append(self._cable(pair, w["ports"], w["air"]))
+        return out
+
+    def _cable(self, pair, ports, air):
+        """What the controller states about one wire, and nothing it does not:
+        fibre where a port's media is SFP, wireless only for an uplink it calls
+        wireless, a speed, a PoE draw and an untagged VLAN only where the ports
+        that state one agree."""
+        ends = [(e, ports[e]) for e in pair]
+        rows = [self._port_row(e, p) for e, p in ends]
+        media = " ".join(str(r.get("media") or "").upper() for r in rows)
+        kind = "wireless" if air else "fibre" if "SFP" in media else "copper"
+        wan = any(str(r.get("network_name") or "").lower().startswith("wan") for r in rows)
+        speed = _one(_speed(r.get("speed")) for r in rows if r.get("up"))
+        vlan = None if wan or air else _one(self.vlan_of.get(str(r.get("native_networkconf_id")))
+                                             for r in rows if r.get("native_networkconf_id") is not None)
+        poe = _one(_poe_watts(r) for r in rows)
+        keys = [f"unifi:{e[0]}/{e[1]}" for e, _ in ends]
+        names = [(self.names if e[0] == "device" else self.client_names)[e[1]] for e, _ in ends]
+        key = "~".join(f"{e[0]}/{e[1]}" + (f"/{p}" if p else "") for e, p in ends)
+        return review.cable(f"unifi:cable/{key}", "Cables", keys[0], keys[1],
+                            source="unifi", by="UniFi", a_port=ends[0][1], b_port=ends[1][1],
+                            kind=kind, speed=speed or "", poe_w=poe, vlan=vlan,
+                            name=" ↔ ".join(f"{n} port {p}" if p else n
+                                            for n, (_, p) in zip(names, ends)))
+
     def notes(self):
         out = []
         if not self.devices:
@@ -414,7 +533,8 @@ def candidates(snapshot):
         reading.device(mac, d)
     for c in reading.clients:
         reading.client(c)
-    return reading.rows + list(reading.links.values()) + reading.facts, reading.notes()
+    return (reading.rows + list(reading.links.values()) + reading.cables() + reading.facts,
+            reading.notes())
 
 
 # ── the connection: what Settings shows, the test, and the survey ───────────

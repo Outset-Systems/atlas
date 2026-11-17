@@ -402,7 +402,7 @@ test('the rail remembers which sections were shut, and nothing else', () => {
 });
 
 test("NODES' words: every one has its plain twin in plain.json", () => {
-  const src = readFileSync(new URL('../static/js/nodes.js', import.meta.url), 'utf8');
+  const src = readFileSync(new URL('../static/js/nodes-text.js', import.meta.url), 'utf8');
   const body = src.match(/export const NODES_TEXT = \{([\s\S]*?)\n\};/)[1];
   const words = Function(`return {${body}}`)();
   const plain = JSON.parse(readFileSync(new URL('../themes/plain.json', import.meta.url), 'utf8')).text;

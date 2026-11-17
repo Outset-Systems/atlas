@@ -20,6 +20,12 @@
 <!-- THE VIEWS' own sheet (NODES and what follows it, 2026-11-13); the view
      shell itself, shown and hidden, is atlas.css "THE VIEWS" -->
 <link rel="stylesheet" href="static/views.css?v={{ v }}">
+<!-- TOPOLOGY (2026-11-17): the view's frame, panel and the `--tp-*` values
+     (topology.css), and every rule inside its one <svg>, which reads only
+     those values (topology-canvas.css), so a drawing taken out of the page
+     can carry its styles with it -->
+<link rel="stylesheet" href="static/topology.css?v={{ v }}">
+<link rel="stylesheet" href="static/topology-canvas.css?v={{ v }}">
 <!-- The backdrop is the largest thing on the page by an order of magnitude and
      nothing can be drawn until it is measured (boot reads its natural size to
      set the world's dimensions). Starting its fetch here, before the stylesheets
@@ -167,8 +173,10 @@
      foot takes only the colophon and the way back to the map. ALERTS
      (stage 4, 2026-11-13) is a view no longer (owner, 2026-11-14): its rules
      are made in NODES and where word goes is Settings › Alerts; `?view=alerts`
-     opens NODES. A menu item or strip entry with `data-admin` and `hidden` is
-     drawn by views.js for an admin and removed for anyone else. -->
+     opens NODES. TOPOLOGY (2026-11-17, topology.js) is the device cards and
+     their cables on one canvas, its own thing as NODES is; it replaced the
+     tier scene THE PATH. A menu item or strip entry with `data-admin` and
+     `hidden` is drawn by views.js for an admin and removed for anyone else. -->
 <main class="atlas-view" id="view-overview" data-view="overview" hidden aria-label="{{ theme.text.view_overview|capitalize }}">
   <div class="view-band view-band-sky" id="overview-sky"></div>
   <a class="view-edge view-edge-up" href="#overview-sky">↑ {{ theme.text.sky }}</a>
@@ -182,12 +190,17 @@
   <section class="nv-sheet" id="nodes-sheet" aria-label="{{ theme.text.view_nodes|capitalize }}"></section>
   <div class="view-foot" id="nodes-foot"></div>
 </main>
+<main class="atlas-view" id="view-topology" data-view="topology" hidden aria-label="{{ theme.text.view_topology|capitalize }}">
+  <section class="tp-sheet" id="topology-sheet" aria-label="{{ theme.text.view_topology|capitalize }}"></section>
+  <div class="view-foot" id="topology-foot"></div>
+</main>
 <!-- On a phone the views are named at the top of the column (there is no
      ATLAS and no map there, so no MAP either; the column's foot is the way to
      the map). Shown only under body.phone. -->
 <nav class="view-strip" id="view-strip" aria-label="{{ theme.text.views }}">
   <button type="button" data-view="overview">{{ theme.text.view_overview }}</button>
   <button type="button" data-view="nodes">{{ theme.text.view_nodes }}</button>
+  <button type="button" data-view="topology">{{ theme.text.view_topology }}</button>
 </nav>
 
 <!-- Floating chrome — ONE menu (2026-08-10). The ◆ scene flyout and the ⚙
@@ -245,7 +258,6 @@
   <button class="scene" data-scene="rack">RACKS</button>
   <button class="scene" data-scene="tribute">RESOURCES</button>
   <button class="scene" data-scene="ledger">ADDRESSES</button>
-  <button class="scene" data-scene="path">TOPOLOGY</button>
   <!-- THE RITES and THE FORGE live here since v1.45.0; the title says so for
        anyone who comes looking for either by its old name. -->
   <button class="scene" data-scene="calendar" title="Every scheduled job in the lab on one clock">CALENDAR</button>
@@ -303,6 +315,7 @@
   <button type="button" role="menuitem" data-view="map">{{ theme.text.view_map }}</button>
   <button type="button" role="menuitem" data-view="overview">{{ theme.text.view_overview }}</button>
   <button type="button" role="menuitem" data-view="nodes">{{ theme.text.view_nodes }}</button>
+  <button type="button" role="menuitem" data-view="topology">{{ theme.text.view_topology }}</button>
 </div>
 
 
@@ -455,19 +468,6 @@
       <div class="trb-summary" id="trb-summary-cpu"></div>
     </div>
     <div class="trb-list" id="trb-list"></div>
-  </div>
-</div>
-
-<!-- TOPOLOGY — the realm's topology, tier by tier (SolarWinds-style, hand-drawn) -->
-<div id="path" aria-hidden="true">
-  <div class="pth-panel" role="dialog" aria-label="Topology — the network, tier by tier">
-    <div class="ldg-head">
-      <span class="ldg-title">TOPOLOGY</span>
-      <span class="ldg-sub">from the internet to the guests — every route, live</span>
-      <button class="ldg-close" id="pth-close" title="Close (Esc)">×</button>
-    </div>
-    <div class="pth-body"><svg id="pth-svg"></svg><div id="pth-nodes"></div></div>
-    <div class="pth-legend" id="pth-legend"></div>
   </div>
 </div>
 

@@ -70,6 +70,9 @@ export const ALERTS_TEXT = {
   alerts_kind_ntfy: 'ntfy',
   alerts_kind_gotify: 'Gotify',
   alerts_kind_webhook: 'A JSON webhook',
+  alerts_kind_discord: 'Discord',
+  alerts_discord_url_hint: 'The webhook\'s address up to its id. The operator lists discord.com:443 in ATLAS_ALERT_HOSTS first.',
+  alerts_discord_secret_hint: 'The token, the part of the webhook\'s address after the id: the server reads it from ATLAS_ALERT_SECRET_<NAME> or its _FILE; Atlas never stores it.',
   alerts_f_name: 'Name',
   alerts_f_kind: 'Kind',
   alerts_f_url: 'Address',
@@ -134,7 +137,8 @@ export const ALERTS_TEXT = {
   alerts_need_dest_first: 'Add a destination first.',
   alerts_need_minutes: 'The wait is a whole number of minutes, from 0 to 1440.',
   alerts_need_url: 'Give the address to send to.',
-  alerts_need_kind: 'Pick ntfy, Gotify or a JSON webhook.',
+  alerts_need_kind: 'Pick {kinds}.',
+  alerts_need_secret: 'Name the secret this kind sends; it cannot send without one.',
   alerts_bad_url: 'The address must start with https:// or http://.',
   alerts_bad_userinfo: 'The address may not carry a user name or password. Name a secret instead.',
   alerts_bad_query: 'The address may not carry a query (?…). Name a secret instead.',
@@ -214,8 +218,49 @@ export const plainT = (key, vars) => fill(ALERTS_TEXT[key] ?? key, vars);
 
 /** The states a rule can wait for, when the server does not list them. */
 export const STATES = ['down', 'degraded', 'maintenance', 'slumbering', 'healthy'];
-/** The three shapes a destination can take (the server fixes method and body). */
+/** The three shapes a destination can take (the server fixes method and body).
+    Since 2026-11-16 the server lists its kinds itself (`kindList`); these are
+    what the page knows when it is not told. */
 export const KINDS = ['ntfy', 'gotify', 'webhook'];
+const PLACEHOLDERS = { ntfy: 'https://ntfy.example/lab-alerts', gotify: 'https://gotify.example', webhook: 'https://hooks.example/atlas' };
+const FIELD_TYPES = ['url', 'secret-name', 'text', 'select'];
+
+/** The kinds a destination can be, as the server declares them (2026-11-16):
+    `kinds` in the alerts read, from Web/senders/, only those that can send,
+    in the order offered. Each is {kind, label, fields}; a field is {name,
+    type: url|secret-name|text|select, required, label (a theme key), text
+    (its plain words), hint, hint_text, placeholder, options}. A declaration
+    with no address is left out. Told nothing, the three this page has always
+    known, with the same fields, so the form is drawn the same either way. */
+export function kindList(given) {
+  const field = (f) => f && typeof f === 'object' && typeof f.name === 'string' && f.name
+    && FIELD_TYPES.includes(f.type);
+  const told = list(given)
+    .filter((k) => k && typeof k.kind === 'string' && k.kind && list(k.fields).some((f) => field(f) && f.name === 'url'))
+    .map((k) => ({ kind: k.kind, label: String(k.label || k.kind), fields: list(k.fields).filter(field) }));
+  if (told.length) return told;
+  return KINDS.map((kind) => ({
+    kind,
+    label: ALERTS_TEXT[`alerts_kind_${kind}`],
+    fields: [
+      { name: 'url', type: 'url', required: true, label: 'alerts_f_url', placeholder: PLACEHOLDERS[kind] },
+      { name: 'secret', type: 'secret-name', required: false, label: 'alerts_f_secret', hint: 'alerts_secret_hint', placeholder: 'NTFY_LAB' },
+    ],
+  }));
+}
+
+/** What a destination of `kind` posts, read from the form's values by field:
+    {url, secret, ...}. An address is trimmed, a secret is its name; a kind
+    that asks for no secret posts none, so an old one is not kept. */
+export function destinationValues(fields, read) {
+  const out = {};
+  for (const f of list(fields)) {
+    const v = read(f.name);
+    out[f.name] = f.type === 'secret-name' ? secretName(v) : f.type === 'select' ? String(v ?? '') : String(v ?? '').trim();
+  }
+  if (!('secret' in out)) out.secret = null;
+  return out;
+}
 /** Whether a rule is on, as the server reads it (alerts.py `rule_on`): no
     `enabled` is on, `true` is on, anything else a hand edit left is off. */
 export const ruleOn = (rule) => ((rule && rule.enabled) ?? true) === true;
@@ -363,14 +408,35 @@ export function secretName(raw) {
 }
 const SECRET_RE = /^[A-Z0-9_]{1,40}$/;
 
+/** The kinds as a sentence names them, from what each declares (2026-11-16):
+    its theme word, else its label, so a kind added on the server needs no
+    edit here. A label that opens with "A" or "An" ("A JSON webhook") reads
+    in lower case inside the sentence. `kinds` are declarations or names. */
+export function kindWords(kinds, t = plainT) {
+  const word = (k) => {
+    const key = `alerts_kind_${k.kind}`;
+    const said = t(key);
+    const w = said && said !== key ? said : String(k.label || k.kind);
+    return w.replace(/^(A|An) /, (m) => m.toLowerCase());
+  };
+  return listWords(list(kinds).map((k) => (typeof k === 'string' ? { kind: k, label: k } : k))
+    .filter((k) => k && typeof k.kind === 'string' && k.kind).map(word), t);
+}
+
 /** Problems with a destination, by field: [{field, text}]. Empty means it may
     be posted. `hosts` is the allowed list from the status (an empty list
-    skips that check: the server decides). */
-export function checkDestination(dest, { hosts } = {}, t = plainT) {
+    skips that check: the server decides). `kinds` are the kinds the server
+    can send to, as declared (`kindList`) or by name; none given, the three.
+    A declared field that is required (Discord's secret) is asked for. The
+    path rules here are ntfy's and Gotify's; another kind's own rule is the
+    server's, and its answer is put beside the address. */
+export function checkDestination(dest, { hosts, kinds } = {}, t = plainT) {
   const d = dest || {};
   const out = [];
+  const offered = list(kinds).length ? list(kinds) : kindList();
+  const known = offered.map((k) => (typeof k === 'string' ? k : k?.kind));
   if (blank(d.name)) out.push({ field: 'name', text: t('alerts_need_name') });
-  if (!KINDS.includes(d.kind)) out.push({ field: 'kind', text: t('alerts_need_kind') });
+  if (!known.includes(d.kind)) out.push({ field: 'kind', text: t('alerts_need_kind', { kinds: kindWords(offered, t) }) });
   if (blank(d.url)) out.push({ field: 'url', text: t('alerts_need_url') });
   else {
     let u = null;
@@ -388,6 +454,10 @@ export function checkDestination(dest, { hosts } = {}, t = plainT) {
   }
   const secret = secretName(d.secret);
   if (secret && !SECRET_RE.test(secret)) out.push({ field: 'secret', text: t('alerts_bad_secret') });
+  const declared = offered.find((k) => k && typeof k === 'object' && k.kind === d.kind);
+  if (!secret && list(declared?.fields).some((f) => f && f.name === 'secret' && f.required === true)) {
+    out.push({ field: 'secret', text: t('alerts_need_secret') });
+  }
   return out;
 }
 

@@ -8,7 +8,8 @@
    `alerts`), hidden for anyone who is not an admin on an instance that
    writes (`A.MAY_ALERTS`); the routes refuse anyone else regardless.
 
-   - DESTINATIONS: ntfy, Gotify or a JSON webhook, on a host the operator
+   - DESTINATIONS: ntfy, Gotify, a JSON webhook or Discord (each kind as the
+     server declares it, `kinds` in the read, Web/senders/), on a host the operator
      listed in ATLAS_ALERT_HOSTS. A destination NAMES its secret; the server
      reads ATLAS_ALERT_SECRET_<NAME> or its _FILE. No secret's value is ever
      asked for, shown or posted. "Send a test" shows only the outcome word and
@@ -25,7 +26,7 @@ import { A, $, esc } from './config.js';
 import * as M from './alerts-model.js';
 import * as Store from './alert-store.js';
 import {
-  t, list, clock, stamp, field, input, select, check, toggle, showProblems, byFieldOf, formBox,
+  t, tOr, list, clock, stamp, field, input, select, check, toggle, showProblems, byFieldOf, formBox,
   noticeHTML, offHTML, answerNotice, keepFocus, focusKey, refocus, sameEntry,
 } from './alert-forms.js';
 
@@ -154,7 +155,7 @@ function destinationsHTML() {
     return `<li class="al-row${editing ? ' al-editing' : ''}" data-dest="${esc(d.id)}">
         <div class="al-row-head">
           <span class="al-name">${esc(d.name || d.id)}</span>
-          <span class="al-kind">${esc(M.ALERTS_TEXT[`alerts_kind_${d.kind}`] ? t(`alerts_kind_${d.kind}`) : d.kind || '')}</span>
+          <span class="al-kind">${esc(kindWord(d.kind))}</span>
           <span class="al-acts">
             <button type="button" class="dsk-btn dsk-btn-sm" data-act="test" data-id="${esc(d.id)}"${test?.pending ? ' disabled' : ''}>${esc(test?.pending ? t('alerts_testing') : t('alerts_test'))}</button>
             <button type="button" class="dsk-btn dsk-btn-sm" data-act="edit" data-id="${esc(d.id)}">${esc(t('alerts_edit'))}</button>
@@ -225,40 +226,93 @@ function drawDeliveries() {
 
 /* ── the forms ───────────────────────────────────────────────────────────── */
 
-const PLACEHOLDER = { ntfy: 'https://ntfy.example/lab-alerts', gotify: 'https://gotify.example', webhook: 'https://hooks.example/atlas' };
+/** The kinds the server can send to, as each declares itself (Web/senders/,
+    2026-11-16), and a kind's word: the theme's, else its own. */
+const kinds = () => M.kindList(body()?.kinds);
+const kindWord = (kind) => tOr(`alerts_kind_${kind}`, kinds().find((k) => k.kind === kind)?.label || kind || '');
 
+/** One box for a field a kind declares, as this form has always drawn it. */
+function control(f, value) {
+  if (f.type === 'select') {
+    return select(list(f.options).filter(Array.isArray).map(([v, plain, key]) => [v, tOr(key, plain || v)]), value ?? '');
+  }
+  if (f.type === 'url') {
+    const box = input('url', value, 'dsk-input dsk-mono al-wide');
+    box.placeholder = f.placeholder || '';
+    box.spellcheck = false;
+    return box;
+  }
+  if (f.type === 'secret-name') {
+    const box = input('text', value || '', 'dsk-input dsk-mono');
+    box.placeholder = f.placeholder || '';
+    box.maxLength = 40;
+    box.spellcheck = false;
+    box.autocomplete = 'off';
+    return box;
+  }
+  const box = input('text', value);
+  if (f.placeholder) box.placeholder = f.placeholder;
+  return box;
+}
+
+/** The destination form: its name and kind, then the fields the kind
+    declares, in its order. When the kind changes to one that asks for other
+    fields they are drawn again, keeping what was typed into a field of the
+    same name; when it asks for the same ones, only what the empty boxes say
+    changes. */
 function destinationForm(was = {}) {
   const editing = Boolean(was.id);
+  const offered = kinds();
   const name = input('text', was.name);
   name.maxLength = 60;
-  const kind = select(M.KINDS.map((k) => [k, t(`alerts_kind_${k}`)]), was.kind || 'ntfy');
-  const url = input('url', was.url, 'dsk-input dsk-mono al-wide');
-  url.placeholder = PLACEHOLDER[kind.value] || '';
-  url.spellcheck = false;
-  kind.addEventListener('change', () => { url.placeholder = PLACEHOLDER[kind.value] || ''; });
-  const secret = input('text', was.secret || '', 'dsk-input dsk-mono');
-  secret.placeholder = 'NTFY_LAB';
-  secret.maxLength = 40;
-  secret.spellcheck = false;
-  secret.autocomplete = 'off';
+  const kind = select(offered.map((k) => [k.kind, kindWord(k.kind)]), was.kind || offered[0]?.kind || '');
+  const fieldsOf = (k) => (offered.find((x) => x.kind === k) || offered[0] || { fields: [] }).fields;
   // the server binds a secret only when the admin names it; after the
   // address moved, naming the same one again is this box (`bind: true`)
   const unbound = editing && M.secretName(was.secret) && was.secret_bound === false;
   const bind = check(false);
-  const bindField = unbound ? [toggle('bind', t('alerts_f_bind', { name: M.secretName(was.secret) }), bind)] : [];
+  const bindField = unbound ? toggle('bind', t('alerts_f_bind', { name: M.secretName(was.secret) }), bind) : null;
+  const boxes = {};      // field name -> its box
+  let fields = [];       // what the kind now shown asks for
+  let seats = [];        // their labels in the form, the bind box last
+  // two kinds ask for the same fields only when the words beside them are the
+  // same too: a kind with its own label or hint (Discord's) is drawn again
+  const shape = (fs) => fs.map((f) => `${f.name}:${f.type}:${f.label || ''}:${f.hint || ''}`).join(',');
+  const draw = (fs) => {
+    const typed = Object.fromEntries(Object.entries(boxes).map(([n, b]) => [n, b.value]));
+    for (const n of Object.keys(boxes)) delete boxes[n];
+    seats = fs.map((f) => {
+      boxes[f.name] = control(f, f.name in typed ? typed[f.name] : was[f.name]);
+      return field(f.name, tOr(f.label, f.text), boxes[f.name], f.hint ? tOr(f.hint, f.hint_text) : '');
+    });
+    if (bindField && boxes.secret) seats.push(bindField);
+    fields = fs;
+  };
+  draw(fieldsOf(kind.value));
+  const kindField = field('kind', t('alerts_f_kind'), kind);
+  kind.addEventListener('change', () => {
+    const next = fieldsOf(kind.value);
+    if (shape(next) === shape(fields)) {
+      for (const f of next) if (boxes[f.name] && 'placeholder' in boxes[f.name]) boxes[f.name].placeholder = f.placeholder || '';
+      fields = next;
+      return;
+    }
+    const gone = seats;
+    draw(next);
+    kindField.after(...seats);
+    for (const s of gone) if (!seats.includes(s)) s.remove();
+  });
   const hosts = list(body().status.hosts);
   const note = document.createElement('p');
   note.className = 'nv-form-note';
   note.textContent = hosts.length ? t('alerts_hosts_hint', { hosts: hosts.join(', ') }) : '';
   return formBox('al-form-dest', [
     field('name', t('alerts_f_name'), name),
-    field('kind', t('alerts_f_kind'), kind),
-    field('url', t('alerts_f_url'), url),
-    field('secret', t('alerts_f_secret'), secret, t('alerts_secret_hint')),
-    ...bindField,
+    kindField,
+    ...seats,
   ], t('alerts_save'), () => saveDestination(was.id || '', {
-    name: name.value.trim(), kind: kind.value, url: url.value.trim(), secret: M.secretName(secret.value),
-    ...(unbound && bind.checked ? { bind: true } : {}),
+    name: name.value.trim(), kind: kind.value, ...M.destinationValues(fields, (n) => boxes[n]?.value),
+    ...(unbound && bind.checked && boxes.secret ? { bind: true } : {}),
   }), closeForm, [note], () => S.busy);
 }
 
@@ -374,7 +428,7 @@ async function saveChange(change, where = {}, after = () => {}, fallbacks = []) 
 
 async function saveDestination(id, entry) {
   const form = S.form?.el;
-  const checks = M.checkDestination(entry, { hosts: body().status.hosts }, t);
+  const checks = M.checkDestination(entry, { hosts: body().status.hosts, kinds: kinds() }, t);
   if (checks.length) { showProblems(form, byFieldOf(checks)); tell(t('alerts_fix'), 'warn'); return; }
   // where a 422 will point: the entry's place in the document as read now
   const dests = body().doc.destinations;

@@ -1,0 +1,378 @@
+/* TOPOLOGY, the view's own sheet (2026-11-17). Read the design notes before editing.
+
+   A view under ATLAS (views.js), its own thing as NODES is: one sheet with a
+   head (the name, its line, find), a panel down the left (VLANS, VIEW,
+   LABELS, ARRANGE AND EXPORT, LEGEND) and the canvas, then the view's foot
+   (the colophon and the way back to the map). The sheet is NODES' sheet:
+   the surface gradient, the ink-line border, 8px corners; the panel's heads
+   are THE RAIL's Cinzel caps and its rows THE INDEX's. The tokens follow
+   the colour scheme because `#topology-sheet` sits in atlas.css's panel
+   token block, so nothing here restates a colour for the light scheme.
+
+   THE DRAWING'S VALUES. Everything inside `svg.tp-canvas` is styled by
+   topology-canvas.css, which reads only the `--tp-*` values set on the svg
+   below, each one mapped from a theme token. So a drawing written out to a
+   file needs that one sheet and these values resolved, and nothing of the
+   page (tests/test_topology_css.py). */
+
+#view-topology [hidden] { display: none !important; }
+
+.tp-sheet {
+  display: flex; flex-direction: column;
+  height: calc(100dvh - var(--view-top) - 92px); min-height: 440px;
+  margin: 0 auto 14px; padding: 16px 20px 14px;
+  background: linear-gradient(180deg, var(--surface-2), var(--surface));
+  border: 1px solid var(--ink-line); border-radius: 8px;
+  box-shadow: 0 28px 80px rgba(var(--shade-rgb), calc(0.75 * var(--shade-k)));
+  color: var(--text);
+}
+#view-topology .view-foot { max-width: none; }
+
+/* ── the head: the view's name, its line, find ── */
+.tp-head {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px;
+  padding-bottom: 12px; border-bottom: 1px solid var(--ink-line);
+}
+.tp-title {
+  margin: 0; font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.9rem;
+  letter-spacing: 0.3em; color: var(--gilt);
+}
+.tp-sub {
+  margin: 0; font-family: 'IM Fell English', 'Alegreya Sans', serif; font-style: italic;
+  font-size: 0.9rem; color: var(--text-dim);
+}
+.tp-find { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.tp-find-input {
+  width: 260px; padding: 5px 10px; border-radius: 4px;
+  font-family: 'Alegreya Sans', sans-serif; font-size: 0.88rem; color: var(--text);
+  background: rgba(var(--shade-rgb), calc(0.25 * var(--shade-k)));
+  border: 1px solid var(--ink-line);
+}
+.tp-find-input::placeholder { color: var(--text-dim); }
+.tp-find-count {
+  min-width: 5.5em; font-family: 'JetBrains Mono', monospace; font-size: 0.72rem;
+  color: var(--text-dim); font-variant-numeric: tabular-nums;
+}
+
+/* ── the body: the panel, then the canvas ── */
+.tp-body {
+  flex: 1; min-height: 0; margin-top: 14px;
+  display: grid; grid-template-columns: 236px minmax(0, 1fr); gap: 0 18px;
+}
+.tp-panel { min-height: 0; overflow-y: auto; padding: 2px 14px 4px 0; border-right: 1px solid var(--ink-line); }
+.tp-sec + .tp-sec { margin-top: 16px; }
+.tp-sec-h {
+  margin: 0 0 6px; font-family: 'Cinzel', serif; font-weight: 400; font-size: 0.72rem;
+  text-transform: uppercase; letter-spacing: 0.28em; color: var(--text-dim);
+}
+.tp-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.tp-vlan {
+  display: flex; align-items: center; gap: 9px; width: 100%;
+  padding: 5px 8px; border-radius: 4px; border: 1px solid transparent;
+  background: none; cursor: pointer; text-align: left;
+  font-family: 'Alegreya Sans', sans-serif; font-size: 0.86rem; color: var(--text);
+  transition: border-color 150ms, background-color 150ms, color 150ms;
+}
+.tp-vlan[aria-pressed="true"] { background: rgba(var(--gilt-rgb), 0.10); border-color: rgba(var(--gilt-rgb), 0.35); }
+.tp-vlan[aria-pressed="true"] .tp-vlan-name { color: var(--gilt); }
+.tp-vlan-no { font-family: 'JetBrains Mono', monospace; font-size: 0.74rem; color: var(--text-dim); min-width: 2.6em; }
+.tp-vlan-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tp-vlan-n {
+  margin-left: auto; font-family: 'JetBrains Mono', monospace; font-size: 0.7rem;
+  color: var(--text-dim); font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+/* the VLAN's zone hue, a dataset value set on the element (--sw), edged in
+   the cable's casing ink (2026-11-17, --tp-casing below) so a pale hue still
+   shows on the light glass */
+.tp-swatch {
+  flex: none; width: 16px; height: 4px; border-radius: 2px; background: var(--sw, var(--ink-soft));
+  box-shadow: 0 0 0 1px var(--ink-soft);
+}
+.tp-quiet { margin: 0; font-size: 0.84rem; color: var(--text-dim); }
+.tp-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.tp-btn {
+  padding: 4px 12px; border-radius: 4px; cursor: pointer;
+  font-family: 'Alegreya Sans', sans-serif; font-size: 0.84rem; color: var(--text);
+  background: rgba(var(--shade-rgb), calc(0.2 * var(--shade-k)));
+  border: 1px solid var(--ink-line);
+  transition: border-color 150ms, color 150ms;
+}
+.tp-btn:hover { border-color: var(--gilt); }
+.tp-btn[aria-pressed="true"] { border-color: var(--gilt); color: var(--gilt); }
+.tp-check { display: flex; align-items: center; gap: 8px; padding: 3px 2px; font-size: 0.86rem; cursor: pointer; }
+.tp-check input { accent-color: var(--gilt); margin: 0; }
+.tp-lg { display: flex; align-items: center; gap: 9px; padding: 2px 0; font-size: 0.8rem; color: var(--text-dim); }
+/* a legend sample is a small drawing of its own, styled as the canvas is */
+.tp-lg > svg.tp-canvas { flex: none; width: 36px; height: 14px; overflow: visible; }
+
+/* ── the canvas ── */
+.tp-stage {
+  position: relative; min-height: 0; overflow: hidden;
+  border: 1px solid var(--ink-line); border-radius: 4px;
+}
+.tp-stage > svg.tp-canvas {
+  display: block; width: 100%; height: 100%;
+  touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab;
+}
+.tp-stage.tp-dragging > svg.tp-canvas { cursor: grabbing; }
+.tp-stage > svg.tp-canvas:focus-visible { outline: 2px solid var(--gilt); outline-offset: -2px; }
+.tp-empty {
+  position: absolute; inset: 0; display: grid; place-items: center; padding: 24px;
+  margin: 0; text-align: center; font-size: 0.95rem; color: var(--text-dim); pointer-events: none;
+}
+/* a stub's note: its name, kind and note, over the canvas's corner */
+.tp-note {
+  position: absolute; left: 12px; bottom: 12px; max-width: min(320px, calc(100% - 24px));
+  padding: 10px 12px 12px; border-radius: 4px;
+  background: var(--surface-2); border: 1px solid var(--ink-line);
+  box-shadow: 0 10px 30px rgba(var(--shade-rgb), calc(0.5 * var(--shade-k)));
+}
+.tp-note-head { display: flex; align-items: baseline; gap: 10px; }
+.tp-note-name { margin: 0; font-family: 'Alegreya Sans', sans-serif; font-weight: 700; font-size: 0.95rem; }
+.tp-note-kind { margin: 2px 0 0; font-size: 0.82rem; color: var(--text-dim); }
+.tp-note-text { margin: 6px 0 0; font-size: 0.86rem; }
+.tp-note .tp-btn { margin-left: auto; padding: 2px 10px; font-size: 0.78rem; }
+.tp-keys { margin: 8px 0 0; font-size: 0.78rem; color: var(--text-dim); }
+.tp-panel-toggle { display: none; }
+
+/* one ring for the sheet's own controls, in the panel's gilt (the cards
+   inside the drawing draw their own ring, topology-canvas.css) */
+.tp-sheet :is(button, input, a):focus-visible { outline: 2px solid var(--gilt); outline-offset: 2px; }
+
+/* ── the drawing's values: every one a theme token, so they follow the
+   colour scheme from #topology-sheet ── */
+svg.tp-canvas {
+  --tp-ground: var(--surface);
+  --tp-dot: var(--ink-line);
+  --tp-card: var(--surface-2);
+  --tp-card-edge: var(--ink-line);
+  --tp-stub: var(--surface);
+  --tp-stub-edge: var(--ink-soft);
+  --tp-ink: var(--text);
+  --tp-ink-dim: var(--text-dim);
+  --tp-gilt: var(--gilt);
+  --tp-cable: var(--text-dim);
+  /* under a hued cable, as a road's casing (2026-11-17): the quiet-stroke
+     ink, dark slate on the light glass, a soft brown on the dark */
+  --tp-casing: var(--ink-soft);
+  --tp-route: var(--ink-soft);
+  --tp-chip: var(--abyss);
+  --tp-chip-edge: var(--ink-line);
+  --tp-up: var(--sem-up);
+  --tp-warn: var(--sem-warn);
+  --tp-down: var(--sem-down);
+  --tp-maint: var(--sem-warn);
+  --tp-slumber: var(--sem-slumber);
+  --tp-none: var(--ink-soft);
+  /* the emblem as the card wears it: ivory on a dark disc, the same in both schemes */
+  --tp-emblem: var(--parchment);
+  --tp-emblem-ground: var(--card-ink);
+  --tp-sans: 'Alegreya Sans', sans-serif;
+  --tp-mono: 'JetBrains Mono', monospace;
+  /* how far an unlit card or cable recedes while something is lit */
+  --tp-dim: 0.22;
+}
+
+/* ── a phone: look, pan and zoom; the panel is a sheet over the canvas ── */
+body.phone .tp-sheet {
+  height: calc(100dvh - var(--view-top) - 84px); min-height: 360px;
+  margin: 0 10px 12px; padding: 12px 12px 10px;
+}
+body.phone .tp-sub, body.phone .tp-keys { display: none; }
+body.phone .tp-find { margin-left: 0; flex: 1 1 100%; }
+body.phone .tp-find-input { width: auto; flex: 1; min-width: 0; }
+body.phone .tp-panel-toggle { display: inline-flex; }
+body.phone .tp-body { grid-template-columns: minmax(0, 1fr); position: relative; margin-top: 10px; }
+body.phone .tp-panel {
+  display: none; position: absolute; z-index: 3; top: 0; bottom: 0; left: 0;
+  width: min(300px, 88%); padding: 12px; border: 1px solid var(--ink-line); border-radius: 4px;
+  background: var(--surface-2);
+  box-shadow: 0 14px 40px rgba(var(--shade-rgb), calc(0.6 * var(--shade-k)));
+}
+body.phone .tp-panel.open { display: block; }
+
+/* a narrow window that is not a phone (2026-11-17): the phone's layout, at
+   the width the other views fold at (views.css), so the canvas is never a
+   sliver beside the panel */
+@media (max-width: 760px) {
+  .tp-sheet { margin: 0 10px 12px; padding: 12px 12px 10px; }
+  .tp-sub, .tp-keys { display: none; }
+  .tp-find { margin-left: 0; flex: 1 1 100%; }
+  .tp-find-input { width: auto; flex: 1; min-width: 0; }
+  .tp-panel-toggle { display: inline-flex; }
+  .tp-body { grid-template-columns: minmax(0, 1fr); position: relative; margin-top: 10px; }
+  .tp-panel {
+    display: none; position: absolute; z-index: 3; top: 0; bottom: 0; left: 0;
+    width: min(300px, 88%); padding: 12px; border: 1px solid var(--ink-line); border-radius: 4px;
+    background: var(--surface-2);
+    box-shadow: 0 14px 40px rgba(var(--shade-rgb), calc(0.6 * var(--shade-k)));
+  }
+  .tp-panel.open { display: block; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tp-vlan, .tp-btn { transition: none; }
+}
+
+/* ── TAKING IT OUT (2026-11-17, topology-export.js) ──────────────────────────
+   The SVG, PNG, Connections CSV and Site report buttons are drawn by the
+   panel; what is here is the line that says what an export did, and the site
+   report's print rules. The report is a section the script mounts as a child
+   of <body> only while it prints, and every print rule waits for the
+   `tp-printing` class on <html>, so an ordinary print of the page is as it
+   was. On paper: white, the parchment card's dark ink in every scheme, the
+   map alone on the first page, each table's head repeated on every page, and
+   no row cut across two. No `--tp-*` value is set here: the map on paper
+   carries its own values in its file. */
+
+.tp-x-note {
+  position: absolute; top: 10px; right: 10px; z-index: 2; margin: 0;
+  max-width: min(420px, calc(100% - 20px)); padding: 6px 10px; border-radius: 4px;
+  font-family: 'Alegreya Sans', sans-serif; font-size: 0.84rem; color: var(--text);
+  background: var(--surface-2); border: 1px solid var(--ink-line);
+  box-shadow: 0 10px 30px rgba(var(--shade-rgb), calc(0.5 * var(--shade-k)));
+  pointer-events: none;
+}
+
+.tp-report { display: none; }
+
+@media print {
+  html.tp-printing, html.tp-printing body {
+    width: auto !important; height: auto !important; overflow: visible !important;
+    background: #fff !important;
+  }
+  html.tp-printing body > :not(.tp-report) { display: none !important; }
+  html.tp-printing body::before, html.tp-printing body::after { display: none !important; content: none !important; }
+  html.tp-printing .tp-report {
+    display: block; margin: 0; padding: 0; background: #fff; color: var(--card-ink);
+    font-family: 'Alegreya Sans', sans-serif; font-size: 10pt; line-height: 1.35;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  .tp-report .tp-rp-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2mm 6mm; margin-bottom: 4mm;
+    padding-bottom: 2mm; border-bottom: 0.4pt solid var(--card-ink-soft); }
+  .tp-report h1 {
+    margin: 0; font-family: 'Cinzel', serif; font-weight: 700; font-size: 15pt;
+    letter-spacing: 0.3em; text-transform: uppercase; color: var(--card-ink);
+  }
+  .tp-report .tp-rp-map-name {
+    margin: 0; font-family: 'Cinzel', serif; font-weight: 600; font-size: 11pt;
+    letter-spacing: 0.14em; text-transform: uppercase;
+  }
+  .tp-report .tp-rp-when {
+    margin: 0 0 0 auto; font-family: 'JetBrains Mono', monospace; font-size: 8.5pt;
+    color: var(--card-ink-soft); font-variant-numeric: tabular-nums;
+  }
+  /* the map: the first page, alone */
+  .tp-report .tp-rp-fig { margin: 0; break-after: page; page-break-after: always; break-inside: avoid; }
+  .tp-report .tp-rp-map {
+    display: block; width: 100%; height: auto; max-height: 215mm; object-fit: contain;
+    border: 0.4pt solid var(--card-ink-soft); border-radius: 4px;
+  }
+  .tp-report figcaption { margin-top: 2mm; font-size: 8.5pt; color: var(--card-ink-soft); }
+  /* the tables after it */
+  .tp-report .tp-rp-sec + .tp-rp-sec { margin-top: 7mm; }
+  .tp-report h2 {
+    margin: 0 0 2mm; font-family: 'Cinzel', serif; font-weight: 600; font-size: 10pt;
+    letter-spacing: 0.22em; text-transform: uppercase; color: var(--card-ink);
+    break-after: avoid; page-break-after: avoid;
+  }
+  .tp-report p { margin: 0; }
+  .tp-report table { width: 100%; border-collapse: collapse; font-size: 8.5pt; }
+  .tp-report thead { display: table-header-group; }
+  .tp-report tr { break-inside: avoid; page-break-inside: avoid; }
+  .tp-report th {
+    text-align: left; font-weight: 700; padding: 1.2mm 2mm 1.2mm 0;
+    border-bottom: 0.6pt solid var(--card-ink);
+  }
+  .tp-report td { padding: 1mm 2mm 1mm 0; vertical-align: top; border-bottom: 0.3pt solid var(--card-ink-soft); }
+  .tp-report .tp-rp-mono { font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; }
+}
+
+/* ── DRAWING (2026-11-17, topology-draw.js): an admin's, on a wide screen.
+   The message line over the canvas's top corner and the form beside it are
+   HTML in the stage, never inside the svg. The form wears the Desk's own
+   fields and buttons (dsk-field, dsk-input, dsk-btn, dsk-notice) on the
+   stub note's surface (`.tp-note`), and enters as a card does: 200ms
+   opacity and a 3px blur, nothing under reduced motion. ── */
+.tp-stage.tp-drawing > svg.tp-canvas { cursor: crosshair; }
+.tp-stage.tp-moving > svg.tp-canvas, .tp-stage.tp-cabling > svg.tp-canvas { cursor: grabbing; }
+.tp-draw-msg {
+  position: absolute; left: 12px; top: 12px; z-index: 2; max-width: min(460px, calc(100% - 24px));
+  margin: 0; padding: 6px 10px; border-radius: 4px; pointer-events: none;
+  font-family: 'Alegreya Sans', sans-serif; font-size: 0.84rem; color: var(--text);
+  background: var(--surface-2); border: 1px solid var(--ink-line);
+}
+.tp-draw-msg[data-kind="warn"] { border-left: 3px solid var(--sem-warn); }
+.tp-draw-msg[data-kind="bad"] { border-left: 3px solid var(--sem-down); }
+.tp-form {
+  position: absolute; top: 12px; right: 12px; bottom: 12px; z-index: 3;
+  width: 320px; max-width: calc(100% - 24px); overflow-y: auto;
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px 12px; align-content: start;
+  margin: 0; padding: 12px 14px 14px; border-radius: 4px;
+  background: var(--surface-2); border: 1px solid var(--ink-line);
+  box-shadow: 0 10px 30px rgba(var(--shade-rgb), calc(0.5 * var(--shade-k)));
+}
+.tp-form > .tp-form-title, .tp-form > .tp-form-sub, .tp-form > .tp-form-wide,
+.tp-form > .tp-form-problems, .tp-form > .tp-form-bar, .tp-form > .tp-route-list { grid-column: 1 / -1; }
+.tp-form-title {
+  margin: 0; font-family: 'Cinzel', serif; font-weight: 400; font-size: 0.72rem;
+  text-transform: uppercase; letter-spacing: 0.28em; color: var(--text-dim);
+}
+.tp-form-sub { margin: 0; font-size: 0.84rem; color: var(--text-dim); }
+/* The Desk's labels and help are inked for its parchment; on this surface they
+   take the quiet ink, as the stub note does (found walking the form, 2026-11-17). */
+.tp-form .dsk-label, .tp-form .dsk-help { color: var(--text-dim); }
+.tp-form .dsk-help code { background: none; color: var(--text); }
+.tp-form-problems:empty { display: none; }
+.tp-port { display: flex; gap: 6px; }
+.tp-port > * { flex: 1; min-width: 0; }
+.tp-form-bar { display: flex; flex-wrap: wrap; gap: 8px; }
+.tp-form-remove { margin-left: auto; }
+.tp-route-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.tp-route-names { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tp-route-kind { margin-left: auto; font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: var(--text-dim); }
+.tp-form-in { animation: tp-form-in 200ms ease-out; }
+@keyframes tp-form-in { from { opacity: 0; filter: blur(3px); } to { opacity: 1; filter: none; } }
+.tp-sheet select:focus-visible { outline: 2px solid var(--gilt); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .tp-form-in { animation: none; }
+}
+
+/* ── where does it break (2026-11-17, topology-diagnose.js; this block is
+   that part's own) ──
+   A note beside the canvas, in the stub note's dress (`.tp-note`: the
+   raised surface, ink-line edge, 4px corners, its shadow), seated in the
+   other bottom corner so both can be out; a short scroll of its own on a
+   small stage. The summary in Alegreya Sans 700, in the up or down ink;
+   the steps in NODES' list's size on a 2px `--ink-line` rule, answered in
+   the body ink, not asked in the quiet ink, the one that broke in the down
+   ink, bold, its rule in the down ink. "Asking…" breathes at the scrying
+   pulse's 1.25s, and holds still under reduced motion. No new colour. ── */
+.tp-dx {
+  position: absolute; right: 12px; bottom: 12px; z-index: 2;
+  width: min(360px, calc(100% - 24px)); max-height: calc(100% - 24px); overflow-y: auto;
+  padding: 10px 12px 12px; border-radius: 4px;
+  font-family: 'Alegreya Sans', sans-serif; font-size: 0.82rem; line-height: 1.35; color: var(--text-dim);
+  background: var(--surface-2); border: 1px solid var(--ink-line);
+  box-shadow: 0 10px 30px rgba(var(--shade-rgb), calc(0.5 * var(--shade-k)));
+}
+.tp-dx-head { display: flex; align-items: baseline; gap: 10px; }
+.tp-dx-name { margin: 0; font-weight: 700; font-size: 0.95rem; color: var(--text); }
+.tp-dx .tp-btn { margin-left: auto; padding: 2px 10px; font-size: 0.78rem; }
+.tp-dx-say { margin: 6px 0 0; font-size: 0.86rem; color: var(--text); }
+.tp-dx-say.tp-dx-warn { color: var(--sem-warn); }
+.tp-dx-say.tp-dx-asking { color: var(--text-dim); animation: tp-dx-asking 1.25s ease-in-out infinite; }
+@keyframes tp-dx-asking { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
+.tp-dx-sum { margin: 6px 0 4px; font-weight: 700; font-size: 0.86rem; color: var(--text); }
+.tp-dx-sum:focus { outline: none; }
+.tp-dx-sum:focus-visible { outline: 2px solid var(--gilt); outline-offset: 2px; }
+.tp-dx-sum.tp-dx-up { color: var(--sem-up); }
+.tp-dx-sum.tp-dx-down { color: var(--sem-down); }
+.tp-dx-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
+.tp-dx-step { padding: 1px 0 1px 8px; border-left: 2px solid var(--ink-line); overflow-wrap: anywhere; }
+.tp-dx-step.tp-dx-up { color: var(--text); }
+.tp-dx-step.tp-dx-down { color: var(--sem-down); }
+.tp-dx-step.tp-dx-broke { border-left-color: var(--sem-down); font-weight: 700; }
+@media (prefers-reduced-motion: reduce) {
+  .tp-dx-say.tp-dx-asking { animation: none; opacity: 0.7; }
+}

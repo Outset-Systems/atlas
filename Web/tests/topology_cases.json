@@ -1,0 +1,353 @@
+{
+ "note": "Shared by tests/test_topology_model.mjs and the server's twin of heads, layers, pathToHead and connections: both must give each case these answers. Written by hand, 2026-11-16, from the rules in static/js/topology-model.js. Thing order is nodes then stubs, as listed; link order is cables, then routes, then parent ties. A thing with no link at all is loose (depth null) and never a head. Heads per connected piece (over cables, routes and parent ties together): every internet stub; else the inside end of a wan route (the end with more links, the from end on a tie), a network-kind one first, then the most links, then thing order; else the network-kind place with the most links; else the thing with the most links; ties by thing order. Layers: cables are walked breadth first from the heads in depth order, each depth's things taken in thing order; a thing no cable reaches hangs by one route hop from a reached thing (fewest hops, then thing order of what it hangs from, then link order), then cables resume from it; parent ties only when no route attaches anything. A connections row is filled only when the thing hangs by a cable; to is the far thing's name; rows sort by lower-cased name, then id, in code-point order.",
+ "cases": [
+  {
+   "name": "a single chain",
+   "data": {
+    "nodes": [
+     {"id": "gate", "name": "GATE", "kind": "network", "ip": "192.0.2.1"},
+     {"id": "host", "name": "HOST", "kind": "physical", "ip": "192.0.2.10"},
+     {"id": "app", "name": "APP", "kind": "physical", "ip": "192.0.2.20"}
+    ],
+    "stubs": [],
+    "cables": [
+     {"id": "c1", "a": "gate", "a_port": "eth1", "b": "host", "b_port": "eth0", "vlan": 10},
+     {"id": "c2", "a": "host", "a_port": "eth1", "b": "app", "b_port": "eth0", "vlan": 10, "poe_w": 4}
+    ],
+    "routes": []
+   },
+   "heads": ["gate"],
+   "depth": {"gate": 0, "host": 1, "app": 2},
+   "up": {"gate": null, "host": "gate", "app": "host"},
+   "paths": {"app": ["app", "host", "gate"], "gate": ["gate"]},
+   "connections": [
+    {"id": "app", "to": "HOST", "port": "eth0", "farPort": "eth1", "vlan": "U10", "poe": 4, "path": "APP \u203a HOST \u203a GATE"},
+    {"id": "gate", "to": "", "port": "", "farPort": "", "vlan": "", "poe": "", "path": ""},
+    {"id": "host", "to": "GATE", "port": "eth0", "farPort": "eth1", "vlan": "U10", "poe": "", "path": "HOST \u203a GATE"}
+   ]
+  },
+  {
+   "name": "an internet stub is the head",
+   "data": {
+    "nodes": [
+     {"id": "gate", "name": "GATE", "kind": "network", "ip": "192.0.2.1"},
+     {"id": "sw-1", "name": "SW 1", "kind": "network", "ip": "192.0.2.2"}
+    ],
+    "stubs": [
+     {"id": "line", "name": "LINE IN", "kind": "internet"}
+    ],
+    "cables": [
+     {"id": "w", "a_stub": "line", "a_port": "lan", "b": "gate", "b_port": "wan"},
+     {"id": "t", "a": "gate", "a_port": "lan1", "b": "sw-1", "b_port": "24", "vlan": 1, "tagged": [20, 10]}
+    ],
+    "routes": []
+   },
+   "heads": ["line"],
+   "depth": {"gate": 1, "sw-1": 2, "line": 0},
+   "up": {"gate": "line", "sw-1": "gate", "line": null},
+   "paths": {"sw-1": ["sw-1", "gate", "line"], "line": ["line"]},
+   "connections": [
+    {"id": "gate", "to": "LINE IN", "port": "wan", "farPort": "lan", "vlan": "", "poe": "", "path": "GATE \u203a LINE IN"},
+    {"id": "line", "to": "", "port": "", "farPort": "", "vlan": "", "poe": "", "path": ""},
+    {"id": "sw-1", "to": "GATE", "port": "24", "farPort": "lan1", "vlan": "U1 T10,20", "poe": "", "path": "SW 1 \u203a GATE \u203a LINE IN"}
+   ]
+  },
+  {
+   "name": "no stub, a wan route: its inside end is the head, and a second wan route does not win",
+   "data": {
+    "nodes": [
+     {"id": "world", "name": "THE INTERNET", "kind": "network", "ip": "\u2014"},
+     {"id": "gate", "name": "GATE", "kind": "network", "ip": "192.0.2.1"},
+     {"id": "nas", "name": "NAS", "kind": "physical", "ip": "192.0.2.30"},
+     {"id": "far", "name": "OFF-SITE", "kind": "network", "ip": "\u2014"},
+     {"id": "sw-1", "name": "SW 1", "kind": "network", "ip": "192.0.2.2"}
+    ],
+    "stubs": [],
+    "cables": [],
+    "routes": [
+     {"from": "gate", "to": "world", "kind": "wan"},
+     {"from": "gate", "to": "sw-1", "kind": "vlan"},
+     {"from": "sw-1", "to": "nas", "kind": "vlan"},
+     {"from": "nas", "to": "far", "kind": "wan"}
+    ]
+   },
+   "heads": ["gate"],
+   "depth": {"world": 1, "gate": 0, "nas": 2, "far": 3, "sw-1": 1},
+   "up": {"world": "gate", "gate": null, "nas": "sw-1", "far": "nas", "sw-1": "gate"},
+   "paths": {"far": ["far", "nas", "sw-1", "gate"], "world": ["world", "gate"]},
+   "connections": [
+    {"id": "gate", "to": "", "port": "", "farPort": "", "vlan": "", "poe": "", "path": ""},
+    {"id": "nas", "to": "", "port": "", "farPort": "", "vlan": "", "poe": "", "path": ""},
+    {"id": "far", "to": "", "port": "", "farPort": "", "vlan": "", "poe": "", "path": ""},
+    {"id": "sw-1", "to": "", "port": "", "farPort": "", "vlan": "", "poe": "", "path": ""},
+    {"id": "world", "to": "", "port": "", "farPort": "", "vlan": "", "poe": "", "path": ""}
+   ]
+  },
+  {
+   "name": "two separate pieces, each with its own head",
+   "data": {
+    "nodes": [
+     {"id": "gate-a", "name": "GATE A", "kind": "network", "ip": "192.0.2.1"},
+     {"id": "sw-a", "name": "SW A", "kind": "network", "ip": "192.0.2.2"},
+     {"id": "host-a", "name": "HOST A", "kind": "physical", "ip": "192.0.2.10"},
+     {"id": "gate-b", "name": "GATE B", "kind": "network", "ip": "192.0.2.129"},
+     {"id": "pc-b", "name": "PC B", "kind": "physical", "ip": "192.0.2.140"}
+    ],
+    "stubs": [],
+    "cables": [
+     {"id": "a1", "a": "gate-a", "a_port": "1", "b": "sw-a", "b_port": "24"},
+     {"id": "a2", "a": "sw-a", "a_port": "2", "b": "host-a", "b_port": "eth0", "vlan": 20},
+     {"id": "b1", "a": "gate-b", "a_port": "1", "b": "pc-b", "b_port": "eth0", "vlan": "30"}
+    ],
+    "routes": []
+   },
+   "heads": ["sw-a", "gate-b"],
+   "depth": {"gate-a": 1, "sw-a": 0, "host-a": 1, "gate-b": 0, "pc-b": 1},
+   "up": {"gate-a": "sw-a", "sw-a": null, "host-a": "sw-a", "gate-b": null, "pc-b": "gate-b"},
+   "paths": {"host-a": ["host-a", "sw-a"], "pc-b": ["pc-b", "gate-b"]},
+   "connections": [
+    {"id": "gate-a", "to": "SW A", "port": "1", "farPort": "24", "vlan": "", "poe": "", "path": "GATE A \u203a SW A"},
+    {"id": "gate-b", "to": "", "port": "", "farPort": "", "vlan": "", "poe": "", "path": ""},
+    {"id": "host-a", "to": "SW A", "port": "eth0", "farPort": "2", "vlan": "U20", "poe": "", "path": "HOST A \u203a SW A"},
+    {"id": "pc-b", "to": "GATE B", "port": "eth0", "farPort": "1", "vlan": "U30", "poe": "", "path": "PC B \u203a GATE B"},
+    {"id": "sw-a", "to": "", "port": "", "farPort": "", "vlan": "", "poe": "", "path": ""}
+   ]
+  },
+  {
+   "name": "a ring does not loop, and of two equal ways up the earlier thing wins",
+   "data": {
+    "nodes": [
+     {"id": "sw-1", "name": "SW 1", "kind": "network", "ip": "192.0.2.2"},
+     {"id": "sw-2", "name": "SW 2", "kind": "network", "ip": "192.0.2.3"},
+     {"id": "sw-3", "name": "SW 3", "kind": "network", "ip": "192.0.2.4"},
+     {"id": "sw-4", "name": "SW 4", "kind": "network", "ip": "192.0.2.5"}
+    ],
+    "stubs": [
+     {"id": "line", "name": "LINE IN", "kind": "internet"}
+    ],
+    "cables": [
+     {"id": "w", "a_stub": "line", "a_port": "lan", "b": "sw-1", "b_port": "1"},
+     {"id": "r1", "a": "sw-1", "a_port": "2", "b": "sw-2", "b_port": "1"},
+     {"id": "r2", "a": "sw-1", "a_port": "3", "b": "sw-3", "b_port": "1"},
+     {"id": "r3", "a": "sw-3", "a_port": "2", "b": "sw-4", "b_port": "1"},
+     {"id": "r4", "a": "sw-2", "a_port": "2", "b": "sw-4", "b_port": "2"}
+    ],
+    "routes": []
+   },
+   "heads": ["line"],
+   "depth": {"sw-1": 1, "sw-2": 2, "sw-3": 2, "sw-4": 3, "line": 0},
+   "up": {"sw-1": "line", "sw-2": "sw-1", "sw-3": "sw-1", "sw-4": "sw-2", "line": null},
+   "paths": {"sw-4": ["sw-4", "sw-2", "sw-1", "line"]},
+   "connections": [
+    {"id": "line", "to": "", "port": "", "farPort": "", "vlan": "", "poe": "", "path": ""},
+    {"id": "sw-1", "to": "LINE IN", "port": "1", "farPort": "lan", "vlan": "", "poe": "", "path": "SW 1 \u203a LINE IN"},
+    {"id": "sw-2", "to": "SW 1", "port": "1", "farPort": "2", "vlan": "", "poe": "", "path": "SW 2 \u203a SW 1 \u203a LINE IN"},
+    {"id": "sw-3", "to": "SW 1", "port": "1", "farPort": "3", "vlan": "", "poe": "", "path": "SW 3 \u203a SW 1 \u203a LINE IN"},
+    {"id": "sw-4", "to": "SW 2", "port": "2", "farPort": "2", "vlan": "", "poe": "", "path": "SW 4 \u203a SW 2 \u203a SW 1 \u203a LINE IN"}
+   ]
+  },
+  {
+   "name": "two cables between the same pair: the first one listed is the one it hangs by",
+   "data": {
+    "nodes": [
+     {"id": "gate", "name": "GATE", "kind": "network", "ip": "192.0.2.1"},
+     {"id": "sw-1", "name": "SW 1", "kind": "network", "ip": "192.0.2.2"}
+    ],
+    "stubs": [],
+    "cables": [
+     {"id": "l1", "a": "gate", "a_port": "1", "b": "sw-1", "b_port": "23", "vlan": 1},
+     {"id": "l2", "a": "gate", "a_port": "2", "b": "sw-1", "b_port": "24", "vlan": 1}
+    ],
+    "routes": []
+   },
+   "heads": ["gate"],
+   "depth": {"gate": 0, "sw-1": 1},
+   "up": {"gate": null, "sw-1": "gate"},
+   "paths": {"sw-1": ["sw-1", "gate"]},
+   "connections": [
+    {"id": "gate", "to": "", "port": "", "farPort": "", "vlan": "", "poe": "", "path": ""},
+    {"id": "sw-1", "to": "GATE", "port": "23", "farPort": "1", "vlan": "U1", "poe": "", "path": "SW 1 \u203a GATE"}
+   ]
+  },
+  {
+   "name": "things no cable reaches hang by routes, hop by hop",
+   "data": {
+    "nodes": [
+     {"id": "gate", "name": "GATE", "kind": "network", "ip": "192.0.2.1"},
+     {"id": "app", "name": "APP", "kind": "physical", "ip": "192.0.2.20"},
+     {"id": "cloud", "name": "CLOUD", "kind": "network", "ip": "\u2014"}
+    ],
+    "stubs": [
+     {"id": "line", "name": "LINE IN", "kind": "internet"}
+    ],
+    "cables": [
+     {"id": "w", "a_stub": "line", "a_port": "lan", "b": "gate", "b_port": "wan"}
+    ],
+    "routes": [
+     {"from": "gate", "to": "app", "kind": "vlan"},
+     {"from": "app", "to": "cloud", "kind": "edge"}
+    ]
+   },
+   "heads": ["line"],
+   "depth": {"gate": 1, "app": 2, "cloud": 3, "line": 0},
+   "up": {"gate": "line", "app": "gate", "cloud": "app", "line": null},
+   "paths": {"cloud": ["cloud", "app", "gate", "line"]},
+   "connections": [
+    {"id": "app", "to": "", "port": "", "farPort": "", "vlan": "", "poe": "", "path": ""},
+    {"id": "cloud", "to": "", "port": "", "farPort": "", "vlan": "", "poe": "", "path": ""},
+    {"id": "gate", "to": "LINE IN", "port": "wan", "farPort": "lan", "vlan": "", "poe": "", "path": "GATE \u203a LINE IN"},
+    {"id": "line", "to": "", "port": "", "farPort": "", "vlan": "", "poe": "", "path": ""}
+   ]
+  },
+  {
+   "name": "a vm reached only by its parent, and one whose parent also has a route to it",
+   "data": {
+    "nodes": [
+     {"id": "gate", "name": "GATE", "kind": "network", "ip": "192.0.2.1"},
+     {"id": "host", "name": "HOST", "kind": "physical", "ip": "192.0.2.10"},
+     {"id": "vm-1", "name": "VM 1", "kind": "vm", "ip": "192.0.2.11", "parent": "host"},
+     {"id": "vm-2", "name": "VM 2", "kind": "vm", "ip": "192.0.2.12", "parent": "host"}
+    ],
+    "stubs": [],
+    "cables": [
+     {"id": "c", "a": "gate", "a_port": "2", "b": "host", "b_port": "eth0", "vlan": 10}
+    ],
+    "routes": [
+     {"from": "host", "to": "vm-2", "kind": "vlan"}
+    ]
+   },
+   "heads": ["gate"],
+   "depth": {"gate": 0, "host": 1, "vm-1": 2, "vm-2": 2},
+   "up": {"gate": null, "host": "gate", "vm-1": "host", "vm-2": "host"},
+   "paths": {"vm-1": ["vm-1", "host", "gate"]},
+   "connections": [
+    {"id": "gate", "to": "", "port": "", "farPort": "", "vlan": "", "poe": "", "path": ""},
+    {"id": "host", "to": "GATE", "port": "eth0", "farPort": "2", "vlan": "U10", "poe": "", "path": "HOST \u203a GATE"},
+    {"id": "vm-1", "to": "", "port": "", "farPort": "", "vlan": "", "poe": "", "path": ""},
+    {"id": "vm-2", "to": "", "port": "", "farPort": "", "vlan": "", "poe": "", "path": ""}
+   ]
+  },
+  {
+   "name": "a loose thing stands in a row of its own and has no path",
+   "data": {
+    "nodes": [
+     {"id": "gate", "name": "GATE", "kind": "network", "ip": "192.0.2.1"},
+     {"id": "pc", "name": "PC", "kind": "physical", "ip": "192.0.2.50"},
+     {"id": "lonely", "name": "LONELY", "kind": "physical", "ip": "192.0.2.99"}
+    ],
+    "stubs": [],
+    "cables": [
+     {"id": "c", "a": "gate", "a_port": "1", "b": "pc", "b_port": "eth0"}
+    ],
+    "routes": []
+   },
+   "heads": ["gate"],
+   "depth": {"gate": 0, "pc": 1, "lonely": null},
+   "up": {"gate": null, "pc": "gate", "lonely": null},
+   "paths": {"lonely": [], "pc": ["pc", "gate"], "nobody": []},
+   "connections": [
+    {"id": "gate", "to": "", "port": "", "farPort": "", "vlan": "", "poe": "", "path": ""},
+    {"id": "lonely", "to": "", "port": "", "farPort": "", "vlan": "", "poe": "", "path": ""},
+    {"id": "pc", "to": "GATE", "port": "eth0", "farPort": "1", "vlan": "", "poe": "", "path": "PC \u203a GATE"}
+   ]
+  },
+  {
+   "name": "a cable or route naming something that is gone is skipped, and so is junk",
+   "data": {
+    "nodes": [
+     {"id": "gate", "name": "GATE", "kind": "network", "ip": "192.0.2.1"},
+     null,
+     "a string",
+     {"name": "NO ID"},
+     {"id": "pc", "name": "PC", "kind": "physical", "ip": "192.0.2.50"},
+     {"id": "gate", "name": "SECOND GATE", "kind": "physical"}
+    ],
+    "stubs": [7, {"id": "junk-stub"}],
+    "cables": [
+     {"id": "c1", "a": "gate", "a_port": "1", "b": "pc", "b_port": "eth0"},
+     {"id": "ghost", "a": "gate", "a_port": "2", "b": "gone", "b_port": "eth0"},
+     {"id": "ghost-2", "a_stub": "nowhere", "b": "pc", "b_port": "eth1"},
+     {"id": "self", "a": "pc", "a_port": "eth0", "b": "pc", "b_port": "eth1"},
+     "junk",
+     null,
+     42
+    ],
+    "routes": [
+     {"from": "gate", "to": "gone", "kind": "wan"},
+     {"from": "gate"},
+     [],
+     {"from": "pc", "to": "pc", "kind": "vlan"}
+    ]
+   },
+   "heads": ["gate"],
+   "depth": {"gate": 0, "pc": 1, "junk-stub": null},
+   "up": {"gate": null, "pc": "gate", "junk-stub": null},
+   "paths": {"pc": ["pc", "gate"], "gone": []},
+   "connections": [
+    {"id": "gate", "to": "", "port": "", "farPort": "", "vlan": "", "poe": "", "path": ""},
+    {"id": "pc", "to": "GATE", "port": "eth0", "farPort": "1", "vlan": "", "poe": "", "path": "PC \u203a GATE"}
+   ]
+  },
+  {
+   "name": "a trunk, a tagged-only cable and access cables read in switch notation",
+   "data": {
+    "nodes": [
+     {"id": "gate", "name": "GATE", "kind": "network", "ip": "192.0.2.1"},
+     {"id": "sw-1", "name": "SW 1", "kind": "network", "ip": "192.0.2.2"},
+     {"id": "ap", "name": "AP", "kind": "network", "ip": "192.0.2.3"},
+     {"id": "cam", "name": "CAM", "kind": "physical", "ip": "192.0.2.66"},
+     {"id": "nas", "name": "NAS", "kind": "physical", "ip": "192.0.2.30"}
+    ],
+    "stubs": [
+     {"id": "line", "name": "LINE IN", "kind": "internet"}
+    ],
+    "cables": [
+     {"id": "w", "a_stub": "line", "a_port": "lan", "b": "gate", "b_port": "wan"},
+     {"id": "t", "a": "gate", "a_port": "lan", "b": "sw-1", "b_port": "24", "vlan": "1", "tagged": ["99", 20, 10]},
+     {"id": "ap-poe", "a": "sw-1", "a_port": "3", "b": "ap", "b_port": "eth0", "vlan": 1, "tagged": [20, 10], "poe_w": 7.5},
+     {"id": "cam-poe", "a": "sw-1", "a_port": "8", "b": "cam", "b_port": "eth0", "vlan": "66", "poe_w": 4},
+     {"id": "nas-t", "a": "sw-1", "a_port": "10", "b": "nas", "b_port": "eth1", "tagged": [30, 20]}
+    ],
+    "routes": []
+   },
+   "heads": ["line"],
+   "depth": {"gate": 1, "sw-1": 2, "ap": 3, "cam": 3, "nas": 3, "line": 0},
+   "up": {"gate": "line", "sw-1": "gate", "ap": "sw-1", "cam": "sw-1", "nas": "sw-1", "line": null},
+   "paths": {"cam": ["cam", "sw-1", "gate", "line"]},
+   "connections": [
+    {"id": "ap", "to": "SW 1", "port": "eth0", "farPort": "3", "vlan": "U1 T10,20", "poe": 7.5, "path": "AP \u203a SW 1 \u203a GATE \u203a LINE IN"},
+    {"id": "cam", "to": "SW 1", "port": "eth0", "farPort": "8", "vlan": "U66", "poe": 4, "path": "CAM \u203a SW 1 \u203a GATE \u203a LINE IN"},
+    {"id": "gate", "to": "LINE IN", "port": "wan", "farPort": "lan", "vlan": "", "poe": "", "path": "GATE \u203a LINE IN"},
+    {"id": "line", "to": "", "port": "", "farPort": "", "vlan": "", "poe": "", "path": ""},
+    {"id": "nas", "to": "SW 1", "port": "eth1", "farPort": "10", "vlan": "T20,30", "poe": "", "path": "NAS \u203a SW 1 \u203a GATE \u203a LINE IN"},
+    {"id": "sw-1", "to": "GATE", "port": "24", "farPort": "lan", "vlan": "U1 T10,20,99", "poe": "", "path": "SW 1 \u203a GATE \u203a LINE IN"}
+   ]
+  },
+  {
+   "name": "two lines in are two heads in one piece",
+   "data": {
+    "nodes": [
+     {"id": "gate", "name": "GATE", "kind": "network", "ip": "192.0.2.1"}
+    ],
+    "stubs": [
+     {"id": "line-1", "name": "LINE 1", "kind": "internet"},
+     {"id": "line-2", "name": "LINE 2", "kind": "internet"}
+    ],
+    "cables": [
+     {"id": "w1", "a_stub": "line-1", "a_port": "lan", "b": "gate", "b_port": "wan1"},
+     {"id": "w2", "a_stub": "line-2", "a_port": "lan", "b": "gate", "b_port": "wan2"}
+    ],
+    "routes": []
+   },
+   "heads": ["line-1", "line-2"],
+   "depth": {"gate": 1, "line-1": 0, "line-2": 0},
+   "up": {"gate": "line-1", "line-1": null, "line-2": null},
+   "paths": {"gate": ["gate", "line-1"], "line-2": ["line-2"]},
+   "connections": [
+    {"id": "gate", "to": "LINE 1", "port": "wan1", "farPort": "lan", "vlan": "", "poe": "", "path": "GATE \u203a LINE 1"},
+    {"id": "line-1", "to": "", "port": "", "farPort": "", "vlan": "", "poe": "", "path": ""},
+    {"id": "line-2", "to": "", "port": "", "farPort": "", "vlan": "", "poe": "", "path": ""}
+   ]
+  }
+ ]
+}

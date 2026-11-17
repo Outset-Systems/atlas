@@ -1,0 +1,131 @@
+/* TOPOLOGY, inside the drawing (2026-11-17). Read the design notes before editing.
+
+   Every rule that styles something inside TOPOLOGY's one <svg> is here, and
+   only here. Each selector starts with `svg.tp-canvas`; each value is one of
+   the `--tp-*` values topology.css sets on that svg (from the theme's
+   tokens), a number, or a keyword; sizes are px. So a later stage can write
+   this file and those values, resolved, into an exported SVG, and it opens
+   the same anywhere. A zone's hue is a dataset value and rides on the
+   element itself (a `fill` or `stroke` attribute), which a rule here can
+   still overrule (a failed step in the down colour). The toggles the panel
+   sets (labels off) are classes on the svg itself, so they travel too.
+   Held by tests/test_topology_css.py. */
+
+/* ── the ground: a dotted sheet that moves with the drawing ── */
+svg.tp-canvas .tp-ground { fill: var(--tp-ground); }
+svg.tp-canvas .tp-dot { fill: var(--tp-dot); }
+svg.tp-canvas text { font-family: var(--tp-sans); fill: var(--tp-ink); }
+
+/* ── a card ── */
+svg.tp-canvas .tp-card { cursor: pointer; outline: none; }
+svg.tp-canvas .tp-box { fill: var(--tp-card); stroke: var(--tp-card-edge); stroke-width: 1px; }
+svg.tp-canvas .tp-back { fill: var(--tp-card); stroke: var(--tp-card-edge); stroke-width: 1px; }
+svg.tp-canvas .tp-card:hover .tp-box { stroke: var(--tp-gilt); }
+svg.tp-canvas .tp-ring { fill: none; stroke: none; stroke-width: 2px; }
+svg.tp-canvas .tp-card:focus-visible .tp-ring { stroke: var(--tp-gilt); }
+svg.tp-canvas .tp-card.tp-sel .tp-box { stroke: var(--tp-gilt); stroke-width: 2px; }
+svg.tp-canvas .tp-card.tp-found .tp-box { stroke: var(--tp-gilt); stroke-dasharray: 4px 3px; }
+svg.tp-canvas .tp-card.tp-found.tp-sel .tp-box { stroke-dasharray: none; }
+svg.tp-canvas .tp-disc-ground { fill: var(--tp-emblem-ground); }
+svg.tp-canvas .tp-disc { fill-opacity: 0.5; }
+svg.tp-canvas .tp-glyph {
+  fill: none; stroke: var(--tp-emblem); stroke-width: 1.6px;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+svg.tp-canvas .tp-glyph-fill { fill: var(--tp-emblem); stroke: none; }
+svg.tp-canvas .tp-name { font-family: var(--tp-sans); font-size: 13px; font-weight: 700; fill: var(--tp-ink); }
+svg.tp-canvas .tp-addr { font-family: var(--tp-mono); font-size: 10px; fill: var(--tp-ink-dim); }
+svg.tp-canvas .tp-kind { font-family: var(--tp-sans); font-size: 10.5px; fill: var(--tp-ink-dim); }
+
+/* the state dot, from the feed: the cards' own colours */
+svg.tp-canvas .tp-state { fill: var(--tp-none); }
+svg.tp-canvas .tp-st-up .tp-state { fill: var(--tp-up); }
+svg.tp-canvas .tp-st-warn .tp-state { fill: var(--tp-warn); }
+svg.tp-canvas .tp-st-down .tp-state { fill: var(--tp-down); }
+svg.tp-canvas .tp-st-maint .tp-state { fill: var(--tp-maint); opacity: 0.7; }
+svg.tp-canvas .tp-st-slumber .tp-state { fill: var(--tp-slumber); }
+svg.tp-canvas .tp-st-down .tp-box { stroke: var(--tp-down); }
+
+/* Watched by: the word NODES shows, in a small chip */
+svg.tp-canvas .tp-watch rect { fill: var(--tp-chip); stroke: var(--tp-chip-edge); stroke-width: 1px; }
+svg.tp-canvas .tp-watch text { font-family: var(--tp-mono); font-size: 8.5px; fill: var(--tp-ink-dim); }
+
+/* a stub: gear nobody charts as a place, drawn quieter, its kind in words */
+svg.tp-canvas .tp-stub .tp-box { fill: var(--tp-stub); stroke: var(--tp-stub-edge); stroke-dasharray: 5px 3px; }
+svg.tp-canvas .tp-stub .tp-name { font-weight: 400; }
+svg.tp-canvas .tp-stub .tp-disc-ground { fill: var(--tp-stub-edge); }
+
+/* a folded group: a stack of cards */
+svg.tp-canvas .tp-group .tp-name { font-weight: 400; }
+/* unmanaged: quieter in its ground, emblem and name's weight; its words keep
+   their ink (the whole card at 0.7 put the address at 3.1:1, 2026-11-17) */
+svg.tp-canvas .tp-unmanaged .tp-box { fill-opacity: 0.55; }
+svg.tp-canvas .tp-unmanaged .tp-disc-ground { opacity: 0.6; }
+svg.tp-canvas .tp-unmanaged .tp-name { font-weight: 400; }
+
+/* the labels the panel turns off */
+svg.tp-canvas.tp-no-address .tp-addr { display: none; }
+svg.tp-canvas.tp-no-kind .tp-kind { display: none; }
+svg.tp-canvas.tp-no-ports .tp-chip-g { display: none; }
+
+/* ── cables: the zone's hue on the element, neutral ink without one ── */
+svg.tp-canvas .tp-link { fill: none; }
+svg.tp-canvas .tp-wire { fill: none; stroke-width: 2px; }
+svg.tp-canvas .tp-wire-plain { stroke: var(--tp-cable); }
+svg.tp-canvas .tp-stripe { fill: none; stroke-width: 2px; }
+svg.tp-canvas .tp-k-dac .tp-wire, svg.tp-canvas .tp-k-dac .tp-stripe { stroke-width: 3.5px; }
+svg.tp-canvas .tp-k-fibre .tp-wire, svg.tp-canvas .tp-k-fibre .tp-stripe { stroke-width: 3.5px; }
+svg.tp-canvas .tp-core { fill: none; stroke: var(--tp-ground); stroke-width: 1px; }
+svg.tp-canvas .tp-k-wireless .tp-wire { stroke-width: 3px; stroke-linecap: round; stroke-dasharray: 0.1px 5px; }
+svg.tp-canvas .tp-k-wireless .tp-stripe { display: none; }
+svg.tp-canvas .tp-k-virtual .tp-wire, svg.tp-canvas .tp-k-virtual .tp-stripe { stroke-width: 1.2px; }
+/* a hued cable's casing (2026-11-17): a stroke 2px wider under it, as a map
+   draws a road, so a pale zone hue still reads on a pale ground */
+svg.tp-canvas .tp-casing { fill: none; stroke: var(--tp-casing); stroke-width: 4px; }
+svg.tp-canvas .tp-k-dac .tp-casing, svg.tp-canvas .tp-k-fibre .tp-casing { stroke-width: 5.5px; }
+svg.tp-canvas .tp-k-virtual .tp-casing { stroke-width: 3.2px; }
+svg.tp-canvas .tp-k-wireless .tp-casing { stroke-width: 5px; stroke-linecap: round; stroke-dasharray: 0.1px 5px; }
+/* assumed: the ground cuts the cable into dashes, so a striped trunk stays
+   striped; the cut is wider than the casing, so the casing is cut too */
+svg.tp-canvas .tp-gap { fill: none; stroke: var(--tp-ground); stroke-width: 5px; stroke-dasharray: 5px 5px; }
+svg.tp-canvas .tp-k-dac .tp-gap, svg.tp-canvas .tp-k-fibre .tp-gap { stroke-width: 6.5px; }
+
+/* routes and hosts: the second, quieter layer */
+svg.tp-canvas .tp-tie {
+  fill: none; stroke: var(--tp-route); stroke-width: 1.2px;
+  stroke-linecap: round; stroke-dasharray: 1px 4px; opacity: 0.85;
+}
+svg.tp-canvas .tp-parent { opacity: 0.55; }
+
+/* a port at each end, the VLANs and the watts midway */
+svg.tp-canvas .tp-chip { fill: var(--tp-chip); stroke: var(--tp-chip-edge); stroke-width: 1px; }
+svg.tp-canvas .tp-port, svg.tp-canvas .tp-vl {
+  font-family: var(--tp-mono); font-size: 9px; text-anchor: middle; dominant-baseline: central;
+}
+svg.tp-canvas .tp-port { fill: var(--tp-ink-dim); }
+svg.tp-canvas .tp-vl { fill: var(--tp-ink); }
+
+/* ── lit: a VLAN, or a way up to the head; a failed step in the down colour ── */
+svg.tp-canvas .tp-dim { opacity: var(--tp-dim); }
+svg.tp-canvas .tp-card.tp-lit .tp-box { stroke: var(--tp-gilt); stroke-width: 2px; }
+svg.tp-canvas .tp-link.tp-lit .tp-wire, svg.tp-canvas .tp-link.tp-lit .tp-stripe { stroke-width: 3.5px; }
+svg.tp-canvas .tp-link.tp-lit .tp-casing { stroke-width: 5.5px; }
+svg.tp-canvas .tp-link.tp-lit .tp-gap { stroke-width: 6.5px; }
+svg.tp-canvas .tp-link.tp-lit .tp-wire-plain { stroke: var(--tp-gilt); }
+svg.tp-canvas .tp-link.tp-lit.tp-tie { stroke: var(--tp-gilt); opacity: 1; stroke-width: 2px; }
+svg.tp-canvas .tp-card.tp-failed .tp-box { stroke: var(--tp-down); stroke-width: 2.5px; }
+svg.tp-canvas .tp-link.tp-failed .tp-wire, svg.tp-canvas .tp-link.tp-failed .tp-stripe { stroke: var(--tp-down); }
+svg.tp-canvas .tp-link.tp-failed.tp-tie { stroke: var(--tp-down); }
+
+/* ── DRAWING (2026-11-17, topology-draw.js): drawn only while an admin draws
+   cables, so a picture taken out at any other time holds none of it.
+   `.tp-draw-hits` holds a path per cable that takes Tab and Enter (a press
+   is picked by distance, so the paths never stand in a card's way); the
+   draft is the line that follows a drag from one card to another. ── */
+svg.tp-canvas .tp-draw-hits { pointer-events: none; }
+svg.tp-canvas .tp-hit { fill: none; stroke: var(--tp-gilt); stroke-width: 12px; stroke-opacity: 0; outline: none; }
+svg.tp-canvas .tp-hit:focus-visible { stroke-opacity: 0.35; }
+svg.tp-canvas .tp-draw-draft { pointer-events: none; }
+svg.tp-canvas .tp-draft-line { fill: none; stroke: var(--tp-gilt); stroke-width: 2px; stroke-dasharray: 6px 4px; }
+svg.tp-canvas .tp-draft-end { fill: var(--tp-gilt); }
+svg.tp-canvas .tp-hit.tp-hit-on { stroke-opacity: 0.35; }

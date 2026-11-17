@@ -239,6 +239,10 @@ _FREE_TEXT = {
     "collections": ("id", "name", "note"),
     "rack": ("name", "desc"),
     "rack_rear": ("name", "desc"),
+    # CABLES AND STUBS (2026-11-16): an id is often made from the ends'
+    # names (`gw-to-vault`), a port can be labelled for what it reaches
+    "cables": ("id", "a_port", "b_port", "note"),
+    "stubs": ("id", "name", "note"),
 }
 
 
@@ -389,6 +393,121 @@ def _scrub_signals_block(d, hidden):
     kuma = block.get("kuma")
     if isinstance(kuma, dict):
         block["kuma"] = {m: n for m, n in kuma.items() if not _holds_hidden(n, hidden)}
+
+
+def _stub_ends(cable):
+    """The stub ids a cable's ends name, or None when one of them is not an
+    id at all (a hand edit's list), which no allowlist can hold."""
+    out = set()
+    for side in ("a_stub", "b_stub"):
+        value = cable.get(side)
+        if value in (None, ""):
+            continue
+        if not isinstance(value, str):
+            return None
+        out.add(value)
+    return out
+
+
+def _scrub_wiring(d, whole, hidden):
+    """CABLES AND STUBS (2026-11-16), while something is hidden from this viewer.
+
+    A cable with a hidden place at either end has already gone whole, with its
+    id, its ports and its note, through the reference walk (its ends are
+    `ref="nodes"` and define it). What is left here is the stubs, which name
+    no place, and the words on the cables that stay.
+
+    THE STUB RULE. A stub stays when a cable of this viewer's own reaches it
+    from a place they can see (straight, or through other stubs), or when the
+    piece of wiring it belongs to touches no hidden place anywhere on the
+    whole map (a stub with no cable at all is such a piece). A stub
+    whose every cable went is withheld with them: shown bare, it would be gear
+    on the wiring that reaches nothing the viewer can see, which says that
+    hidden places are wired there, how many cables run to them through it
+    (its ports), and its own name for them. "No cable at all" is counted on
+    the map before redaction, never after, or that stub would pass as an
+    unwired one. A stub whose words name a hidden place has already gone
+    (`_FREE_TEXT`), and a cable keeps a stub end only when that stub is still
+    here (an allowlist), so a cable never points at a withheld stub. Across a
+    chain of stubs a viewer sees the stubs their own cables reach, and the
+    chain stops where the next cable would reach a hidden place.
+
+    A cable's `note` goes, the blunt rule `interfaces` keeps for `peer` and
+    `note`: an import may write prose about the far end that no name match
+    can be trusted to catch."""
+    stubs = d.get("stubs") if isinstance(d.get("stubs"), list) else None
+    here = {s.get("id") for s in stubs or [] if isinstance(s.get("id"), str)}
+    if isinstance(d.get("cables"), list):
+        kept = []
+        for c in d["cables"]:
+            ends = _stub_ends(c)
+            if ends is not None and ends <= here:
+                kept.append(c)
+        d["cables"] = kept
+        for c in kept:
+            c.pop("note", None)
+    if stubs is None:
+        return
+
+    # THE PIECES (2026-11-17). Stubs joined to each other by cables are one
+    # piece of wiring, counted on the whole map. A piece that touches a hidden
+    # place anywhere is `tainted`: of its stubs, this viewer keeps only those
+    # a cable of their own reaches from a place they can see. Two stubs wired
+    # to each other and, past them, only to a hidden place used to keep each
+    # other here (each had a cable left); they go together now.
+    piece = {}
+
+    def find(s):
+        while piece.setdefault(s, s) != s:
+            piece[s] = piece[piece[s]]
+            s = piece[s]
+        return s
+
+    tainted, every = set(), False
+    listed = whole.get("cables") if isinstance(whole, dict) else None
+    for c in listed if isinstance(listed, list) else []:
+        if not isinstance(c, dict):
+            continue
+        ends = _stub_ends(c)
+        if ends is None:
+            # not an id: it cannot be matched to a stub, so every stub is
+            # treated as wired towards something hidden, the safe way
+            every = True
+            continue
+        if not ends:
+            continue
+        ends = sorted(ends)
+        for other in ends[1:]:
+            piece[find(other)] = find(ends[0])
+        for side in ("a", "b"):
+            place = c.get(side)
+            if place not in (None, "") and (not isinstance(place, str) or place in hidden):
+                tainted.add(ends[0])
+    tainted = {find(s) for s in tainted}
+
+    # what this viewer's own cables reach, starting from a place they see
+    reached, joins = set(), {}
+    for c in d.get("cables") if isinstance(d.get("cables"), list) else []:
+        ends = _stub_ends(c) or set()
+        if any(isinstance(c.get(side), str) and c.get(side) for side in ("a", "b")):
+            reached |= ends
+        for s in ends:
+            joins.setdefault(s, set()).update(ends - {s})
+    walk = list(reached)
+    while walk:
+        for s in joins.get(walk.pop(), ()):
+            if s not in reached:
+                reached.add(s)
+                walk.append(s)
+
+    def stays(s):
+        return isinstance(s.get("id"), str) and (
+            s["id"] in reached or not (every or find(s["id"]) in tainted))
+
+    d["stubs"] = [s for s in stubs if stays(s)]
+    if isinstance(d.get("cables"), list):
+        left = {s["id"] for s in d["stubs"]}
+        d["cables"] = [c for c in d["cables"] if (_stub_ends(c) or set()) <= left]
 
 
 def hidden_node_ids(data, groups):
@@ -730,6 +849,7 @@ def redact(data, groups, token=False):
                       if not isinstance(e, dict)
                       or _scrub_entry(e, refs, unseen, defining)]
         _scrub_signals_block(d, unseen)
+        _scrub_wiring(d, data, unseen)
         # A PORT'S WORDS (2026-11-11). `peer` and `note` say what is on the other
         # end in prose, and a connection import now writes them: "VAULT and 3
         # guests" on a visible switch names a hidden place, its port and what it

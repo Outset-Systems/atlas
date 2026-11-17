@@ -5,7 +5,9 @@
    is only what is drawn inside one. Tokens only: the panel tokens follow
    `data-scheme` once `#nodes-sheet` (and OVERVIEW's `#overview-tiles`) sits in
    atlas.css's panel token block, so nothing here restates a colour for the
-   light scheme. OVERVIEW is at the foot of this file.
+   light scheme, save the dim behind a phone's menu sheet, which is the
+   scene wrapper's and has its light twin there too (2026-11-16). OVERVIEW
+   is at the foot of this file.
 
    NODES (nodes.js) is a scene panel laid flat: the `.ldg-panel` sheet
    (surface gradient, ink-line border, 8px corners), the Desk's table, buttons
@@ -132,6 +134,9 @@ body.phone .nv-recent-said { grid-column: 3; }
   padding: 2px 7px; cursor: pointer; color: var(--text-dim); font-size: 0.9rem; line-height: 1.2;
 }
 .nv-rail-more:hover, .nv-rail-more[aria-expanded="true"] { color: var(--gilt); border-color: rgba(var(--gilt-rgb), 0.3); }
+/* under a collection's row: its name box, its armed Remove and notes, the
+   services it holds that have gone. Its other tools are in its ⋯ menu
+   (`.nv-menu`, 2026-11-16) */
 .nv-rail-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 4px 4px 10px 24px; }
 .nv-rail-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 8px 0; }
 .nv-rail-input { flex: 1 1 100%; width: 100%; }
@@ -191,7 +196,9 @@ body.phone .nv-rail { display: none; }
 /* ── stage 3 (2026-11-14): the place menu ──
    The ⋯ beside a place's name (the rail's own `.nv-rail-more`), one menu for
    every row, seated under the ⋯ pressed (fixed: the table scrolls inside
-   `.nv-scroll`); the panel's frame and the Desk's buttons. */
+   `.nv-scroll`); the panel's frame and the Desk's buttons. Since 2026-11-16
+   a service's ⋯ and a collection's ⋯ in the rail open this same menu, and
+   it needed no rule of its own for them. */
 .nv-name-cell { display: inline-flex; align-items: center; gap: 4px; }
 .nv-row-more { padding: 0 6px; }
 .nv-add-place { margin-left: 10px; }
@@ -214,6 +221,90 @@ body.phone .nv-rail { display: none; }
 .nv-menu-item:disabled { opacity: 0.5; cursor: default; }
 .nv-menu-note {
   margin: 0; padding: 6px 10px; font-family: 'Alegreya Sans', sans-serif; font-size: 0.86rem; color: var(--text-dim);
+}
+/* ── the engines in the menu (2026-11-17) ──
+   Who watches it and its last answer are notes (above). Check now where
+   the server would refuse it is held: still in the arrows' path, so its
+   reason is read out, in the note's quiet ink, with no hover. */
+.nv-menu-item.nv-menu-held { color: var(--text-dim); cursor: default; }
+.nv-menu-item.nv-menu-held:hover { color: var(--text-dim); border-color: transparent; }
+.nv-menu-item.nv-menu-held:focus-visible { color: var(--text); border-color: var(--ink-line); }
+/* Check now's line in the row: under a place's name, or across a service's
+   line; the semantic inks for what it said, warn for a refusal. "Asking…"
+   breathes at the scrying pulse's pace, and holds still under reduced
+   motion. */
+.nv-asked {
+  display: block; margin-top: 2px; max-width: 26rem; white-space: normal;
+  font-family: 'Alegreya Sans', sans-serif; font-size: 0.82rem; line-height: 1.35; color: var(--text-dim);
+}
+.nv-svc > .nv-asked { grid-column: 1 / -1; margin: 0 0 2px; max-width: none; }
+.nv-asked-up { color: var(--sem-up); }
+.nv-asked-warn { color: var(--sem-warn); }
+.nv-asked-down { color: var(--sem-down); }
+.nv-asking { animation: nv-asking 1.25s ease-in-out infinite; }
+@keyframes nv-asking { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .nv-asking { animation: none; opacity: 0.7; }
+}
+/* ── where does it break (2026-11-17) ──
+   The chain, under the place's name where Check now's line sits, until it
+   is closed: the summary in Alegreya Sans 700 (the keyboard lands on it),
+   in the up or down ink, then one line per step in the asked line's size
+   on a 2px `--ink-line` rule: answered in the body ink, not asked in the
+   quiet ink; the step that broke wears the down ink, bold, and its rule
+   turns down too. Show on the canvas and Close are the Desk's small
+   buttons. Nothing moves. */
+.nv-dx {
+  display: block; margin: 6px 0 4px; white-space: normal;
+  font-family: 'Alegreya Sans', sans-serif; font-size: 0.82rem; line-height: 1.35; color: var(--text-dim);
+  /* wider than the name's column, which held it to a ribbon 144px wide and
+     425px tall (found walking it, 2026-11-17): it lies across the row as a
+     note, and the row's other cells keep to the top beside the name */
+  position: relative; z-index: 1; box-sizing: border-box;
+  width: min(40rem, calc(100vw - 6rem)); max-width: none; padding: 6px 10px 8px;
+  background: var(--surface-2); border: 1px solid var(--ink-line); border-radius: 4px;
+}
+tr:has(.nv-dx) > td { vertical-align: top; }
+.nv-dx-sum { margin: 0 0 3px; font-weight: 700; font-size: 0.86rem; color: var(--text); }
+.nv-dx-sum:focus { outline: none; }
+.nv-dx-sum:focus-visible { outline: 2px solid var(--gilt); outline-offset: 2px; }
+.nv-dx-sum.nv-dx-up { color: var(--sem-up); }
+.nv-dx-sum.nv-dx-down { color: var(--sem-down); }
+.nv-dx-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
+.nv-dx-step { padding: 1px 0 1px 8px; border-left: 2px solid var(--ink-line); overflow-wrap: anywhere; }
+.nv-dx-step.nv-dx-up { color: var(--text); }
+.nv-dx-step.nv-dx-down { color: var(--sem-down); }
+.nv-dx-step.nv-dx-broke { border-left-color: var(--sem-down); font-weight: 700; }
+.nv-dx-bar { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 5px; }
+/* ── a phone's sheet (2026-11-16) ──
+   A card's ⋯ opens the same menu, with the same lines, as a sheet along the
+   screen's foot, the width of the screen. Its surface and its dim are the
+   scene chrome's (atlas.css: `.ldg-panel`'s gradient and 8px corners, on the
+   scene wrapper's dim and that dim's light twin); it rises from below as
+   the phone's place card does (`translateY(34px) scale(0.985)`, `--glide`),
+   and the dim fades in as a scene's does (200ms). It stands inside the
+   view's own layer (`.atlas-view`), so the band stays over it. The card's ⋯
+   stays lit over the dim, where a second press puts the sheet away. */
+body.phone .nv-menu-dim {
+  position: fixed; inset: 0; z-index: 60; background: rgba(6,5,3,0.7);
+  touch-action: none; animation: nv-dim-in 200ms ease;
+}
+:root[data-scheme="light"] body.phone .nv-menu-dim { background: rgba(13, 11, 7, 0.82); }
+body.phone .nv-menu.nv-menu-sheet {
+  left: 0; right: 0; top: auto; bottom: 0; z-index: 62;
+  min-width: 0; max-width: none; gap: 4px;
+  padding: 10px 12px calc(12px + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(180deg, var(--surface-2), var(--surface));
+  border-width: 1px 0 0; border-radius: 8px 8px 0 0;
+  box-shadow: 0 -14px 40px rgba(var(--shade-rgb), calc(0.6 * var(--shade-k)));
+  animation: nv-sheet-in 380ms var(--glide);
+}
+body.phone .nv-menu-sheet .nv-menu-item { min-height: 44px; font-size: 1rem; }
+body.phone .nv-card-more[aria-expanded="true"] { z-index: 61; }
+@keyframes nv-dim-in { from { opacity: 0; } }
+@keyframes nv-sheet-in { from { opacity: 0; transform: translateY(34px) scale(0.985); } }
+@media (prefers-reduced-motion: reduce) {
+  body.phone :is(.nv-menu-dim, .nv-menu-sheet) { animation: none; }
 }
 
 /* ── stage 3b (2026-11-15): a place's services, under its row ── */
@@ -319,6 +410,11 @@ body.phone .nv-svc.nv-thing > .nv-svc-host { grid-column: 2; grid-row: 2; }
   font-family: 'Alegreya Sans', sans-serif; font-size: 0.84rem; color: var(--text-dim);
 }
 .nv-form-bar { display: flex; gap: 8px; margin-left: auto; }
+/* what the server refused in a scope bar's form (Check…, 2026-11-17): the
+   Desk's own notice, across the form */
+.nv-form-problems { flex-basis: 100%; }
+.nv-form-problems:empty { display: none; }
+.nv-form-problems .dsk-notice { margin-bottom: 0; }
 
 .nv-msg:empty { display: none; }
 
@@ -376,6 +472,14 @@ th[aria-sort="descending"] .nv-sort::after { content: ' ▼'; font-size: 0.8em; 
   transition: border-color 150ms;
 }
 .nv-card:hover { border-color: var(--gilt); }
+/* its ⋯ (2026-11-16): the rail's `.nv-rail-more`, beside the card's button
+   (never inside it), a thumb's 44px square at the card's top right */
+.nv-card-li { position: relative; }
+.nv-card-li > .nv-card { padding-right: 48px; }
+.nv-card-more {
+  position: absolute; top: 0; right: 0; width: 44px; height: 44px; padding: 0;
+  display: flex; align-items: center; justify-content: center; font-size: 1.1rem;
+}
 .nv-card-top { display: flex; align-items: center; gap: 8px; }
 .nv-card-top .svc-health { margin-left: 0; }
 .nv-card-line {

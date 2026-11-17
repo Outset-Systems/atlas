@@ -7,8 +7,10 @@
    opens on, and THE ATLAS is the way back from it. MAP is the map itself;
    OVERVIEW is the realm's own facts in tiles, then the Deck below them (the
    Sky's and the Depths' charts in one column, 2026-11-13 stage 3); NODES is
-   one table of every place; ALERTS is the rules and destinations that send
-   word out when the map changes (stage 4), and is an admin's only.
+   one table of every place; TOPOLOGY (2026-11-17) is the device cards and
+   the cables between them, drawn on one canvas (topology.js); ALERTS is the
+   rules and destinations that send word out when the map changes (stage 4),
+   and is an admin's only.
    views.js does the showing; this file only decides.
    Unit-tested by tests/test_views_model.mjs under plain node.
 
@@ -29,7 +31,9 @@
    wins over a stored pick and a phone's default, never over `?view=`.
 
    The address can overrule all of it: `?view=map` keeps the map on any screen,
-   `?view=overview` / `?view=nodes` open on that view, and `?view=phone` asks
+   `?view=overview` / `?view=nodes` / `?view=topology` open on that view
+   (`?view=topology&at=<place id>` centred on that place, its way up to the
+   head lit: topology.js reads `at` with parsePlace), and `?view=phone` asks
    for the phone's own layout on any screen (what a phone looks like, on a
    desk). `phone` is a LAYOUT, not a view: it is never stored and never in
    VIEWS. */
@@ -41,7 +45,7 @@ export const DECK_KEY = 'atlas.view';
 
 /** Every view, in the menu's order. The ONE list: a later stage adds its view
     here and the menu, the address and the stored pick all know it. */
-export const VIEWS = ['map', 'overview', 'nodes'];
+export const VIEWS = ['map', 'overview', 'nodes', 'topology'];
 /** The views only an admin may open (and only an admin sees in the menu).
     None since 2026-11-14: ALERTS was the one, and it left for NODES. */
 export const ADMIN_VIEWS = Object.freeze([]);

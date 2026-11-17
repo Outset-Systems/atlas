@@ -76,12 +76,15 @@ def _body():
 from . import health  # noqa: E402,F401
 from . import reads  # noqa: E402,F401  — the map's reads: lab-data, maps
 from . import writes  # noqa: E402,F401  — the layout writes: positions, rack
+from . import topology_layout  # noqa: E402,F401  : TOPOLOGY's card layout, read and written (2026-11-17)
 from . import feeds  # noqa: E402,F401  — signals, rites, events
 from . import roster  # noqa: E402,F401  — the places table (2026-11-13)
 from . import overview  # noqa: E402,F401  — OVERVIEW, the realm's own facts (2026-11-13)
+from . import topology_sheet  # noqa: E402,F401  : TOPOLOGY's connections sheet, a CSV (2026-11-17)
 from . import probes  # noqa: E402,F401  — embeddable, whois
 from . import beat  # noqa: E402,F401  — the machine beat
 from . import admin  # noqa: E402,F401  — the editor (nested bp)
+from . import checks  # noqa: E402,F401  : one check, read and asked now (admin; 2026-11-16)
 from . import sites  # noqa: E402,F401  — multi-site reads (db only)
 from . import ingest_v2  # noqa: E402,F401  — relay ingest (nested bp)
 from . import accounts_v2  # noqa: E402,F401  — accounts (nested bp)

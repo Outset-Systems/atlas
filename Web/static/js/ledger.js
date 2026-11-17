@@ -11,7 +11,8 @@
    `zones[].subnet` when it doesn't — so a map written before any of this
    renders exactly as it always did.
 
-   Roads and topology live in THE PATH (path.js). */
+   Routes, cables and the topology live in the TOPOLOGY view (topology.js,
+   2026-11-17; THE PATH, path.js, retired with it). */
 
 import { A, CFG, $, esc, zoneById, nodeById, FALLBACK_HUE } from './config.js';
 import { say } from './words.js';

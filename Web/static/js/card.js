@@ -97,6 +97,9 @@ const nodeLogo = (n) => {
   return onStyle && (CFG.THEME.sceneryLogos || []).includes(themed) ? '' : themed;
 };
 
+/* TOPOLOGY's cards wear the same emblem (2026-11-17) */
+A.nodeLogo = nodeLogo;
+
 function setPortrait(n) {
   const slug = nodeLogo(n) || 'waypoints';   // waypoints = generic fallback
   $('card-portrait').innerHTML = `<img class="portrait-logo" src="static/icons/${slug}.svg" alt="">`;
@@ -573,9 +576,9 @@ function showServiceDetail(node, link) {
           `${glassAttrs(link.label, `a service of ${node.name}`, link.open_in)}>Open ${esc(link.label)}${ICON.out}</a>`
         : '') +
       `<div class="csv-twin">` +
-      `<button class="csv-metrics" id="csv-path" title="Show it in TOPOLOGY — the tier diagram">${ICON.topo}Topology</button>` +
+      `<button class="csv-metrics" id="csv-path" title="Show its place in TOPOLOGY, lit from the head down">${ICON.topo}Topology</button>` +
       // the map-side twin of TOPOLOGY: the same road, drawn where you already
-      // are instead of in the tier diagram (2026-08-11)
+      // are instead of in the topology (2026-08-11)
       `<button class="csv-metrics" id="csv-road" title="Follow its route on the map">${ICON.route}Draw route</button>` +
       `</div></div>`;
   svc.querySelector('#csv-back').addEventListener('click', (e) => {
@@ -587,11 +590,10 @@ function showServiceDetail(node, link) {
   svc.querySelector('#csv-path').addEventListener('click', (e) => {
     e.stopPropagation();
     A.closeCard?.();
-    A.setSceneActive?.('path');
-    // THE PATH, with this service's host haloed and its reach web lit; the
-    // road out wins over the unordered set, same precedence highlightService
-    // uses — the two views must not disagree about what this service touches
-    A.openPath?.(node.id, link.path || link.connects || node.reaches || [], link.label);
+    // the TOPOLOGY view (2026-11-17), centred on the service's place with its
+    // way up to the head lit, as `?view=topology&at=<id>` opens it; the tier
+    // scene that lit the service's reach (THE PATH) retired with it
+    A.openTopology?.(node.id);
   });
   svc.querySelector('#csv-road').addEventListener('click', (e) => {
     e.stopPropagation();

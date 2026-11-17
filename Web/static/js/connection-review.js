@@ -14,7 +14,9 @@
 
 import { A, esc, postJSON } from './config.js';
 import { say } from './words.js';
-import { follow, groupsOf, ignoreLocally, tickable } from './connections-model.js';
+import {
+  cableState, countsLine, follow, groupsOf, ignoreLocally, reviewCounts, tickable,
+} from './connections-model.js';
 
 export async function post(url, body) {
   const r = await postJSON(url, body);
@@ -34,6 +36,7 @@ function rowState(r, zones) {
   if (r.type === 'port') return 'a port on its device';
   if (r.type === 'route') return 'a link between them';
   if (r.type === 'fact') return 'adds to what the map has';
+  if (r.type === 'cable') return cableState(r);
   const zone = zones.find((z) => z.id === r.zone);
   return zone ? `lands in ${esc(zone.name)}` : say('no realm yet');
 }
@@ -60,8 +63,8 @@ function reviewHTML(view) {
   const { rows, zones, notes } = view;
   const open = rows.filter((r) => r.status !== 'ignored');
   const ignored = rows.filter((r) => r.status === 'ignored');
-  const fresh = rows.filter(tickable).length;
-  const charted = rows.filter((r) => r.status === 'charted').length;
+  const counts = reviewCounts(rows);
+  const { fresh } = counts;
   if (!rows.length) return '<div class="acct-note">It answered, but it has nothing to list.</div>';
   const lists = [...groupsOf(open)].map(([group, members]) => {
     const all = members.some(tickable)
@@ -71,7 +74,7 @@ function reviewHTML(view) {
   }).join('');
   // Uncharted is the blank choice, made if the map has not got it
   const choices = zones.filter((z) => z.id !== 'uncharted').map((z) => `<option value="${esc(z.id)}">${esc(z.name)}</option>`).join('');
-  return `<div class="acct-note">${fresh} new · ${charted} already on the map${ignored.length ? ` · ${ignored.length} ignored` : ''}.
+  return `<div class="acct-note">${esc(countsLine(counts))}.
       Nothing is added until you tick it.</div>
     ${notes.map((n) => `<div class="acct-note">${esc(n)}</div>`).join('')}
     ${rows.length > FILTER_FROM ? '<input class="dir-input con-filter" data-filter placeholder="filter by name or address" aria-label="Filter" autocomplete="off" spellcheck="false">' : ''}

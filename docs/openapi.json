@@ -1120,6 +1120,121 @@
             },
             "description": "The ports."
           },
+          "cables": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "Short unique key, e.g. `gw-to-switch`. How the cable is named in the change log."
+                },
+                "a": {
+                  "type": "string",
+                  "description": "The place at one end. Leave blank when this end is a stub. Names an entry in `nodes`."
+                },
+                "a_stub": {
+                  "type": "string",
+                  "description": "The stub at this end, when it is not a place. Names an entry in `stubs`."
+                },
+                "a_port": {
+                  "type": "string",
+                  "description": "The port at this end, e.g. `8` or `eth0`. The name of one of the place's ports when it has them; any name is allowed."
+                },
+                "b": {
+                  "type": "string",
+                  "description": "The place at the other end. Leave blank when this end is a stub. Names an entry in `nodes`."
+                },
+                "b_stub": {
+                  "type": "string",
+                  "description": "The stub at this end, when it is not a place. Names an entry in `stubs`."
+                },
+                "b_port": {
+                  "type": "string",
+                  "description": "The port at this end."
+                },
+                "kind": {
+                  "type": "string",
+                  "examples": [
+                    "copper",
+                    "fibre",
+                    "dac",
+                    "wireless",
+                    "virtual"
+                  ],
+                  "description": "copper = an ordinary patch lead · fibre · dac = a direct-attach copper cable · wireless = a radio link · virtual = inside one box."
+                },
+                "vlan": {
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean"
+                  ],
+                  "description": "The VLAN carried untagged, e.g. `10`. Blank for none."
+                },
+                "tagged": {
+                  "description": "The VLANs carried tagged, as a list, e.g. `[10, 20]`. Blank for none. A cable with both is a trunk, drawn `U1 T10,20`."
+                },
+                "poe_w": {
+                  "type": "number",
+                  "description": "Watts of power over the cable, when it carries any."
+                },
+                "speed": {
+                  "type": "string",
+                  "description": "e.g. `1G`, `2.5G`, `10G`."
+                },
+                "state": {
+                  "type": "string",
+                  "examples": [
+                    "confirmed",
+                    "assumed"
+                  ],
+                  "description": "confirmed = someone has seen it · assumed = believed, not checked (drawn dashed)."
+                },
+                "source": {
+                  "type": "string",
+                  "description": "Who says this cable is there: `hand` when a person charted it, or the connection that reported it, e.g. `unifi`."
+                },
+                "note": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The cables."
+          },
+          "stubs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "Short unique key, e.g. `isp-line`."
+                },
+                "name": {
+                  "type": "string",
+                  "description": "What it is called, e.g. `Fibre line in`."
+                },
+                "kind": {
+                  "type": "string",
+                  "examples": [
+                    "internet",
+                    "switch",
+                    "patch",
+                    "outlet",
+                    "other"
+                  ],
+                  "description": "internet = the provider's line · switch = a small switch nobody watches · patch = a patch panel · outlet = a wall jack · other."
+                },
+                "note": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The stubs."
+          },
           "racks": {
             "type": "array",
             "items": {

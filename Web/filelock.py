@@ -141,3 +141,21 @@ def exclusive(path, timeout=LOCK_TIMEOUT):
             os.close(fd)
     finally:
         thread_lock.release()
+
+
+@contextmanager
+def writing_now(path):
+    """Hold `path`'s writer lock without waiting, and yield `save(obj)`: an
+    atomic JSON write of `path` with no `.bak`.
+
+    The checks' round (watch.tick) and the shadow counts (shadow.observe) each
+    spelled this for themselves until 2026-11-16. A second writer is not waited
+    for: `LockTimeout` at once, and the caller serves what is stored. An
+    `OSError` (a folder that cannot be written) goes to the caller too, since
+    each falls back its own way. `exclusive` is read from this module when
+    called, so a test that replaces it still reaches this path.
+    """
+    import jsonio
+
+    with exclusive(lock_for(path), timeout=0):
+        yield lambda obj: jsonio.write_json_atomic(path, obj, keep_backup=False)

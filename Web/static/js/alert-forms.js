@@ -11,6 +11,9 @@ import * as M from './alerts-model.js';
 
 /** One phrase: the theme's, else the plain one, with `{name}` filled in. */
 export const t = (key, vars = {}) => M.fill(themeText(key, M.ALERTS_TEXT[key] || ''), vars);
+/** The same, for words a kind of destination declares (2026-11-16): the
+    theme's, else ours, else the kind's own `plain` words. */
+export const tOr = (key, plain, vars = {}) => M.fill(themeText(key, M.ALERTS_TEXT[key] || plain || ''), vars);
 
 export const list = (v) => (Array.isArray(v) ? v : []);
 export const clock = (ms) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });

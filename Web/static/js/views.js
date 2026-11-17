@@ -5,7 +5,9 @@
    `#overview-body`, inside the tiles' sheet) and, below them, THE DECK (v1.66.0 phone, v1.67.0
    everywhere): one scrolling column of the watchings, the Sky's charts and
    then the Depths'. NODES is one table of every place (nodes.js draws it into
-   `#view-nodes`). ALERTS was a view (2026-11-13) and is not since
+   `#view-nodes`). TOPOLOGY (2026-11-17) is the device cards and their cables
+   on one canvas (topology.js draws it into `#view-topology`; its own thing,
+   as NODES is). ALERTS was a view (2026-11-13) and is not since
    2026-11-14: its rules are made in NODES (alert-rules.js) and where word
    goes is Settings › Alerts (alert-setup.js); a stored or addressed `alerts`
    opens NODES. An admin's menu item or strip entry (`data-admin`) is drawn
@@ -133,6 +135,7 @@ function frame(view) {
 const MOVERS = {
   overview: [['chronicle', 'up'], ['abyss', 'down'], ['colophon', 'down']],
   nodes: [['colophon', 'foot']],
+  topology: [['colophon', 'foot']],
 };
 const seats = new Map();
 

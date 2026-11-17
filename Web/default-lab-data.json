@@ -816,6 +816,134 @@
       "kind": "mesh"
     }
   ],
+  "cables": [
+    {
+      "id": "wan-in",
+      "a_stub": "fibre-line",
+      "a_port": "lan",
+      "b": "gateway",
+      "b_port": "igc0",
+      "kind": "copper",
+      "speed": "1G",
+      "state": "confirmed",
+      "source": "hand",
+      "note": "The provider's box to the router's WAN port."
+    },
+    {
+      "id": "gw-trunk",
+      "a": "gateway",
+      "a_port": "igc1",
+      "b": "core-switch",
+      "b_port": "24",
+      "kind": "copper",
+      "vlan": 1,
+      "tagged": [
+        10,
+        30,
+        33,
+        66,
+        90
+      ],
+      "speed": "1G",
+      "state": "confirmed",
+      "source": "hand",
+      "note": "Every VLAN, one cable."
+    },
+    {
+      "id": "hv-uplink",
+      "a": "hypervisor",
+      "a_port": "enp1s0f0",
+      "b": "core-switch",
+      "b_port": "sfp1",
+      "kind": "dac",
+      "vlan": 33,
+      "tagged": [
+        30,
+        90
+      ],
+      "speed": "10G",
+      "state": "confirmed",
+      "source": "hand"
+    },
+    {
+      "id": "nas-fibre",
+      "a": "nas",
+      "a_port": "eth2",
+      "b": "core-switch",
+      "b_port": "sfp2",
+      "kind": "fibre",
+      "vlan": 33,
+      "speed": "10G",
+      "state": "confirmed",
+      "source": "hand"
+    },
+    {
+      "id": "camera-poe",
+      "a": "camera-hub",
+      "a_port": "eth0",
+      "b": "core-switch",
+      "b_port": "8",
+      "kind": "copper",
+      "vlan": 66,
+      "poe_w": 12,
+      "speed": "1G",
+      "state": "confirmed",
+      "source": "hand",
+      "note": "Powered from the switch; no plug of its own."
+    },
+    {
+      "id": "desk-run",
+      "a": "core-switch",
+      "a_port": "12",
+      "b_stub": "desk-switch",
+      "b_port": "1",
+      "kind": "copper",
+      "vlan": 10,
+      "speed": "1G",
+      "state": "confirmed",
+      "source": "hand",
+      "note": "The run through the wall to the office."
+    },
+    {
+      "id": "workstation-desk",
+      "a": "workstation",
+      "a_port": "eth0",
+      "b_stub": "desk-switch",
+      "b_port": "2",
+      "kind": "copper",
+      "vlan": 10,
+      "speed": "1G",
+      "state": "confirmed",
+      "source": "hand"
+    },
+    {
+      "id": "gpu-desk",
+      "a": "gpu-box",
+      "a_port": "eth0",
+      "b_stub": "desk-switch",
+      "b_port": "3",
+      "kind": "copper",
+      "vlan": 10,
+      "speed": "1G",
+      "state": "assumed",
+      "source": "hand",
+      "note": "Probably port 3; nobody has looked behind the desk."
+    }
+  ],
+  "stubs": [
+    {
+      "id": "fibre-line",
+      "name": "Fibre line in",
+      "kind": "internet",
+      "note": "The provider's box on the hall wall. Not ours to log into."
+    },
+    {
+      "id": "desk-switch",
+      "name": "Desk switch",
+      "kind": "switch",
+      "note": "Five ports under the office desk. No address, no VLANs of its own."
+    }
+  ],
   "racks": [
     {
       "id": "rack-a",

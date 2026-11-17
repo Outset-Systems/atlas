@@ -334,16 +334,29 @@ def test_nothing_to_check_is_an_answer_and_no_map_is_silence(web, tmp_path):
 
 # ── wiring ──────────────────────────────────────────────────────────────────
 def test_signals_still_loads_with_only_settings_beside_the_standard_library():
-    """A relay box imports `signals` with no web stack installed."""
-    with open(os.path.join(WEB, "signals.py"), encoding="utf-8") as fh:
-        tree = ast.parse(fh.read())
-    top = set()
-    for stmt in tree.body:
-        if isinstance(stmt, ast.Import):
-            top |= {alias.name for alias in stmt.names}
-        elif isinstance(stmt, ast.ImportFrom):
-            top.add(stmt.module)
-    assert top == {"json", "logging", "os", "threading", "time", "settings"}
+    """A relay box imports `signals` with no web stack installed. The adapters
+    are modules of their own beside it (`engines/`, 2026-11-16) and `signals`
+    imports every one, so the same holds for each of them."""
+    def top_imports(*parts):
+        with open(os.path.join(WEB, *parts), encoding="utf-8") as fh:
+            tree = ast.parse(fh.read())
+        top = set()
+        for stmt in tree.body:
+            if isinstance(stmt, ast.Import):
+                top |= {alias.name for alias in stmt.names}
+            elif isinstance(stmt, ast.ImportFrom):
+                assert stmt.level == 0, parts        # a relative import would hide what it loads
+                top.add(stmt.module)
+        return top
+
+    files = sorted(f for f in os.listdir(os.path.join(WEB, "engines"))
+                   if f.endswith(".py") and f != "__init__.py")
+    engines = {"engines." + f[:-3] for f in files}
+    assert {"engines.base", "engines.checks", "engines.kuma"} <= engines
+    assert top_imports("signals.py") == {"logging", "os", "threading", "time", "settings"} | engines
+    assert top_imports("engines", "__init__.py") == set()
+    for f in files:
+        assert top_imports("engines", f) <= {"json", "logging", "os", "time"} | engines, f
 
 
 def _sources(monkeypatch, tmp_path, listed):

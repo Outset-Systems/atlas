@@ -40,7 +40,8 @@ Web/                  the app (this is what the image runs)
   validation.py       the catalogue applied to a dataset
   store/              SQLAlchemy models for the db backend
   migrations/         Alembic migrations for the db backend
-  signals.py          live-health adapters and the signals hub
+  signals.py          the signals hub: builds the enabled sources and merges their feeds
+  engines/            one module per live-health source (the adapters), plus what they share
   integrations.py     Sources/Realm settings saved from the Settings screen
   auth_config.py      Directory settings saved from the Settings screen
   crypto_at_rest.py   the master key and Fernet encryption
@@ -146,6 +147,7 @@ per surface, each attaching routes to it:
 | `writes.py` | `/positions`, `/rack` (layout overlays) |
 | `feeds.py` | `/signals`, `/rites`, `/events` |
 | `roster.py` | `/places/roster` (one row per place this viewer may see, from the redacted map and the redacted live feed) |
+| `checks.py` | `/checks/<key>` (one check's last answer, cut like the feed) and `/admin/checks/run` (ask one check now; admin). The logic is plain functions in `Web/watch.py` |
 | `overview.py` | `/overview` (OVERVIEW's tiles from the redacted map and live feed; the tiles themselves are built in `Web/overview.py`, which `atlas_overview` reads too) |
 | `probes.py` | `/embeddable` (may this URL be framed?), `/whois` |
 | `beat.py` | `/rites/<key>/beat` (a job reports that it ran) |
@@ -271,7 +273,8 @@ own token checks instead.
 
 ## Signals and sources
 
-`signals.py` has one small adapter per source: `PrometheusAdapter`,
+`engines/` has one small adapter per source, a module each, and `signals.py`
+imports them back under their old names: `PrometheusAdapter`,
 `KumaAdapter` (Kuma's `/metrics`), `UniFiAdapter` (what is connected now, for
 charted places no monitor watches), `ChecksAdapter` (built-in checks),
 `DeceptionAdapter` (the decoy feed), `RelayAdapter` (the latest push stored by
@@ -280,8 +283,17 @@ charted on the map that name no Kuma monitor, and keeps its last round in
 `checks.json` beside the dataset so two workers do not both ask.
 Each request has a hard timeout (three seconds; six for UniFi) and an adapter **never raises**: any failure is
 "no signal", so a dead source removes its markers and nothing else.
+Kuma, the decoy feed and Prometheus make that request through one call,
+`engines/runtime.py`'s `get`; the checks' round and the shadow counts take
+their store's lock without waiting and write it through `filelock.writing_now`.
 `SignalsHub` merges the enabled adapters into one feed cached for 30 seconds,
 served at `/api/v2/signals`.
+
+Each source declares itself once, in `engines/registry.py`: its name, the
+word NODES shows under "Watched by", the setting it needs, what it can give a
+state for (a place, a service, a stone) and how it is built.
+`integrations.SOURCES`, `integrations.SOURCE_NEEDS` and `signals._BUILDERS`
+are read from that registry, so a new source is one module and one entry.
 
 Which adapters exist is decided by `integrations.py`: the Settings screen's
 saved values first, the environment second. The hub watches the settings
@@ -349,10 +361,13 @@ flowchart TD
   the boot sequence calls is defined somewhere.
 - **Scenes** are full-screen views over the map (addresses, the
   racks, resources, the calendar, certificates, tripwires, the event history,
-  the topology, accounts). `scene.js` provides `makeScene({ id, closeId, build,
+  accounts). `scene.js` provides `makeScene({ id, closeId, build,
   onClose })` so each module supplies only what it draws.
+- **Views** stand in the map's place under the band: overview, nodes and,
+  since 2026-11-17, the topology (`topology.js` and its parts), which replaced
+  the tier scene `path.js`.
 - **Pure models** (`camera-model.js`, `region-model.js`, `world-model.js`,
-  `card-model.js`, `calendar-model.js`, `ipam.js`, `path-model.js`,
+  `card-model.js`, `calendar-model.js`, `ipam.js`, `topology-model.js`,
   `connections-model.js`, `editor/form-model.js`, `project.js`,
   `rack-model.js` and the other `*-model.js` files) have no DOM access and are
   unit tested with node. Logic that decides something goes in a model; the

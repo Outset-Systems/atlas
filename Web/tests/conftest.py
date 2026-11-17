@@ -66,11 +66,13 @@ ATLAS_ENV = [
     "ATLAS_LDAP_CA_FILE", "ATLAS_LDAP_ACCESS_GROUPS", "ATLAS_LDAP_ADMIN_GROUPS",
     "ATLAS_LDAP_TIMEOUT",
     "ATLAS_HUB_SECRET", "ATLAS_HUB_SECRET_FILE",
+    # TOPOLOGY (2026-11-17): the layout file, and the one outside address
+    "ATLAS_TOPOLOGY_LAYOUT", "ATLAS_DIAGNOSE_OUTSIDE",
 ]
 
 
 @pytest.fixture(autouse=True)
-def _atlas_env(request):
+def _atlas_env(request, monkeypatch):
     """Give each test the environment its own module declared.
 
     pytest imports every test module before running any test, so the module
@@ -78,13 +80,24 @@ def _atlas_env(request):
     `store.session_scope()` reads `ATLAS_DB_URL` live, which is why suites
     passed alone and 401'd together. Each module now declares `ATLAS_TEST_ENV`
     and it is re-applied here, per test.
+
+    The declared values go in through `monkeypatch` (2026-11-17). A test that
+    then calls `monkeypatch.setenv` on the same name has it put back to what
+    was there before the test, whatever order the two fixtures are torn down
+    in. Set straight into `os.environ`, the value a test's `monkeypatch`
+    remembered as "the old one" was the declared one, and where another
+    plugin's autouse fixture asks for `monkeypatch` first (pytest-django does)
+    its undo ran after the restore below and left `ATLAS_AUTH_MODE=accounts`
+    behind for the next module: the alerts suites followed by the db suite
+    answered 401.
     """
     declared = getattr(request.module, "ATLAS_TEST_ENV", None)
     if not declared:
         yield
         return
     before = {name: os.environ.get(name) for name in ATLAS_ENV}
-    os.environ.update({k: str(v) for k, v in declared.items()})
+    for name, value in declared.items():
+        monkeypatch.setenv(name, str(value))
     yield
     for name, value in before.items():
         if value is None:

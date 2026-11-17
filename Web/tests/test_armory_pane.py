@@ -150,8 +150,10 @@ def test_two_racks_keep_their_own_slots_and_heights():
 def test_the_old_names_are_gone_from_the_scene_band():
     """Plain words on the band and the flyout (2026-10-31)."""
     html = (WEB / "templates" / "index.html").read_text(encoding="utf-8")
-    for word in ("RACKS", "RESOURCES", "ADDRESSES", "TOPOLOGY"):
+    for word in ("RACKS", "RESOURCES", "ADDRESSES"):
         assert f">{word}</button>" in html
+    # TOPOLOGY left the band for the views (2026-11-17): the theme's word, in the menu
+    assert '<button type="button" role="menuitem" data-view="topology">{{ theme.text.view_topology }}</button>' in html
     for word in ("ARMORY", "TRIBUTE", "LEDGER", "PATH"):
         assert f">{word}</button>" not in html
     card = (WEB / "static" / "js" / "card.js").read_text(encoding="utf-8")

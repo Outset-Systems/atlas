@@ -54,6 +54,7 @@ const SVC_HEALTH_CLASS = {
 // The one state→dot-class map for the whole app, exported like its sibling
 // A.stateHue — the card, the Index, THE LEDGER and THE PATH all read this
 // instead of keeping a private copy (they had drifted into five identical ones).
+// (THE PATH retired 2026-11-17; TOPOLOGY reads the feed for its own dots.)
 A.svcHealthClass = SVC_HEALTH_CLASS;
 
 /** Paint per-service health dots (K4) on any [data-kuma] element from the feed.
@@ -114,6 +115,7 @@ function apply(feed) {
   A.paintDecoys?.();       // the decoy feed eyes follow the same poll
   A.paintRoutes?.();        // amber-in the roads that lead to trouble
   A.paintFolds?.();         // a folded region's tab counts its hidden places by state
+  A.paintTopology?.();      // TOPOLOGY's state dots and Watched by (2026-11-17)
   A.refreshStonesScene?.(); // a stone that starts speaking lights up where it
                             // stands, even with the list already open — the
                             // scene where a stale "all quiet" is the worst lie
@@ -197,6 +199,7 @@ function goStatic(note) {
   A.paintServiceHealth?.();   // clear service dots too
   A.paintRoutes?.();          // roads back to their resting VLAN colours
   A.paintFolds?.();           // folded regions keep their count and drop the states
+  A.paintTopology?.();        // TOPOLOGY's cards lose their dots too
   A.paintDecoys?.();         // the eyes grey out — the watch cannot be heard
   paintDrift(null);           // drop the drift chip too
   if (colophon) {

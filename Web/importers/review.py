@@ -31,6 +31,13 @@ to a place on the map by address or name, and lands in that place's `monitors`.
 A place arriving from another system can bring its monitors with it (`watch`), so
 one review charts a switch and wires its health in the same change.
 
+A cable (2026-11-17) is a physical connection a system reports, port to port.
+It is offered only when both its ends are places already on the map, and it is
+matched to the map's cables by its ends and ports, never by id. A cable a person
+drew (or another system wrote) is never changed: where the system reads it
+otherwise, the row says so in words and cannot be ticked. A cable this same
+system wrote before may be offered as an update. See `_annotate_cables`.
+
 What a remote system says is untrusted text. `clean` and `address` are why a
 stranger's control characters or a hostname in an address field cannot reach the
 dataset, and strict validation in the store is the backstop.
@@ -41,6 +48,8 @@ import re
 from urllib.parse import urlsplit
 
 import discovery
+import schema
+import topology
 from layoutgrid import BAND_LABEL_X, BAND_STEP, BAND_TOP, Y_MAX
 
 from .common import UNCHARTED_SLUG, UNCHARTED_ZONE, UNKNOWN_ZONE_FIELDS, slugify
@@ -139,8 +148,39 @@ def monitor(key, name, host, detail=""):
                       detail=clean(detail, 240))
 
 
+#: A cable's fields a system may state, besides its ends, in the dataset's names.
+CABLE_FIELDS = ("kind", "vlan", "tagged", "poe_w", "speed", "state")
+#: Where the cables a system reads otherwise than the map are listed.
+DIFFERS_GROUP = "Cables the map has otherwise"
+
+
+def cable(key, group, a, b, *, source, by, a_port="", b_port="", kind="copper", speed="",
+          poe_w=None, vlan=None, tagged=None, name=""):
+    """A cable between two things in the same review, by their keys, as the
+    system states it. `source` is what the dataset's `source` will say (the
+    system's key, `unifi`); `by` is how the review's words name the system
+    (`UniFi`). Only what is given is written: no speed, no PoE, no VLAN unless
+    the system said so. `state` is always `confirmed`: the system saw it."""
+    fields = {"kind": kind, "state": "confirmed"}
+    if clean(speed):
+        fields["speed"] = clean(speed)
+    if isinstance(poe_w, (int, float)) and not isinstance(poe_w, bool) and poe_w > 0:
+        fields["poe_w"] = poe_w
+    if schema.vlan_number(vlan) is not None:
+        fields["vlan"] = schema.vlan_number(vlan)
+    tagged = [v for v in (schema.vlan_number(t) for t in tagged or ()) if v is not None]
+    if tagged:
+        fields["tagged"] = sorted(set(tagged) - {fields.get("vlan")})
+    bits = [kind, fields.get("speed", ""), topology.vlan_label(fields),
+            f"PoE {fields['poe_w']:g} W" if "poe_w" in fields else ""]
+    return _candidate(key, "cable", group, name or "cable", parent=a, peer=b,
+                      a_port=clean(a_port, 40), b_port=clean(b_port, 40), cable=fields,
+                      source=clean(source, 40), by=clean(by, 40),
+                      detail=" · ".join(b for b in bits if b))
+
+
 #: Rows that stand on another row, so they are read after the rows they stand on.
-_DEPENDENT = ("service", "port", "route", "monitor", "fact")
+_DEPENDENT = ("service", "port", "route", "monitor", "fact", "cable")
 
 
 def _real_ip(ip):
@@ -200,6 +240,12 @@ class _Map:
             if isinstance(i, dict):
                 self.port_at.setdefault((i.get("device"), str(i.get("name"))), (index, i))
         self.ports = set(self.port_at)
+        # the wiring, as it stands: cables by position, stubs by id
+        self.cables = [c for c in data.get("cables") or [] if isinstance(c, dict)] \
+            if isinstance(data.get("cables"), list) else []
+        self.stubs = {s.get("id"): s for s in data.get("stubs") or []
+                      if isinstance(s, dict) and isinstance(s.get("id"), str)} \
+            if isinstance(data.get("stubs"), list) else {}
         # every monitor that already lights something, and what it lights
         self.tied = {}
         for n in self.nodes.values():
@@ -290,11 +336,14 @@ def annotate(candidates, data, ignored=()):
     """
     chart = _Map(data)
     ignored = set(ignored)
-    rows, by_key = [], {}
+    rows, by_key, cables = [], {}, []
     # hosts first, so a service can read its host's row whatever the listing order
     for row in sorted(candidates, key=lambda c: c["type"] in _DEPENDENT):
         row = {**row, "matched": "", "zone": "", "note": "", "blocked": False}
         by_key[row["key"]] = row
+        if row["type"] == "cable":
+            cables.append(row)                 # read together, once every place is placed
+            continue
         if row["type"] == "zone":
             found = chart.find_zone(row)
             row["status"], row["matched"] = (CHARTED, found.get("id")) if found else (NEW, "")
@@ -318,6 +367,10 @@ def annotate(candidates, data, ignored=()):
                 continue                       # its place is not on the map: the place brings it
         else:
             _annotate_monitor(row, chart)
+        if row["key"] in ignored and row["status"] != CHARTED:
+            row["status"] = IGNORED
+        rows.append(row)
+    for row in _annotate_cables(cables, by_key, chart):
         if row["key"] in ignored and row["status"] != CHARTED:
             row["status"] = IGNORED
         rows.append(row)
@@ -399,6 +452,288 @@ def _annotate_monitor(row, chart):
         row.update(blocked=True, note=f"No place on the map answers to {row.get('host') or 'its address'}.")
     else:
         row.update(place=node.get("id"), note=f"watches {node.get('name') or node.get('id')}")
+
+
+# ── cables (2026-11-17) ──────────────────────────────────────────────────────
+
+def _port_word(port):
+    """A port as the dataset names it, or "" for none."""
+    if isinstance(port, bool) or not isinstance(port, (str, int)):
+        return ""
+    return str(port).strip()
+
+
+def _same_port(x, y):
+    return x.casefold() == y.casefold()
+
+
+def _map_ends(c):
+    """A map cable's two ends as [(what, id, port)], `what` being place or
+    stub; None when an end names neither, which validation reports."""
+    out = []
+    for side in ("a", "b"):
+        place, stub = c.get(side), c.get(side + "_stub")
+        if isinstance(place, str) and place:
+            out.append(("place", place, _port_word(c.get(side + "_port"))))
+        elif isinstance(stub, str) and stub:
+            out.append(("stub", stub, _port_word(c.get(side + "_port"))))
+        else:
+            return None
+    return out
+
+
+def _between(ends, a, b):
+    """The map cable's ports turned to face (a, b), when it runs between those
+    two places; None otherwise. The second answer is True when it was turned."""
+    if ends is None or any(e[0] != "place" for e in ends):
+        return None, False
+    if (ends[0][1], ends[1][1]) == (a, b):
+        return (ends[0][2], ends[1][2]), False
+    if (ends[0][1], ends[1][1]) == (b, a):
+        return (ends[1][2], ends[0][2]), True
+    return None, False
+
+
+def _fit(theirs, ours):
+    """None when the two name different ports at an end; else how many ports
+    they agree on. A port one side leaves blank agrees with any."""
+    score = 0
+    for t, o in zip(theirs, ours):
+        if t and o:
+            if not _same_port(t, o):
+                return None
+            score += 1
+    return score
+
+
+def _place_name(chart, pid):
+    return clean((chart.nodes.get(pid) or {}).get("name")) or pid
+
+
+def _end_name(chart, end):
+    what, ident, _ = end
+    if what == "stub":
+        return f"the stub {clean((chart.stubs.get(ident) or {}).get('name')) or ident}"
+    return _place_name(chart, ident)
+
+
+def _at(port, name):
+    return f"port {port} on {name}" if port else name
+
+
+def _states_otherwise(field, theirs, ours):
+    """Whether the map's value for a field is not what the system states."""
+    if field == "vlan":
+        return schema.vlan_number(theirs) != ours
+    if field == "tagged":
+        listed = theirs if isinstance(theirs, list) else []
+        return sorted({schema.vlan_number(v) for v in listed} - {None}) != ours
+    if field == "poe_w":
+        try:
+            return float(theirs) != float(ours)
+        except (TypeError, ValueError):
+            return True
+    return str(theirs or "").strip().casefold() != str(ours).strip().casefold()
+
+
+def _vlan_words(c):
+    return topology.vlan_label({"vlan": c.get("vlan"), "tagged": c.get("tagged")}) or "no VLAN"
+
+
+def _differs_from_hand(c, row):
+    """What a cable someone else wrote says otherwise, in words: its VLANs,
+    where both it and the system state them. A port it leaves blank is not a
+    disagreement: it is a cable with less written on it."""
+    want = row["cable"]
+    clash = any(f in want and c.get(f) not in (None, "", [])
+                and _states_otherwise(f, c.get(f), want[f]) for f in ("vlan", "tagged"))
+    return [f"the map says {_vlan_words(c)}, {row['by']} says {_vlan_words(want)}"] if clash else []
+
+
+def _changes_words(c, changes):
+    out = []
+    for field, value in changes.items():
+        was = c.get(field)
+        if field.endswith("_port"):
+            out.append(f"port {value}" + (f", was {was}" if was else ""))
+        elif field in ("vlan", "tagged"):
+            continue
+        elif field not in ("a", "b", "a_stub", "b_stub") and value is not None:
+            out.append(f"{field.replace('_w', '')} {value}" + (f", was {was}" if was not in (None, "") else ""))
+    if "vlan" in changes or "tagged" in changes:
+        out.append(f"{_vlan_words({**c, **changes})}, was {_vlan_words(c)}")
+    return out
+
+
+def _differ(row, words):
+    """A cable the map has otherwise: listed, never ticked, never written."""
+    row.update(status=NEW, blocked=True, differs=words, group=DIFFERS_GROUP,
+               note=f"{'; '.join(words)}. The map's cable stays as it is: change it by hand "
+                    f"if {row['by']} is right.")
+
+
+def _cable_id(a, a_port, b, b_port, ids):
+    """The id a new cable is written under: its two ends and ports, so the same
+    cable on the same map is offered under the same id on every review."""
+    ends = sorted([(a, a_port), (b, b_port)])
+    base = "--".join(slugify(p) + (f".{slugify(q)}" if q else "") for p, q in ends)
+    cid, n = base, 2
+    while cid in ids:
+        cid, n = f"{base}-{n}", n + 1
+    return cid
+
+
+def _annotate_cables(rows, by_key, chart):
+    """The cable rows, read against the map's cables. Returns the rows kept.
+
+    A cable whose ends are not both places on the map is dropped: no cable and
+    no stub. Then, for each kept row:
+
+    * the map has the same cable (same two places, and no port the two name
+      differently): nothing is offered, unless this system wrote that cable and
+      now states something else about it, when the row is an update;
+    * the map gives one of its ports to something else, or runs a cable between
+      the same two places on another port: if that cable is this system's own,
+      the row is an update of it; if anyone else wrote it, the row lists the
+      disagreement in words and cannot be ticked;
+    * otherwise the row is a new cable.
+
+    Matching is by ends and ports, never by id, so a renamed place keeps its
+    cables matched."""
+    live = []
+    for row in rows:
+        a, b = by_key.get(row["parent"]), by_key.get(row["peer"])
+        if a is None or b is None or a["status"] != CHARTED or b["status"] != CHARTED \
+                or a["matched"] == b["matched"]:
+            continue
+        row["ends"] = [[a["matched"], row["a_port"]], [b["matched"], row["b_port"]]]
+        row["name"] = clean(" ↔ ".join(_place_name(chart, end) + (f" port {port}" if port else "")
+                                       for end, port in row["ends"]), 240)
+        live.append(row)
+    ends = [_map_ends(c) for c in chart.cables]
+    # each row's own cable on the map first, the closest fit winning, so two
+    # cables between the same pair (an aggregate) each find their own
+    same, held = {}, set()
+    for row in live:
+        (A, ap), (B, bp) = row["ends"]
+        best = None
+        for i, e in enumerate(ends):
+            theirs, _ = _between(e, A, B)
+            score = None if i in held or theirs is None else _fit(theirs, (ap, bp))
+            if score is not None and (best is None or score > best[1]):
+                best = (i, score)
+        if best is not None:
+            same[row["key"]] = best[0]
+            held.add(best[0])
+    ids = {c.get("id") for c in chart.cables}
+    claimed = set()
+    for row in live:
+        if row["key"] in same:
+            _against_its_own(row, chart, same[row["key"]], ends)
+        else:
+            _against_the_rest(row, chart, ends, held, claimed, ids)
+    return live
+
+
+#: Readings of the moment, not facts about the wire: a link renegotiates, a
+#: camera draws a little more at night. Written where the map has none, never
+#: offered as a change, or every review would offer the same cable again.
+_READINGS = ("speed", "poe_w")
+
+
+def _stated_changes(c, row):
+    """What the system states about a cable of its own that the map has
+    otherwise: the kind, the state and the VLANs; a reading only where the
+    map has none."""
+    out = {}
+    for field in CABLE_FIELDS:
+        if field not in row["cable"]:
+            continue
+        if field in _READINGS and c.get(field) not in (None, ""):
+            continue
+        if _states_otherwise(field, c.get(field), row["cable"][field]):
+            out[field] = row["cable"][field]
+    return out
+
+
+def _own(c, row):
+    return (c.get("source") or "hand") == row["source"]
+
+
+def _against_its_own(row, chart, i, ends):
+    c = chart.cables[i]
+    (A, ap), (B, bp) = row["ends"]
+    theirs, turned = _between(ends[i], A, B)
+    row["matched"] = clean(c.get("id")) or "a cable"
+    if not _own(c, row):
+        words = _differs_from_hand(c, row)
+        if words:
+            _differ(row, words)
+        else:
+            row["status"] = CHARTED
+        return
+    changes = {}
+    for k, (t, o) in enumerate(zip(theirs, (ap, bp))):
+        if o and not t:
+            changes[("a", "b")[k ^ turned] + "_port"] = o
+    changes.update(_stated_changes(c, row))
+    if changes and isinstance(c.get("id"), str):
+        row.update(status=NEW, updates=c["id"], changes=changes,
+                   note=f"updates the cable {row['by']} gave before: {'; '.join(_changes_words(c, changes))}")
+    else:
+        row["status"] = CHARTED
+
+
+def _against_the_rest(row, chart, ends, held, claimed, ids):
+    (A, ap), (B, bp) = row["ends"]
+    by, hits = row["by"], {}
+    for i, e in enumerate(ends):
+        if e is None:
+            continue
+        # a port of this cable that the map gives to something else
+        for place, port, far in ((A, ap, B), (B, bp, A)):
+            if not port:
+                continue
+            for k in (0, 1):
+                what, ident, p = e[k]
+                other = e[1 - k]
+                if what == "place" and ident == place and p and _same_port(p, port) \
+                        and not (other[0] == "place" and other[1] == far):
+                    hits.setdefault(i, []).append(
+                        f"the map says {_at(port, _place_name(chart, place))} goes to "
+                        f"{_end_name(chart, other)}, {by} says {_place_name(chart, far)}")
+        # a cable between the same two places, on another port
+        theirs, _ = _between(e, A, B)
+        if theirs is not None and i not in held:
+            for t, o, place in zip(theirs, (ap, bp), (A, B)):
+                if t and o and not _same_port(t, o):
+                    hits.setdefault(i, []).append(
+                        f"the map says port {t} on {_place_name(chart, place)}, {by} says port {o}")
+    if not hits:
+        row["cable"]["id"] = _cable_id(A, ap, B, bp, ids)
+        ids.add(row["cable"]["id"])
+        row["status"] = NEW
+        return
+    # one cable in the way, this system's own, and not another row's own
+    # cable: it is offered as moved. Anything more, or anyone else's, is
+    # listed and left alone.
+    i = next(iter(hits)) if len(hits) == 1 else None
+    c = chart.cables[i] if i is not None else {}
+    if i is None or i in held or i in claimed or not _own(c, row) or not isinstance(c.get("id"), str):
+        _differ(row, list(dict.fromkeys(w for ws in hits.values() for w in ws)))
+        return
+    claimed.add(i)
+    changes = {"a": A, "b": B}
+    for side, port in (("a", ap), ("b", bp)):
+        if port:
+            changes[side + "_port"] = port
+        elif c.get(side + "_port") not in (None, ""):
+            changes[side + "_port"] = None         # this system's own cable: what it no longer says goes
+        if c.get(side + "_stub") not in (None, ""):
+            changes[side + "_stub"] = None
+    changes.update(_stated_changes(c, row))
+    row.update(status=NEW, updates=c["id"], changes=changes, matched=c["id"],
+               note=f"updates the cable {by} gave before: {'; '.join(dict.fromkeys(hits[i]))}")
 
 
 def plan(rows, picks, data, *, label, fallback=""):
@@ -495,9 +830,29 @@ def plan(rows, picks, data, *, label, fallback=""):
     for row in routes:
         ops.append({"op": "insert", "section": "routes",
                     "body": {"from": at(row["parent"]), "to": at(row["peer"]), "kind": "vlan"}})
+    for row in (r for r in chosen if r["type"] == "cable"):
+        ops.append(_cable_op(row))
     if not ops:
         raise PlanError(["Nothing was ticked."])
     return ops
+
+
+def _cable_op(row):
+    """A ticked cable as one op: an upsert of this system's own cable by its id,
+    carrying only what changed, or a new cable in the catalogue's field order.
+    Both ends are on the map already: `annotate` keeps no other cable row."""
+    if row.get("updates"):
+        return {"op": "upsert", "section": "cables", "id": row["updates"], "body": dict(row["changes"])}
+    (a, a_port), (b, b_port) = row["ends"]
+    body = {"id": row["cable"]["id"], "a": a}
+    if a_port:
+        body["a_port"] = a_port
+    body["b"] = b
+    if b_port:
+        body["b_port"] = b_port
+    body.update({k: row["cable"][k] for k in CABLE_FIELDS if k in row["cable"]})
+    body["source"] = row["source"]
+    return {"op": "insert", "section": "cables", "body": body}
 
 
 class PlanError(Exception):

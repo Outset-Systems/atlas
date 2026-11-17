@@ -121,7 +121,6 @@ def observe(feed, data, path=None, watch_path=None, now=None):
 
 def _observe(feed, data, path, watch_path, now):
     import filelock
-    import jsonio
     import watch
     if not isinstance(data, dict) or not on(data) or not isinstance(feed, dict):
         return None
@@ -133,7 +132,7 @@ def _observe(feed, data, path, watch_path, now):
     where = path_of(path)
     now = time.time() if now is None else now
     try:
-        with filelock.exclusive(filelock.lock_for(where), timeout=0):
+        with filelock.writing_now(where) as save:
             doc = load(where)
             counted = 0
             things = {}
@@ -164,7 +163,7 @@ def _observe(feed, data, path, watch_path, now):
                 things[t.ckey] = rec
             out = {"since": doc["since"] or now, "things": things}   # what is no longer shadowed is dropped
             if counted or out != doc:
-                jsonio.write_json_atomic(where, out, keep_backup=False)
+                save(out)
             return counted
     except filelock.LockTimeout:
         return None

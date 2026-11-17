@@ -218,7 +218,9 @@ def _cascade_delete(data, section_key, entry_id):
                             sub[inner] = [v for v in schema.as_list(sub[inner]) if v != entry_id]
                     continue
                 if entry.get(path) == entry_id or entry_id in schema.as_list(entry.get(path)):
-                    if fld and fld.get("required"):
+                    # `follows`: a cable's end is optional (a place OR a stub)
+                    # but the cable is nothing without it, so it goes whole
+                    if fld and (fld.get("required") or fld.get("follows")):
                         drop = True
                     elif isinstance(entry.get(path), list):
                         entry[path] = [v for v in entry[path] if v != entry_id]
@@ -232,6 +234,29 @@ def _cascade_delete(data, section_key, entry_id):
         if other_key in data:
             data[other_key] = kept
     return removed
+
+
+def _carry_rename(data, section_key, old_id, new_id):
+    """A renamed entry takes what `follows` it along (2026-11-16): a cable
+    whose end names the old id names the new one, in the same save. Only the
+    fields marked `follows` (a cable's ends); every other reference to the old
+    id is left as it is, and the save is refused for it as before. Returns how
+    many entries changed."""
+    if not (isinstance(old_id, str) and isinstance(new_id, str)) or not old_id \
+            or not new_id or old_id == new_id:
+        return 0
+    moved = 0
+    for other_key, name in schema.followers(section_key):
+        entries = data.get(other_key)
+        for entry in entries if isinstance(entries, list) else []:
+            if not isinstance(entry, dict) or entry.get(name) != old_id:
+                continue
+            # an entry with both ends on the renamed thing is counted once
+            if not any(entry.get(n) == new_id for o, n in schema.followers(section_key)
+                       if o == other_key and n != name):
+                moved += 1
+            entry[name] = new_id
+    return moved
 
 
 # ── The ops engine ───────────────────────────────────────────────────────────
@@ -318,13 +343,21 @@ def _apply_upsert(data, op, s, entries):
         # dataset's business, not the form's. An explicit
         # null is how a form says "clear this optional field", which is a
         # different intention from not mentioning it at all.
-        merged = dict(entries[index])
+        was = entries[index]
+        merged = dict(was)
         merged.update(body)
         for key, value in body.items():
             if value is None:
                 merged.pop(key, None)
         entries[index] = merged
-        return f"changed {s['noun']} {label}"
+        note = ""
+        id_field = s["id_field"]
+        if id_field:
+            carried = _carry_rename(data, section_key, was.get(id_field), merged.get(id_field))
+            if carried:
+                note = (f" (and {carried} thing{'s' if carried != 1 else ''} that pointed "
+                        "at it, carried to the new id)")
+        return f"changed {s['noun']} {label}{note}"
     entries.append(body)
     return f"added {s['noun']} {label}"
 

@@ -53,6 +53,7 @@ from urllib.parse import urlsplit
 
 import settings
 import signals
+import engines.authority as authority
 
 log = logging.getLogger("atlas.live.watch")
 
@@ -77,6 +78,26 @@ POLL = 5
 TICK_BUDGET = 25.0
 FILE = "checks.json"
 VERSION = 2
+
+#: Why an answer was not a healthy one (2026-11-16): the code a probe gives
+#: and the store keeps, and the words a person reads. Fixed words only: never
+#: an exception's own text, never anything the service sent.
+WHY = {
+    "timeout": "no answer inside the timeout",
+    "refused": "the connection was refused",
+    "unreachable": "no connection could be made",
+    "no-name": "the name did not resolve",
+    "status": "answered with a status that was not expected",
+    "server-error": "answered with a server error",
+    "keyword": "the keyword was not in the answer",
+    "json": "the value in the JSON answer was not the one expected",
+    "address": "the name resolved, but not to the address expected",
+}
+#: The words for an ask that got no answer at all: the address could not be
+#: asked, or the check did not finish in time.
+NO_ANSWER = "no answer: the check could not be asked, or did not finish in time"
+#: The words for a failed answer stored before the reasons were kept.
+NOT_HEALTHY = "the answer was not a healthy one"
 
 _UA = {"User-Agent": "Atlas-check"}
 _METADATA = frozenset(map(ipaddress.ip_address, ("fd00:ec2::254", "100.100.100.200", "192.0.0.192")))
@@ -240,8 +261,11 @@ def targets(data):
             continue
         ip = _address(node.get("ip"))
         own = spec_of(node)
-        if own["type"] in TYPES and (nid not in watched or shadow):
-            ckey, kind = (f"kp:{nid}", "shadow-place") if nid in watched else (f"p:{nid}", "place")
+        # who speaks for it (engines/authority.py): a monitor the owner named
+        # first, then Atlas's own check; beside the monitor only as a shadow
+        kind = authority.place_check(nid in watched, shadow)
+        if own["type"] in TYPES and kind:
+            ckey = f"kp:{nid}" if kind == authority.SHADOW_PLACE else f"p:{nid}"
             t = _make(ckey, nid, kind, nid, own["type"], own, "", ip)
             if t:
                 out.append(t)
@@ -251,9 +275,11 @@ def targets(data):
                     or link.get("unmanaged") is True):
                 continue
             named = link.get("kuma")
-            if named and (not shadow or named in mapped):
-                # a monitor tied to a place reaches the feed only folded into
-                # that place: there is no answer of its own to set beside
+            # a monitor tied to a place reaches the feed only folded into
+            # that place: there is no answer of its own to set beside
+            tied = bool(named) and shadow and named in mapped
+            asks = authority.service_check(bool(named), tied, shadow)
+            if asks is None:
                 continue
             key = signals.service_key(nid, link)
             ckey = f"k:{key}" if named else f"s:{key}"
@@ -266,8 +292,8 @@ def targets(data):
             kind = spec["type"] or ("http" if url else "")
             if not kind:
                 continue
-            t = _make(ckey, key, "shadow" if named else "service", nid, kind, spec, url, ip,
-                      rolls_up=nid not in watched and not named)
+            t = _make(ckey, key, asks, nid, kind, spec, url, ip,
+                      rolls_up=authority.rolls_up(nid in watched, bool(named)))
             if t:
                 out.append(t)
                 seen.add(t.ckey)
@@ -385,16 +411,24 @@ def _http(t):
         if t.type == "http":
             if t.expect:
                 state = signals.HEALTHY if _codes_ok(code, t.expect) else signals.DOWN
+                extra = {"why": "status", "status": code}
             else:
                 state = signals.HEALTHY if code < 500 else signals.DEGRADED
+                extra = {"why": "server-error", "status": code}
         elif code >= 400:
             state = signals.DOWN
+            extra = {"why": "status", "status": code}
         else:
             body = _read(resp)
             found = (t.expect in body) if t.type == "keyword" else _json_ok(body, t.expect)
             state = signals.HEALTHY if found else signals.DOWN
-    except (requests.ConnectionError, requests.Timeout):
-        state = signals.DOWN
+            extra = {"why": t.type}
+        if state == signals.HEALTHY:
+            extra = {}
+    except requests.Timeout:   # before ConnectionError: a connect timeout is both
+        state, extra = signals.DOWN, {"why": "timeout"}
+    except requests.ConnectionError:
+        state, extra = signals.DOWN, {"why": "unreachable"}
     except Exception as e:  # noqa: BLE001 - one bad address never stops the round
         log.debug("watch: one address could not be asked (%s)", type(e).__name__)
     finally:
@@ -415,8 +449,14 @@ def _tcp(t):
         with socket.create_connection((t.host, t.port), timeout=t.timeout):
             pass
         return signals.HEALTHY, _ms(start), {}
-    except OSError:          # refused, unreachable, timed out, or a name that does not resolve
-        return signals.DOWN, _ms(start), {}
+    except socket.timeout:   # TimeoutError
+        return signals.DOWN, _ms(start), {"why": "timeout"}
+    except ConnectionRefusedError:
+        return signals.DOWN, _ms(start), {"why": "refused"}
+    except socket.gaierror:
+        return signals.DOWN, _ms(start), {"why": "no-name"}
+    except OSError:          # unreachable, reset, or anything else the socket says
+        return signals.DOWN, _ms(start), {"why": "unreachable"}
 
 
 def _dns(t):
@@ -424,12 +464,13 @@ def _dns(t):
     try:
         found = {info[4][0] for info in socket.getaddrinfo(t.host, None)}
     except socket.gaierror:
-        return signals.DOWN, _ms(start), {}
+        return signals.DOWN, _ms(start), {"why": "no-name"}
     except OSError:
         return None, _ms(start), {}
     want = t.expect
-    ok = not want or want in found
-    return (signals.HEALTHY if ok else signals.DOWN), _ms(start), {}
+    if not want or want in found:
+        return signals.HEALTHY, _ms(start), {}
+    return signals.DOWN, _ms(start), {"why": "address"}
 
 
 def probe(t):
@@ -492,12 +533,7 @@ def _run(due, budget, certs=()):
 # ── the schedule ────────────────────────────────────────────────────────────
 
 def per_minute():
-    raw = os.environ.get("ATLAS_CHECKS_PER_MINUTE", "").strip()
-    try:
-        value = int(raw)
-    except ValueError:
-        return PER_MINUTE
-    return value if value >= 10 else PER_MINUTE
+    return settings.env_int("ATLAS_CHECKS_PER_MINUTE", PER_MINUTE, 10)
 
 
 _stretch_logged = [None]
@@ -551,6 +587,15 @@ def judge(entry, t, answer, now):
         return entry
     entry["heard"] = now              # when it last said anything: what ages a state
     entry["ms"] = ms
+    # why the last answer was not a healthy one, as a code from WHY (and the
+    # status it came with), never the exception's text or what the service sent
+    why, code = extra.get("why"), extra.get("status")
+    entry.pop("why", None)
+    entry.pop("status", None)
+    if state != signals.HEALTHY and why in WHY:
+        entry["why"] = why
+        if isinstance(code, int) and not isinstance(code, bool):
+            entry["status"] = code
     if state == signals.HEALTHY:
         entry["fails"] = 0
         entry["state"] = state
@@ -631,15 +676,14 @@ def tick(data, path=None, now=None, budget=TICK_BUDGET, ts=None):
     """One round: ask what is due, store what was heard. Returns the store, or
     None when another worker holds the round (its store will do)."""
     import filelock
-    import jsonio
     ts = targets(data) if ts is None else ts
     where = path_of(path)
     fixed = now is not None                    # a test's clock: the round takes no time
     try:
-        with filelock.exclusive(filelock.lock_for(where), timeout=0):
+        with filelock.writing_now(where) as save:
             store = _advance(load(where), ts, now if fixed else time.time(), budget, fixed)
             try:
-                jsonio.write_json_atomic(where, store, keep_backup=False)
+                save(store)
             except OSError as e:
                 log.warning("watch: the round could not be stored (%s)", type(e).__name__)
             return store
@@ -710,6 +754,259 @@ def as_feed(store, ts, now=None, factor=None):
     return {"services": services, "nodes": nodes}
 
 
+# ── one check, read or asked now (2026-11-16) ───────────────────────────────
+#
+# What `GET /api/v2/checks/<key>` and `POST /api/v2/admin/checks/run` stand on
+# (api/v2/checks.py). Plain functions: who may see what is the route's to say.
+
+#: The kinds of target that are a place's own check, or a shadow of one.
+_PLACE_KINDS = (authority.PLACE, authority.SHADOW_PLACE)
+
+
+def find(data, key, ts=None):
+    """The Target the map gives `key` (a place id or a service key), or None.
+    Only `targets(data)` is looked in, so nothing the map does not chart is
+    ever found. A key that is both a place id and a monitor's name is the
+    place's: a place's own check is looked for first."""
+    ts = targets(data) if ts is None else ts
+    if not isinstance(key, str) or not key:
+        return None
+    mine = [t for t in ts if t.key == key]
+    return next((t for t in mine if t.kind in _PLACE_KINDS), None) or (mine[0] if mine else None)
+
+
+def not_asked(data, key):
+    """Why a thing on the map has no check Atlas asks, for a key `find` did
+    not find: {"why": "unmanaged"}, {"why": "kuma", "monitor": name} (a
+    monitor watches it and "Check beside Kuma" is off, or the monitor is
+    tied to a place), or None (no check is charted, or it is not on the map)."""
+    if not isinstance(data, dict) or not isinstance(key, str):
+        return None
+    nodes = [n for n in (data.get("nodes") if isinstance(data.get("nodes"), list) else [])
+             if isinstance(n, dict) and isinstance(n.get("id"), str)]
+    unmanaged = signals.unmanaged_ids(data)
+    monitors = signals.monitor_map(data)
+    if any(n["id"] == key for n in nodes):
+        if key in unmanaged:
+            return {"why": "unmanaged"}
+        named = sorted(m for m, nid in monitors.items() if nid == key)
+        return {"why": "kuma", "monitor": named[0]} if named else None
+    if key in signals.services_of(data, unmanaged) | signals.unmanaged_service_keys(data):
+        return {"why": "unmanaged"}
+    named = key in monitors or any(
+        isinstance(link, dict) and link.get("kuma") == key
+        for n in nodes for link in (n.get("links") if isinstance(n.get("links"), list) else []))
+    return {"why": "kuma", "monitor": key} if named else None
+
+
+def _when(value):
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    import jsonio
+    return jsonio.iso_utc(value)
+
+
+def asks(t):
+    """What a check asks, in words: its URL, an address and port, or a name."""
+    if t.type == "tcp":
+        return f"{t.host} port {t.port}"
+    if t.type == "dns":
+        return f"the name {t.host}"
+    return t.url
+
+
+def answer_for(store, t, now=None, factor=1.0):
+    """One check's last answer from a store, for a person to read. Every name
+    and address in it is the map's own; the caller cuts it for its viewer
+    (the certificate's `names` above all). The fields:
+
+    `state` is what the feed serves for it now (None when it was never heard,
+    or was last heard too long ago: `stale`); `said` is what the last answer
+    said, which differs from `state` while a failure is still inside its
+    retries (`fails` of `retries + 1`); `error` says in fixed words why the
+    last answer was not a healthy one, or that the last ask got no answer."""
+    now = time.time() if now is None else now
+    entry = ((store or {}).get("checks") or {}).get(t.ckey)
+    entry = entry if isinstance(entry, dict) else {}
+    said = entry.get("said") if entry.get("said") in signals.NODE_STATES else None
+    held = entry.get("state") if entry.get("state") in signals.NODE_STATES else None
+    heard, asked = entry.get("heard"), entry.get("asked")
+    numeric = lambda v: isinstance(v, (int, float)) and not isinstance(v, bool)   # noqa: E731
+    stale = bool(held) and (not numeric(heard) or now - heard > stale_after(t, factor))
+    answered = numeric(asked) and numeric(heard) and heard >= asked
+    if numeric(asked) and not answered:
+        error = NO_ANSWER
+    elif said and said != signals.HEALTHY:
+        why = entry.get("why")
+        error = (WHY.get(why) if isinstance(why, str) else None) or NOT_HEALTHY
+    else:
+        error = None
+    code = entry.get("status")
+    tls = entry.get("tls") if isinstance(entry.get("tls"), dict) and entry.get("tls_url") == t.url else None
+    fails = entry.get("fails")
+    return {
+        "key": t.key,
+        "thing": "place" if t.kind in _PLACE_KINDS else "service",
+        "authority": t.kind,
+        "place": t.place,
+        "type": t.type,
+        "asks": asks(t),
+        "url": t.url or None,
+        "host": t.host or None,
+        "port": t.port or None,
+        "expect": t.expect or None,
+        "every": t.every,
+        "retries": t.retries,
+        "timeout": t.timeout,
+        "state": None if stale else held,
+        "stale": stale,
+        "said": said,
+        "fails": fails if isinstance(fails, int) and not isinstance(fails, bool) else 0,
+        "since": _when(entry.get("since")) if held else None,
+        "asked_at": _when(asked),
+        "heard_at": _when(heard),
+        "ms": entry.get("ms") if isinstance(entry.get("ms"), int) and not isinstance(entry.get("ms"), bool) else None,
+        "error": error,
+        "status": code if error and isinstance(code, int) and not isinstance(code, bool) else None,
+        "tls": dict(tls) if tls else None,
+    }
+
+
+#: Asks made by hand that the store does not keep (2026-11-17): the steps of
+#: "Where does it break?" (diagnose.py) ask hops, a name and an outside
+#: address that are no check of their own, so nothing of theirs is stored;
+#: they are counted here, per store path, so they spend the same per-minute
+#: budget. Held by this process only: each worker counts its own.
+_by_hand = {}
+_by_hand_lock = threading.Lock()
+
+
+def spend_by_hand(path, count, now):
+    """Count `count` asks made now by hand against the budget of the store
+    at `path`."""
+    where = path_of(path)
+    with _by_hand_lock:
+        kept = [at for at in _by_hand.get(where, ()) if 0 <= now - at < 60]
+        kept.extend([now] * max(0, int(count)))
+        _by_hand[where] = kept
+
+
+def asked_by_hand(path, now):
+    """When each ask counted by `spend_by_hand` in the last minute was made."""
+    with _by_hand_lock:
+        return [at for at in _by_hand.get(path_of(path), ()) if 0 <= now - at < 60]
+
+
+def recent_asks(store, now, path=None):
+    """When each check was asked in the last minute, ascending: the stored
+    ones, and with `path` the ones counted by hand beside that store."""
+    checks = (store or {}).get("checks") or {}
+    numeric = lambda v: isinstance(v, (int, float)) and not isinstance(v, bool)   # noqa: E731
+    recent = [e["asked"] for e in checks.values()
+              if isinstance(e, dict) and numeric(e.get("asked")) and 0 <= now - e["asked"] < 60]
+    if path is not None:
+        recent.extend(asked_by_hand(path, now))
+    return sorted(recent)
+
+
+def manual_wait(store, t, now, cap=None, path=None):
+    """Seconds before `t` may be asked by hand, or 0 when it may be now.
+
+    Two rules, both the worker's own: one check is not asked again inside the
+    shortest interval a check may have (EVERY_MIN), and the map-wide budget
+    (`per_minute`) is spent when as many checks were asked in the last minute
+    as it allows. The store keeps when each check was last asked, so that count
+    is of checks asked, at least what the minute spent; with `path`, the asks
+    counted by hand beside that store (`spend_by_hand`) count too."""
+    checks = (store or {}).get("checks") or {}
+    numeric = lambda v: isinstance(v, (int, float)) and not isinstance(v, bool)   # noqa: E731
+    last = (checks.get(t.ckey) or {}).get("asked")
+    if numeric(last) and 0 <= now - last < EVERY_MIN:
+        return max(1, int(EVERY_MIN - (now - last) + 0.999))
+    cap = cap or per_minute()
+    recent = recent_asks(store, now, path)
+    if len(recent) >= cap:
+        return max(1, int(recent[len(recent) - cap] + 60 - now + 0.999))
+    return 0
+
+
+def _ask_one(store, t, now, fixed, path=None):
+    """Ask `t` once into `store` (in place), as a round would: the same probe,
+    the certificate when it is due, and `judge`, so one failed ask counts as
+    one failure against the check's retries. Only its own entry changes, and
+    not the store's `at`: the round's schedule is the round's. Returns
+    ("asked", None) or ("soon" | "spent", seconds to wait)."""
+    checks = store.setdefault("checks", {})
+    entry = checks.get(t.ckey)
+    wait = manual_wait(store, t, now, path=path)
+    if wait:
+        last = (entry or {}).get("asked")
+        soon = isinstance(last, (int, float)) and 0 <= now - last < EVERY_MIN
+        return ("soon" if soon else "spent"), wait
+    certs = [t] if t.url.lower().startswith("https://") and _cert_due(entry, t, now) else []
+    heard, _ = _run([t], 2 * t.timeout + 1.0, certs)
+    after = now if fixed else time.time()
+    if t.ckey in heard:
+        entry = judge(entry, t, heard[t.ckey], after)
+    if (entry or {}).get("asked") != after:
+        entry = {**(entry or {}), "asked": after}   # asked, no answer in time: unknown
+    checks[t.ckey] = entry
+    return "asked", None
+
+
+def ask_now(data, key, path=None, now=None, ts=None):
+    """Ask the check the map gives `key` once, now, whatever its schedule
+    says, and store the answer where a round would. The target comes from
+    `targets(data)` alone. Returns (outcome, value):
+
+      ("asked", answer)   asked and stored; `answer_for` after it
+      ("held", answer)    another worker holds the store (as `tick` returns
+                          None): nothing was asked, the answer is the stored one
+      ("soon", seconds)   this check was asked less than EVERY_MIN ago
+      ("spent", seconds)  the map-wide budget for the minute is spent
+      ("none", None)      the map gives `key` no check
+    """
+    import filelock
+    ts = targets(data) if ts is None else ts
+    t = find(data, key, ts)
+    if t is None:
+        return "none", None
+    where = path_of(path)
+    fixed = now is not None
+    factor = stretch(ts)
+
+    def done(store, outcome, value):
+        if outcome == "asked":
+            return outcome, answer_for(store, t, now, factor)
+        return outcome, value
+
+    try:
+        with filelock.writing_now(where) as save:
+            store = load(where)
+            outcome, value = _ask_one(store, t, now if fixed else time.time(), fixed, where)
+            if outcome == "asked":
+                try:
+                    save(store)
+                except OSError as e:
+                    log.warning("watch: a check asked by hand could not be stored (%s)", type(e).__name__)
+            return done(store, outcome, value)
+    except filelock.LockTimeout:
+        return "held", answer_for(load(where), t, now, factor)
+    except OSError as e:
+        # no shared store here (a read-only data directory): the one `tick`
+        # keeps in memory for this process, as a round would
+        log.debug("watch: no shared store here (%s); asking into the one in memory", type(e).__name__)
+        if not _memory_lock.acquire(blocking=False):
+            return "held", answer_for(_memory.get(where), t, now, factor)
+        try:
+            kept = _memory.get(where) or {"v": VERSION, "at": None, "checks": {}}
+            outcome, value = _ask_one(kept, t, now if fixed else time.time(), fixed, where)
+            _memory[where] = kept
+            return done(kept, outcome, value)
+        finally:
+            _memory_lock.release()
+
+
 # ── the thread ──────────────────────────────────────────────────────────────
 
 _started = False
@@ -718,14 +1015,7 @@ _lock = threading.Lock()
 
 def poll_every():
     """Seconds between rounds; 0 turns the thread off."""
-    raw = os.environ.get("ATLAS_CHECKS_POLL", str(POLL)).strip()
-    try:
-        value = int(raw)
-    except ValueError:
-        return POLL
-    if value == 0:
-        return 0
-    return value if value >= 2 else POLL
+    return settings.env_int("ATLAS_CHECKS_POLL", POLL, 2, zero_off=True)
 
 
 def _round(app):

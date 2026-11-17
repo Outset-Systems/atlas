@@ -57,6 +57,7 @@ beside `ATLAS_DATA` and rarely need changing.
 | `ATLAS_FALLBACK` | `empty` | What an instance with no dataset shows. `empty`: an empty map that invites you to start charting. `bundled`: the dataset baked into the image (the public image bundles an invented demo lab, plus a demo status feed that colours it while no source is configured and the instance is unseeded). The first save writes your own copy to `ATLAS_DATA` and silences the demo feed. | no | no |
 | `ATLAS_POSITIONS` | `<data dir>/positions.json` | Hand-placed marker positions, stored over the dataset. | no | no |
 | `ATLAS_RACK` | `<data dir>/rack.json` | Rack layout overlay. | no | no |
+| `ATLAS_TOPOLOGY_LAYOUT` | `<data dir>/topology-layout.json` | Where an admin put each card on the TOPOLOGY canvas, kept beside the dataset like marker positions. Not map data: no revision, no undo. Re-arrange empties it. | no | no |
 | `ATLAS_REVISIONS` | `<data dir>/revisions` | Directory of dataset snapshots written on every change (the change log). | no | no |
 | `ATLAS_OBSERVED` | `<data dir>/observed.json` | What discovery and scans observed, used for drift reports. | no | no |
 | `ATLAS_EVENTS` | `<data dir>/events.json` | The event history (faults, recoveries, acknowledgements). | no | no |
@@ -198,6 +199,7 @@ address is never asked.
 | `ATLAS_LLM_LOG_TAG` | `llm` | The prefix of the `<tag> ok` / `<tag> FALLBACK` log lines those charts count. | no | no |
 | `ATLAS_CHECKS_POLL` | `5` | Seconds between the background rounds of the `checks` source, which ask only the checks that are due. `0` turns the background rounds off; reading the live feed then asks a round when none has run for 30 seconds. Values under 2 fall back to 5. | no | no |
 | `ATLAS_CHECKS_PER_MINUTE` | `600` | The most checks the `checks` source asks in a minute across the whole map. Past it, every check's interval is stretched evenly and the log says so. Values under 10 fall back to 600. | no | no |
+| `ATLAS_DIAGNOSE_OUTSIDE` | (unset) | The one address outside the map that "Where does it break?" (`POST /api/v2/admin/diagnose`) may ask, as `host:port` (`[2001:db8::1]:443` for an IPv6 address), for its last step: a tcp connection that says whether the internet answers. Unset, the step is absent and Atlas reaches nothing outside the map on its own. A value that is not `host:port`, or names an address no check may ask (link-local, cloud metadata), leaves the step off and the log says so. | no | no |
 | `ATLAS_ANNALS_POLL` | `60` | Seconds between background polls that keep the event history and the scheduled-job checks current while nobody has the map open. `0` disables; values under 15 fall back to 60. | no | no |
 | `NETBOX_TOKEN` | (unset) | NetBox API token, for `python cli.py import-netbox` only. The web app never reads it. | yes, `NETBOX_TOKEN_FILE` | no |
 | `ATLAS_PROXMOX_URL` | (unset) | Proxmox VE base URL, for Settings → Connections. Can also be saved there. | no | yes (Connections) |
@@ -257,11 +259,22 @@ can stop returning data until Atlas catches up. Nothing it does changes your dev
 | Portainer | environments | stacks, as services on their environment |
 | Komodo | servers | stacks, as services on their server |
 | NetBox | devices, virtual machines | VLANs, as realms, with the subnet of their first prefix |
-| UniFi Network | the gateway, switches, access points and power strips; every client connected now | networks, as realms; each device's ports, with what is on the other end; a power strip's outlets; links between them |
+| UniFi Network | the gateway, switches, access points and power strips; every client connected now | networks, as realms; each device's ports, with what is on the other end; a power strip's outlets; links between them; cables, port to port, between places already on the map |
 
 - **Already on the map** means the same record was imported before, or the address matches,
   or the name matches. Those rows cannot be ticked. A tick only adds: an import never
-  changes or removes what is already charted.
+  changes or removes what is already charted. The one exception is a cable the same
+  connection wrote, below.
+- **Cables** (UniFi, 2026-11-17) are offered for each wire the controller states: a device's
+  uplink, an LLDP neighbour, a wired client's switch port. Only between two places the map
+  already has, so they come at the review after the places land. Each says only what the
+  controller states (ports, speed, PoE draw, untagged VLAN; fibre for an SFP port, wireless
+  for a wireless uplink) and is `confirmed`, `source: "unifi"`. A cable a person drew is never
+  changed: where UniFi reads it otherwise it is listed under **Cables the map has otherwise**,
+  in words ("the map says port 8 on CORE SWITCH, UniFi says port 12"), for you to fix by hand
+  or ignore. A cable UniFi wrote and now reads differently is offered as an update of that
+  cable. A client gets no cable when it shares its port with another client (something
+  uncharted sits between them) or is a hypervisor's guest. `DATA.md` has the rules.
 - **Same name, different address** is listed with a warning. Tick it to add a second place.
 - **What a system adds** lists what it knows about a place or a port the map already has: a
   MAC address, the networks an access point broadcasts, what is plugged into a port. Tick a
@@ -366,14 +379,26 @@ in it.
 
 ## Alerts
 
-Alerts send a short message to ntfy, Gotify or a JSON webhook when a place, a
+Alerts send a short message to ntfy, Gotify, a JSON webhook or Discord when a place, a
 collection or a network changes state and stays in it for as long as a rule says,
-plus an optional daily digest. An admin makes a rule in NODES, from the bell
+plus an optional daily digest. Each kind of destination is declared once in
+`Web/senders/`; every kind goes through the same checks in `Web/alert_send.py`.
+An admin makes a rule in NODES, from the bell
 beside a place or beside a collection or a network, and sets up where word goes
 (the destinations, the daily digest, and the log of sends) in Settings › Alerts.
 They are **off** until the operator sets both `ATLAS_ALERTS=1`
 and a non-empty `ATLAS_ALERT_HOSTS`. While either is missing nothing is sent,
 and the admin routes that save or test answer 403 with that reason.
+
+A Discord destination is a channel's incoming webhook. Its address stops at the
+webhook's id, `https://discord.com/api/webhooks/<id>` (or on `discordapp.com`,
+`canary.discord.com` or `ptb.discord.com`), and the token after the id is its
+secret: put the token in `ATLAS_ALERT_SECRET_<NAME>` and name `<NAME>` in the
+form. Atlas adds it to the path only when it sends, so it is never in the alerts
+file, on the page or in the log. List `discord.com:443` in `ATLAS_ALERT_HOSTS`
+first. Mentions are off (an `@everyone` or a role in a message pings nobody), so
+is the link preview, and a message is cut to Discord's 2000 characters. Discord's
+`?thread_id=` is not taken: an address may carry no query.
 
 Alerts ride the background poll (`ATLAS_ANNALS_POLL`), after each build of the
 live feed. They add no thread and make no request except the sends. So they
@@ -403,7 +428,7 @@ carries them.
 |---|---|---|---|---|
 | `ATLAS_ALERTS` | (unset) | `1` lets alerts send. Off, NODES and Settings › Alerts say how to turn them on and save nothing. | no | no |
 | `ATLAS_ALERT_HOSTS` | (unset) | The hosts a destination may name, as `host:port`, comma separated, for example `ntfy.example.internal:443,gotify.example.internal:8080`. An admin can only send to a host listed here. Loopback, link-local, multicast and unspecified addresses, the cloud metadata addresses (`fd00:ec2::254`, `100.100.100.200`, `192.0.0.192`), Atlas's own address and the addresses this machine's name resolves to are refused even when listed. The name is resolved once per send, given up after 3 seconds, and the connection goes to that address. Empty, nothing is sent. | no | no |
-| `ATLAS_ALERT_SECRET_<NAME>` | (unset) | A destination's key, named in Settings › Alerts by `<NAME>` alone (`NTFY_LAB` reads `ATLAS_ALERT_SECRET_NTFY_LAB`). Sent as `Authorization: Bearer` to ntfy and a webhook, and as `X-Gotify-Key` to Gotify. Atlas never stores it, shows it or logs it, and sends it only to the address it was named for: change the address and the admin names the secret again. The prefix the app reads is `ATLAS_ALERT_SECRET_`. | yes, `ATLAS_ALERT_SECRET_<NAME>_FILE` | no |
+| `ATLAS_ALERT_SECRET_<NAME>` | (unset) | A destination's key, named in Settings › Alerts by `<NAME>` alone (`NTFY_LAB` reads `ATLAS_ALERT_SECRET_NTFY_LAB`). Sent as `Authorization: Bearer` to ntfy and a webhook, as `X-Gotify-Key` to Gotify, and as the end of a Discord webhook's path (the token). Atlas never stores it, shows it or logs it, and sends it only to the address it was named for: change the address and the admin names the secret again. The prefix the app reads is `ATLAS_ALERT_SECRET_`. | yes, `ATLAS_ALERT_SECRET_<NAME>_FILE` | no |
 | `ATLAS_PUBLIC_URL` | (unset) | The address people reach this Atlas by, for example `https://atlas.example.internal/`. A message links to `<address>?place=<id>`. Atlas cannot know its own address behind a proxy, so unset, messages carry no link. | no | no |
 | `ATLAS_ALERTS_FILE` | `<data dir>/alerts.json` | The rules, the digest and the destinations (secrets by name only). Written from NODES (rules) and Settings › Alerts (the rest). Never exported and never shown to a token. | no | no |
 | `ATLAS_ALERTS_STATE` | `<data dir>/alerts-state.json` | The poll's own record for alerts: the last event handled, rules waiting out their minutes, the rate limit and the last digest day. Written under a lock so two workers send once. | no | no |
