@@ -159,7 +159,7 @@ function showDetail(d) {
   if (ip) data.push(`<span>${esc(ip)}</span>`);
   if (desc && desc !== hw) data.push(`<span class="rel-detail-desc">${esc(desc)}</span>`);
   if (hw) data.push(`<span>${esc(hw)}</span>`);
-  const links = (n?.links || []).map((l) =>
+  const links = (n?.links || []).filter((l) => l?.url).map((l) =>
     `<a class="card-link" href="${esc(l.url)}" target="_blank" rel="noopener"` +
     `${glassAttrs(l.label, `a service of ${n.name}`, l.open_in)}>` +
     `<span class="ldot" style="background:${esc(l.hue)}"></span>${esc(l.label.toUpperCase())} ›</a>`).join('');

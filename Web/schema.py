@@ -98,6 +98,10 @@ PREFIX_ROLES = ["prefix", "container", "reserved"]
 RANGE_KINDS = ["dhcp", "reserved"]
 #: How a service's button behaves — see LINK_FIELDS["open_in"] and glass.js.
 OPEN_IN = ["auto", "here", "tab"]
+#: What a service link is in NODES (2026-11-15). Blank reads its `container`.
+LINK_KINDS = ["", "service", "container"]
+#: THE WATCH's kinds of check (2026-11-15, watch.py). Blank is the default.
+CHECK_TYPES = ["", "http", "tcp", "dns", "keyword", "json", "off"]
 #: How a maintenance window recurs.
 MAINTENANCE_REPEATS = ("none", "daily", "weekly", "monthly")
 #: The lowest and highest value a `percent` field may hold. Named once because
@@ -138,10 +142,46 @@ STONE_ZONES = ["internal", "wan"]
 #: How loud a trip here should be. `critical` is the wake-a-human tier.
 STONE_SEVERITIES = ["info", "low", "medium", "high", "critical"]
 
+def _check_fields(on_place):
+    """THE WATCH's settings (2026-11-15, watch.py), on a service or a place.
+    Every one may be left blank: a service with an http(s) address is asked
+    as it always was, and a place with no check takes its services' state."""
+    whose = "this place" if on_place else "this service"
+    return [
+        f("check", "select", options=CHECK_TYPES, default="", label="Check",
+          help=("How Atlas asks " + whose + " itself. Blank: "
+                + ("no check of its own; it takes the worst of its services."
+                   if on_place else "a GET of its address (below 500 is up).")
+                + " http = a GET judged by its status · tcp = a port answers · "
+                  "dns = a name resolves · keyword = the page holds some text · "
+                  "json = a JSON answer holds a value · off = never asked. "
+                  "Kuma's own monitor, where one is named, wins.")),
+        f("check_host", "text", label="Check address",
+          help=("What it asks: an address or a name (tcp, dns), or a full http(s) "
+                "address (http, keyword, json). Blank: "
+                + ("this place's IP." if on_place else "the service's own address, else its place's IP."))),
+        f("check_port", "int", label="Check port", min=1, max=65535,
+          help="The port a tcp check opens. Blank: the address's own port."),
+        f("check_expect", "text", label="Check expects",
+          help="keyword: the text that must be on the page · json: `path=value`, e.g. "
+               "`status.healthy=true` · dns: an address the name must resolve to · "
+               "http: the statuses that count as up, e.g. `200-299,401` (blank: below 500)."),
+        f("check_every", "int", label="Check every (s)", min=20, max=3600,
+          help="Seconds between checks. Blank: 60."),
+        f("check_retries", "int", label="Check retries", min=0, max=5,
+          help="How many times a failing answer is asked again, 20 s apart, before "
+               "the state changes. Blank: 1."),
+        f("check_timeout", "number", label="Check timeout (s)", min=1, max=10,
+          help="How long one answer may take. Blank: 3."),
+    ]
+
+
 # The link sub-object, reused by nodes.
 LINK_FIELDS = [
     f("label", "text", required=True, help="The service name, as shown on the card."),
-    f("url", "url", required=True, help="Where the service answers. http:// or https://"),
+    f("url", "url", help="Where the service answers. http:// or https://. A service with "
+                         "nothing to open (a database's port, a name server) may leave it "
+                         "blank when its check is tcp or dns."),
     f("desc", "longtext", label="Description",
       help="What this service is *for*, in a sentence or two. Shown on its own "
            "pane when you open it from a place's card. Leave it blank and the "
@@ -153,6 +193,10 @@ LINK_FIELDS = [
            "Omit it and the service simply shows no health dot."),
     f("container", "text",
       help="Docker container name, if cAdvisor scrapes it — powers 'view its metrics'."),
+    f("kind", "select", options=LINK_KINDS, default="",
+      help="What it is in NODES: a container (Docker) or another service. Blank: a "
+           "container when it names one above, else a service. Neither is a place."),
+    *_check_fields(False),
     f("connects", "strings", label="Reaches", ref="nodes",
       help="Places this one service talks to. Narrows the reach web in TOPOLOGY."),
     f("path", "strings", label="Route out", ref="nodes",
@@ -335,6 +379,7 @@ SECTIONS = {
             f("unmanaged", "bool", label="Unmanaged",
               help="Not ours to watch: it stays on the map, greyed, takes no state from "
                    "any source and raises nothing. (Maintenance is 'expected down, for now'.)"),
+            *_check_fields(True),
             f("links", "objects", of=LINK_FIELDS, label="Services",
               help="Everything hosted here. Each becomes a card button and an Index row."),
             f("monitors", "strings", label="Kuma monitors",
@@ -715,6 +760,11 @@ SECTIONS = {
               help="When a service is renamed (its label, its monitor, or its place's id), "
                    "the collections, repair windows and alert rules naming it follow the new "
                    "name. Off, they keep the old one, and Atlas says what was left behind."),
+            f("shadow_kuma", "bool", label="Check beside Kuma",
+              help="Atlas also asks what a Kuma monitor watches, by the service's own "
+                   "address or check, and NODES shows how often the two agree. Kuma's "
+                   "answer stays the one on the map. For deciding whether Atlas can "
+                   "take over from Kuma."),
             f("surveyed", "text", help="When the map was last walked, `YYYY-MM-DD`."),
             f("art", "text", help="Which base render is in use — a note to your future self."),
             f("map_image", "text", label="Base render",
@@ -923,6 +973,8 @@ def _check_scalar(fld, value):
 
 
 def _check_url(fld, value):
+    if value == "" and not fld.get("required"):
+        return None        # blank: a field that may be left out (a service's url, 2026-11-15)
     if not isinstance(value, str) or not value.startswith(("http://", "https://")):
         return f"{fld['name']} must be a url starting http:// or https://"
     return None

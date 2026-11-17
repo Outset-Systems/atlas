@@ -24,8 +24,10 @@
    `atlas:view` with detail {view, prev}; the first one fires here at import,
    before later modules listen, so a reader also takes `A.VIEW` on load.
 
-   THE SKY ABOVE, THE DEPTHS BELOW (owner, 2026-11-13). OVERVIEW and NODES
-   stand between the two sections as the map does: the SAME #chronicle is
+   THE SKY ABOVE, THE DEPTHS BELOW (owner, 2026-11-13). OVERVIEW stands
+   between the two sections as the map does (NODES did too until 2026-11-15,
+   when the owner asked for it to be its own thing: it keeps only the
+   colophon and the way back, at its foot): the SAME #chronicle is
    moved out of the camera's stage into the band above the view, and the SAME
    #abyss (with the colophon and the way back to the map) into the band below,
    and back again, so chronicle.js draws into them exactly as it does on the
@@ -112,8 +114,8 @@ foot.addEventListener('click', (e) => {
 
 /* The views that stand between the Sky and the Depths, and each one's parts:
    its main, the band above, the band below, and "↑ the sky" (the line the
-   page opens on, just above the view's sheet). */
-const BANDED = ['overview', 'nodes'];
+   page opens on, just above the view's sheet). NODES left them 2026-11-15. */
+const BANDED = ['overview'];
 function frame(view) {
   if (!BANDED.includes(view)) return null;
   const main = document.querySelector(`main.atlas-view[data-view="${view}"]`);
@@ -123,23 +125,35 @@ function frame(view) {
   return { main, up, down, edge: main.querySelector(':scope > .view-edge-up') || up };
 }
 
-/* The colophon is the feed's voice (signals.js turns it to an alarm), so in
-   a view it rides at the column's foot instead of floating over a chart. */
-const MOVERS = [['chronicle', 'up'], ['abyss', 'down'], ['colophon', 'down']];
+/* What each view borrows from the map, and where it seats it. The colophon
+   is the feed's voice (signals.js turns it to an alarm), so in a view it
+   rides at the column's foot instead of floating over a chart. NODES has no
+   bands (2026-11-15): its foot (`.view-foot`) takes the colophon and the way
+   back to the map. */
+const MOVERS = {
+  overview: [['chronicle', 'up'], ['abyss', 'down'], ['colophon', 'down']],
+  nodes: [['colophon', 'foot']],
+};
 const seats = new Map();
 
 function lift(view) {
-  const f = frame(view);
-  if (!f) return;
-  for (const [id, band] of MOVERS) {
+  const main = document.querySelector(`main.atlas-view[data-view="${view}"]`);
+  const movers = MOVERS[view];
+  if (!main || !movers) return;
+  const parts = {
+    up: main.querySelector(':scope > .view-band-sky'),
+    down: main.querySelector(':scope > .view-band-depths'),
+    foot: main.querySelector(':scope > .view-foot'),
+  };
+  for (const [id, where] of movers) {
     const el = $(id);
-    if (!el || seats.has(id)) continue;
+    if (!el || !parts[where] || seats.has(id)) continue;
     const seat = document.createComment(` ${id} sits here on the map `);
     el.before(seat);
     seats.set(id, seat);
-    f[band].append(el);
+    parts[where].append(el);
   }
-  f.down.append(foot);
+  (parts.foot || parts.down)?.append(foot);
 }
 function settle() {
   for (const [id, seat] of seats) seat.replaceWith($(id));
@@ -214,8 +228,8 @@ A.setView = function setView(name, { remember = false } = {}) {
     // a region's crumbs and keys belong to the map: leave it whole
     if (prev === 'map' && A.inRegion?.()) A.leaveToMap?.();
     if (prev) A.closeCard?.();
-    if (BANDED.includes(prev)) settle();
-    if (BANDED.includes(next)) lift(next);
+    if (MOVERS[prev]) settle();
+    if (MOVERS[next]) lift(next);
     A.VIEW = next;
     A.DECK = next !== 'map';
     document.body.classList.toggle('deck', A.DECK);

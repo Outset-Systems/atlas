@@ -37,6 +37,17 @@ def post_worker_init(worker):
             except Exception:  # noqa: BLE001 — gunicorn's own logger is a courtesy
                 pass
 
+    # THE WATCH (2026-11-15): the built-in checks ask on their own schedules,
+    # in the same worker, whether or not anything reads the feed (watch.py)
+    try:
+        import watch
+        watch.start(worker.wsgi)
+    except Exception:  # noqa: BLE001 — never stop a worker, but never in silence
+        import logging
+        logging.getLogger("atlas.live.watch").exception(
+            "watch: could not start in worker %s; the built-in checks ask only "
+            "when the feed is read", getattr(worker, "pid", "?"))
+
 
 def child_exit(server, worker):  # noqa: ARG001 — gunicorn's signature
     if not os.environ.get("PROMETHEUS_MULTIPROC_DIR"):

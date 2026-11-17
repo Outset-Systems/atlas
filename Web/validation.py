@@ -210,7 +210,72 @@ def validate(data, strict=False):
     _check_prefix_ranges(problems, data)
     _check_regions(problems, data)
     _check_tripwire_sensors(problems, data)
+    _check_watch(problems, data)
     return problems
+
+
+def _check_watch(problems, data):
+    """THE WATCH (2026-11-15): a check the map asks for has what it needs to
+    be asked, and asks nothing it must not. A service with no address must be
+    one a tcp or dns check can reach."""
+    import watch
+    nodes = data.get("nodes")
+    for i, node in enumerate(nodes if isinstance(nodes, list) else []):
+        if not isinstance(node, dict):
+            continue
+        label = _label("nodes", node, i)
+        ip = watch._address(node.get("ip"))
+        own = watch.spec_of(node)
+        if own["type"] in watch.TYPES:
+            why = _check_problem(own, "", ip)
+            if why:
+                problems.append(f"{label}: its check {why}")
+        links = node.get("links")
+        for j, link in enumerate(links if isinstance(links, list) else []):
+            if not isinstance(link, dict):
+                continue
+            name = link.get("label") if isinstance(link.get("label"), str) else f"#{j + 1}"
+            spec = watch.spec_of(link)
+            url = link.get("url")
+            if url in (None, ""):
+                if spec["type"] not in ("tcp", "dns"):
+                    problems.append(f"{label}: service {name!r} needs a url, or a tcp or dns check")
+                    continue
+            if spec["type"] in watch.TYPES and not link.get("kuma"):
+                why = _check_problem(spec, url if isinstance(url, str) else "", ip)
+                if why:
+                    problems.append(f"{label}: service {name!r}: its check {why}")
+
+
+def _check_problem(spec, url, ip):
+    """Why a check could not be asked as charted, or None."""
+    import signals
+    import watch
+    kind = spec["type"]
+    asked = signals._check_url(url) if url else None
+    if kind in ("http", "keyword", "json"):
+        target = signals._check_url(spec["host"]) or asked
+        if not target:
+            return "needs an http(s) address (the service's own, or as its check address)"
+        if watch.refused_host(watch._parts(target)[0]) or watch.refused_host(spec["host"]):
+            return "may not ask a link-local or metadata address"
+        if kind == "keyword" and not spec["expect"]:
+            return "needs the text it expects"
+        if kind == "json" and "=" not in spec["expect"]:
+            return "needs what it expects as path=value"
+        return None
+    host = spec["host"]
+    if host.lower().startswith(("http://", "https://")):
+        host = watch._parts(host)[0]
+    url_host, url_port = watch._parts(asked) if asked else ("", 0)
+    host = host or url_host or (ip if kind == "tcp" else "")
+    if not host:
+        return "needs an address or a name to ask"
+    if watch.refused_host(host):
+        return "may not ask a link-local or metadata address"
+    if kind == "tcp" and not (spec["port"] or url_port):
+        return "needs a port"
+    return None
 
 
 def _check_tripwire_sensors(problems, data):

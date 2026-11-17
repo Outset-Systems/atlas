@@ -22,10 +22,30 @@
    repairs' stamp. The bulk actions are drawn only where the Desk itself would
    open (`body[data-editable]`), and never on a phone.
 
+   ITS OWN THING (owner, 2026-11-15): NODES no longer stands between the Sky
+   and the Depths. Above the table, one line counts the places by state (each
+   count is the state filter); below it, the newest state changes of the
+   places and services on screen, from the annals (`api/v2/events`, redacted
+   for the viewer there).
+
+   WATCHED BY (2026-11-15): the column the roster calls `confirmed_by` names
+   the source that gave a place its state (Kuma, Atlas's own checks, UniFi…),
+   or "nothing"; a service's line says the same after its name. SHADOW: with
+   the map's "Check beside Kuma" on, an admin sees below the changes how often
+   Atlas's own checks agreed with Kuma's monitors (`api/v2/admin/shadow`).
+
+   CONTAINERS AND SERVICES (2026-11-15): KINDS in the rail
+   also lists Containers and Services. Each shows every one of them on the
+   map as a list of its own (roster-model `thingRows`): its state, its name,
+   the place it runs on (which opens the card), the container's name, its
+   collections, its bell and its ⋯, the same line a place's services draw
+   under its row. A container is a service link that names a Docker
+   container or says `kind: container`; neither is a place or a marker.
+
    Every visible word is theme text (`nodes_*`), with the plain fallback in
    NODES_TEXT below. The look is views.css. */
 
-import { A, $, esc, themeText, canAdminWrite } from './config.js';
+import { A, $, esc, themeText, canAdminWrite, ago } from './config.js';
 import * as R from './roster-model.js';
 import { parseCollection } from './views-model.js';
 import Editor, { EditorError } from './editor/store.js';
@@ -58,6 +78,43 @@ export const NODES_TEXT = {
   nodes_state_slumbering: 'Asleep',
   nodes_state_unknown: 'Not known',
   nodes_state_unmanaged: 'Unmanaged',
+  nodes_summary_label: 'By state; a count shows only those',
+  nodes_by_kuma: 'Kuma',
+  nodes_by_checks: 'Atlas',
+  nodes_by_unifi: 'UniFi',
+  nodes_by_prometheus: 'Prometheus',
+  nodes_by_relay: 'Relay',
+  nodes_by_static: 'A file',
+  nodes_by_demo: 'Demo',
+  nodes_by_nothing: 'nothing',
+  nodes_shadow_title: 'Atlas beside Kuma',
+  nodes_shadow_line: '{pct}% agree over {n} answers since {since}',
+  nodes_shadow_none: 'No answer compared yet: Atlas asks what Kuma watches, each on its own schedule.',
+  nodes_shadow_same: 'Every answer so far agreed.',
+  nodes_shadow_row: 'Atlas said {atlas}, Kuma {kuma} \u00b7 {differ} of {total} differ',
+  nodes_shadow_failed: 'The comparison could not be read.',
+  nodes_shadow_idle: 'The checks source is off (Settings, Sources), so Atlas asks nothing beside Kuma.',
+  nodes_kind_container: 'Containers',
+  nodes_kind_service: 'Services',
+  nodes_things_container: 'containers',
+  nodes_things_container_one: 'container',
+  nodes_things_service: 'services',
+  nodes_things_service_one: 'service',
+  nodes_things_count: '{shown} of {total} {what}',
+  nodes_things_all: '{total} {what}',
+  nodes_things_none: 'None of these match the filter.',
+  nodes_things_empty: 'Nothing on the map is one of these yet.',
+  nodes_thing_host: 'Open {name}',
+  nodes_summary_item: '{n} {state}',
+  nodes_recent_title: 'Recent changes',
+  nodes_recent_none: 'Nothing listed here has changed state yet.',
+  nodes_recent_failed: 'The recent changes could not be read.',
+  nodes_recent_to_down: 'went down',
+  nodes_recent_to_degraded: 'became degraded',
+  nodes_recent_to_healthy: 'came back up',
+  nodes_recent_to_maintenance: 'went into maintenance',
+  nodes_recent_to_slumbering: 'went to sleep',
+  nodes_recent_to_other: 'became {state}',
   nodes_unchecked: 'Not checked yet',
   nodes_stale: 'Not checked in 90 days',
   nodes_clear: 'Clear the filter',
@@ -72,7 +129,7 @@ export const NODES_TEXT = {
   nodes_col_kind: 'Kind',
   nodes_col_addresses: 'Addresses',
   nodes_col_services: 'Services',
-  nodes_col_confirmed: 'Confirmed by',
+  nodes_col_confirmed: 'Watched by',
   nodes_col_reviewed: 'Reviewed',
   nodes_col_maintenance: 'Maintenance',
   nodes_col_cert: 'Certificate',
@@ -297,6 +354,10 @@ const S = {
   expanded: new Set(), // the places whose services are shown under their row
   win: null,           // the drawn window of a long table (stage 5), or null when every row is drawn
   cards: 200,          // a phone draws this many cards, then "Show more" (stage 5)
+  events: null,        // the annals' newest events, or null before (or without) a read (2026-11-15)
+  shadow: null,        // Atlas beside Kuma, for an admin (api/v2/admin/shadow), or null
+  thingsShown: [],     // the keys of the containers or services listed (C2)
+  eventsError: false,  // the last read of them failed
 };
 
 let root = null;
@@ -408,6 +469,8 @@ function refresh() {
       try { S.roster = await fetchRoster(); S.error = ''; } catch (err) { S.error = err.message || String(err); }
     } while (again);
     inflight = null;
+    readEvents();      // the changes below the table, read beside it (never waited on)
+    readShadow();      // and, for an admin, Atlas beside Kuma
     hookRefresh();   // and again once the read is back: by then atlas.js has run
     const known = new Set((S.roster?.rows || []).map((r) => r.id));
     for (const id of [...S.selected]) if (!known.has(id)) S.selected.delete(id);
@@ -417,6 +480,80 @@ function refresh() {
     if (mayAlert()) AlertStore.read();
   })();
   return inflight;
+}
+
+/** The annals' newest events, for the changes below the table. A failed read
+    keeps the last list and says so; the table never waits on this. */
+let eventsInflight = null;
+function readEvents() {
+  if (eventsInflight) return eventsInflight;
+  eventsInflight = (async () => {
+    try {
+      const res = await fetch('api/v2/events?limit=200', { cache: 'no-store' });
+      if (!res.ok) throw new Error(String(res.status));
+      const body = await res.json();
+      S.events = Array.isArray(body?.events) ? body.events : [];
+      S.eventsError = false;
+    } catch {
+      S.eventsError = true;
+    }
+    eventsInflight = null;
+    if (el.sheet) drawRecent();
+  })();
+  return eventsInflight;
+}
+
+/** SHADOW (2026-11-15): how often Atlas's own checks agreed with Kuma, for
+    an admin. Read beside the roster; nothing waits on it. */
+let shadowInflight = null;
+function readShadow() {
+  if (!mayWrite()) { S.shadow = null; return null; }
+  if (shadowInflight) return shadowInflight;
+  shadowInflight = (async () => {
+    try {
+      const res = await fetch('api/v2/admin/shadow', { cache: 'no-store' });
+      if (!res.ok) throw new Error(String(res.status));
+      S.shadow = await res.json();
+    } catch {
+      S.shadow = { failed: true };
+    }
+    shadowInflight = null;
+    if (el.sheet) drawShadow();
+  })();
+  return shadowInflight;
+}
+
+function drawShadow() {
+  const sh = S.shadow;
+  if (!el.shadow) return;
+  if (!sh || (!sh.failed && !sh.on && !(sh.things || []).length)) { el.shadow.hidden = true; return; }
+  el.shadow.hidden = false;
+  if (sh.failed) { el.shadowList.innerHTML = `<div class="nv-quiet">${esc(t('nodes_shadow_failed'))}</div>`; return; }
+  const n = (sh.agree || 0) + (sh.differ || 0);
+  const lines = [];
+  if (sh.on && sh.asking === false) lines.push(`<div class="nv-quiet">${esc(t('nodes_shadow_idle'))}</div>`);
+  if (!n) lines.push(`<div class="nv-quiet">${esc(t('nodes_shadow_none'))}</div>`);
+  else {
+    const pct = Math.floor((1000 * (sh.agree || 0)) / n) / 10;
+    const day = new Date(Number(sh.since) * 1000);
+    const since = Number.isNaN(day.getTime()) ? '' : day.toISOString().slice(0, 10);
+    lines.push(`<div class="nv-quiet">${esc(t('nodes_shadow_line', { pct, n, since }))}</div>`);
+    if (!sh.differ) lines.push(`<div class="nv-quiet">${esc(t('nodes_shadow_same'))}</div>`);
+  }
+  const now = Date.now();
+  const word = (s) => t(`nodes_state_${DOT[s] ? s : 'unknown'}`).toLowerCase();
+  for (const th of (sh.things || []).filter((x) => x.differ > 0).slice(0, 8)) {
+    const last = (th.last || [])[0] || {};
+    const at = Number(last.at) * 1000;
+    const name = th.of ? `${th.name} · ${th.of}` : th.name;
+    lines.push(`<div class="nv-recent-row">` +
+      `<span class="nv-recent-when">${esc(Number.isFinite(at) ? ago(Math.max(0, now - at)) : '')}</span>` +
+      `<span class="svc-health ${DOT[last.atlas] || ''}" aria-hidden="true"></span>` +
+      `<button type="button" class="nv-recent-name" data-recentplace="${esc(th.place || '')}">${esc(name || th.key || '')}</button>` +
+      `<span class="nv-recent-said">${esc(t('nodes_shadow_row', { atlas: word(last.atlas), kuma: word(last.kuma),
+        differ: th.differ, total: th.agree + th.differ }))}</span></div>`);
+  }
+  el.shadowList.innerHTML = lines.join('');
 }
 
 /** The map's own refresh (atlas.js, after every Desk write) redraws this table
@@ -452,6 +589,7 @@ function build() {
         <span class="nv-count" aria-live="polite"></span>
         <button type="button" class="dsk-btn dsk-btn-sm nv-add-place" hidden>${esc(t('nodes_add_place'))}</button>
       </header>
+      <div class="nv-summary" role="group" aria-label="${esc(t('nodes_summary_label'))}" hidden></div>
       <div class="nv-body">
         <nav class="nv-rail" aria-label="${esc(t('nodes_rail_label'))}"></nav>
         <div class="nv-main">
@@ -473,7 +611,15 @@ function build() {
           <div class="nv-msg" aria-live="polite"></div>
           <div class="nv-results"></div>
         </div>
-      </div>`;
+      </div>
+      <section class="nv-recent" aria-label="${esc(t('nodes_recent_title'))}" hidden>
+        <h3 class="nv-recent-title">${esc(t('nodes_recent_title'))}</h3>
+        <div class="nv-recent-list"></div>
+      </section>
+      <section class="nv-recent nv-shadow" aria-label="${esc(t('nodes_shadow_title'))}" hidden>
+        <h3 class="nv-recent-title">${esc(t('nodes_shadow_title'))}</h3>
+        <div class="nv-recent-list nv-shadow-list"></div>
+      </section>`;
   el = {
     sheet: root,
     count: root.querySelector('.nv-count'),
@@ -491,6 +637,11 @@ function build() {
     results: root.querySelector('.nv-results'),
     menu: root.querySelector('.nv-menu'),
     addPlace: root.querySelector('.nv-add-place'),
+    summary: root.querySelector('.nv-summary'),
+    recent: root.querySelector('.nv-recent'),
+    recentList: root.querySelector('.nv-recent-list'),
+    shadow: root.querySelector('.nv-shadow'),
+    shadowList: root.querySelector('.nv-shadow-list'),
   };
   // the panel shuts itself (Close, Escape): the bells redraw and the keyboard
   // goes back to the bell that opened it
@@ -501,7 +652,15 @@ function build() {
 
   el.search.value = S.filter.text;
   el.search.addEventListener('input', () => setFilter({ text: el.search.value }));
-  for (const sel of el.picks) sel.addEventListener('change', () => setFilter({ [sel.dataset.f]: sel.value }));
+  for (const sel of el.picks) sel.addEventListener('change', () => {
+    // a phone's kind picker also offers Containers and Services (`thing:<kind>`)
+    if (sel.dataset.f === 'kind') {
+      const v = sel.value;
+      setFilter(v.startsWith('thing:') ? { kind: '', things: v.slice(6) } : { kind: v, things: '' });
+      return;
+    }
+    setFilter({ [sel.dataset.f]: sel.value });
+  });
   el.unchecked.addEventListener('change', () => setFilter({ unchecked: el.unchecked.checked }));
   el.stale.addEventListener('change', () => setFilter({ staleDays: el.stale.checked ? 90 : 0 }));
   el.clear.addEventListener('click', () => { applyFilter({ ...R.NO_FILTER }); el.search.focus(); });
@@ -513,6 +672,26 @@ function build() {
   el.menu.addEventListener('click', onMenuClick);
   el.menu.addEventListener('keydown', onMenuKey);
   el.addPlace.addEventListener('click', () => A.newPlace?.());
+  // a thing's place, in the list of containers or services, opens its card
+  el.results.addEventListener('click', (e) => {
+    const host = e.target.closest('[data-hostplace]');
+    if (host) { e.stopPropagation(); openCard(host.dataset.hostplace); }
+  }, true);
+  // a count on the line above is the state filter; pressed again, it lets go
+  el.summary.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-sumstate]');
+    if (!b) return;
+    const s = b.dataset.sumstate;
+    setFilter({ state: S.filter.state === s ? '' : s });
+    syncFilterBoxes();
+    el.summary.querySelector(`[data-sumstate="${CSS.escape(s)}"]`)?.focus();
+  });
+  for (const list of [el.recentList, el.shadowList]) {
+    list.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-recentplace]');
+      if (b) openCard(b.dataset.recentplace);
+    });
+  }
   // a press anywhere else, or the page scrolling, puts the menu away
   document.addEventListener('pointerdown', (e) => {
     if ((S.rowMenu || S.svcMenu) && !el.menu.contains(e.target)
@@ -549,7 +728,9 @@ function applyFilter(filter, sort) {
 function syncFilterBoxes() {
   if (!el.sheet) return;
   el.search.value = S.filter.text;
-  for (const sel of el.picks) sel.value = S.filter[sel.dataset.f] || '';
+  for (const sel of el.picks) {
+    sel.value = sel.dataset.f === 'kind' && S.filter.things ? `thing:${S.filter.things}` : (S.filter[sel.dataset.f] || '');
+  }
   el.unchecked.checked = S.filter.unchecked;
   el.stale.checked = Number(S.filter.staleDays) > 0;
 }
@@ -573,7 +754,8 @@ function drawPicks() {
   const options = {
     state: [STATES.map((s) => [s, t(`nodes_state_${s}`)]), 'nodes_any_state'],
     zone: [r.zones.map((z) => [z.id, z.name || z.id]), 'nodes_any_zone'],
-    kind: [kinds.map((k) => [k, k]), 'nodes_any_kind'],
+    kind: [[...kinds.map((k) => [k, k]),
+      ...R.thingGroups(thingList()).map((g) => [`thing:${g.id}`, t(`nodes_kind_${g.id}`)])], 'nodes_any_kind'],
     collection: [r.collections.map((s) => [s.id, s.name || s.id]), 'nodes_any_collection'],
   };
   for (const sel of el.picks) {
@@ -718,6 +900,22 @@ function collectionsCell(row) {
 }
 
 const text = (v) => (blank(v) ? dim : esc(v));
+
+/** Which source gave a place its state, in words; "nothing" for a place no
+    source has a word for (an unmanaged one is nobody's to watch: a dash). */
+function watchedCell(row) {
+  const by = row.confirmed_by;
+  if (blank(by)) return row.unmanaged ? dim : `<span class="nv-quiet">${esc(t('nodes_by_nothing'))}</span>`;
+  const key = `nodes_by_${by}`;
+  return esc(Object.prototype.hasOwnProperty.call(NODES_TEXT, key) ? t(key) : by);
+}
+
+/** Who watches one service: Kuma when it names a monitor, else Atlas when a
+    check has answered for it, else nothing. */
+function serviceWatcher(svc) {
+  if (linkOf(svc)?.kuma) return t('nodes_by_kuma');
+  return A.signalsFeed?.services?.[svc.id] ? t('nodes_by_checks') : t('nodes_by_nothing');
+}
 const kindCell = (row) => (blank(row.kind) && blank(row.role) ? dim
   : esc([row.kind, row.role].filter((v) => !blank(v)).join(' · ')));
 const addressCell = (row) => ((row.addresses || []).length
@@ -732,6 +930,84 @@ function drawCount(shown, total) {
       : t('nodes_count', { shown, total });
 }
 
+/** The line above the table: every place this viewer may see, by state, or
+    (while the list of containers or services is up) every one of those, so
+    a count and the filter it sets always agree. */
+function drawSummary() {
+  const counted = !S.roster ? [] : S.filter.things
+    ? thingList().filter((x) => x.kind === S.filter.things) : S.roster.rows;
+  const counts = R.stateCounts(counted);
+  el.summary.hidden = !counts.length;
+  el.summary.innerHTML = counts.map(([s, n]) => {
+    const on = S.filter.state === s;
+    return `<button type="button" class="nv-sum${on ? ' on' : ''}" data-sumstate="${esc(s)}" aria-pressed="${on}">` +
+      `<span class="svc-health ${DOT[s] || ''}" aria-hidden="true"></span>` +
+      `${esc(t('nodes_summary_item', { n, state: t(`nodes_state_${s}`) }))}</button>`;
+  }).join('');
+}
+
+/** Every service key on the map the viewer was given, and the place and
+    label it belongs to (the first link to name a key keeps it). Worked out
+    once per map: a keystroke redraws the changes, and a big map has many
+    links. */
+let svcIndex = { data: null, keys: new Map() };
+function serviceIndex() {
+  if (svcIndex.data === A.DATA) return svcIndex.keys;
+  const keys = new Map();
+  for (const node of A.DATA?.nodes || []) {
+    if (!node || typeof node.id !== 'string') continue;
+    for (const link of node.links || []) {
+      if (!link || typeof link !== 'object') continue;
+      const key = AM.serviceKey(node.id, link);
+      if (!keys.has(key)) keys.set(key, { place: node.id, label: typeof link.label === 'string' ? link.label : '' });
+    }
+  }
+  svcIndex = { data: A.DATA, keys };
+  return keys;
+}
+
+/** The changes below the table: the newest state changes of what is on screen. */
+function drawRecent() {
+  if (!el.sheet) return;
+  if (!S.roster || (S.events === null && !S.eventsError)) { el.recent.hidden = true; return; }
+  el.recent.hidden = false;
+  if (S.events === null) {
+    el.recentList.innerHTML = `<div class="nv-quiet">${esc(t('nodes_recent_failed'))}</div>`;
+    return;
+  }
+  const svcs = serviceIndex();
+  const keyPlace = new Map();
+  let places = S.shown;
+  let events = S.events;
+  if (S.filter.things) {
+    // only the things listed: their own changes, not their places'
+    for (const k of S.thingsShown) if (svcs.has(k)) keyPlace.set(k, svcs.get(k).place);
+    places = [...new Set(keyPlace.values())];
+    events = S.events.filter((e) => e?.kind === 'service');
+  } else {
+    for (const e of S.events) if (e?.kind === 'service' && svcs.has(e.target)) keyPlace.set(e.target, svcs.get(e.target).place);
+  }
+  const list = R.recentFor(events, places, keyPlace, 8);
+  const names = new Map(S.roster.rows.map((r) => [r.id, r.name || r.id]));
+  const now = Date.now();
+  const row = (e) => {
+    const at = Date.parse(e.at);
+    const when = Number.isNaN(at) ? '' : ago(Math.max(0, now - at));
+    const what = e.kind === 'service'
+      ? `${names.get(e.place) || e.place} · ${svcs.get(e.target)?.label || e.target}`
+      : (names.get(e.place) || e.name || e.place);
+    const known = Object.prototype.hasOwnProperty.call(NODES_TEXT, `nodes_recent_to_${e.to}`);
+    const said = known ? t(`nodes_recent_to_${e.to}`) : t('nodes_recent_to_other', { state: String(e.to || '') });
+    return `<div class="nv-recent-row">` +
+      `<span class="nv-recent-when"${e.at ? ` title="${esc(String(e.at))}"` : ''}>${esc(when)}</span>` +
+      `<span class="svc-health ${DOT[e.to] || ''}" aria-hidden="true"></span>` +
+      `<button type="button" class="nv-recent-name" data-recentplace="${esc(e.place)}">${esc(what)}</button>` +
+      `<span class="nv-recent-said">${esc(said)}</span></div>`;
+  };
+  el.recentList.innerHTML = (S.eventsError ? `<div class="nv-quiet">${esc(t('nodes_recent_failed'))}</div>` : '') +
+    (list.length ? list.map(row).join('') : `<div class="nv-quiet">${esc(t('nodes_recent_none'))}</div>`);
+}
+
 function drawResults() {
   if (!el.sheet) return;
   // the table on screen, read before anything here writes (stage 5: a read
@@ -740,6 +1016,8 @@ function drawResults() {
   // (only a windowed one: a short table has nothing to hold and needs no layout read)
   const pre = oldBody && S.win ? readDrawn(oldBody) : null;
   el.clear.hidden = R.isEmptyFilter(S.filter);
+  // the two checks about a place's review say nothing about a container
+  for (const box of [el.unchecked, el.stale]) { const l = box.closest('label'); if (l) l.hidden = Boolean(S.filter.things); }
   drawSaved();
   drawRail();
   drawMessage();
@@ -753,6 +1031,7 @@ function drawResults() {
     drawBulk();
     return;
   }
+  if (S.filter.things) { drawThings(); return; }
   const now = Date.now();
   const all = S.roster.rows;
   const rows = R.sortRows(R.filterRows(all, S.filter, now), S.sort.key, S.sort.dir, S.roster.collections);
@@ -778,6 +1057,8 @@ function drawResults() {
   if (warn && !windowed) el.results.insertAdjacentHTML('afterbegin', warn);
   syncSelectAll();
   drawBulk();
+  drawSummary();
+  drawRecent();
 }
 
 function tableHTML(rows, now) {
@@ -825,7 +1106,7 @@ function tableParts(now) {
       `<td>${kindCell(row)}</td>` +
       `<td>${addressCell(row)}</td>` +
       `<td class="nv-num">${servicesCell(row, admin)}</td>` +
-      `<td>${text(row.confirmed_by)}</td>` +
+      `<td>${watchedCell(row)}</td>` +
       `<td>${reviewedCell(row, now)}</td>` +
       `<td>${maintenanceCell(row)}</td>` +
       `<td>${certCell(row)}</td>` +
@@ -1056,7 +1337,7 @@ function onResultsClick(e) {
     const from = S.cards;
     S.cards += CARDS;
     drawResults();
-    el.results.querySelectorAll('.nv-card')[from]?.focus();
+    el.results.querySelectorAll(S.filter.things ? '.nv-things .nv-svc-host' : '.nv-card')[from]?.focus();
     return;
   }
   const expand = e.target.closest('[data-expand]');
@@ -1729,47 +2010,103 @@ function serviceState(svc, row) {
   return DOT[s] ? s : 'unknown';
 }
 
+/** One service's line: under its place's row, or in the list of every
+    container or service, where `flat` (its place and container) follows the
+    name (2026-11-15). `s` is the state it reads as; `menu` draws its ⋯ (an
+    admin's writes). */
+function serviceItem(svc, row, s, rules, flat = '', menu = true) {
+  const cols = holding(svc.id).map((c) => c.name || c.id);
+  let bell = '';
+  if (mayAlert() && rules) {
+    const on = panelOn('service', svc.id);
+    // as the server judges it: unmanaged, behind its own group, or on a
+    // place no rule sends for, it is held (stage 3b review)
+    const gated = Boolean(linkOf(svc)?.require_group);
+    const heldBy = s === 'unmanaged' ? 'nodes_bell_unmanaged'
+      : (gated || (AlertStore.ALERTS.body?.status?.held || []).includes(row.id)) ? 'nodes_bell_held' : '';
+    if (heldBy) {
+      const label = t(heldBy, { name: svc.label });
+      bell = `<button type="button" class="nv-bell nv-bell-held${on ? ' on' : ''}" data-alerts="service" ` +
+        `data-id="${esc(svc.id)}" aria-pressed="${on}" aria-label="${esc(label)}" title="${esc(label)}">${BELL}` +
+        '<span class="nv-bell-n">×</span></button>';
+    } else {
+      const reaching = AM.rulesReachingService(rules, svc.id, S.roster?.collections || []);
+      const n = reaching.length;
+      const lit = reaching.some(AM.ruleOn);
+      const label = n ? t('nodes_bell_watched', { name: svc.label, n }) : t('nodes_bell_group', { name: svc.label });
+      bell = `<button type="button" class="nv-bell${lit ? ' nv-bell-lit' : ''}${on ? ' on' : ''}" data-alerts="service" ` +
+        `data-id="${esc(svc.id)}" aria-pressed="${on}" aria-label="${esc(label)}" title="${esc(label)}">${BELL}` +
+        `<span class="nv-bell-n">${n || ''}</span></button>`;
+    }
+  }
+  return `<li class="nv-svc${flat ? ' nv-thing' : ''}${s === 'unmanaged' ? ' nv-unmanaged' : ''}">` +
+    `<span class="nv-state"><span class="svc-health ${DOT[s] || ''}" aria-hidden="true"></span>${esc(t(`nodes_state_${s}`))}</span>` +
+    `<span class="nv-svc-name" title="${esc(t('nodes_svc_key', { key: svc.id }))}">${esc(svc.label)}` +
+    `<span class="nv-svc-by"> · ${esc(serviceWatcher(svc))}</span></span>` +
+    flat +
+    `<span class="nv-dim nv-svc-cols">${cols.length ? esc(t('nodes_svc_in', { names: cols.join(', ') })) : ''}</span>` +
+    bell + (!menu ? '</li>' :
+    `<button type="button" class="nv-rail-more" data-svcmenu="${esc(svc.id)}" aria-haspopup="menu" ` +
+    `aria-expanded="${S.svcMenu === svc.id}" aria-label="${esc(t('nodes_menu', { name: svc.name }))}" ` +
+    `title="${esc(t('nodes_menu', { name: svc.name }))}">⋯</button></li>`);
+}
+
 function servicesRow(row, span, index = 0) {
   const list = AM.services({ nodes: [mapNode(row.id)].filter(Boolean) });
   const rules = alertRules();
-  const items = list.map((svc) => {
-    const s = serviceState(svc, row);
-    const cols = holding(svc.id).map((c) => c.name || c.id);
-    let bell = '';
-    if (mayAlert() && rules) {
-      const on = panelOn('service', svc.id);
-      // as the server judges it: unmanaged, behind its own group, or on a
-      // place no rule sends for, it is held (stage 3b review)
-      const gated = Boolean(linkOf(svc)?.require_group);
-      const heldBy = s === 'unmanaged' ? 'nodes_bell_unmanaged'
-        : (gated || (AlertStore.ALERTS.body?.status?.held || []).includes(row.id)) ? 'nodes_bell_held' : '';
-      if (heldBy) {
-        const label = t(heldBy, { name: svc.label });
-        bell = `<button type="button" class="nv-bell nv-bell-held${on ? ' on' : ''}" data-alerts="service" ` +
-          `data-id="${esc(svc.id)}" aria-pressed="${on}" aria-label="${esc(label)}" title="${esc(label)}">${BELL}` +
-          '<span class="nv-bell-n">×</span></button>';
-      } else {
-        const reaching = AM.rulesReachingService(rules, svc.id, S.roster?.collections || []);
-        const n = reaching.length;
-        const lit = reaching.some(AM.ruleOn);
-        const label = n ? t('nodes_bell_watched', { name: svc.label, n }) : t('nodes_bell_group', { name: svc.label });
-        bell = `<button type="button" class="nv-bell${lit ? ' nv-bell-lit' : ''}${on ? ' on' : ''}" data-alerts="service" ` +
-          `data-id="${esc(svc.id)}" aria-pressed="${on}" aria-label="${esc(label)}" title="${esc(label)}">${BELL}` +
-          `<span class="nv-bell-n">${n || ''}</span></button>`;
-      }
-    }
-    return `<li class="nv-svc${s === 'unmanaged' ? ' nv-unmanaged' : ''}">` +
-      `<span class="nv-state"><span class="svc-health ${DOT[s] || ''}" aria-hidden="true"></span>${esc(t(`nodes_state_${s}`))}</span>` +
-      `<span class="nv-svc-name" title="${esc(t('nodes_svc_key', { key: svc.id }))}">${esc(svc.label)}</span>` +
-      `<span class="nv-dim nv-svc-cols">${cols.length ? esc(t('nodes_svc_in', { names: cols.join(', ') })) : ''}</span>` +
-      bell +
-      `<button type="button" class="nv-rail-more" data-svcmenu="${esc(svc.id)}" aria-haspopup="menu" ` +
-      `aria-expanded="${S.svcMenu === svc.id}" aria-label="${esc(t('nodes_menu', { name: svc.name }))}" ` +
-      `title="${esc(t('nodes_menu', { name: svc.name }))}">⋯</button></li>`;
-  }).join('');
+  const items = list.map((svc) => serviceItem(svc, row, serviceState(svc, row), rules)).join('');
   return `<tr class="nv-svc-row" data-svc-of="${esc(row.id)}"${index ? ` aria-rowindex="${index}"` : ''}><td colspan="${span}">` +
     (items ? `<ul class="nv-svc-list">${items}</ul>` : `<p class="nv-rail-empty">${esc(t('nodes_svc_none'))}</p>`) +
     '</td></tr>';
+}
+
+/* ── every container, or every service, as a list (2026-11-15, C2) ── */
+
+/** The things on the map, worked out once per map, feed and roster. */
+let thingsCache = { data: null, feed: null, roster: null, list: [] };
+function thingList() {
+  const feed = A.signalsFeed || null;
+  if (thingsCache.data === A.DATA && thingsCache.feed === feed && thingsCache.roster === S.roster) return thingsCache.list;
+  const list = R.thingRows(A.DATA, S.roster, feed || {});
+  thingsCache = { data: A.DATA, feed, roster: S.roster, list };
+  return list;
+}
+
+function drawThings() {
+  const kind = S.filter.things;
+  const all = thingList().filter((x) => x.kind === kind);
+  const shown = R.sortThings(R.filterThings(all, S.filter));
+  // a selection is of places: none here, and nothing for the bulk bar to act on
+  S.win = null;
+  S.shown = [];
+  S.thingsShown = shown.map((x) => x.key);
+  if (S.selected.size) { S.selected.clear(); S.arm.disarm(); }
+  const what = (n) => t(n === 1 ? `nodes_things_${kind}_one` : `nodes_things_${kind}`);
+  el.count.textContent = shown.length === all.length
+    ? t('nodes_things_all', { total: all.length, what: what(all.length) })
+    : t('nodes_things_count', { shown: shown.length, total: all.length, what: what(all.length) });
+  const rows = new Map(S.roster.rows.map((r) => [r.id, r]));
+  const rules = alertRules();
+  const admin = mayWrite() && !phone();   // the ⋯ is an admin's, as under a place's row
+  const cut = shown.slice(0, S.cards);
+  const items = cut.map((x) => {
+    const svc = { id: x.key, name: `${x.label} on ${x.place_name}`, place: x.place, label: x.label };
+    const flat = `<button type="button" class="nv-svc-host" data-hostplace="${esc(x.place)}" ` +
+      `title="${esc(t('nodes_thing_host', { name: x.place_name }))}">${esc(x.place_name)}</button>` +
+      `<span class="nv-mono nv-dim nv-svc-ctr">${esc(x.container)}</span>`;
+    return serviceItem(svc, rows.get(x.place), R.rowState(x), rules, flat, admin);
+  }).join('');
+  el.results.innerHTML = !all.length ? `<div class="dsk-notice">${esc(t('nodes_things_empty'))}</div>`
+    : !shown.length ? `<div class="dsk-notice">${esc(t('nodes_things_none'))}</div>`
+      : `<ul class="nv-svc-list nv-things">${items}</ul>` + (shown.length > S.cards
+        ? `<button type="button" class="dsk-btn dsk-btn-sm nv-more-cards" data-morecards>${esc(t('nodes_more_cards', { n: Math.min(CARDS, shown.length - S.cards), left: shown.length - S.cards }))}</button>` : '');
+  if (S.error) el.results.insertAdjacentHTML('afterbegin', `<div class="dsk-notice dsk-notice-warn">${esc(t('nodes_failed', { why: S.error }))}</div>`);
+  placeRowMenu();
+  el.addPlace.hidden = !(mayWrite() && !phone() && typeof A.newPlace === 'function');
+  syncSelectAll();
+  drawBulk();
+  drawSummary();
+  drawRecent();
 }
 
 function toggleServices(id) {
@@ -2108,7 +2445,8 @@ function drawRail() {
     railSection('collections', t('nodes_rail_collections'),
       list('collections', groups.collections, S.roster ? t('nodes_rail_empty_collections') : '') + foot) +
     railSection('networks', t('nodes_rail_networks'), list('networks', groups.networks)) +
-    railSection('kinds', t('nodes_rail_kinds'), list('kinds', groups.kinds)) +
+    railSection('kinds', t('nodes_rail_kinds'), list('kinds', groups.kinds) +
+      list('things', S.roster ? R.thingGroups(thingList()).map((g) => ({ ...g, name: t(`nodes_kind_${g.id}`) })) : [])) +
     railSection('saved', t('nodes_rail_saved'), S.saved.length
       ? `<div class="nv-saved">${savedChips()}</div>`
       : `<p class="nv-rail-empty">${esc(t('nodes_rail_empty_saved'))}</p>`);
@@ -2163,7 +2501,11 @@ function onRailClick(e) {
   const row = e.target.closest('.nv-rail-row');
   if (row) {
     const patch = R.railPress(S.filter, row.dataset.sec, row.dataset.id);
+    // a place kind and a thing kind are one choice: picking one lets go of the other
+    if (patch.things) patch.kind = '';
+    if (patch.kind) patch.things = '';
     S.filter = { ...S.filter, ...patch };
+    S.cards = CARDS;
     syncFilterBoxes();
     S.msg = null;
     drawResults();
@@ -2366,6 +2708,7 @@ async function needs(ids, picks) {
 
 function draw() {
   if (!el.sheet) return;
+  drewWithoutMap = !A.DATA;
   if (S.roster) S.filter = R.dropUnknown(S.filter, R.filterGroups(S.roster));
   drawPicks();
   syncFilterBoxes();
@@ -2391,6 +2734,10 @@ AlertStore.listen((changed) => {
 });
 
 addEventListener('atlas:view', (e) => { if (e.detail?.view === 'nodes') show(); });
+// the containers and services come from the map: a NODES drawn before it
+// arrived (the roster answered first) draws again, once (review, 2026-11-15)
+let drewWithoutMap = false;
+addEventListener('atlas:data', () => { if (drewWithoutMap && A.VIEW === 'nodes' && el.sheet) draw(); });
 // atlas.js assigns A.refreshData once every module has run, which is before
 // the page's DOMContentLoaded: wrap it then, whichever view the page opened on
 addEventListener('DOMContentLoaded', hookRefresh, { once: true });

@@ -7,7 +7,8 @@ import { readFileSync } from 'node:fs';
 import {
   NO_FILTER, REVIEW_BATCH, SAVED_KEY, SEVERITY, SORT_KEY, armedLabel, batches, certTone, cleanFilter,
   daysSince, filterRows, inBatches, inMode, modeChange, modeVia, ipv4Number, isEmptyFilter, markedLine, mergeNeeds, readSaved,
-  RAIL_FIELDS, RAIL_KEY, dropUnknown, filterGroups, memberList, railGroups, railPress, readRail, writeRail,
+  RAIL_FIELDS, RAIL_KEY, SUMMARY_ORDER, dropUnknown, recentFor, stateCounts,
+  THING_KINDS, filterThings, sortThings, thingGroups, thingKind, thingRows, filterGroups, memberList, railGroups, railPress, readRail, writeRail,
   readSort, reviewOps, rowPress, rowStanding, rowState, rowWaiting, sentence, slugFor, sortRows, staleFor, standing,
   twoPress, waiting, withSaved, withoutSaved, writeSaved, writeSort,
 } from '../static/js/roster-model.js';
@@ -352,7 +353,7 @@ test('a rail row filters to itself, and a second press shows everything', () => 
   assert.deepEqual(railPress({}, 'networks', 'dmz'), { zone: 'dmz' });
   assert.deepEqual(railPress({ kind: 'vm' }, 'kinds', 'vm'), { kind: '' });
   assert.deepEqual(railPress({}, 'saved', 'x'), {});
-  assert.deepEqual(RAIL_FIELDS, { collections: 'collection', networks: 'zone', kinds: 'kind' });
+  assert.deepEqual(RAIL_FIELDS, { collections: 'collection', networks: 'zone', kinds: 'kind', things: 'things' });
 });
 
 test('a phone keeps a filter on an empty network; members read as one id or a list', () => {
@@ -449,6 +450,117 @@ test('maintenance mode on a service: its own window field, on and off (stage 3b)
   assert.deepEqual(modeChange(on, { services: ['core/SSH'] }, false, {}), []);
   const mixed = [{ id: 'm', open: true, nodes: ['a'], services: ['k'] }];
   assert.deepEqual(modeChange(mixed, { services: ['k'] }, false, {}), [{ id: 'm', open: true, nodes: ['a'] }]);
+});
+
+test('the summary line counts each state as the table reads it, worst first (2026-11-15)', () => {
+  const rows = [
+    { id: 'a', state: 'healthy' }, { id: 'b', state: 'down' }, { id: 'c', state: 'healthy' },
+    { id: 'd' }, { id: 'e', state: 'down', unmanaged: true }, { id: 'f', state: 'bogus' }, null,
+  ];
+  assert.deepEqual(stateCounts(rows), [['down', 1], ['healthy', 2], ['unknown', 2], ['unmanaged', 1]]);
+  assert.deepEqual(stateCounts([]), []);
+  assert.deepEqual(stateCounts(undefined), []);
+  // every count is a state the filter can take, so pressing one shows exactly those rows
+  for (const [s, n] of stateCounts(rows)) assert.equal(filterRows(rows.filter(Boolean), { state: s }).length, n);
+  assert.deepEqual([...SUMMARY_ORDER].sort(), [...SEVERITY, 'unknown', 'unmanaged'].sort());
+});
+
+test('recent changes: only the things on screen, newest first, capped (2026-11-15)', () => {
+  const ev = [
+    { id: 1, kind: 'node', target: 'a', to: 'down' },
+    { id: 4, kind: 'service', target: 'Web UI', to: 'healthy' },
+    { id: 3, kind: 'node', target: 'gone', to: 'down' },
+    { id: 2, kind: 'rite', target: 'backup', to: 'down' },
+    { id: 5, kind: 'service', target: 'b/SSH', to: 'down' },
+    { id: 6, kind: 'node', target: 'a', to: 'healthy' },
+    { kind: 'node' }, null, 'x',
+  ];
+  const keys = new Map([['Web UI', 'a'], ['b/SSH', 'b'], ['c/x', 'c']]);
+  ev.push({ id: 9, kind: 'service', target: 'c/x', to: 'down' });   // its place is not on screen
+  const got = recentFor(ev, ['a', 'b'], keys);
+  assert.deepEqual(got.map((e) => [e.id, e.place]), [[6, 'a'], [5, 'b'], [4, 'a'], [1, 'a']]);
+  assert.equal(recentFor(ev, ['a', 'b'], keys, 2).length, 2);
+  assert.deepEqual(recentFor(ev, [], new Map()), [], 'nothing on screen, nothing listed');
+  assert.deepEqual(recentFor(null, ['a'], null), []);
+  assert.ok(!('place' in ev[0]), 'the events read are left as they were');
+});
+
+test('a container is a link that says so, or names one; anything else is a service (C2)', () => {
+  assert.equal(thingKind({ container: 'scout' }), 'container');
+  assert.equal(thingKind({ container: '  ' }), 'service');
+  assert.equal(thingKind({ container: 'scout', kind: 'service' }), 'service', 'its own word wins');
+  assert.equal(thingKind({ kind: 'container' }), 'container');
+  assert.equal(thingKind({ kind: 'vm' }), 'service', 'an unknown word is not a kind');
+  assert.equal(thingKind(null), 'service');
+  assert.deepEqual(THING_KINDS, ['container', 'service']);
+});
+
+const THINGS_DATA = {
+  nodes: [
+    { id: 'host', name: 'HOST', links: [
+      { label: 'Scout', container: 'scout', kuma: 'Scout monitor' },
+      { label: 'SSH' },
+      { label: 'Dup', kuma: 'Scout monitor' },          // a second link naming one monitor: the first keeps it
+      { label: 'Quiet', container: 'q', unmanaged: true },
+      'junk',
+    ] },
+    { id: 'hidden', name: 'HIDDEN', links: [{ label: 'Secret', container: 'secret' }] },   // not in the roster
+    { id: 'off', name: 'OFF', links: [{ label: 'Web' }] },
+  ],
+};
+const THINGS_ROSTER = {
+  rows: [
+    { id: 'host', name: 'HOST', zone: 'core', collections: ['racks'] },
+    { id: 'off', name: 'OFF', zone: 'edge', unmanaged: true, collections: [] },
+  ],
+  collections: [{ id: 'racks', places: ['host'], services: [] }, { id: 'web', services: ['host/SSH'] }],
+};
+const THINGS_FEED = { services: { 'Scout monitor': { state: 'down' }, 'host/SSH': { state: 'healthy' } },
+               maintenance_services: ['host/SSH'] };
+
+test('thingRows: every service link of a place the viewer was given, with the card\'s state rule (C2)', () => {
+  const rows = thingRows(THINGS_DATA, THINGS_ROSTER, THINGS_FEED);
+  assert.deepEqual(rows.map((x) => [x.key, x.kind, x.place]),
+    [['Scout monitor', 'container', 'host'], ['host/SSH', 'service', 'host'], ['host/Quiet', 'container', 'host'], ['off/Web', 'service', 'off']]);
+  const by = Object.fromEntries(rows.map((x) => [x.key, x]));
+  assert.equal(by['Scout monitor'].state, 'down');
+  assert.equal(by['Scout monitor'].container, 'scout');
+  assert.equal(by['host/SSH'].state, 'maintenance', 'a window naming it outranks the feed');
+  assert.deepEqual(by['host/SSH'].collections, ['web']);
+  assert.deepEqual(by['host/SSH'].place_collections, ['racks']);
+  assert.equal(by['host/Quiet'].unmanaged, true);
+  assert.equal(by['off/Web'].unmanaged, true, 'an unmanaged place takes its services with it');
+  assert.ok(!rows.some((x) => x.place === 'hidden'), 'a place the roster does not list gives no row');
+  assert.deepEqual(thingRows(null, null, null), []);
+  assert.deepEqual(thingRows(THINGS_DATA, { rows: [] }, {}), []);
+});
+
+test('filterThings and sortThings: the table\'s filter, read for a thing; worst first (C2)', () => {
+  const rows = thingRows(THINGS_DATA, THINGS_ROSTER, THINGS_FEED);
+  const keys = (list) => list.map((x) => x.key);
+  assert.deepEqual(keys(filterThings(rows, { things: 'container' })), ['Scout monitor', 'host/Quiet']);
+  assert.deepEqual(keys(filterThings(rows, { things: 'service', text: 'host' })), ['host/SSH']);
+  assert.deepEqual(keys(filterThings(rows, { text: 'scout' })), ['Scout monitor'], 'the container name is found');
+  assert.deepEqual(keys(filterThings(rows, { state: 'unmanaged' })), ['host/Quiet', 'off/Web']);
+  assert.deepEqual(keys(filterThings(rows, { zone: 'edge' })), ['off/Web']);
+  assert.deepEqual(keys(filterThings(rows, { collection: 'web' })), ['host/SSH'], 'its own collection');
+  assert.deepEqual(keys(filterThings(rows, { collection: 'racks' })).length, 3, 'or its place\'s');
+  assert.deepEqual(keys(filterThings(rows, { unchecked: true, staleDays: 90 })).length, 4, 'a place\'s review is not a thing\'s');
+  assert.deepEqual(keys(sortThings(rows)), ['Scout monitor', 'host/SSH', 'host/Quiet', 'off/Web']);
+});
+
+test('thingGroups: the rail\'s Containers and Services, counted, with the worst trouble (C2)', () => {
+  const g = thingGroups(thingRows(THINGS_DATA, THINGS_ROSTER, THINGS_FEED));
+  assert.deepEqual(g.map((x) => [x.id, x.count, x.worst]), [['container', 2, 'down'], ['service', 2, '']]);
+  assert.deepEqual(thingGroups([]), [], 'a kind with none is not listed');
+});
+
+test('a thing filter is a filter: kept, cleaned, and never dropped as unknown (C2)', () => {
+  assert.equal(cleanFilter({ things: 'container' }).things, 'container');
+  assert.equal(cleanFilter({ things: 'vm' }).things, '');
+  assert.equal(isEmptyFilter({ things: 'service' }), false);
+  assert.equal(dropUnknown({ things: 'container' }, { collections: [], networks: [], kinds: [] }).things, 'container');
+  assert.equal(dropUnknown({ things: 'nope' }, {}).things, '');
 });
 
 await Promise.all(pending);

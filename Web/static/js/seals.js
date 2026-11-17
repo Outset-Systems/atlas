@@ -11,13 +11,18 @@
    Read from the dataset, not from the wire: the expiries were surveyed off the
    hosts when charted (openssl s_client / ssh-keygen -L). That makes this an
    inventory, and an inventory can go stale — so the head says how stale, rather
-   than implying it is live. (2026-08-04) */
+   than implying it is live. (2026-08-04)
+
+   SEEN (2026-11-15): a TLS seal a built-in https check has met says what the
+   wire presented beside what was charted, and when the two dates disagree
+   the chart is called out of date (watch-model `seenFor`). */
 
 import { A, $, esc } from './config.js';
 import { say } from './words.js';
 import { makeScene } from './scene.js';
 import { folds } from './fold.js';
 import { opensAtFirst, sealsByHand, sealsDue } from './fold-model.js';
+import { seenFor } from './watch-model.js';
 
 let listEl, headEl;
 const F = folds('seals');
@@ -46,6 +51,13 @@ function daysUntil(iso) {
   return Math.round((t - Date.now()) / DAY);
 }
 
+function seenHTML(c) {
+  const seen = seenFor(c, A.DATA, A.signalsFeed?.services);
+  if (!seen) return '';
+  const words = seen.differs ? `seen ${seen.expires} · the chart is out of date` : `seen ${seen.expires}`;
+  return `<span class="seal-seen${seen.differs ? ' seal-differs' : ''}" title="${esc(`${seen.issuer ? `${seen.issuer} · ` : ''}via ${seen.via}`)}">${esc(words)}</span>`;
+}
+
 function sealHTML(c) {
   const days = daysUntil(c.expires);
   const b = band(days);
@@ -63,6 +75,7 @@ function sealHTML(c) {
     <span class="seal-when">
       <span class="seal-days">${esc(b.word)}</span>
       <span class="seal-date">${esc(c.expires || '—')}</span>
+      ${seenHTML(c)}
     </span>
   </div>`;
 }

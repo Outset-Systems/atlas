@@ -52,6 +52,9 @@ async function loadData() {
   const data = await res.json();
   if (data.error) throw new Error(data.error);
   A.DATA = data;
+  // a view that drew before the map arrived draws again (NODES' containers
+  // and services are read from it, 2026-11-15)
+  dispatchEvent(new CustomEvent('atlas:data'));
   A.CHARTS = {};
   try {
     if (cat?.ok) for (const e of (await cat.json()).charts || []) if (e.available) A.CHARTS[e.key] = e;

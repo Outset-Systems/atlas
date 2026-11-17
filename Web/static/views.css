@@ -43,6 +43,49 @@
   color: var(--text-dim); font-variant-numeric: tabular-nums;
 }
 
+/* ── NODES on its own (2026-11-15): the line above the table, the changes
+   below it. The summary's counts are the saved filters' chips (one piece,
+   no ×) with the cards' status dots; the changes are THE ANNALS' rows cut
+   to four columns. No new colour, type or shape. ── */
+.nv-summary { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+.nv-sum {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 4px 12px; border-radius: 20px;
+  font-family: 'Alegreya Sans', sans-serif; font-size: 0.82rem; line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  background: rgba(var(--shade-rgb), calc(0.2 * var(--shade-k)));
+  color: var(--text); border: 1px solid var(--ink-line); cursor: pointer;
+  transition: border-color 150ms, color 150ms;
+}
+.nv-sum.on { border-color: var(--gilt); color: var(--gilt); }
+.nv-recent { margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--ink-line); }
+.nv-recent-title {
+  margin: 0 0 8px; font-family: 'Cinzel', serif; font-weight: 600; font-size: 0.72rem;
+  letter-spacing: 0.22em; text-transform: uppercase; color: var(--text-dim);
+}
+.nv-recent-list { display: flex; flex-direction: column; gap: 2px; font-size: 0.88rem; }
+.nv-recent-row {
+  display: grid; grid-template-columns: 5.5em 12px minmax(0, max-content) 1fr;
+  align-items: center; gap: 0 8px; padding: 3px 0;
+}
+.nv-recent-when {
+  font-family: 'JetBrains Mono', monospace; font-size: 0.74rem; color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.nv-recent-name {
+  padding: 0; border: 0; background: none; cursor: pointer; text-align: left;
+  font: inherit; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.nv-recent-said { color: var(--text-dim); }
+.nv-recent-list > .nv-quiet { padding: 3px 0; }
+/* who watches a service, after its name (2026-11-15): the quietest word on the line */
+.nv-svc-by { color: var(--text-dim); font-size: 0.8rem; }
+/* a phone: what happened goes under the name, and the name wraps */
+body.phone .nv-recent-row { grid-template-columns: 4.6em 12px minmax(0, 1fr); align-items: start; }
+body.phone .nv-recent-row > .svc-health { margin-top: 0.45em; }
+body.phone .nv-recent-name { white-space: normal; }
+body.phone .nv-recent-said { grid-column: 3; }
+
 /* ── the rail (2026-11-14): collections, networks, kinds and saved filters down
    the left of the table. Its rows are THE INDEX's (`.idx-item`), its heads
    THE INDEX's zone heads in Cinzel caps, its dots the cards' (`.svc-health`),
@@ -197,6 +240,20 @@ body.phone .nv-rail { display: none; }
 .nv-svc-name { font-family: 'Alegreya Sans', sans-serif; font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nv-svc-cols { font-size: 0.82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nv-svc.nv-unmanaged > :not(.nv-rail-more):not(.nv-bell) { opacity: 0.5; }
+/* every container, or every service, as one list (2026-11-15): the same
+   line, with its place and its container after the name */
+.nv-svc.nv-thing {
+  grid-template-columns: 9.5rem minmax(8rem, 16rem) minmax(6rem, 12rem) minmax(0, 11rem) minmax(0, 14rem) auto auto;
+}
+.nv-svc-host {
+  padding: 0; border: 0; background: none; cursor: pointer; text-align: left; font: inherit;
+  font-size: 0.86rem; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.nv-svc-host:is(:hover, :focus-visible) { color: var(--gilt); }
+.nv-svc-ctr { font-size: 0.74rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body.phone .nv-svc.nv-thing { grid-template-columns: 6.5rem minmax(0, 1fr) auto auto; }
+body.phone .nv-svc.nv-thing > :is(.nv-svc-ctr, .nv-svc-cols) { display: none; }
+body.phone .nv-svc.nv-thing > .nv-svc-host { grid-column: 2; grid-row: 2; }
 
 /* UNMANAGED (2026-11-14): the row stays, greyed; it is not ours to watch */
 .nv-row.nv-unmanaged > td:not(.dsk-td-pick):not(.nv-td-alerts) { opacity: 0.5; }
@@ -331,7 +388,7 @@ body.phone .nv-count { margin-left: 0; flex-basis: 100%; }
 
 /* THE HOVER GLOW (the design notes 2026-11-02), the same rule as atlas.css's list,
    for the controls this sheet adds */
-:is(.nv-sort, .nv-name, .nv-chip, .nv-chip-x, .nv-card):is(:hover, :focus-visible):not(:disabled) {
+:is(.nv-sort, .nv-name, .nv-chip, .nv-chip-x, .nv-card, .nv-sum, .nv-recent-name):is(:hover, :focus-visible):not(:disabled) {
   box-shadow: 0 0 14px rgba(var(--gilt-rgb), var(--hover-glow-a));
 }
 

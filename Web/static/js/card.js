@@ -17,6 +17,7 @@ import { A, CFG, $, esc, host, glassAttrs, svcKey, zoneById, nodeById, FALLBACK_
 import { say } from './words.js';
 import { calendarPointerHTML } from './calendar.js';
 import * as M from './card-model.js';
+import { checkWhere } from './watch-model.js';
 
 const card = $('card');
 
@@ -369,6 +370,8 @@ function fillServices(n, entries) {
   /* the row's quiet second word: just the port when the service answers on this
      place itself (by its address or its own name), else the host it answers at */
   const metaFor = (url) => esc(M.serviceMeta(host(url), n));
+  // a service with nothing to open (2026-11-15) says where its check asks
+  const metaOf = (l) => (l.url ? metaFor(l.url) : esc(checkWhere(l, n)));
   let svcHTML = '';
   if (vassals.length) {
     svcHTML += `<p class="cd-sub">${say('its vassals')}</p><ul class="cd-rows">` +
@@ -379,7 +382,7 @@ function fillServices(n, entries) {
     svcHTML += `<p class="cp-head">Services<span class="n">${links.length}</span></p><ul class="cd-rows">` +
       links.map((l, i) => row(`data-svc="${i}"`,
         `<span class="svc-health" data-kuma="${esc(svcKey(l, n.id))}"></span>`,
-        esc(l.label), metaFor(l.url))).join('') + '</ul>';
+        esc(l.label), metaOf(l))).join('') + '</ul>';
   }
   if (crossing.length) {
     svcHTML += `<p class="cd-sub">what crosses here</p><ul class="cd-rows">` +
@@ -548,7 +551,7 @@ function showServiceDetail(node, link) {
   const desc = (link.desc || '').trim();
   // the road out, as stops — the same precedence highlightService uses
   const stops = (link.path || []).map((id) => nodeById(id)?.name || id);
-  const facts = [`<dt>Address</dt><dd>${esc(host(link.url))}</dd>`];
+  const facts = [`<dt>Address</dt><dd>${esc(link.url ? host(link.url) : checkWhere(link, node))}</dd>`];
   if (link.container) facts.push(`<dt>Container</dt><dd>${esc(link.container)}</dd>`);
   svc.innerHTML =
     `<button class="csv-back" id="csv-back" title="Back to ${esc(node.name)}">${ICON.back}Back to <b>${esc(node.name)}</b></button>` +
@@ -565,8 +568,10 @@ function showServiceDetail(node, link) {
       : '') +
     `<dl class="csv-facts">${facts.join('')}</dl>` +
     `<div class="csv-actions">` +
-      `<a class="csv-open" href="${esc(link.url)}" target="_blank" rel="noopener"` +
-        `${glassAttrs(link.label, `a service of ${node.name}`, link.open_in)}>Open ${esc(link.label)}${ICON.out}</a>` +
+      (link.url
+        ? `<a class="csv-open" href="${esc(link.url)}" target="_blank" rel="noopener"` +
+          `${glassAttrs(link.label, `a service of ${node.name}`, link.open_in)}>Open ${esc(link.label)}${ICON.out}</a>`
+        : '') +
       `<div class="csv-twin">` +
       `<button class="csv-metrics" id="csv-path" title="Show it in TOPOLOGY — the tier diagram">${ICON.topo}Topology</button>` +
       // the map-side twin of TOPOLOGY: the same road, drawn where you already

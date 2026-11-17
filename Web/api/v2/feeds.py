@@ -18,6 +18,7 @@ import dependencies
 import events
 import heartbeats
 import maintenance
+import shadow
 import signals
 import tripwires
 from context import atlas
@@ -152,6 +153,13 @@ def _redact_feed(ctx, feed, groups, data=None):
 
     out["services"] = {name: info for name, info in (feed.get("services") or {}).items()
                        if name in monitors}
+    # THE WATCH (2026-11-15): a certificate a check read lists the names it
+    # covers, and a shared one can name a place this viewer may not see, so
+    # those names are for a viewer who sees everything; its date stays
+    if not sees_everything(groups):
+        out["services"] = {name: ({**info, "tls": {k: v for k, v in info["tls"].items() if k != "names"}}
+                                  if isinstance(info, dict) and isinstance(info.get("tls"), dict) else info)
+                           for name, info in out["services"].items()}
     # a collection's members reach these lists as written ("VAULT-01" for a
     # hidden vault-01), so while anything is hidden they keep only the ids of
     # places this viewer sees: an allowlist, not a blocklist (stage 3 review)
@@ -274,6 +282,10 @@ def build_feed(ctx):
             events.record(feed, _label_for(ctx))
         except Exception as e:      # noqa: BLE001 — history must never break the map
             log.warning("could not record events: %s", e)
+    # SHADOW (2026-11-15): Atlas's own answers for what Kuma watches, set
+    # beside Kuma's, counted once per answer (shadow.py; never raises)
+    if not feed.get("cached") and map_now is not None:
+        shadow.observe(feed, map_now)
     # the unmanaged services' keys were for the annals alone: no reader gets them
     feed.pop("unmanaged_services", None)
 

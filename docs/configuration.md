@@ -169,11 +169,18 @@ controller itself shows as offline is marked down. It uses the UniFi
 connection's saved address and credential (`ATLAS_UNIFI_URL` and its API key
 or local user, under Connections).
 
-The `checks` source is for a map with no monitoring: about once a minute it
-asks each service URL charted on the map (only those, and not a link that names
-a Kuma monitor) and reports whether it answered; it needs no URL or key of its
-own. It verifies no certificates and follows no redirects, so a self-signed
-service or a sign-in page counts as up, and it sends no credentials.
+The `checks` source is Atlas's own monitoring, for whatever nothing else
+watches. It asks only what the map charts: each service URL (not a link that
+names a Kuma monitor), and any check set on a service or a place in the map
+editor: `http` (judged by its status), `tcp` (a port answers), `dns` (a name
+resolves), `keyword` (the page holds some text) or `json` (a JSON answer holds
+a value). Each check has its own interval, retries and timeout (60 s, 1 and
+3 s unless set), and a failing answer changes the state only after its
+retries. It needs no URL or key of its own. It verifies no certificates and
+follows no redirects, so a self-signed service or a sign-in page counts as up,
+and it sends no credentials; an https check keeps the certificate's end date
+so SEALS can show it beside the charted one. A link-local or cloud metadata
+address is never asked.
 
 | Variable | Default | What it does | Secret | Settings screen |
 |---|---|---|---|---|
@@ -189,6 +196,8 @@ service or a sign-in page counts as up, and it sends no credentials.
 | `ATLAS_DECOYS_KEY_HEADER` | `X-Api-Key` | The header the decoy read key is sent in. | no | no |
 | `ATLAS_LLM_CONTAINERS` | `.+` | A Loki regex over container names, for the charts that count language-model calls in your logs. The default matches every container. | no | no |
 | `ATLAS_LLM_LOG_TAG` | `llm` | The prefix of the `<tag> ok` / `<tag> FALLBACK` log lines those charts count. | no | no |
+| `ATLAS_CHECKS_POLL` | `5` | Seconds between the background rounds of the `checks` source, which ask only the checks that are due. `0` turns the background rounds off; reading the live feed then asks a round when none has run for 30 seconds. Values under 2 fall back to 5. | no | no |
+| `ATLAS_CHECKS_PER_MINUTE` | `600` | The most checks the `checks` source asks in a minute across the whole map. Past it, every check's interval is stretched evenly and the log says so. Values under 10 fall back to 600. | no | no |
 | `ATLAS_ANNALS_POLL` | `60` | Seconds between background polls that keep the event history and the scheduled-job checks current while nobody has the map open. `0` disables; values under 15 fall back to 60. | no | no |
 | `NETBOX_TOKEN` | (unset) | NetBox API token, for `python cli.py import-netbox` only. The web app never reads it. | yes, `NETBOX_TOKEN_FILE` | no |
 | `ATLAS_PROXMOX_URL` | (unset) | Proxmox VE base URL, for Settings → Connections. Can also be saved there. | no | yes (Connections) |

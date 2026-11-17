@@ -92,6 +92,7 @@ function allServices() {
     if (!n.links?.length) continue;
     const zone = zoneById(n.zone);
     for (const l of n.links) {
+      if (!l?.url) continue;   // nothing to open (2026-11-15): NODES lists it
       out.push({ ghue: zone ? zone.hue : FALLBACK_HUE, group: n.name,
         gsub: n.ip !== '—' ? n.ip : '', name: l.label, url: l.url, kuma: svcKey(l, n.id),
         open_in: l.open_in });
@@ -285,7 +286,7 @@ const setDegoogOn = (on) => { try { localStorage.setItem(DEGOOG_KEY, on ? '1' : 
 function degoogService() {
   for (const n of A.DATA?.nodes || []) {
     for (const l of n.links || []) {
-      if (l.container === 'degoog' || /degoog/i.test(l.label || '')) return l;
+      if (l.url && (l.container === 'degoog' || /degoog/i.test(l.label || ''))) return l;
     }
   }
   return null;

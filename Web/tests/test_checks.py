@@ -8,7 +8,10 @@ What is held here:
   or no answer in time is down, and no answer inside the budget is unknown.
 * KUMA STANDS: a link that names a monitor is not asked, and a place a monitor
   is mapped to gets no marker state from here.
-* ASKED ONCE: two workers share one stored round and one lock.
+* ASKED ONCE: two workers share one store and one lock (THE WATCH,
+  watch.py, since 2026-11-15: each check on its own schedule; its own tests
+  are tests/test_watch.py). A failing answer is believed after its retries,
+  so the tests that judge a failure on the first round set `check_retries: 0`.
 * SEEN RIGHT: a viewer gets the results for the places they may see and none
   for a hidden one.
 
@@ -95,14 +98,16 @@ def _adapter(tmp_path, data=DATA, **kw):
 
 
 def _one_place_each(urls):
-    return {"nodes": [{"id": f"box-{i}", "links": [{"label": "Page", "url": url}]}
+    return {"nodes": [{"id": f"box-{i}", "links": [{"label": "Page", "url": url, "check_retries": 0}]}
                       for i, url in enumerate(urls)]}
 
 
-def _store(tmp_path, age, services=None, nodes=None):
-    body = {"at": time.time() - age,
-            "services": services if services is not None else {"app-box/Wiki": {"state": "down", "ms": 5}},
-            "nodes": nodes if nodes is not None else {"app-box": {"state": "down"}}}
+def _store(tmp_path, age, services=None):
+    """A store last written `age` seconds ago, each service asked then."""
+    at = time.time() - age
+    services = services if services is not None else {"app-box/Wiki": {"state": "down", "ms": 5}}
+    body = {"v": 2, "at": at,
+            "checks": {f"s:{k}": {**v, "asked": at, "heard": at, "fails": 0} for k, v in services.items()}}
     (tmp_path / "checks.json").write_text(json.dumps(body), encoding="utf-8")
     return body
 
@@ -138,7 +143,7 @@ def test_a_place_takes_the_worst_of_its_links_but_is_down_only_when_all_are(web,
     web.answers.update({bad: 503, gone: requests.ConnectionError("refused")})
 
     def place(node_id, *urls):
-        return {"id": node_id, "links": [{"label": f"s{i}", "url": url + f"p{i}"}
+        return {"id": node_id, "links": [{"label": f"s{i}", "url": url + f"p{i}", "check_retries": 0}
                                          for i, url in enumerate(urls)]}
 
     for url in (bad, gone):
@@ -217,26 +222,6 @@ def test_a_place_kuma_is_mapped_to_gets_no_marker_state(web, tmp_path):
     assert set(feed["services"]) == {"app-box/Wiki", "file-box/Files", "mail-box/Mail"}
 
 
-def test_at_most_200_addresses_are_asked_and_the_log_says_so_once(web, tmp_path):
-    data = _one_place_each([f"http://10.20.{i // 250}.{i % 250 + 1}/" for i in range(205)])
-    seen = []
-    handler = logging.Handler(level=logging.WARNING)
-    handler.emit = seen.append
-    S.log.addHandler(handler)
-    try:
-        adapter = _adapter(tmp_path, data, fresh=0)      # every fetch is a new round
-        feed = adapter.fetch()
-        adapter.fetch()
-    finally:
-        S.log.removeHandler(handler)
-    first = {f"box-{i}/Page" for i in range(200)}
-    assert set(feed["services"]) == first
-    assert len(web.calls) == 400 and len(set(web.urls())) == 200
-    capped = [r for r in seen if "asking the first 200" in r.getMessage()]
-    assert len(capped) == 1 and "205" in capped[0].getMessage()
-    assert capped[0].name == "atlas.live.signals"
-
-
 def test_a_target_that_does_not_answer_inside_the_budget_has_no_state(web, tmp_path):
     gate = threading.Event()
     slow = "http://192.0.2.50/"
@@ -285,9 +270,10 @@ def test_a_round_is_stored_and_a_second_fetch_inside_a_minute_asks_nothing(web, 
     first = _adapter(tmp_path).fetch()
     assert len(web.calls) == 2
     stored = json.loads((tmp_path / "checks.json").read_text(encoding="utf-8"))
-    assert set(stored) == {"at", "services", "nodes"}
+    assert set(stored) == {"v", "at", "checks"} and stored["v"] == 2
     assert abs(stored["at"] - time.time()) < 30
-    assert stored["services"] == first["services"] and stored["nodes"] == first["nodes"]
+    assert {k: v["state"] for k, v in stored["checks"].items()} == {
+        f"s:{k}": v["state"] for k, v in first["services"].items()}
     assert not list(tmp_path.glob("checks.json.bak*")), "a round keeps no backup"
 
     # another worker: its own adapter, the same file
@@ -300,16 +286,18 @@ def test_a_round_older_than_a_minute_is_asked_again(web, tmp_path):
     feed = _adapter(tmp_path).fetch()
     assert len(web.calls) == 2
     assert feed["services"]["app-box/Wiki"]["state"] == "healthy"
-    assert json.loads((tmp_path / "checks.json").read_text(encoding="utf-8"))["nodes"] == feed["nodes"]
+    stored = json.loads((tmp_path / "checks.json").read_text(encoding="utf-8"))
+    assert stored["checks"]["s:app-box/Wiki"]["state"] == "healthy"
 
 
 def test_a_worker_that_cannot_take_the_lock_serves_the_stored_round(web, tmp_path):
     import filelock
-    stored = _store(tmp_path, age=120)
+    _store(tmp_path, age=120)
     with filelock.exclusive(filelock.lock_for(str(tmp_path / "checks.json"))):
         feed = _adapter(tmp_path).fetch()
     assert web.calls == []
-    assert feed == {"services": stored["services"], "nodes": stored["nodes"]}
+    assert feed == {"services": {"app-box/Wiki": {"state": "down", "ms": 5}},
+                    "nodes": {"app-box": {"state": "down"}}}
 
 
 def test_a_round_older_than_five_minutes_is_not_served_at_all(web, tmp_path):
@@ -328,9 +316,7 @@ def test_a_round_older_than_five_minutes_is_not_served_at_all(web, tmp_path):
 def test_a_stored_round_is_cut_to_what_the_map_charts_now(web, tmp_path):
     _store(tmp_path, age=5,
            services={"app-box/Wiki": {"state": "healthy", "ms": 3},
-                     "old-box/Gone": {"state": "down", "ms": 9}},
-           nodes={"app-box": {"state": "healthy"}, "old-box": {"state": "down"},
-                  "file-box": {"state": "down"}})
+                     "old-box/Gone": {"state": "down", "ms": 9}})
     data = {"nodes": [{"id": "app-box", "links": [{"label": "Wiki", "url": WIKI}]},
                       {"id": "file-box", "monitors": ["File box"],
                        "links": [{"label": "Files", "url": FILES}]}]}
@@ -424,7 +410,7 @@ LAB = {"meta": {"title": "Test map"}, "zones": [], "routes": [],
                              "require_group": "ops-team"}]},
                  {"id": "closed-box", "name": "Closed", "kind": "physical", "x": 20, "y": 20,
                   "require_group": "ops-team",
-                  "links": [{"label": "Ledger", "url": "https://192.0.2.20/"}]}]}
+                  "links": [{"label": "Ledger", "url": "https://192.0.2.20/", "check_retries": 0}]}]}
 EVERY_KEY = {"open-box/Wiki", "open-box/Back office", "closed-box/Ledger"}
 
 
@@ -519,33 +505,15 @@ def test_a_charted_query_string_is_not_sent():
     assert signals._check_url("http://10.0.0.5/status?key=abc") == "http://10.0.0.5/status"
 
 
-def test_the_round_starts_somewhere_else_each_minute(monkeypatch):
-    """With a fixed order, slow addresses at the head of the list would spend the
-    budget every round and the rest would never be asked."""
-    import signals
-    targets = [(f"p/{i}", "p", f"http://10.0.0.{i}/") for i in range(1, 6)]
-    asked = []
-    monkeypatch.setattr(signals, "_check_one", lambda url: asked.append(url) or ("healthy", 1))
-    monkeypatch.setattr(signals, "CHECKS_WORKERS", 1)
-    adapter = signals.ChecksAdapter(path="unused")
-    firsts = set()
-    for minute in range(5):
-        asked.clear()
-        monkeypatch.setattr(signals.time, "time", lambda m=minute: 1_000_000_020 + 60 * m)
-        adapter._probe(list(targets), set())
-        assert sorted(asked) == sorted(url for _, _, url in targets)
-        firsts.add(asked[0])
-    assert len(firsts) == 5
-
-
 def test_a_data_directory_that_cannot_be_written_still_gets_checks(tmp_path, monkeypatch):
     import filelock
     import signals
+    import watch
 
     def refuse(*a, **k):
         raise OSError("read-only file system")
     monkeypatch.setattr(filelock, "exclusive", refuse)
-    monkeypatch.setattr(signals, "_check_one", lambda url: ("healthy", 1))
+    monkeypatch.setattr(watch, "probe", lambda t: ("healthy", 1, {}))
     adapter = signals.ChecksAdapter(path=str(tmp_path / "checks.json"))
     adapter.use_map({"nodes": [{"id": "alpha", "links": [{"label": "Wiki", "url": "http://10.0.0.5/"}]}]})
     assert adapter.fetch()["services"] == {"alpha/Wiki": {"state": "healthy", "ms": 1}}

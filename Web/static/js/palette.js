@@ -26,6 +26,7 @@ function buildIndex() {
       run: () => { close(); A.focusNode(n.id); },
     });
     for (const l of n.links || []) {
+      if (!l?.url) continue;   // nothing to open (2026-11-15): NODES lists it
       items.push({
         kind: 'service',
         label: l.label,

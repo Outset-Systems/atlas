@@ -12,6 +12,8 @@
    The server writes the stamp (provenance.py) and is the only one who may.
    This file only reads it back. */
 
+import { serviceKey } from './alerts-model.js';
+
 /* ── what a place's stamp says (moved from editor/standing.js) ───────────── */
 
 /** 'checked' | 'changed' | 'unchecked' | 'unknown' (charted before the map kept the record).
@@ -271,6 +273,7 @@ export function staleFor(row, days, now = Date.now()) {
 /** The empty filter: everything shows. */
 export const NO_FILTER = Object.freeze({
   text: '', state: '', zone: '', kind: '', collection: '', unchecked: false, staleDays: 0,
+  things: '',   // '' (places), or a THING_KINDS value: the list of every container or service (2026-11-15)
 });
 
 /** `rows` that pass every criterion given. `state: 'unknown'` matches a row
@@ -303,7 +306,7 @@ export function filterRows(rows, filter = {}, now = Date.now()) {
 export const isEmptyFilter = (filter) => {
   const f = { ...NO_FILTER, ...(filter || {}) };
   return !String(f.text).trim() && !f.state && !f.zone && !f.kind && !f.collection
-    && !f.unchecked && !Number(f.staleDays);
+    && !f.unchecked && !Number(f.staleDays) && !f.things;
 };
 
 /** A filter cut down to the keys it may hold, of the types they take. */
@@ -315,6 +318,7 @@ export function cleanFilter(raw) {
     collection: str(f.collection) || str(f.set),   // `set`: a filter kept before 2026-11-14
     unchecked: f.unchecked === true,
     staleDays: Number.isFinite(Number(f.staleDays)) && Number(f.staleDays) > 0 ? Math.floor(Number(f.staleDays)) : 0,
+    things: THING_KINDS.includes(f.things) ? f.things : '',
   };
 }
 
@@ -375,8 +379,9 @@ export function filterGroups(roster) {
 export const memberList = (places) => (Array.isArray(places) ? places
   : (typeof places === 'string' && places ? [places] : []));
 
-/** Which filter field each rail section sets. */
-export const RAIL_FIELDS = Object.freeze({ collections: 'collection', networks: 'zone', kinds: 'kind' });
+/** Which filter field each rail section sets. `things` are the Containers
+    and Services rows under KINDS (2026-11-15). */
+export const RAIL_FIELDS = Object.freeze({ collections: 'collection', networks: 'zone', kinds: 'kind', things: 'things' });
 
 /** A rail row pressed: its value, or nothing when it was already the filter
     (a second press shows everything again). Returns the filter patch. */
@@ -392,6 +397,8 @@ export function railPress(filter, section, id) {
 export function dropUnknown(filter, groups) {
   const f = { ...(filter || {}) };
   for (const [section, field] of Object.entries(RAIL_FIELDS)) {
+    // a containers or services list is always there to show, even empty
+    if (section === 'things') { if (f.things && !THING_KINDS.includes(f.things)) f.things = ''; continue; }
     if (f[field] && !((groups || {})[section] || []).some((g) => g.id === f[field])) f[field] = '';
   }
   return f;
@@ -569,4 +576,151 @@ export function modeChange(windows, targets, on, { now, reason = 'Maintenance mo
     out.push(next);
   }
   return changed ? out : null;
+}
+
+/* ── NODES on its own (2026-11-15): the line above the table, the changes
+   below it ─────────────────────────────────────────────────────────────── */
+
+/** The order of the summary line: what needs a look first, then what rests,
+    then what nobody is told about. */
+export const SUMMARY_ORDER = Object.freeze(['down', 'degraded', 'maintenance', 'slumbering', 'healthy', 'unknown', 'unmanaged']);
+
+/** [[state, how many]] for the summary line, in SUMMARY_ORDER, leaving out a
+    state no row reads as. A row reads as `rowState` says, so the counts and
+    the state filter agree. */
+export function stateCounts(rows) {
+  const n = new Map();
+  for (const row of rows || []) {
+    if (!row) continue;
+    const s = rowState(row);
+    n.set(s, (n.get(s) || 0) + 1);
+  }
+  return SUMMARY_ORDER.filter((s) => n.get(s)).map((s) => [s, n.get(s)]);
+}
+
+/** The newest changes to the things on screen, newest first, at most `max`.
+    `places` is the place ids on screen; `services` maps a service key to the
+    place it belongs to (any place: the ones off screen are left out here). A place event counts when
+    its place is on screen, a service event when its key belongs to a place
+    on screen; anything else (a rite, a tripwire, a place filtered away) is
+    left out.
+    Each event comes back with `place`, the place it is about. */
+export function recentFor(events, places, services, max = 8) {
+  const on = new Set(places || []);
+  const keys = services instanceof Map ? services : new Map();
+  const out = [];
+  for (const e of Array.isArray(events) ? events : []) {
+    if (!e || typeof e !== 'object' || typeof e.target !== 'string') continue;
+    let place = null;
+    if (e.kind === 'node' && on.has(e.target)) place = e.target;
+    else if (e.kind === 'service' && on.has(keys.get(e.target))) place = keys.get(e.target);
+    if (place) out.push({ ...e, place });
+  }
+  const seq = (e) => (Number.isFinite(Number(e.id)) ? Number(e.id) : -1);
+  out.sort((a, b) => seq(b) - seq(a) || String(b.at || '').localeCompare(String(a.at || '')));
+  return out.slice(0, Math.max(0, max));
+}
+
+/* ── containers and services as kinds (2026-11-15) ─────────
+   A container and a service are things a place runs, not places: rows in
+   NODES, never markers on the map. Each is a service link on a place, known
+   by its key (alerts-model `serviceKey`). Built from the map the viewer was
+   given and the roster's rows, so a hidden place, and a link behind an access
+   group the viewer is not in, give no row (the server cut both). */
+
+/** The two kinds of thing, in the rail's order. */
+export const THING_KINDS = Object.freeze(['container', 'service']);
+
+/** What a service link is: what its `kind` says, else a container when it
+    names a Docker container, else a service. */
+export function thingKind(link) {
+  if (link && (link.kind === 'container' || link.kind === 'service')) return link.kind;
+  return typeof link?.container === 'string' && link.container.trim() ? 'container' : 'service';
+}
+
+/** Every service link as a row of its own:
+    {key, place, place_name, label, kind, container, zone, state, unmanaged,
+     collections (its own), place_collections}. Its state is the card's rule:
+    unmanaged (itself, a collection holding it, or its place), else in
+    maintenance (a window naming it), else the feed's, else none. Two links
+    naming one key: the first keeps it, as on the card. */
+export function thingRows(data, roster, feed) {
+  const rows = new Map();
+  for (const r of roster?.rows || []) if (r && typeof r.id === 'string') rows.set(r.id, r);
+  const holding = new Map();
+  for (const c of roster?.collections || []) {
+    if (!c || typeof c.id !== 'string') continue;
+    for (const k of Array.isArray(c.services) ? c.services : []) {
+      if (!holding.has(k)) holding.set(k, []);
+      holding.get(k).push(c);
+    }
+  }
+  const maint = new Set(Array.isArray(feed?.maintenance_services) ? feed.maintenance_services : []);
+  const live = feed?.services && typeof feed.services === 'object' ? feed.services : {};
+  const out = [];
+  const seen = new Set();
+  for (const node of Array.isArray(data?.nodes) ? data.nodes : []) {
+    if (!node || typeof node.id !== 'string') continue;
+    const row = rows.get(node.id);
+    if (!row) continue;                       // not a place this viewer was given
+    for (const link of Array.isArray(node.links) ? node.links : []) {
+      if (!link || typeof link !== 'object') continue;
+      const key = serviceKey(node.id, link);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const cols = holding.get(key) || [];
+      const unmanaged = row.unmanaged === true || link.unmanaged === true || cols.some((c) => c.unmanaged === true);
+      const said = live[key]?.state;
+      out.push({
+        key, place: node.id, place_name: row.name || node.id,
+        label: typeof link.label === 'string' && link.label ? link.label : key,
+        kind: thingKind(link),
+        container: typeof link.container === 'string' ? link.container.trim() : '',
+        zone: row.zone ?? null,
+        state: maint.has(key) ? 'maintenance' : (SEVERITY.includes(said) ? said : null),
+        unmanaged,
+        collections: cols.map((c) => c.id),
+        place_collections: Array.isArray(row.collections) ? row.collections : [],
+      });
+    }
+  }
+  return out;
+}
+
+/** The things a filter shows: of its `things` kind, matching its words (the
+    name, the place, the container, the key), its state, its network (the
+    place's) and its collection (its own, or its place's). The two checks
+    about a place's review do not apply to a thing. */
+export function filterThings(things, filter = {}) {
+  const f = { ...NO_FILTER, ...(filter || {}) };
+  const words = String(f.text || '').trim().toLowerCase().split(/\s+/).filter(Boolean);
+  return (things || []).filter((x) => {
+    if (!x) return false;
+    if (f.things && x.kind !== f.things) return false;
+    if (words.length) {
+      const hay = [x.label, x.place_name, x.place, x.container, x.key].filter((v) => !blank(v)).join(' ').toLowerCase();
+      if (!words.every((w) => hay.includes(w))) return false;
+    }
+    if (f.state && rowState(x) !== f.state) return false;
+    if (f.zone && x.zone !== f.zone) return false;
+    if (f.collection && !(x.collections || []).includes(f.collection)
+        && !(x.place_collections || []).includes(f.collection)) return false;
+    return true;
+  });
+}
+
+const THING_ORDER = [...SEVERITY, 'unknown', 'unmanaged'];
+/** Worst first, then by place, then by name: the list reads like the table. */
+export function sortThings(things) {
+  const rank = (x) => THING_ORDER.indexOf(rowState(x));
+  return [...(things || [])].sort((a, b) => rank(a) - rank(b)
+    || String(a.place_name).localeCompare(String(b.place_name))
+    || String(a.label).localeCompare(String(b.label)));
+}
+
+/** The rail's Containers and Services rows: how many, and the worst trouble.
+    A kind with none is left out. */
+export function thingGroups(things) {
+  return THING_KINDS.map((k) => group(k, k, (things || []).filter((x) => x && x.kind === k)))
+    .filter((g) => g.count > 0);
 }

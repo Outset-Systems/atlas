@@ -732,14 +732,15 @@ def test_the_menu_lamp_cannot_overflow_the_band_it_sits_in():
 
 # ── OVERVIEW (2026-11-13, stage 3) ───────────────────────────────────────────
 
-def test_overview_and_nodes_stand_between_the_sky_and_the_depths():
-    """The owner (2026-11-13): OVERVIEW and NODES sit between the Sky and the
-    Depths, as the map does. Each main is the band above, "↑ the sky", the
-    view's sheet, "the depths ↓", the band below; views.js lifts #chronicle up
-    and #abyss (with the colophon and the way back) down, and the page opens
-    on the view. `charts` opens OVERVIEW at the Sky."""
+def test_overview_stands_between_the_sky_and_the_depths():
+    """The owner (2026-11-13): OVERVIEW sits between the Sky and the Depths,
+    as the map does. Its main is the band above, "↑ the sky", the view's
+    sheet, "the depths ↓", the band below; views.js lifts #chronicle up and
+    #abyss (with the colophon and the way back) down, and the page opens on
+    the view. `charts` opens OVERVIEW at the Sky. NODES left them 2026-11-15
+    (`test_nodes_stands_alone`)."""
     html = _read(INDEX)
-    for view, sheet in (("overview", 'id="overview-tiles"'), ("nodes", 'id="nodes-sheet"')):
+    for view, sheet in (("overview", 'id="overview-tiles"'),):
         main = re.search(rf'<main class="atlas-view" id="view-{view}" data-view="{view}" hidden[^>]*>(.*?)</main>',
                          html, re.S)
         assert main, f"{view}'s main is gone"
@@ -752,28 +753,75 @@ def test_overview_and_nodes_stand_between_the_sky_and_the_depths():
     ov = re.search(r'<section class="ov-sheet" id="overview-tiles"[^>]*>(.*?)</section>', html, re.S).group(1)
     assert 'id="overview-body"' in ov
     views = _read(WEB / "static" / "js" / "views.js")
-    assert "const BANDED = ['overview', 'nodes'];" in views
-    assert "const MOVERS = [['chronicle', 'up'], ['abyss', 'down'], ['colophon', 'down']];" in views
+    assert "const BANDED = ['overview'];" in views
+    assert "overview: [['chronicle', 'up'], ['abyss', 'down'], ['colophon', 'down']]," in views
     assert "document.createComment(` ${id} sits here on the map `)" in views
     assert "seat.replaceWith($(id))" in views
-    assert "if (BANDED.includes(prev)) settle();" in views and "if (BANDED.includes(next)) lift(next);" in views
+    assert "if (MOVERS[prev]) settle();" in views and "if (MOVERS[next]) lift(next);" in views
     assert "else if (BANDED.includes(next)) { holdMiddle = true; toMiddle(); }" in views, "opens on the view"
     assert "new ResizeObserver(() => { if (holdMiddle) toMiddle(); })" in views, "the Sky filling in does not push it"
     assert "A.setDeck = (on, opts) => A.setView(on ? 'overview' : 'map', opts);" in views
-    assert "tracking = BANDED.includes(A.VIEW)" in views, "a phone's swipe pages the charts in both views"
+    assert "tracking = BANDED.includes(A.VIEW)" in views, "a phone's swipe pages the charts where they are"
     for sid in ('id="chronicle"', 'id="abyss"', 'id="colophon"'):
         assert sid in html, sid
     css = _read(CSS)
     assert 'body[data-view="charts"]' not in css
-    assert css.count('body:is([data-view="overview"], [data-view="nodes"])') == 5
+    assert css.count('body[data-view="overview"] :is(#chronicle, #abyss)') == 2
     nodes = _read(WEB / "static" / "js" / "nodes.js")
-    assert "root = $('nodes-sheet');" in nodes, "NODES draws into its sheet, never over the bands"
+    assert "root = $('nodes-sheet');" in nodes, "NODES draws into its sheet"
     over = _read(WEB / "static" / "js" / "overview.js")
     assert "$('overview-body')" in over, "overview.js draws into #overview-body"
     for whole in ("$('view-overview')", "$('overview-tiles')"):
         assert whole not in over, "overview.js must write into #overview-body only: the view holds the bands"
     assert "import './overview.js';" in _read(WEB / "static" / "js" / "atlas.js")
 
+
+
+def test_nodes_stands_alone():
+    """The owner (2026-11-15): NODES is its own thing, not between the Sky and
+    the Depths. Its main is the sheet and a foot; views.js seats only the
+    colophon (the feed's alarm) and the way back to the map there, and the
+    Sky's and the Depths' sections stay on the map's stage. Above the table a
+    line counts the places by state, below it the recent changes."""
+    html = _read(INDEX)
+    main = re.search(r'<main class="atlas-view" id="view-nodes" data-view="nodes" hidden[^>]*>(.*?)</main>',
+                     html, re.S).group(1)
+    assert 'id="nodes-sheet"' in main and 'class="view-foot" id="nodes-foot"' in main
+    assert main.index('id="nodes-sheet"') < main.index('id="nodes-foot"')
+    for gone in ("view-band", "view-edge", "theme.text.sky", "theme.text.depths"):
+        assert gone not in main, f"NODES has no {gone} any more"
+    views = _read(WEB / "static" / "js" / "views.js")
+    assert "nodes: [['colophon', 'foot']]," in views
+    assert "(parts.foot || parts.down)?.append(foot);" in views, "the way back sits at NODES' foot"
+    css = _read(CSS)
+    assert 'body:is([data-view="overview"], [data-view="nodes"]) #colophon' in css, "the colophon in flow in both"
+    assert '[data-view="nodes"]) :is(#chronicle, #abyss)' not in css
+    nodes = _read(WEB / "static" / "js" / "nodes.js")
+    for piece in ('class="nv-summary"', 'class="nv-recent"', "R.stateCounts(counted)",
+                  "R.recentFor(events, places, keyPlace, 8)", "fetch('api/v2/events?limit=200'"):
+        assert piece in nodes, piece
+    assert nodes.index('class="nv-summary"') < nodes.index('<div class="nv-body">') < nodes.index('class="nv-recent"')
+
+
+def test_nodes_lists_containers_and_services():
+    """The owner (2026-11-15): KINDS gains Containers and
+    Services. Each is a list of service links (rows, never markers on the
+    map), drawn with the same line a place's services draw under its row; a
+    link says what it is with `kind`, or is a container when it names one."""
+    nodes = _read(WEB / "static" / "js" / "nodes.js")
+    for piece in ("function serviceItem(svc, row, s, rules, flat = '', menu = true)",
+                  "list.map((svc) => serviceItem(svc, row, serviceState(svc, row), rules))",
+                  "if (S.filter.things) { drawThings(); return; }",
+                  "R.thingRows(A.DATA, S.roster, feed || {})",
+                  "list('things', S.roster ? R.thingGroups(thingList())",
+                  "const admin = mayWrite() && !phone();   // the ⋯ is an admin's"):
+        assert piece in nodes, piece
+    import schema
+    link = {f["name"]: f for f in schema.LINK_FIELDS}
+    assert link["kind"]["type"] == "select" and link["kind"]["options"] == ["", "service", "container"]
+    assert not link["kind"]["required"], "blank reads the container name"
+    css = _read(WEB / "static" / "views.css")
+    assert ".nv-svc.nv-thing {" in css
 
 def test_colours_is_always_open():
     """The owner (2026-11-13): Light, Dark and Light/Dark side by side as soon as

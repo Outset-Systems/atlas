@@ -470,13 +470,12 @@ class UniFiAdapter(_Adapter):
         return {"nodes": {nid: {"state": state} for nid, state in states.items()}}
 
 
-#: The built-in checks' limits: how many charted addresses one round asks, how
-#: many at once, how long the whole round may take, how long a stored round is
-#: served before a new one, and the age past which a stored round is not served.
-CHECKS_MAX_TARGETS = 200
-CHECKS_WORKERS = 8
+#: The built-in checks as a source (THE WATCH, watch.py, 2026-11-15): the
+#: most one read inside a request may spend asking, how long the store may sit
+#: still before a read asks a round itself (no thread is running), and the age
+#: past which a store is not served when another worker holds the round.
 CHECKS_BUDGET = 8.0
-CHECKS_FRESH = 60.0
+CHECKS_FRESH = 30.0
 CHECKS_MAX_AGE = 300.0
 CHECKS_FILE = "checks.json"
 
@@ -515,54 +514,16 @@ def _check_url(value):
     return url
 
 
-def _check_one(url):
-    """Ask one charted address once: (state, milliseconds).
-
-    Any answer below 500 is `healthy`: a sign-in wall or a redirect still means
-    the service is up. 500 and above is `degraded`. No connection, or no answer
-    in time, is `down`. Anything else that stops the request (an address that
-    cannot be asked at all) is no state: it says nothing about the service.
-
-    The certificate is not verified on purpose: a service with a self-signed
-    certificate is still up, and the request carries no credentials to protect.
-    The body is never read and no redirect is followed.
-    """
-    import requests  # local import: optional dep, never at module load
-
-    start = time.monotonic()
-    resp, state = None, None
-    try:
-        resp = requests.get(url, timeout=_TIMEOUT, allow_redirects=False, verify=False,
-                            stream=True, headers={"User-Agent": "Atlas-check"})
-        state = HEALTHY if resp.status_code < 500 else DEGRADED
-    except (requests.ConnectionError, requests.Timeout):
-        state = DOWN
-    except Exception as e:  # noqa: BLE001 - one bad address never stops the round
-        log.debug("checks: one address could not be asked (%s)", type(e).__name__)
-    finally:
-        if resp is not None:
-            try:
-                resp.close()
-            except Exception:  # noqa: BLE001 - closing is a courtesy
-                pass
-    return state, int(round((time.monotonic() - start) * 1000))
-
-
 class ChecksAdapter(_Adapter):
-    """Built-in checks: does each charted service URL answer?
+    """Built-in checks: what THE WATCH (watch.py) heard, as a live source.
 
-    A fallback for an install with no monitoring of its own, and deliberately
-    small. Three rules keep it inside what the map promises:
-
-    * Only a charted address is ever asked: the `url` of a service link on a
-      place. Nothing is discovered, no port is tried, no range is walked.
-    * Kuma is the authority where it watches. A link that names a monitor is
-      not asked, and a place a monitor is mapped to gets no marker state here.
-    * No answer inside the round's budget is unknown, never down.
-
-    Two gunicorn workers share one stored round (`checks.json` beside the
-    dataset) and a lock, so the charted addresses are asked once a minute and
-    not once per worker.
+    A fallback for an install with no monitoring of its own, and its rules are
+    watch.py's: only what the map charts is asked, Kuma stands where it
+    watches, no answer in time is unknown, never down. Each check keeps its
+    own schedule there; the gunicorn workers' threads ask, and this only reads
+    the store they share. With no thread asking (the dev server, a worker that
+    lost it) a read whose store has not moved in `fresh` seconds asks a round
+    itself, inside `budget` seconds.
     """
 
     name = "checks"
@@ -574,148 +535,30 @@ class ChecksAdapter(_Adapter):
         self.fresh = fresh
         self.max_age = max_age
         self._data = None                 # the dataset, once the feed has handed it over
-        self._over = 0                    # the target count the cap was last logged for
 
     def use_map(self, data):
         # called before every feed read, cached ones too: keep it, work it out later
         self._data = data
 
-    @staticmethod
-    def _targets(data):
-        """[(key, place id, address)] for every link a check may ask."""
-        out, seen = [], set()
-        for node in data.get("nodes") or []:
-            if not isinstance(node, dict) or not node.get("id") or node.get("planned"):
-                continue
-            for link in node.get("links") or []:
-                if not isinstance(link, dict) or link.get("planned") or link.get("kuma"):
-                    continue
-                url = _check_url(link.get("url"))
-                key = service_key(node["id"], link)
-                if url and key not in seen:
-                    seen.add(key)
-                    out.append((key, node["id"], url))
-        return out
-
-    def _stored(self, path):
-        """(the stored round, its age in seconds), or (None, None) when there is
-        none that can be read."""
-        try:
-            with open(path, encoding="utf-8") as fh:
-                raw = json.load(fh)
-            age = time.time() - float(raw["at"])
-        except (OSError, ValueError, KeyError, TypeError):
-            return None, None
-        if age < 0:                       # written by a clock that has since gone back
-            return None, None
-        feed = _coerce_feed(raw)
-        return {"services": feed.get("services", {}), "nodes": feed.get("nodes", {})}, age
-
-    @staticmethod
-    def _charted(result, targets, watched):
-        """A stored round cut to what the map charts now: a link removed, or a
-        place a monitor was tied to since the round, is no longer reported."""
-        keys = {key for key, _, _ in targets}
-        places = {nid for _, nid, _ in targets} - watched
-        return {"services": {k: v for k, v in result["services"].items() if k in keys},
-                "nodes": {k: v for k, v in result["nodes"].items() if k in places}}
-
-    def _probe(self, targets, watched):
-        """Ask every target once, in a small pool, inside the budget."""
-        import warnings
-        from concurrent.futures import ThreadPoolExecutor, wait
-
-        import requests  # noqa: F401 - fail here, once, when it is missing
-        from urllib3.exceptions import InsecureRequestWarning
-
-        if len(targets) > CHECKS_MAX_TARGETS:
-            if self._over != len(targets):
-                self._over = len(targets)
-                log.warning("checks: %d service addresses are charted; asking the first %d",
-                            len(targets), CHECKS_MAX_TARGETS)
-            targets = targets[:CHECKS_MAX_TARGETS]
-
-        # Start somewhere else each round. With a fixed order, a run of addresses
-        # that time out at the head of the list spends the whole budget every
-        # time and the ones behind them are never asked.
-        start = int(time.time() // max(self.fresh, 1)) % len(targets)
-        targets = targets[start:] + targets[:start]
-        pool = ThreadPoolExecutor(max_workers=CHECKS_WORKERS, thread_name_prefix="atlas-check")
-        try:
-            # Not verifying a certificate makes urllib3 warn on every request.
-            # The filter is set here, in the calling thread, and only while the
-            # round runs, so every other request in the app keeps its warning.
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore", InsecureRequestWarning)
-                asked = {pool.submit(_check_one, url): key for key, _, url in targets}
-                done, _ = wait(asked, timeout=self.budget)
-        finally:
-            # never wait for a slow address: what has not answered is unknown
-            pool.shutdown(wait=False, cancel_futures=True)
-
-        services = {}
-        for future in done:
-            try:
-                state, ms = future.result()
-            except Exception:  # noqa: BLE001 - a check that broke says nothing
-                continue
-            if state:
-                services[asked[future]] = {"state": state, "ms": ms}
-
-        answered = {}
-        for key, nid, _ in targets:
-            if key in services and nid not in watched:
-                answered.setdefault(nid, []).append(services[key]["state"])
-        nodes = {}
-        for nid, states in answered.items():
-            if all(s == HEALTHY for s in states):
-                nodes[nid] = {"state": HEALTHY}
-            elif all(s == DOWN for s in states):
-                nodes[nid] = {"state": DOWN}
-            else:
-                nodes[nid] = {"state": DEGRADED}
-        return {"services": services, "nodes": nodes}
-
     def _fetch(self):
         data = self._data
         if not isinstance(data, dict):
             return {}                     # no dataset yet: nothing to say, nothing to store
-        targets = self._targets(data)
-        if not targets:
+        import watch
+        ts = watch.targets(data)
+        if not ts:
             return {"nodes": {}}          # it ran, and the map charts nothing to ask
-        watched = {nid for nid in monitor_map(data).values() if nid}
-        path = self.path or os.path.join(settings.DATA_DIR, CHECKS_FILE)
-
-        stored, age = self._stored(path)
-        if stored is not None and age < self.fresh:
-            return self._charted(stored, targets, watched)
-
-        import filelock
-        import jsonio
-        try:
-            with filelock.exclusive(filelock.lock_for(path), timeout=0):
-                # another worker may have finished a round while this one looked
-                stored, age = self._stored(path)
-                if stored is not None and age < self.fresh:
-                    return self._charted(stored, targets, watched)
-                result = self._probe(targets, watched)
-                try:
-                    jsonio.write_json_atomic(path, {"at": time.time(), **result},
-                                             keep_backup=False)
-                except OSError as e:
-                    log.warning("checks: the round could not be stored (%s)", type(e).__name__)
-                return result
-        except OSError as e:
-            # A data directory that cannot be written (read-only mount): there is
-            # no round to share, so this worker asks for itself.
-            log.debug("checks: no shared round here (%s); asking without one", type(e).__name__)
-            return self._probe(targets, watched)
-        except filelock.LockTimeout:
-            # Another worker is asking right now. Its last round stands meanwhile,
-            # unless it is so old that the worker holding the lock must be stuck.
-            if stored is not None and age <= self.max_age:
-                return self._charted(stored, targets, watched)
-            return {}
+        path = watch.path_of(self.path)
+        store = watch.load(path)
+        at = store.get("at")
+        age = None if at is None else time.time() - at
+        if age is None or age < 0 or age >= self.fresh:
+            heard = watch.tick(data, path, budget=self.budget, ts=ts)
+            if heard is not None:
+                store = heard
+            elif age is None or age < 0 or age > self.max_age:
+                return {}                 # another worker is asking, and what is stored is too old
+        return watch.as_feed(store, ts)
 
 
 # Kuma monitor_status values → Atlas marker states (0 down · 1 up · 2 pending · 3 maint)

@@ -501,7 +501,7 @@ def _probe_allowed(who):
 # editor stays in this file; each of these is one screen of Settings.
 from . import (  # noqa: E402,F401
     admin_alerts, admin_connections, admin_directory, admin_discovery, admin_mapart,
-    admin_sources,
+    admin_shadow, admin_sources,
 )
 # Names that lived in this module before the split and are still reached through it.
 from .admin_sources import _probe  # noqa: E402,F401

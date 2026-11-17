@@ -4124,6 +4124,9 @@ body.constellation .mk.active .mk-dot { opacity: 0.35; }
   font-size: 0.62rem; color: var(--text-dim); opacity: 0.7;
 }
 .seal.s-calm   { border-left-color: rgba(var(--gilt-rgb), 0.18); }
+/* what the wire showed (2026-11-15): quiet, unless the chart disagrees */
+.seal-seen { display: block; font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: var(--text-dim); }
+.seal-seen.seal-differs { color: var(--sem-warn); }
 .seal.s-calm    .seal-days { color: var(--sem-up); }
 .seal.s-watch  { border-left-color: color-mix(in srgb, var(--sem-warn) 45%, transparent); }
 .seal.s-watch   .seal-days { color: var(--sem-warn); }
@@ -4822,29 +4825,30 @@ body.deck .atlas-view:not([hidden]) {
   background: var(--abyss);
 }
 
-/* ── THE SKY ABOVE, THE DEPTHS BELOW: OVERVIEW and NODES between them ─────
+/* ── THE SKY ABOVE, THE DEPTHS BELOW: OVERVIEW between them ────────────────
    (owner, 2026-11-13) views.js lifts the Sky's section into the band above
-   the view and the Depths' into the band below, and puts them back. The rules
+   the view and the Depths' into the band below, and puts them back. NODES
+   stood there too until 2026-11-15; it keeps only the colophon. The rules
    below follow the lift, so they key on the views that have it, not on
    `body.deck` (under ALERTS the sections stay on the hidden stage). Stage 2
    called OVERVIEW's charts CHARTS; `?view=charts` opens it at the Sky.
    The sections forget the map: no camera scale, no seat in map space
    (camera.js still writes their `top`, which a static box ignores, and
    re-measures it the moment they go back on the stage) */
-body:is([data-view="overview"], [data-view="nodes"]) :is(#chronicle, #abyss) {
+body[data-view="overview"] :is(#chronicle, #abyss) {
   position: static; transform: none; width: auto; max-width: 1560px;
   margin: 0 auto 24px; border-radius: 8px;
 }
 /* the Sky's charts are drawn for a bright field; on the map the sky behind
    them is that field, here the section carries it. Each section's ground is
    its set's, so in the Deck it follows the same pick rules as on the map. */
-body:is([data-view="overview"], [data-view="nodes"]) :is(#chronicle, #abyss) {
+body[data-view="overview"] :is(#chronicle, #abyss) {
   background: var(--sec-deck-ground);
   border: 1px solid var(--sec-deck-border);
 }
 /* no map behind a frame to travel, so a frame never sleeps here */
-body:is([data-view="overview"], [data-view="nodes"]) .chron-pane .chron-frame { pointer-events: auto; }
-body:is([data-view="overview"], [data-view="nodes"]) .chron-pane::after { display: none; }
+body[data-view="overview"] .chron-pane .chron-frame { pointer-events: auto; }
+body[data-view="overview"] .chron-pane::after { display: none; }
 /* the colophon rides at the column's foot (views.js), in flow */
 body:is([data-view="overview"], [data-view="nodes"]) #colophon { position: static; transform: none; margin: 4px 16px 0; text-align: center; }
 /* "↑ the sky" and "the depths ↓": the edges between a view and its bands, in
@@ -4863,6 +4867,8 @@ body:is([data-view="overview"], [data-view="nodes"]) #colophon { position: stati
   color: var(--text-dim); text-decoration: none;
 }
 .deck-foot:hover, .deck-foot:focus-visible { color: var(--gilt); }
+/* NODES' foot (2026-11-15): no bands, just the colophon and the way back */
+.view-foot { max-width: 1560px; margin: 0 auto; padding: 0 0 18px; }
 
 /* ── THE ATLAS's ▾ and the views' menu (2026-11-13) ───────────────────────
    A click on ATLAS is always home. The views hang off it as a short menu:

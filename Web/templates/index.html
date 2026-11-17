@@ -159,10 +159,12 @@
 <!-- THE VIEWS (2026-11-13): what stands in the map's place under the band. One
      `main.atlas-view` per view, every one `hidden` until views.js shows exactly
      one; `body.deck` means the map is put away. OVERVIEW (the realm's facts
-     in tiles, overview.js) and NODES (nodes.js) stand between the Sky and
-     the Depths as the map does (owner, 2026-11-13): views.js lifts the Sky's
-     section into the band above and the Depths' into the band below, and the
-     page opens on the view. `?view=charts` opens OVERVIEW at the Sky. ALERTS
+     in tiles, overview.js) stands between the Sky and the Depths as the map
+     does (owner, 2026-11-13): views.js lifts the Sky's section into the band
+     above and the Depths' into the band below, and the page opens on the
+     view. `?view=charts` opens OVERVIEW at the Sky. NODES (nodes.js) stood
+     there too until 2026-11-15, when the owner made it its own thing: its
+     foot takes only the colophon and the way back to the map. ALERTS
      (stage 4, 2026-11-13) is a view no longer (owner, 2026-11-14): its rules
      are made in NODES and where word goes is Settings › Alerts; `?view=alerts`
      opens NODES. A menu item or strip entry with `data-admin` and `hidden` is
@@ -177,11 +179,8 @@
   <div class="ov-charts view-band view-band-depths" id="overview-charts"></div>
 </main>
 <main class="atlas-view" id="view-nodes" data-view="nodes" hidden aria-label="{{ theme.text.view_nodes|capitalize }}">
-  <div class="view-band view-band-sky" id="nodes-sky"></div>
-  <a class="view-edge view-edge-up" href="#nodes-sky">↑ {{ theme.text.sky }}</a>
   <section class="nv-sheet" id="nodes-sheet" aria-label="{{ theme.text.view_nodes|capitalize }}"></section>
-  <a class="view-edge view-edge-down" href="#nodes-depths">{{ theme.text.depths }} ↓</a>
-  <div class="view-band view-band-depths" id="nodes-depths"></div>
+  <div class="view-foot" id="nodes-foot"></div>
 </main>
 <!-- On a phone the views are named at the top of the column (there is no
      ATLAS and no map there, so no MAP either; the column's foot is the way to
