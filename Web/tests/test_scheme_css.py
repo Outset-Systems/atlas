@@ -56,8 +56,8 @@ BAR_RE = re.compile(r"#scenes-list|\.scene\b|\.scene-home|\.band-|\.chrome\b|\.c
 BAR_TOKENS = ["--bar-glass", "--bar-glass-firm", "--bar-shadow-firm", "--chrome-glass",
               "--chrome-glass-firm", "--crumb-glass", "--crumb-shadow", "--hint-glass",
               "--hint-shadow", "--pop-shadow", "--scene-shadow", "--scene-active-bg",
-              "--sky-lit-fill", "--sky-lit-ink", "--sky-lit-border", "--depths-lit-fill",
-              "--depths-lit-ink", "--depths-lit-border", "--hover-glow-a"]
+              "--hover-glow-a"]
+# (`--sky-lit-*` / `--depths-lit-*` went with the bar's sky and depths buttons, 2026-11-18)
 # (`--bar-sun` / `--bar-moon` went with the band's ☀/☾ button, 2026-11-14)
 #: tokens the light block must restate, or a panel keeps a night value
 MUST_FLIP = ["--abyss", "--surface", "--surface-2", "--ink-line", "--ink-soft", "--text",
@@ -372,21 +372,13 @@ def test_every_text_token_clears_aa_on_its_grounds_in_both_schemes():
                     assert r >= 4.5, f"{name}: {fg} {p[fg]} on {ground} {p[ground]} is {r:.2f}:1, under 4.5"
 
 
-def test_each_lit_journey_reads_on_both_bars():
-    """Being lit follows the bar's colour. The ink on the fill is text (4.5:1);
-    the fill against the bar's ground is a mark (3:1)."""
-    for name in ("dark", "light"):
-        p = _bar(name)
-        for j in ("sky", "depths"):
-            fill, ink = _hex(p[f"--{j}-lit-fill"]), _hex(p[f"--{j}-lit-ink"])
-            r = _ratio(ink, fill)
-            assert r >= 4.5, f"{name} bar: the lit {j} ink {ink} on {fill} is {r:.2f}:1"
-            r = _ratio(fill, p["--abyss"])
-            assert r >= 3.0, f"{name} bar: the lit {j} fill {fill} on the bar's ground is {r:.2f}:1"
+def test_the_lit_journeys_tokens_left_with_their_buttons():
+    """The sky's and the depths' buttons left the bar (owner, 2026-11-18), and
+    the fills they lit in were only theirs: a token nothing reads is a value
+    someone will tune for nothing."""
     root, bar, _ = _bar_palettes()
-    assert root["--sky-lit-fill"] == "var(--gilt)" and root["--sky-lit-ink"] == "var(--on-gilt)", (
-        "on a dark bar the Sky lights gilt with its own ink (plan: the card-ink fill would vanish)")
-    assert bar["--depths-lit-fill"] == "#0f766e", "on a light bar the Depths light deep teal"
+    for palette in (root, bar):
+        assert not [name for name in palette if "-lit-" in name], "a lit-journey token is still set"
 
 
 def test_the_status_hues_read_as_marks_in_both_schemes():

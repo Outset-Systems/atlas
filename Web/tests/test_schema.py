@@ -262,3 +262,19 @@ def test_a_list_where_one_id_belongs_is_reported_not_fatal():
     assert "to must be one id, as text" in joined
     assert "place must be one id, as text" in joined
     assert "parent must be one id, as text" in joined
+
+
+def test_a_number_field_refuses_nan_and_infinity():
+    """Python's JSON reader takes `NaN` and `Infinity` from a raw body as
+    floats. Neither is below a minimum nor above a maximum, so a number field
+    once kept them (found 2026-11-18, reading the canvas's forms)."""
+    import json
+    import schema
+    body = json.loads('{"a": NaN, "b": Infinity, "c": -Infinity, "d": 12.5}')
+    for kind in ("number", "int"):
+        fld = {"name": "poe_w", "type": kind, "min": 0}
+        for key in ("a", "b", "c"):
+            assert schema._check_number(fld, body[key]), f"{kind}: {body[key]!r} passed"
+    assert schema._check_number({"name": "poe_w", "type": "number", "min": 0}, body["d"]) is None
+    assert schema._check_number({"name": "n", "type": "int"}, 3) is None
+

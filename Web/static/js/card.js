@@ -34,6 +34,9 @@ const ICON = {
   copy: '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5" y="5" width="8" height="9" rx="1"/><path d="M3 11V3a1 1 0 0 1 1-1h6"/></svg>',
   out: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9 3h4v4M13 3L7 9M11 9v4H3V5h4"/></svg>',
   topo: '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="6" y="2" width="4" height="3"/><rect x="2" y="11" width="4" height="3"/><rect x="10" y="11" width="4" height="3"/><path d="M8 5v3M4 11V8h8v3"/></svg>',
+  // WIRING's mark (2026-11-18): two cards and the cable between them, the canvas in
+  // small, so the pane's Topology (the tiers) and Wiring do not wear one icon
+  wire: '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="5" width="4.5" height="6" rx="1"/><rect x="10" y="5" width="4.5" height="6" rx="1"/><path d="M6 8h4"/></svg>',
   route: '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="3.5" cy="12.5" r="1.5"/><circle cx="12.5" cy="3.5" r="1.5"/><path d="M5 12.5h4a2.5 2.5 0 0 0 0-5H7a2.5 2.5 0 0 1 0-5h4"/></svg>',
   lock: '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></svg>',
 };
@@ -583,7 +586,7 @@ function showServiceDetail(node, link) {
       `</div>` +
       // WIRING (2026-11-17, the view `topology`): a row of its own under the
       // twin, the full width as Open is, so the twin keeps its pair
-      `<button class="csv-metrics" id="csv-wiring" title="Show its place in WIRING, lit from the head down">${ICON.topo}Wiring</button>` +
+      `<button class="csv-metrics" id="csv-wiring" title="Show its place in WIRING, lit from the head down">${ICON.wire}Wiring</button>` +
       `</div>`;
   svc.querySelector('#csv-back').addEventListener('click', (e) => {
     e.stopPropagation();

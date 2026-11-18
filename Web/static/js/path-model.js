@@ -47,18 +47,57 @@ export function tierOf(n) {
 }
 
 /** Lay the tiers out on a normalized 100×100 grid. Returns the four tiers and
-    `pos`, each place's {x, y} by id. */
-export function layout(nodes) {
+    `pos`, each place's {x, y} by id.
+
+    Wide (the default) the tiers are rows down the page and a tier's places
+    spread across it. `narrow` (a phone, 2026-11-18) turns the picture a quarter:
+    the tiers that hold anything are columns across the page, left to right in
+    tier order, and a tier's places stack down from the top, every tier on the
+    same rows. A phone has room downward and none across, and a name needs a
+    column's width to be read. `rows` is the busiest tier's count (what the
+    narrow picture's height is cut by) and `cols` the number of columns it has. */
+export function layout(nodes, narrow = false) {
   const tiers = [[], [], [], []];
   for (const n of nodes) tiers[tierOf(n)].push(n);
   const TIER_Y = [8, 30, 55, 82];
   const pos = {};
-  tiers.forEach((tier, t) => {
+  if (!narrow) {
+    tiers.forEach((tier, t) => {
+      tier.forEach((n, i) => {
+        pos[n.id] = { x: (100 * (i + 1)) / (tier.length + 1), y: TIER_Y[t] };
+      });
+    });
+    return { tiers, pos };
+  }
+  const held = tiers.filter((tier) => tier.length);
+  const cols = Math.max(held.length, 1);
+  const rows = Math.max(...tiers.map((tier) => tier.length), 1);
+  held.forEach((tier, c) => {
     tier.forEach((n, i) => {
-      pos[n.id] = { x: (100 * (i + 1)) / (tier.length + 1), y: TIER_Y[t] };
+      pos[n.id] = { x: (100 * (c + 0.5)) / cols, y: (100 * (i + 0.5)) / rows };
     });
   });
-  return { tiers, pos };
+  return { tiers, pos, rows, cols };
+}
+
+/** The curve between two places, as an SVG path's `d` on the same grid. Wide,
+    it leaves and arrives vertically (the tiers are rows); narrow, horizontally
+    (the tiers are columns). Narrow, two places in one column would be joined
+    by a straight line down through every name between them, so that curve
+    bows out into the gap beside the column instead: toward the column before
+    it, or after it for the first. `cols` is the narrow layout's column count. */
+export function edgePath(a, b, narrow = false, cols = 1) {
+  if (!narrow) {
+    const my = (a.y + b.y) / 2;
+    return `M ${a.x} ${a.y} C ${a.x} ${my}, ${b.x} ${my}, ${b.x} ${b.y}`;
+  }
+  if (a.x === b.x) {
+    const width = 100 / Math.max(cols, 1);
+    const bx = a.x + (a.x < width ? 0.62 : -0.62) * width;
+    return `M ${a.x} ${a.y} C ${bx} ${a.y}, ${bx} ${b.y}, ${b.x} ${b.y}`;
+  }
+  const mx = (a.x + b.x) / 2;
+  return `M ${a.x} ${a.y} C ${mx} ${a.y}, ${mx} ${b.y}, ${b.x} ${b.y}`;
 }
 
 /** edges: routes[] + parent containment (drawn quieter). A route is kept only

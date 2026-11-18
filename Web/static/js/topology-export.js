@@ -384,7 +384,7 @@ async function saveCsv() {
   const res = await fetch(CSV_URL, { credentials: 'same-origin', cache: 'no-store' });
   if (!res.ok) throw new Error(t('tp_x_csv_refused', { status: res.status }));
   const given = (res.headers.get('Content-Disposition') || '').match(/filename="([A-Za-z0-9._-]+)"/);
-  const name = given ? given[1] : X.fileName(mapTitle(), 'csv', new Date()).replace('-topology-', '-connections-');
+  const name = given ? given[1] : X.fileName(mapTitle(), 'csv', new Date()).replace('-wiring-', '-connections-');
   saveBlob(await res.blob(), name);
   say(t('tp_x_saved', { file: name }));
 }

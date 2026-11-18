@@ -56,10 +56,10 @@ def test_the_map_tools_are_not_inside_the_band():
         assert f'id="{button}"' not in _band(html), (
             f"#{button} is nested inside #scenes-list — backdrop-filter + "
             "overflow on the band will position it wrongly and then clip it away")
-    # the sky and the depths are in the band again (2026-11-14), in flow like ⚙:
-    # the next test is their belt
+    # the sky and the depths were in the band from 2026-11-14 and left it on
+    # 2026-11-18 (the owner: "remove the sky/depths icons from the nav bar")
     for button in ("btn-sky", "btn-depths"):
-        assert f'id="{button}"' in _band(html), f"{button} left the band"
+        assert f'id="{button}"' not in html, f"{button} is back on the page"
     assert 'id="atlas-tools"' not in html, "the standing column came back"
 
 
@@ -105,14 +105,14 @@ def test_the_gear_is_in_the_band_and_in_flow():
     # PINNED since 2026-10-31: a hover-revealed control is no control on a touch
     # screen, and on a desktop it is one you forget exists. So the cluster is
     # out at every width, with no hover wiring left behind.
-    # auto since 2026-11-14: the sky, the depths and the gear, and the first two
-    # go away in a view, a scene or a region, so a fixed width would leave a hole
+    # auto since 2026-11-14, when the sky and the depths stood beside the gear
+    # and went away in a view; the gear alone since 2026-11-18
     assert "width: auto" in rule.group(0), "the cluster must size to what it shows"
     assert "opacity: 0" not in rule.group(0) and "width: 0" not in rule.group(0)
     assert "hoverReveal($('btn-menu')" not in _read(UI), "the pinned cluster is still wired to hover"
     tools = re.search(r'<span class="menu-tools" id="menu-tools">(.*?)</span>', band, re.S).group(1)
-    assert re.findall(r'id="(btn-[\w-]+)"', tools) == ["btn-sky", "btn-depths", "btn-menu-settings"], (
-        "the sky, then the depths, then ⚙ (owner, 2026-11-14)")
+    assert re.findall(r'id="(btn-[\w-]+)"', tools) == ["btn-menu-settings"], (
+        "⚙ alone: the sky and the depths left the bar (owner, 2026-11-18)")
     assert 'id="btn-scheme"' not in _read(INDEX), "☀/☾ came back to the band"
 
 
@@ -155,16 +155,23 @@ def _view_menu(html):
     return html[start:end]
 
 
-@pytest.mark.parametrize("button", ["btn-sky", "btn-depths"])
-def test_the_sky_and_the_depths_are_round_buttons_in_the_band(button):
-    """The owner (2026-11-14): out of the views menu, into the band where ☀/☾
-    was. A round `.chrome` button with its glyph and its key in the title."""
+def test_the_sky_and_the_depths_have_no_button_in_the_bar():
+    """The owner (2026-11-18): "remove the sky/depths icons from the nav bar."
+    They stood in the band from 2026-11-14 and at the views menu's top the day
+    before. Nothing on the page is a button for either now, no script reaches
+    for one (a `$('btn-sky')` on a page without it stops the boot), and the map
+    still rises and descends: the S and D keys, and its own shores."""
     html = _read(INDEX)
-    assert f'id="{button}"' not in _view_menu(html), f"{button} is still in the views menu"
-    tag = re.search(rf'<button class="chrome ci-(?:sky|depths)" id="{button}"[^>]*>', html, re.S)
-    assert tag, f"{button} is not a band button"
-    assert 'type="button"' in tag.group(0) and "aria-label=" in tag.group(0)
-    assert ("(S)" if button == "btn-sky" else "(D)") in tag.group(0)
+    assert "ci-sky" not in html and "ci-depths" not in html
+    assert 'id="btn-sky"' not in html and 'id="btn-depths"' not in html
+    for script in sorted((WEB / "static" / "js").rglob("*.js")):
+        text = _read(script)
+        assert "btn-sky" not in text and "btn-depths" not in text, f"{script.name} reaches for a button that is gone"
+    camera = _read(WEB / "static" / "js" / "camera.js")
+    assert "case 'd': A.descend?.(); break;" in camera and "case 's': A.ascend?.(); break;" in camera
+    world = _read(WEB / "static" / "js" / "world.js")
+    assert "A.descend = function descend()" in world and "A.ascend = function ascend()" in world
+    assert "shoreSnap = true; A.ascend();" in world, "the map's north shore no longer rises to the sky"
 
 
 def test_the_watch_is_toggled_in_its_own_scene():
@@ -382,12 +389,12 @@ def test_settings_sections_default_closed_except_account():
 
 
 def test_the_map_tools_show_only_while_the_map_is_the_view():
-    """The owner (2026-11-13), kept when they moved to the band (2026-11-14):
-    only when MAP is the view. A view (`body.deck`) or a scene over the map has
-    nothing for them to act on, and a region has its own way back."""
+    """The owner (2026-11-13): the map's tools only when MAP is the view. The
+    sky's and the depths' buttons were the last of them in the bar and left it
+    on 2026-11-18, their rules with them; the standing column stays gone."""
     css = _read(CSS)
-    assert "body:is(.deck, .scene-open) #scenes-list :is(.ci-sky, .ci-depths) { display: none; }" in css
-    assert "body.region-open #btn-sky, body.region-open #btn-depths { display: none; }" in css
+    assert ".ci-sky" not in css and ".ci-depths" not in css
+    assert "#btn-sky" not in css and "#btn-depths" not in css
     assert ".atlas-tools" not in re.sub(r"/\*.*?\*/", "", css, flags=re.S), "the standing column's rules came back"
 
 
@@ -617,17 +624,12 @@ def test_the_drift_note_fades_and_returns_to_the_middle_of_the_map():
 
 
 def test_a_lit_tool_fills_in_the_band():
-    """A tool that is on says so in the band: it fills in the same tokens the
-    round buttons and the menu's lamps used (the Sky and the Depths in
-    reverse). The band clears every `.chrome` fill at id weight, so the lit
-    fill has to be said at that weight too."""
+    """The band clears every `.chrome` fill at id weight, so a tool that is on
+    there would have to say its lit fill at that weight too. The sky and the
+    depths were the two that did, and left the bar on 2026-11-18."""
     css = _read(CSS)
     assert "#scenes-list .chrome { background: transparent;" in css
-    sky = re.search(r"#scenes-list \.chrome\.ci-sky\.lit \{[^}]*\}", css)
-    depths = re.search(r"#scenes-list \.chrome\.ci-depths\.lit \{[^}]*\}", css)
-    assert sky and "var(--sky-lit-fill)" in sky.group(0) and "var(--sky-lit-ink)" in sky.group(0)
-    assert depths and "var(--depths-lit-fill)" in depths.group(0) and "var(--depths-lit-ink)" in depths.group(0)
-    assert css.index("#scenes-list .chrome { background: transparent;") < css.index("#scenes-list .chrome.ci-sky.lit")
+    assert not re.search(r"#scenes-list \.chrome\.ci-[\w-]+\.lit", css)
     assert ".vt-lamp {" in css, "the tripwires' pill still wears the lamp"
 
 
@@ -645,33 +647,21 @@ def test_the_menu_and_the_index_fade_and_roll_up_when_the_mouse_leaves():
     assert "el.matches('input, textarea, select')" in js, "typing in the Index's search must keep it up"
 
 
-def test_the_sky_lights_as_the_depths_do_in_reverse():
-    """The owner's ask: scrolling into the sky lights its button, from the camera
-    so S and the button do too, in the theme's colours: biolume in the Depths,
-    dark ink with the accent in the sky."""
+def test_the_camera_still_says_when_it_is_in_the_sky_or_the_depths():
+    """Scrolling into the sky or the depths once lit a button for each. The
+    buttons are gone (2026-11-18); what the camera says is not: `body.in-sky`
+    and `body.depths` still flip at a crossing, and the bar's colour, the map's
+    tools and each section's ground hang from them."""
     world = _read(WEB / "static" / "js" / "world.js")
     shades = re.search(r"function updateShades.*?^}", world, re.S | re.M).group(0)
-    assert "$('btn-sky').classList.toggle('lit', inSky)" in shades
+    assert "document.body.classList.toggle('in-sky', inSky);" in shades
     assert "CFG.SKY_RELEASE" in shades and "CFG.SKY_ENGAGE" in shades
+    assert "document.body.classList.toggle('depths', inDepths);" in world
+    assert ".classList.toggle('lit', inSky)" not in world and ".classList.toggle('lit', inDepths)" not in world
     css = _read(CSS)
-    # being lit follows the BAR's colour (stage 1, 2026-11-13): the rules read
-    # tokens, the night values sit on :root and the bar block restates them
-    depths = re.search(r":root \.chrome\.ci-depths\.lit \{.*?\}", css, re.S).group(0)
-    sky = re.search(r":root \.chrome\.ci-sky\.lit \{.*?\}", css, re.S).group(0)
-    for part in ("fill", "ink", "border"):
-        assert f"var(--depths-lit-{part})" in depths and f"var(--sky-lit-{part})" in sky
-    root = re.search(r"^:root \{.*?^\}", css, re.S | re.M).group(0)
-    bar = re.search(r'^:root\[data-scheme-pick="light"\] :is\(.*?^\}', css, re.S | re.M).group(0)
-    # a dark bar: the Depths in biolume with dark ink, the Sky in gilt with its own ink
-    assert "--depths-lit-fill: var(--depth);" in root and "--depths-lit-ink: var(--card-ink);" in root
-    assert "--sky-lit-fill: var(--gilt);" in root and "--sky-lit-ink: var(--on-gilt);" in root
-    # a light bar: the Sky in navy (the bar's gilt), the Depths in deep teal with pale ink
-    assert "--sky-lit-fill: var(--gilt);" in bar and "--sky-lit-ink: var(--on-gilt);" in bar
-    assert "--depths-lit-fill: #0f766e;" in bar and "--depths-lit-ink: #f0fdfa;" in bar
-    assert "#btn-depths.lit" not in css, "an id rule would outrank the fill"
-    # nothing lit is keyed on the OS any more; `:root` lifts both over `.chrome.lit`
+    # nothing lit is keyed on the OS; `.chrome.lit` is the one lit rule left
     assert 'data-scheme="light"] .chrome' not in css
-    assert css.index(".chrome.lit {") < css.index(":root .chrome.ci-sky.lit")
+    assert ".chrome.lit {" in css
 
 
 def test_the_colours_are_only_in_settings():
@@ -893,6 +883,49 @@ def test_topology_in_the_band_and_wiring_in_the_views():
     theme = json.loads((WEB / "themes" / "plain.json").read_text(encoding="utf-8"))
     assert theme["text"]["view_topology"] == "WIRING", "the views' menu does not name WIRING"
     assert ">TOPOLOGY<" not in menu, "the views' menu names the scene's word"
+
+
+def test_topology_on_a_phone_is_columns_that_scroll():
+    """Across a phone's width a tier of eight had 33px a place and every name
+    lay over its neighbours (walked 2026-11-17; the owner: "fix the phone-width
+    overlap"). On a phone the scene draws the tiers as columns and scrolls
+    downward. One flag decides it: path.js asks the views' own rule for a phone,
+    hands the answer to the model and sets `#path.pth-narrow`, and every rule
+    for the narrow picture hangs from that class, so the layout and its styles
+    cannot disagree the way a second media query could."""
+    js = _read(WEB / "static" / "js" / "path.js")
+    assert "import { PHONE_MEDIA } from './views-model.js';" in js
+    assert "const phone = matchMedia(PHONE_MEDIA);" in js
+    assert "layout(nodes, narrow)" in js and "edgePath(a, b, narrow, cols)" in js
+    assert "root.classList.toggle('pth-narrow', narrow);" in js
+    assert "phone.addEventListener('change'" in js, "a turned phone keeps the old picture"
+    css = re.sub(r"/\*.*?\*/", "", _read(CSS), flags=re.S)
+    narrow = re.findall(r"^[^{}\n]*#path\.pth-narrow[^{}]*\{[^{}]*\}", css, re.M)
+    rules = {" ".join(r.split("{")[0].split()): r.split("{", 1)[1] for r in narrow}
+    # the tiers scroll in the body, between a head (with ×) and a legend that
+    # stay put: nothing scrolls under the head, which is glass in the light scheme
+    assert "overflow-y: auto" in rules["#path.pth-narrow .pth-body"]
+    assert "#path.pth-narrow .pth-panel" not in rules, "the panel scrolls: the head and × go with it"
+    assert "sticky" not in rules["#path.pth-narrow .ldg-head"]
+    assert "flex-basis: 100%" in rules["#path.pth-narrow .ldg-sub"], "the sub-line wraps beside the title"
+    # the drawing is as tall as the busiest tier, and a place is one column wide
+    assert "var(--pth-rows" in rules["#path.pth-narrow #pth-svg"]
+    nodes = rules["#path.pth-narrow #pth-nodes"]
+    assert "var(--pth-rows" in nodes and "position: relative" in nodes, "the places' points are no longer the drawing's"
+    assert "var(--pth-tiers" in rules["#path.pth-narrow .pth-node"]
+    # the places' layer covers the drawing and a button is a column wide: only
+    # a marker, a name and an address catch a tap, so a route can be pressed
+    # (walked 2026-11-18: before this no point of any route could be)
+    assert "pointer-events: none" in rules["#path.pth-narrow :is(#pth-nodes, .pth-node)"]
+    assert "pointer-events: auto" in rules["#path.pth-narrow .pth-node > *"]
+    # a name wraps inside its column; its type is the wide picture's, untouched
+    name = rules["#path.pth-narrow .pth-name"]
+    assert "white-space: normal" in name
+    assert "font" not in name and "letter-spacing" not in name, "the phone's names changed type"
+    # and nothing for the narrow picture is said in a media query of its own
+    for block in re.findall(r"@media[^{]*\{(?:[^{}]|\{[^{}]*\})*\}", css):
+        assert "pth-narrow" not in block and (".pth-" not in block or "prefers-reduced-motion" in block), (
+            "a media query styles the scene: the flag is path.js's")
 
 
 if __name__ == "__main__":

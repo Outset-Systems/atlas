@@ -24,6 +24,7 @@ of what the file may hold.
 """
 
 import ipaddress
+import math
 import re
 from datetime import date, datetime
 
@@ -1114,6 +1115,10 @@ def _check_bool(fld, value):
 def _check_number(fld, value):
     name = fld["name"]
     if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return f"{name} must be a number"
+    # NaN and Infinity are floats to Python's JSON reader, and neither is less
+    # than a minimum nor more than a maximum: both once passed (2026-11-18)
+    if isinstance(value, float) and not math.isfinite(value):
         return f"{name} must be a number"
     if fld["type"] == "int" and not float(value).is_integer():
         return f"{name} must be a whole number"

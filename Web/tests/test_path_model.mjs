@@ -8,7 +8,7 @@
 
 import assert from 'node:assert/strict';
 import {
-  chainPairs, edgesOf, layout, servicesCrossing, tierOf,
+  chainPairs, edgePath, edgesOf, layout, servicesCrossing, tierOf,
 } from '../static/js/path-model.js';
 
 let passed = 0;
@@ -56,6 +56,61 @@ test('layout spreads each tier evenly across the width, at its own height', () =
   assert.deepEqual(pos['switch-1'], { x: 75, y: 55 });
   assert.deepEqual(pos['vm-2'], { x: 200 / 3, y: 82 });
   assert.deepEqual(layout([]), { tiers: [[], [], [], []], pos: {} });
+});
+
+test('narrow: the tiers that hold anything are columns, and a tier stacks down from the top', () => {
+  const { tiers, pos, rows, cols } = layout(NODES, true);
+  assert.deepEqual(tiers.map((t) => t.map((n) => n.id)), layout(NODES).tiers.map((t) => t.map((n) => n.id)));
+  assert.equal(cols, 4);
+  assert.equal(rows, 3, 'the busiest tier (the three on tier 2)');
+  // one column a tier, left to right in tier order, each centred in its quarter
+  assert.equal(pos['the-wild'].x, 12.5);
+  assert.equal(pos.gateway.x, 37.5);
+  assert.equal(pos['host-a'].x, 62.5);
+  assert.equal(pos['vm-1'].x, 87.5);
+  // every tier starts on the first row, and the rows are the same for all of them
+  for (const id of ['the-wild', 'gateway', 'host-a', 'vm-1']) assert.equal(pos[id].y, 100 * 0.5 / 3);
+  assert.equal(pos.traefik.y, 100 * 1.5 / 3);
+  assert.equal(pos['switch-1'].y, 100 * 2.5 / 3);
+  assert.equal(pos['vm-2'].y, pos.traefik.y);
+  // a tier that holds nothing takes no column
+  const few = layout([{ id: 'the-wild' }, { id: 'box-a' }, { id: 'box-b' }, { id: 'guest', parent: 'box-a' }], true);
+  assert.equal(few.cols, 3);
+  assert.equal(few.rows, 2);
+  assert.deepEqual([few.pos['the-wild'].x, few.pos['box-a'].x, few.pos.guest.x].map((x) => +x.toFixed(4)), [16.6667, 50, 83.3333]);
+  assert.deepEqual(layout([], true), { tiers: [[], [], [], []], pos: {}, rows: 1, cols: 1 });
+  // no two places share a point, wide or narrow
+  for (const narrow of [false, true]) {
+    const points = Object.values(layout(NODES, narrow).pos).map((p) => `${p.x} ${p.y}`);
+    assert.equal(new Set(points).size, points.length);
+  }
+});
+
+test('the curve between two places: down the page when wide, across it when narrow', () => {
+  const a = { x: 10, y: 8 }, b = { x: 30, y: 30 };
+  assert.equal(edgePath(a, b), 'M 10 8 C 10 19, 30 19, 30 30');
+  assert.equal(edgePath(a, b, false, 4), edgePath(a, b));
+  assert.equal(edgePath({ x: 12.5, y: 10 }, { x: 37.5, y: 50 }, true, 4), 'M 12.5 10 C 25 10, 25 50, 37.5 50');
+});
+
+test('narrow: two places in one column are joined beside it, not through the names between', () => {
+  // a later column bows toward the one before it
+  const later = edgePath({ x: 62.5, y: 10 }, { x: 62.5, y: 70 }, true, 4);
+  assert.equal(later, 'M 62.5 10 C 47 10, 47 70, 62.5 70');
+  // the first column has nothing before it and bows the other way
+  const first = edgePath({ x: 12.5, y: 10 }, { x: 12.5, y: 70 }, true, 4);
+  assert.equal(first, 'M 12.5 10 C 28 10, 28 70, 12.5 70');
+  // and never leaves the picture, however few columns there are
+  for (const cols of [1, 2, 3, 4]) {
+    for (let c = 0; c < cols; c++) {
+      const x = (100 * (c + 0.5)) / cols;
+      const bx = Number(edgePath({ x, y: 10 }, { x, y: 70 }, true, cols).split(' ')[4]);
+      assert.ok(bx !== x, 'it bows');
+      // a cubic with both handles at bx reaches three quarters of the way to it
+      const peak = x + 0.75 * (bx - x);
+      assert.ok(peak >= 0 && peak <= 100, `cols ${cols} col ${c}: peak ${peak}`);
+    }
+  }
 });
 
 test('edges: charted routes whose ends are both drawn, then each guest under its host', () => {

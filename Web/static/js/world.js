@@ -120,7 +120,6 @@ function toggleDepths(force) {
   if (next === inDepths) return;   // stating a state you're in is a no-op
   inDepths = next;
   document.body.classList.toggle('depths', inDepths);
-  $('btn-depths').classList.toggle('lit', inDepths);
 }
 
 /** The viewport's edges in image-y — the projection every Depths decision
@@ -180,7 +179,6 @@ function updateShades(userMove) {
   if (skyQ !== lastSkyQ) { lastSkyQ = skyQ; skyLightEl()?.style.setProperty('--sky-t', skyQ); }
   if (inSky ? skyT < CFG.SKY_RELEASE : skyT > CFG.SKY_ENGAGE) {
     inSky = !inSky;
-    $('btn-sky').classList.toggle('lit', inSky);
     document.body.classList.toggle('in-sky', inSky);   // the map's own tools step back (atlas.css)
   }
   const offCentre = Math.abs((topImgY + bottomImgY) / 2 / A.MAPH - 0.5);

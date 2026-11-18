@@ -44,10 +44,10 @@ test('a date is the reader\'s own day, zero-padded', () => {
 
 test('a file is named for the map, the view and the day', () => {
   const day = new Date(2026, 10, 17, 9);
-  assert.equal(fileName('Test Realm', 'svg', day), 'test-realm-topology-2026-11-17.svg');
-  assert.equal(fileName('Test Realm', 'PNG', day), 'test-realm-topology-2026-11-17.png');
-  assert.equal(fileName('', 'svg', day), 'atlas-topology-2026-11-17.svg');
-  assert.equal(fileName('../../etc/passwd', 'svg', day), 'etc-passwd-topology-2026-11-17.svg');
+  assert.equal(fileName('Test Realm', 'svg', day), 'test-realm-wiring-2026-11-17.svg');
+  assert.equal(fileName('Test Realm', 'PNG', day), 'test-realm-wiring-2026-11-17.png');
+  assert.equal(fileName('', 'svg', day), 'atlas-wiring-2026-11-17.svg');
+  assert.equal(fileName('../../etc/passwd', 'svg', day), 'etc-passwd-wiring-2026-11-17.svg');
 });
 
 test('a slug is plain ASCII, one hyphen a run, at most 40, never empty', () => {

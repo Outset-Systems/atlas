@@ -19,6 +19,7 @@
      nudge(p, dir, step)              -> the corner moved one step that way
      withSaved(layout, saved)         -> a layout with the saved corners laid over it
      changedCards(before, after)      -> {id: {x, y} | null} what a save must send
+     layoutQueue()                    -> the layout's saves and reads, kept in order
 
    An end is `{id, type}` with type 'place' or 'stub', as a card's thing is.
    Values come from the form as typed: blanks, and numbers as text. */
@@ -161,8 +162,10 @@ export function parseTagged(value) {
   return s.split(/[\s,;]+/).filter(Boolean).map(asVlan);
 }
 
-/** Watts as typed: a number, or the words. */
-const asWatts = (v) => (/^\d+(\.\d+)?$/.test(v) ? Number(v) : v);
+/** Watts as typed: a number, or the words. Digits too many to be a number
+    stay the words: read as one they are Infinity, which is sent as null, and
+    null on an edit clears the field without a word (2026-11-18). */
+const asWatts = (v) => (/^\d+(\.\d+)?$/.test(v) && Number.isFinite(Number(v)) ? Number(v) : v);
 
 /** The fields the form writes, and how a typed value is read. */
 const FIELDS = {
@@ -337,4 +340,114 @@ export function changedCards(before, after) {
   }
   for (const id of Object.keys(a)) if (!(id in b)) out[id] = null;
   return out;
+}
+
+/* ── the layout's saves and reads, in order ───────────────────────────────── */
+
+const isPoint = (p) => isObj(p) && Number.isFinite(p.x) && Number.isFinite(p.y);
+
+/** The layout's saves and reads, kept in order (2026-11-18). It sends and
+    reads nothing itself: topology-draw.js asks it what to send, tells it what
+    came back, and lays what it answers. The rules:
+
+    ONE SAVE IN FLIGHT. `move(id, p)` and `clear()` (Re-arrange) only note what
+    waits; `take()` hands over everything waiting as one batch, `{cards,
+    expect}` with `replace: true` after a clear, or null while a save is out
+    or nothing waits. A card moved twice before it is sent goes once, where it
+    was put last, so an older place is never sent after a newer one.
+
+    `done(outcome, stamp)` is the answer to that batch, and is true when moves
+    made meanwhile wait and may go at once:
+      'saved'    the stamp is the one the save answered with
+      'stale'    (a 409) the batch is dropped, as the page then says; what
+                 was moved meanwhile is KEPT, and nothing more is sent until
+                 the layout has been read again
+      'failed'   (no answer, or a 5xx) the batch goes back under what was
+                 moved meanwhile, to go with the next save; never by itself
+      'refused'  (any other refusal) the batch is dropped
+
+    A READ NEVER GOES OVER SOMETHING NEWER. `read()` gives a ticket as a read
+    starts; `land(ticket, body)` gives `{cards}` to lay on screen, or null:
+      an older read than the last one started   null (the later one answers)
+      a save went out or came back meanwhile    null, and `owed` is true once
+                                                nothing is in flight: read again
+      the read failed (`body` not an object)    null; a stale save stays held
+                                                (`stale`), so nothing is sent on the
+                                                old stamp: read again first
+      else                                      the stamp is the read's, and
+                                                `cards` are its cards with the
+                                                moves not yet sent laid over
+                                                (alone, after a clear) */
+export function layoutQueue() {
+  let pending = {};      // moves not yet sent: {id: {x, y}}
+  let replace = false;   // the next save throws the saved layout away first
+  let flight = null;     // the batch out now: {cards, replace}
+  let hold = false;      // a save came back stale: read before sending more
+  let stamp = null;      // the layout's stamp, as last read or written
+  let writes = 0;        // every save sent and every save answered
+  let reads = 0;         // every read started
+  let owed = false;      // a read crossed a save
+  const waiting = () => replace || Object.keys(pending).length > 0;
+  return {
+    get stamp() { return stamp; },
+    get busy() { return flight !== null || hold; },
+    get waiting() { return waiting(); },
+    get owed() { return owed && flight === null && !hold; },
+    /** A save came back stale and the layout has not been read since. */
+    get stale() { return hold && flight === null; },
+    move(id, p) {
+      if (typeof id !== 'string' || !id || !isPoint(p)) return false;
+      pending[id] = { x: p.x, y: p.y };
+      return true;
+    },
+    clear() {
+      pending = {};
+      replace = true;
+    },
+    take() {
+      if (flight !== null || hold || !waiting()) return null;
+      flight = { cards: pending, replace };
+      pending = {};
+      replace = false;
+      writes += 1;
+      return { cards: { ...flight.cards }, ...(flight.replace ? { replace: true } : {}), expect: stamp };
+    },
+    done(outcome, newStamp) {
+      const sent = flight;
+      if (!sent) return false;
+      flight = null;
+      writes += 1;
+      const meanwhile = waiting();
+      if (outcome === 'saved') {
+        if (typeof newStamp === 'string' && newStamp) stamp = newStamp;
+      } else if (outcome === 'stale') {
+        hold = true;
+      } else if (outcome === 'failed' && !replace) {
+        // a clear made meanwhile throws the failed batch away with the rest
+        pending = { ...sent.cards, ...pending };
+        replace = sent.replace;
+      }
+      return meanwhile && !hold;
+    },
+    read() {
+      owed = false;
+      reads += 1;
+      return { reads, writes };
+    },
+    land(ticket, body) {
+      if (!isObj(ticket) || ticket.reads !== reads) return null;
+      if (flight !== null || ticket.writes !== writes) {
+        owed = true;
+        return null;
+      }
+      // a read that failed leaves a stale save held: sending again on the old
+      // stamp would only be refused again, and read again, without end
+      if (!isObj(body)) return null;
+      hold = false;
+      stamp = typeof body.stamp === 'string' ? body.stamp : null;
+      const cards = replace || !isObj(body.cards) ? {} : { ...body.cards };
+      for (const [id, p] of Object.entries(pending)) cards[id] = { x: p.x, y: p.y };
+      return { cards };
+    },
+  };
 }

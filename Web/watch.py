@@ -705,6 +705,67 @@ def tick(data, path=None, now=None, budget=TICK_BUDGET, ts=None):
             _memory_lock.release()
 
 
+#: How long a carry waits for a round to let go of the store.
+CARRY_WAIT = 2.0
+
+
+def _asks_same(a, b):
+    """Whether two targets ask the same thing of the same address."""
+    return (a.type, a.url, a.host, a.port, a.expect) == (b.type, b.url, b.host, b.port, b.expect)
+
+
+def carry(before, after, moves, path=None, wait=CARRY_WAIT):
+    """Keep what a service's check last heard when the service is re-keyed
+    (2026-11-18): `moves` is {old service key: [new keys]}, `before` and
+    `after` the map on either side of the write. Returns how many entries
+    moved.
+
+    A link that stops naming a monitor goes from a shadow check (`k:<monitor>`)
+    to the service's own (`s:<place>/<label>`): the same question to the same
+    address, so its state and `since` go with it instead of starting again at
+    unknown. Only when both sides are checks the map charts and ask the same
+    thing; where a key went to several, the first of them that does. An entry
+    the new key already heard an answer under is never written over.
+
+    Not a promise: a round that runs between the save and this drops the old
+    entry first (`_advance` keeps only what is charted), and then the check
+    starts fresh, as it did before there was a carry. Raises what the store
+    raises (`LockTimeout`, `OSError`); the caller says so and goes on."""
+    import filelock
+    import jsonio
+    kinds = (authority.SERVICE, authority.SHADOW)
+    was = {t.key: t for t in targets(before) if t.kind in kinds}
+    now = {t.key: t for t in targets(after) if t.kind in kinds}
+    wanted = []
+    for old, news in (moves or {}).items():
+        a = was.get(old)
+        for new in news if isinstance(news, (list, tuple)) else []:
+            b = now.get(new)
+            if a is not None and b is not None and a.ckey != b.ckey and _asks_same(a, b):
+                wanted.append((a.ckey, b.ckey))
+                break
+    if not wanted:
+        return 0
+    where = path_of(path)
+    with filelock.exclusive(filelock.lock_for(where), timeout=wait):
+        store = load(where)
+        checks = store["checks"]
+        # all taken out first, then put down: two keys that swapped, or `a`
+        # to `b` while `b` goes to `c`, each land where their own link went
+        taken = {a: checks.pop(a) for a, _ in wanted if a in checks}
+        moved = 0
+        for a, b in wanted:
+            heard = (checks.get(b) or {}).get("heard")
+            if a in taken and not isinstance(heard, (int, float)):
+                checks[b] = taken.pop(a)
+                moved += 1
+        for a, entry in taken.items():
+            checks.setdefault(a, entry)      # not put down: left where it was
+        if moved:
+            jsonio.write_json_atomic(where, store, keep_backup=False)
+    return moved
+
+
 def stale_after(t, factor=1.0):
     """How long an answer is served: three intervals as stretched, five
     minutes at least."""

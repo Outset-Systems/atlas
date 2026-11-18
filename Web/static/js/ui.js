@@ -313,10 +313,9 @@ idxSearch.addEventListener('keydown', (e) => {
 idxClear.addEventListener('click', () => { idxSearch.value = ''; applyIndexSearch(); idxSearch.focus(); });
 if (lastListTab !== 'places') selectDrawerTab(lastListTab);   // the remembered tab (see LIST_TABS)
 
-/* ── The sky ascent ─────────────────────────────────── */
-/* the sky button rises to the Upper Deck (where the Chronicle lives) —
-   the mirror of the Depths button that descends south */
-$('btn-sky').addEventListener('click', () => A.ascend());
+/* (The sky's and the Depths' buttons left the bar on 2026-11-18. The S and D
+   keys in camera.js, and the map's own shores in world.js, still rise and
+   descend.) */
 
 /* Scenes: clicking a scene selects it; clicking the ACTIVE scene again
    deselects — back to the atlas. THE PATH merged into THE LEDGER (2026-07-11).
@@ -433,7 +432,6 @@ document.querySelectorAll('[data-scene]').forEach(btn => {
 // the Home key, and clicking a selected marker again (2026-07-12)
 $('btn-zoom-in').addEventListener('click', () => A.zoomAt(innerWidth / 2, innerHeight / 2, CFG.ZOOM_BTN));
 $('btn-zoom-out').addEventListener('click', () => A.zoomAt(innerWidth / 2, innerHeight / 2, 1 / CFG.ZOOM_BTN));
-$('btn-depths').addEventListener('click', () => A.descend());
 $('btn-net').addEventListener('click', () => A.toggleNet());
 
 /* Something that drops from an anchor while a mouse is over either, or while

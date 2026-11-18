@@ -311,50 +311,74 @@ def apply_ops():
     # its monitor, its place's id) takes the collections naming it along in
     # this same save, and the windows and alert rules straight after
     ops = body.get("ops")
-    moves, data = _service_moves(ops)
-    if moves:
-        ops = list(ops) + renames.collection_ops(data, moves)
+    plan = _service_moves(ops)
+    if plan and plan["moves"]:
+        ops = list(ops) + renames.collection_ops(plan["after"], plan["moves"])
     # `origin` lets the page say "these came from a survey": it can only lower
     # the standing of what it writes (unreviewed), never raise it
     result, refused = _commit(atlas(), ops, body.get("expect"),
                               str(body.get("note") or "")[:200], body.get("origin"))
     if refused:
         return refused
-    if moves:
-        result["carried"] = _carry_elsewhere(moves)
+    if plan:
+        result["carried"] = _carry_elsewhere(plan)
     return jsonify(result)
 
 
 def _service_moves(ops):
-    """({old key: new key}, the map as read) for the services these ops
-    rename, when the map asks for renames to be carried; ({}, None) otherwise."""
-    if not isinstance(ops, list):
-        return {}, None
+    """What a write carries, when the map asks for renames to be carried:
+    {"moves": {old key: [new keys]}, "stayed": [keys still in use], "before",
+    "after"} (the map on either side of the ops), or None when there is
+    nothing to carry or to say.
+
+    The whole map decides (`renames.map_moves`), so the ops are applied to a
+    copy first. A batch the store will refuse carries nothing: the save
+    answers with the refusal, as it would have."""
+    if not isinstance(ops, list) or not any(
+            isinstance(op, dict) and op.get("op") == "upsert" and op.get("section") == "nodes"
+            and isinstance(op.get("body"), dict)
+            and ("links" in op["body"] or isinstance(op["body"].get("id"), str)) for op in ops):
+        return None
     try:
         data, _, refused = _read(atlas())
-    except Exception:  # noqa: BLE001 — no map, nothing to carry
-        return {}, None
-    if refused or not renames.enabled(data):
-        return {}, None
-    by_id = {n.get("id"): n for n in data.get("nodes") or [] if isinstance(n, dict)}
-    moves = {}
-    for op in ops:
-        if not (isinstance(op, dict) and op.get("op") == "upsert" and op.get("section") == "nodes"):
-            continue
-        before = by_id.get(op.get("id")) if isinstance(op.get("id"), str) else None
-        fields = op.get("body") if isinstance(op.get("body"), dict) else {}
-        if before is None or not ("links" in fields or isinstance(fields.get("id"), str)):
-            continue
-        new_id = fields["id"] if isinstance(fields.get("id"), str) and fields["id"] else op["id"]
-        moves.update(renames.key_moves(before, fields.get("links"), op["id"], new_id))
-    return moves, data
+        if refused or not renames.enabled(data):
+            return None
+        after, _ = ds.apply_ops(data, ops)
+    except Exception:  # noqa: BLE001 (no map, or ops the store will refuse: nothing to carry)
+        return None
+    return _carry_plan(data, after, renames.renamed_places(ops, data))
 
 
-def _carry_elsewhere(moves):
-    """Carry `moves` in the repair windows and the alert rules, each under its
-    own store's lock; what moved where, for the answer. A store that cannot
-    be read or written is said, never raised: the map is already saved."""
-    out = {"services": [f"{a} -> {b}" for a, b in sorted(moves.items())], "windows": 0, "rules": 0}
+def _carry_plan(before, after, renamed=None):
+    """The plan `_carry_elsewhere` works from, or None when no key changed."""
+    moves, stayed = renames.map_moves(before, after, renamed)
+    if not moves and not stayed:
+        return None
+    return {"moves": moves, "stayed": stayed, "before": before, "after": after}
+
+
+def _carry_elsewhere(plan):
+    """Carry a plan's moves in the repair windows, the alert rules and what
+    the checks last heard, each under its own store's lock; what moved where,
+    for the answer. A store that cannot be read or written is said, never
+    raised: the map is already saved.
+
+    The answer: `services` ("old -> new", one line for each key a key went
+    to), `windows` and `rules` (how many changed), `checks` (how many checks
+    kept what they last heard); `split` when one key went to several (which,
+    where to, and the one its alert rules now name); `stayed` for a key that
+    changed on one link and is still another's, which is why it moved nothing."""
+    moves = plan["moves"]
+    out = {"services": [f"{a} -> {b}" for a, news in sorted(moves.items()) for b in news],
+           "windows": 0, "rules": 0, "checks": 0}
+    split = [{"key": a, "to": list(news), "rule_to": news[0], "rules": 0}
+             for a, news in sorted(renames.splits(moves).items())]
+    if split:
+        out["split"] = split
+    if plan["stayed"]:
+        out["stayed"] = list(plan["stayed"])
+    if not moves:
+        return out
     try:
         stored = maintenance.read()
         windows = renames.carried_windows(stored["windows"], moves)
@@ -370,10 +394,20 @@ def _carry_elsewhere(moves):
         carried = renames.carried_rules(doc, moves)
         if carried is not None:
             alerts.save(carried, expect=stamp)
-            out["rules"] = sum(1 for r, was in zip(carried["rules"], doc.get("rules") or []) if r is not was)
+            named = [was["target"]["id"] for now, was in zip(carried["rules"], doc.get("rules") or [])
+                     if now is not was]
+            out["rules"] = len(named)
+            for entry in split:
+                entry["rules"] = named.count(entry["key"])
     except Exception as e:  # noqa: BLE001
         log.warning("v2: could not carry renames into the alert rules: %s", e)
         out["rules_failed"] = True
+    try:
+        import watch
+        out["checks"] = watch.carry(plan["before"], plan["after"], moves)
+    except Exception as e:  # noqa: BLE001
+        log.warning("v2: could not carry renames into the checks: %s: %s", type(e).__name__, e)
+        out["checks_failed"] = True
     return out
 
 
@@ -401,6 +435,7 @@ def revisions():
 @write_required
 def revert(revision_id):
     ctx = atlas()
+    before = _map_to_carry_from(ctx)
     try:
         result = ctx.store.revert(revision_id, actor=actor(),
                                   expect=_body().get("expect"))
@@ -409,7 +444,49 @@ def revert(revision_id):
     except OSError as e:
         return jsonify({"error": f"could not revert: {e}"}), 500
     ctx.invalidate()
+    carried = _carry_undo(ctx, before, revision_id)
+    if carried:
+        result["carried"] = carried
     return jsonify(result)
+
+
+def _map_to_carry_from(ctx):
+    """The map as it stands, when it asks for renames to be carried; else None."""
+    try:
+        data, _ = ctx.store.read()
+    except Exception:  # noqa: BLE001 (the undo itself says what is wrong)
+        return None
+    return data if renames.enabled(data) else None
+
+
+def _carry_undo(ctx, before, revision_id):
+    """AN UNDO PUTS THE CARRY BACK (2026-11-18). The snapshot brings the
+    collections back with the map; the repair windows, the alert rules and
+    the checks are stores of their own and would be left on keys the map no
+    longer has. So an undo is carried like any other write: every key that
+    differs between the map as it was (`before`) and the map as it is now
+    goes back the same way, a key that had gone to several included (they
+    all go back to the one). The setting that decides is the one the map had
+    before the undo.
+
+    Places are paired by id. A place the undo gives its old id back is known
+    only when the undo took back the one latest change (its ops are in the
+    change log); an undo reaching further back carries nothing for a place
+    whose id it changed. Never raises."""
+    if before is None:
+        return None
+    try:
+        after, _ = ctx.store.read()
+        renamed = {}
+        latest = ctx.store.revisions(limit=2)      # the undo itself, then what came before it
+        if len(latest) == 2 and latest[1].get("id") == revision_id:
+            forward = renames.renamed_places(latest[1].get("ops"), after)
+            renamed = {new: old for old, new in forward.items()}
+        plan = _carry_plan(before, after, renamed)
+        return _carry_elsewhere(plan) if plan else None
+    except Exception as e:  # noqa: BLE001 (the map is already put back)
+        log.warning("v2: could not carry an undo's renames: %s: %s", type(e).__name__, e)
+        return None
 
 
 # ── THE REPAIRS — maintenance windows ────────────────────────────────────────

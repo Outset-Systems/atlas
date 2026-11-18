@@ -15,10 +15,16 @@
 
 import { A, $, esc, zoneById, FALLBACK_HUE } from './config.js';
 import { say } from './words.js';
-import { chainPairs, edgesOf, layout, servicesCrossing } from './path-model.js';
+import { chainPairs, edgePath, edgesOf, layout, servicesCrossing } from './path-model.js';
+import { PHONE_MEDIA } from './views-model.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 let root, svg, nodesEl, legendEl;
+
+/* A phone (the views' own rule for one, 2026-11-18): the tiers are drawn as
+   columns and the scene scrolls downward. This one flag picks the layout here
+   and, as `#path.pth-narrow`, the rules that go with it. */
+const phone = matchMedia(PHONE_MEDIA);
 
 let tracedEdge = null;   // "<a> <b>" of the hop currently being traced, or null
 let lastFocus = null;    // the service-card view to return to when a trace is released
@@ -90,8 +96,13 @@ function build() {
   const nodes = A.DATA.nodes.filter((n) => !n.off_map);
   const feed = A.signalsFeed?.nodes || {};
 
-  // lay tiers out on a normalized 100×100 grid
-  const { tiers, pos } = layout(nodes);
+  // lay tiers out on a normalized 100×100 grid: rows on a wide screen, columns
+  // on a phone, where the body is cut to the busiest tier's rows and scrolls
+  const narrow = phone.matches;
+  const { tiers, pos, rows = 1, cols = 1 } = layout(nodes, narrow);
+  root.classList.toggle('pth-narrow', narrow);
+  root.style.setProperty('--pth-rows', String(rows));
+  root.style.setProperty('--pth-tiers', String(cols));
 
   // Tell the CSS how many columns the busiest tier needs, so the table can be
   // sized to the REALM rather than to the window. These x's are percentages of
@@ -110,8 +121,7 @@ function build() {
   svg.innerHTML = '';
   for (const e of edges) {
     const a = pos[e.a], b = pos[e.b];
-    const my = (a.y + b.y) / 2;
-    const d = `M ${a.x} ${a.y} C ${a.x} ${my}, ${b.x} ${my}, ${b.x} ${b.y}`;
+    const d = edgePath(a, b, narrow, cols);
     const p = document.createElementNS(SVGNS, 'path');
     p.setAttribute('d', d);
     const st = feed[e.b]?.state;
@@ -212,6 +222,9 @@ function open(focusId, reachIds, serviceLabel) {
       legendEl.insertAdjacentHTML('afterbegin',
         `<span class="pth-lg pth-lg-svc">◈ the reach of <strong>${esc(serviceLabel)}</strong> from its home</span>`);
     }
+    // on a phone the tiers scroll: the place asked for is brought wholly into
+    // sight, once the legend has its line (the legend's height is the body's loss)
+    if (host && phone.matches) host.scrollIntoView({ block: 'nearest' });
   }
 }
 function close() {
@@ -236,4 +249,9 @@ A.buildPathScene = function buildPathScene() {
   legendEl = $('pth-legend');
   $('pth-close')?.addEventListener('click', () => { close(); A.recenter?.(true); });
   root.addEventListener('pointerdown', (e) => { if (e.target === root) close(); });
+  // a phone turned on its side, or a window drawn across the line: redraw what is open
+  phone.addEventListener('change', () => {
+    if (!root.classList.contains('open')) return;
+    open(lastFocus?.focusId, lastFocus?.reachIds, lastFocus?.serviceLabel);
+  });
 };

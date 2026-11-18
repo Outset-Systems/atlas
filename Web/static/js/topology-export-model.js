@@ -4,7 +4,7 @@
 
      dateText(date)                 -> 'YYYY-MM-DD' in the reader's own day
      slug(text)                     -> 'test-realm' (ASCII, at most 40)
-     fileName(title, ext, date)     -> 'test-realm-topology-2026-11-17.svg'
+     fileName(title, ext, date)     -> 'test-realm-wiring-2026-11-17.svg'
      boundsOf(positions, w, h, g)   -> the box round every card, or null
      wideView(bounds, w, h)         -> the view that shows all of it at once
      exportBox(bounds, opts)        -> the file's viewBox {x, y, w, h}
@@ -49,10 +49,12 @@ export function slug(text) {
   return s || 'atlas';
 }
 
-/** The file a drawing is saved as: '<map>-topology-<date>.<ext>'. */
+/** The file a drawing is saved as: '<map>-wiring-<date>.<ext>', the word its
+    title wears (the view is WIRING wherever a person reads it, and a file's
+    name is read). */
 export function fileName(title, ext, date) {
   const e = String(ext || '').toLowerCase().replace(/[^a-z0-9]/g, '') || 'svg';
-  return `${slug(title)}-topology-${dateText(date)}.${e}`;
+  return `${slug(title)}-wiring-${dateText(date)}.${e}`;
 }
 
 /* ── the file's frame ─────────────────────────────────────────────────────── */

@@ -1,7 +1,8 @@
 /* TOPOLOGY, drawing's rules (2026-11-17), in plain node: the ids offered, the
    ports made on the spot, the routes with no cable, the one batch a cable's
-   form saves, picking a cable, moving a card, and the saved layout laid over
-   the canvas's own. Also: every word the view shows has its plain twin.
+   form saves, picking a cable, moving a card, the saved layout laid over
+   the canvas's own, and the order the layout's saves and reads are kept in.
+   Also: every word the view shows has its plain twin.
 
    Run:  node --test tests/test_topology_draw_model.mjs        (from Web/) */
 
@@ -13,7 +14,7 @@ import { cableGeometry } from '../static/js/topology-geometry.js';
 import {
   HIT, ID_MAX, LIMIT, NUDGE,
   cableBody, cableIdFor, cableOps, cablesFromRoutes, changedCards, clampPoint, distanceToCurve,
-  freeId, hitCable, newPortOps, nudge, parseTagged, portsOf, routesWithoutCable, slugify,
+  freeId, hitCable, layoutQueue, newPortOps, nudge, parseTagged, portsOf, routesWithoutCable, slugify,
   stubIdFor, takenIds, withSaved,
 } from '../static/js/topology-draw-model.js';
 
@@ -155,6 +156,25 @@ test('words where a number belongs go to the server as typed, so it can say what
   assert.deepEqual(parseTagged(''), []);
 });
 
+test('digits too many to be a number stay words: never Infinity, which is sent as null', () => {
+  const ends = [place('a'), place('b')];
+  const huge = '9'.repeat(400);
+  for (const typed of [huge, `${huge}.5`, 'NaN', 'Infinity', '-Infinity', '1e999']) {
+    const fresh = cableBody({ id: 'c', poe: typed, vlan: typed, tagged: typed }, ends).body;
+    assert.deepEqual([fresh.poe_w, fresh.vlan, fresh.tagged], [typed, typed, [typed]], typed.slice(0, 12));
+    // what is sent is what was made: nothing in it turns to null on the way
+    assert.deepEqual(JSON.parse(JSON.stringify(fresh)), fresh);
+    // an edit sends the words for the server to refuse, and never clears the field
+    const edit = cableBody({ id: 'c', poe: typed }, ends, { id: 'c', a: 'a', b: 'b', poe_w: 15 }).body;
+    assert.deepEqual(edit, { poe_w: typed });
+  }
+  // every number the form makes is a finite one
+  const seen = [];
+  JSON.stringify(cableBody({ id: 'c', poe: '15.4', vlan: '4094', tagged: '1 2' }, ends).body,
+    (k, v) => { if (typeof v === 'number') seen.push(v); return v; });
+  assert.deepEqual(seen.sort((a, b) => a - b), [1, 2, 15.4, 4094]);
+});
+
 test('the form says a missing id, a missing end and a cable to itself', () => {
   assert.deepEqual(cableBody({ id: '' }, [place('a'), place('b')]).problems, ['id']);
   assert.deepEqual(cableBody({ id: 'c' }, [place('a')]).problems, ['ends']);
@@ -251,6 +271,235 @@ test('a save sends each card moved or new, and null for each forgotten', () => {
   assert.deepEqual(changedCards(null, null), {});
 });
 
+/* ── the layout's saves and reads, in order ── */
+
+const at = (x, y = 0) => ({ x, y });
+
+test('one save is out at a time, and what is moved meanwhile goes when it comes back', () => {
+  const q = layoutQueue();
+  assert.equal(q.take(), null, 'nothing waits');
+  assert.equal(q.move('a', at(1)), true);
+  assert.equal(q.waiting, true);
+  assert.deepEqual(q.take(), { cards: { a: at(1) }, expect: null });
+  assert.equal(q.busy, true);
+  // moved while that save is out: noted, not sent
+  q.move('b', at(2));
+  assert.equal(q.take(), null, 'a second save never goes while the first is out');
+  assert.equal(q.done('saved', 's1'), true, 'moves made meanwhile wait: they may go at once');
+  assert.equal(q.stamp, 's1');
+  assert.deepEqual(q.take(), { cards: { b: at(2) }, expect: 's1' });
+  assert.equal(q.done('saved', 's2'), false, 'nothing more waits');
+  assert.equal(q.busy, false);
+  assert.equal(q.waiting, false);
+  // an answer with no stamp keeps the one it had; an answer to nothing is nothing
+  q.move('a', at(3));
+  q.take();
+  q.done('saved', undefined);
+  assert.equal(q.stamp, 's2');
+  assert.equal(q.done('saved', 'zz'), false);
+  assert.equal(q.stamp, 's2');
+});
+
+test('a card moved again while its save is out is sent once more, where it was put last', () => {
+  const q = layoutQueue();
+  q.move('a', at(1));
+  q.move('a', at(2));
+  assert.deepEqual(q.take().cards, { a: at(2) }, 'moved twice before it went: once, the last place');
+  q.move('a', at(3));
+  q.move('b', at(9));
+  q.move('a', at(4));
+  q.done('saved', 's1');
+  // the older places (1, 2, 3) are never sent after the newer one
+  assert.deepEqual(q.take(), { cards: { a: at(4), b: at(9) }, expect: 's1' });
+  // what was handed over is not changed by a later move
+  q.done('saved', 's2');
+  q.move('a', at(5));
+  const batch = q.take();
+  q.move('a', at(6));
+  assert.deepEqual(batch.cards, { a: at(5) });
+});
+
+test('a move that is not a place on the canvas is not kept', () => {
+  const q = layoutQueue();
+  for (const bad of [at(NaN), at(1, Infinity), { x: '1', y: 2 }, null, undefined, 'x', [1, 2]]) {
+    assert.equal(q.move('a', bad), false);
+  }
+  assert.equal(q.move('', at(1)), false);
+  assert.equal(q.move(7, at(1)), false);
+  assert.equal(q.waiting, false);
+  assert.equal(q.take(), null);
+});
+
+test('a save refused as stale drops its own batch and keeps what was moved meanwhile', () => {
+  const q = layoutQueue();
+  q.land(q.read(), { cards: { a: at(0), z: at(50) }, stamp: 's0' });
+  q.move('a', at(1));
+  assert.deepEqual(q.take(), { cards: { a: at(1) }, expect: 's0' });
+  q.move('b', at(2));                       // while the save is out
+  assert.equal(q.done('stale'), false, 'nothing goes until the layout is read again');
+  assert.equal(q.busy, true);
+  assert.equal(q.waiting, true, 'the move made meanwhile is still there');
+  assert.equal(q.take(), null);
+  // the layout read again: someone else moved a and z; our later move lies over it
+  const ticket = q.read();
+  q.move('c', at(3));                       // and one made during the read
+  const got = q.land(ticket, { cards: { a: at(70), z: at(80) }, stamp: 's9' });
+  assert.deepEqual(got, { cards: { a: at(70), z: at(80), b: at(2), c: at(3) } });
+  assert.equal(q.busy, false);
+  // and goes with the stamp just read; the refused move of a does not
+  assert.deepEqual(q.take(), { cards: { b: at(2), c: at(3) }, expect: 's9' });
+});
+
+test('after a stale refusal a read that fails changes no stamp and sends nothing', () => {
+  const q = layoutQueue();
+  q.land(q.read(), { cards: {}, stamp: 's0' });
+  q.move('a', at(1));
+  q.take();
+  q.move('b', at(2));
+  q.done('stale');
+  assert.equal(q.land(q.read(), null), null);
+  assert.equal(q.stamp, 's0', 'a read that failed changes no stamp');
+  assert.equal(q.busy, true, 'held until a read lands (2026-11-18: it once let the save go, to be refused and read again without end)');
+  assert.equal(q.take(), null);
+});
+
+test('a save that got no answer goes back under what was moved meanwhile; a refused one is dropped', () => {
+  const q = layoutQueue();
+  q.move('a', at(1));
+  q.move('b', at(1));
+  q.take();
+  assert.equal(q.done('failed'), false, 'it is never sent again by itself');
+  assert.equal(q.waiting, true);
+  q.move('a', at(2));
+  assert.deepEqual(q.take().cards, { a: at(2), b: at(1) }, 'with the next save, the newer place over it');
+  q.move('c', at(3));                       // while that one is out
+  assert.equal(q.done('failed'), true, 'the move made meanwhile may go');
+  assert.deepEqual(q.take().cards, { a: at(2), b: at(1), c: at(3) });
+  q.move('d', at(4));
+  assert.equal(q.done('refused'), true);
+  assert.deepEqual(q.take().cards, { d: at(4) }, 'a refused batch is not sent again');
+  assert.equal(q.done('refused'), false);
+  assert.equal(q.waiting, false);
+});
+
+test('Re-arrange waits its turn, and nothing older is sent after it', () => {
+  const q = layoutQueue();
+  q.land(q.read(), { cards: { a: at(0) }, stamp: 's0' });
+  q.move('a', at(1));
+  q.take();
+  q.move('b', at(2));                       // moved while the save is out ...
+  q.clear();                                // ... then Re-arrange: that move goes with the rest
+  assert.equal(q.take(), null, 'not while a save is out');
+  assert.equal(q.done('saved', 's1'), true);
+  assert.deepEqual(q.take(), { cards: {}, replace: true, expect: 's1' });
+  assert.equal(q.done('saved', 's2'), false);
+  // a card moved after Re-arrange and before it is sent goes in the same save
+  q.clear();
+  q.move('c', at(3));
+  assert.deepEqual(q.take(), { cards: { c: at(3) }, replace: true, expect: 's2' });
+  // that save gets no answer: it is sent again whole, still a Re-arrange
+  q.move('d', at(4));
+  q.done('failed');
+  assert.deepEqual(q.take(), { cards: { c: at(3), d: at(4) }, replace: true, expect: 's2' });
+  // a save with no answer, and Re-arrange pressed meanwhile: its cards are not brought back
+  q.done('saved', 's3');
+  q.move('e', at(5));
+  q.take();
+  q.clear();
+  assert.equal(q.done('failed'), true);
+  assert.deepEqual(q.take(), { cards: {}, replace: true, expect: 's3' });
+});
+
+test('a read that comes back after a move lays the move over what it read', () => {
+  const q = layoutQueue();
+  const ticket = q.read();
+  q.move('a', at(5));                       // dragged before the first read came back
+  const got = q.land(ticket, { cards: { a: at(1), b: at(2) }, stamp: 's1' });
+  assert.deepEqual(got, { cards: { a: at(5), b: at(2) } }, 'the newer place is not overwritten');
+  assert.equal(q.stamp, 's1');
+  assert.equal(q.owed, false);
+  assert.deepEqual(q.take(), { cards: { a: at(5) }, expect: 's1' });
+  // after Re-arrange and before it is sent, what the server still holds is not laid
+  q.done('saved', 's2');
+  q.clear();
+  q.move('c', at(3));
+  assert.deepEqual(q.land(q.read(), { cards: { a: at(5), b: at(2) }, stamp: 's2' }), { cards: { c: at(3) } });
+  // a read with no cards and no stamp reads as it did
+  const bare = layoutQueue();
+  assert.deepEqual(bare.land(bare.read(), {}), { cards: {} });
+  assert.equal(bare.stamp, null);
+});
+
+test('a read that crossed a save is not laid, and is owed again once nothing is out', () => {
+  // the save went out and came back while the read was on its way
+  let q = layoutQueue();
+  q.land(q.read(), { cards: { a: at(0) }, stamp: 's0' });
+  let ticket = q.read();                    // reads the layout as it was
+  q.move('a', at(1));
+  q.take();
+  q.done('saved', 's1');                    // the newer place is saved
+  assert.equal(q.land(ticket, { cards: { a: at(0) }, stamp: 's0' }), null);
+  assert.equal(q.stamp, 's1', 'the older stamp is not taken either');
+  assert.equal(q.owed, true);
+  assert.deepEqual(q.land(q.read(), { cards: { a: at(1) }, stamp: 's1' }), { cards: { a: at(1) } });
+  assert.equal(q.owed, false);
+
+  // the save was out when the read began (sent on leaving the view) and is back before it
+  q = layoutQueue();
+  q.move('a', at(1));
+  q.take();
+  ticket = q.read();
+  q.done('saved', 's1');
+  assert.equal(q.land(ticket, { cards: {}, stamp: 's0' }), null);
+  assert.equal(q.stamp, 's1');
+  assert.equal(q.owed, true);
+
+  // the save is still out when the read comes back: owed only once it is answered
+  q = layoutQueue();
+  ticket = q.read();
+  q.move('a', at(1));
+  q.take();
+  assert.equal(q.land(ticket, { cards: {}, stamp: 's0' }), null);
+  assert.equal(q.stamp, null);
+  assert.equal(q.owed, false, 'not while the save is out');
+  q.done('saved', 's1');
+  assert.equal(q.owed, true);
+  // starting the read again is what settles it
+  q.read();
+  assert.equal(q.owed, false);
+});
+
+test('of two reads on their way, only the one started last is laid', () => {
+  const q = layoutQueue();
+  const first = q.read();
+  const second = q.read();
+  assert.deepEqual(q.land(second, { cards: { a: at(2) }, stamp: 's2' }), { cards: { a: at(2) } });
+  assert.equal(q.land(first, { cards: { a: at(1) }, stamp: 's1' }), null, 'the older answer came last');
+  assert.equal(q.stamp, 's2');
+  assert.equal(q.owed, false, 'nothing to read again: the later read answered');
+  // the other way round: the older one first
+  const third = q.read();
+  const fourth = q.read();
+  assert.equal(q.land(third, { cards: {}, stamp: 's3' }), null);
+  assert.deepEqual(q.land(fourth, { cards: { a: at(4) }, stamp: 's4' }), { cards: { a: at(4) } });
+  assert.equal(q.stamp, 's4');
+  // a ticket that is not one, and a read that failed
+  assert.equal(q.land(null, { cards: {}, stamp: 'x' }), null);
+  assert.equal(q.land(q.read(), null), null);
+  assert.equal(q.stamp, 's4');
+});
+
+test('the drawing sends the layout from one place, in the order the queue keeps', () => {
+  const code = readFileSync(here('../static/js/topology-draw.js'), 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, '');
+  assert.equal(code.match(/postJSON\(/g).length, 1, 'one save, so one at a time');
+  assert.match(code, /const batch = Q\.take\(\);\n\s*if \(!batch\) return;/);
+  assert.match(code, /await postJSON\(LAYOUT, batch, \{ keepalive: true \}\)/);
+  assert.equal(code.match(/\bfetch\(/g).length, 1, 'one read');
+  assert.match(code, /const ticket = Q\.read\(\);[\s\S]*?const got = Q\.land\(ticket, body\);/);
+  // nothing keeps a stamp or a list of moves of its own beside the queue
+  for (const word of ['S.pending', 'S.stamp', 'S.saving']) assert.ok(!code.includes(word), word);
+});
+
 /* ── words ── */
 
 test("every word the view shows has its plain twin in plain.json, and none is an em dash", () => {
@@ -289,4 +538,22 @@ test('a port typed in another case is the port the place already has', () => {
   const ends = [{ id: 'sw', type: 'place' }, { id: 'pc', type: 'place' }];
   assert.deepEqual(newPortOps(data, ends, ['eth1', 'en0']),
     [{ op: 'insert', section: 'interfaces', body: { device: 'pc', name: 'en0' } }]);
+});
+
+test('layoutQueue: a stale save whose re-read fails stays held, so nothing loops on the old stamp', () => {
+  const q = layoutQueue();
+  q.land(q.read(), { cards: {}, stamp: 's0' });
+  q.move('a', { x: 10, y: 10 });
+  assert.equal(q.take().expect, 's0');
+  q.move('b', { x: 20, y: 20 });          // moved while the save was out
+  assert.equal(q.done('stale'), false, 'nothing more goes until a read lands');
+  assert.equal(q.stale, true);
+  assert.equal(q.land(q.read(), null), null, 'the re-read failed');
+  assert.equal(q.stale, true, 'still held');
+  assert.equal(q.take(), null, 'and nothing is sent on the old stamp');
+  assert.equal(q.waiting, true, 'the later move still waits');
+  const got = q.land(q.read(), { cards: { c: { x: 1, y: 1 } }, stamp: 's1' });
+  assert.deepEqual(got.cards, { c: { x: 1, y: 1 }, b: { x: 20, y: 20 } });
+  assert.equal(q.stale, false);
+  assert.deepEqual(q.take(), { cards: { b: { x: 20, y: 20 } }, expect: 's1' });
 });

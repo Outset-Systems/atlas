@@ -336,6 +336,103 @@ def test_a_place_with_a_route_is_still_refused_a_rename_as_before(tmp_path):
     assert err.value.problems == ["route #1: unknown from 'alpha'"]
 
 
+# ── a port renamed (2026-11-18) ──────────────────────────────────────────────
+
+def _port(device, name, **extra):
+    return {"device": device, "name": name, **extra}
+
+
+def _rename_port(index, name):
+    return {"op": "upsert", "section": "interfaces", "index": index, "body": {"name": name}}
+
+
+def _ports_of(data):
+    return {c["id"]: (c.get("a_port"), c.get("b_port")) for c in data["cables"]}
+
+
+def test_a_renamed_port_takes_the_cables_that_name_it_along(make_store):
+    st = make_store(realm_data(
+        interfaces=[_port("alpha", "7"), _port("alpha", "8"), _port("beta", "7")],
+        cables=[cable("ab", "alpha", "beta", a_port=" 7", b_port="7"),
+                cable("ba", "beta", "alpha", a_port="1", b_port="7"),
+                cable("other", "alpha", "beta", a_port="8", b_port="2")]))
+    _, stamp = st.read()
+    out = st.apply([_rename_port(0, "Gi1/0/7")], expect=stamp)
+    assert out["changed"] == ["changed interface 7 (and 2 cables that named it, "
+                              "carried to the new name)"]
+    data, _ = st.read()
+    # alpha's port 7 at either end follows; beta's own port 7 and alpha's 8 do not
+    assert _ports_of(data) == {"ab": ("Gi1/0/7", "7"), "ba": ("1", "Gi1/0/7"), "other": ("8", "2")}
+
+
+def test_ports_renamed_in_a_row_move_each_cable_one_step(make_store):
+    """`1` to `2` and `2` to `3` in one save, and two names swapped: each cable
+    follows its own port, and none is carried twice."""
+    st = make_store(realm_data(
+        interfaces=[_port("alpha", "1"), _port("alpha", "2"), _port("beta", "x"), _port("beta", "y")],
+        cables=[cable("one", "alpha", "beta", a_port="1", b_port="x"),
+                cable("two", "alpha", "beta", a_port="2", b_port="y")]))
+    _, stamp = st.read()
+    out = st.apply([_rename_port(0, "2"), _rename_port(1, "3"),
+                    _rename_port(2, "y"), _rename_port(3, "x"),
+                    _rename_port(0, "uplink")], expect=stamp)
+    assert _ports_of(st.read()[0]) == {"one": ("uplink", "y"), "two": ("3", "x")}
+    # the op that gave a port its last name is the one that says so
+    assert [c.endswith("carried to the new name)") for c in out["changed"]] == [False, True, True, True, True]
+
+
+def test_what_a_renamed_port_leaves_alone(tmp_path):
+    st = _file_store(tmp_path, realm_data(
+        interfaces=[_port("alpha", "7"), _port("alpha", "7"), _port("alpha", "9"), _port("beta", "4"),
+                    _port("beta", "5")],
+        cables=[cable("twin", "alpha", "beta", a_port="7", b_port="1"),
+                cable("replugged", "alpha", "beta", a_port="9", b_port="2"),
+                cable("moved", "beta", "alpha", a_port="4", b_port="3"),
+                cable("gone", "beta", "alpha", a_port="5", b_port="6")]))
+    _, stamp = st.read()
+    out = st.apply([
+        _rename_port(0, "seven"),                      # two ports of alpha are called 7: which one is not known
+        _rename_port(2, "nine"),                       # ...and the person re-plugs this cable in the same save
+        {"op": "upsert", "section": "cables", "id": "replugged", "body": {"a_port": "8"}},
+        {"op": "upsert", "section": "interfaces", "index": 3,
+         "body": {"device": "alpha", "name": "four"}},  # a port given to another place is another port
+        _rename_port(4, "five"),                       # renamed, then removed in the same save
+        {"op": "delete", "section": "interfaces", "index": 4},
+    ], expect=stamp)
+    assert not any("carried" in c for c in out["changed"])
+    assert _ports_of(st.read()[0]) == {"twin": ("7", "1"), "replugged": ("8", "2"),
+                                       "moved": ("4", "3"), "gone": ("5", "6")}
+
+
+def test_a_port_renamed_only_in_its_case_keeps_its_cables(tmp_path):
+    st = _file_store(tmp_path, realm_data(interfaces=[_port("alpha", "eth0")],
+                                          cables=[cable("c", "alpha", "beta", a_port="ETH0")]))
+    _, stamp = st.read()
+    st.apply([_rename_port(0, "Eth0")], expect=stamp)
+    assert st.read()[0]["cables"][0]["a_port"] == "Eth0"
+
+
+def test_an_undo_puts_the_port_and_its_cables_back(tmp_path):
+    st = _file_store(tmp_path, realm_data(interfaces=[_port("alpha", "7")],
+                                          cables=[cable("c", "alpha", "beta", a_port="7")]))
+    original, stamp = st.read()
+    out = st.apply([_rename_port(0, "uplink")], expect=stamp)
+    assert st.read()[0]["cables"][0]["a_port"] == "uplink"
+    st.revert(out["revision"], actor="test")
+    assert st.read()[0] == original
+
+
+def test_a_renamed_port_is_carried_whatever_the_map_says_about_service_renames(tmp_path):
+    """The cable is part of the same document and nothing says what it was
+    left naming, so this does not wait on `carry_service_renames`."""
+    data = realm_data(interfaces=[_port("alpha", "7")], cables=[cable("c", "alpha", "beta", a_port="7")])
+    assert data["meta"].get("carry_service_renames") is None
+    st = _file_store(tmp_path, data)
+    _, stamp = st.read()
+    st.apply([_rename_port(0, "uplink")], expect=stamp)
+    assert st.read()[0]["cables"][0]["a_port"] == "uplink"
+
+
 # ── a place or a stub removed ────────────────────────────────────────────────
 
 def test_removing_a_place_removes_its_cables_in_the_same_save(make_store):

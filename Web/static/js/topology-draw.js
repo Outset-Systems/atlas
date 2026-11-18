@@ -14,6 +14,9 @@
    a 409 reads the layout again and says so. Re-arrange asks once, then
    throws the saved layout away (`guardRearrange`). A card dragged is not
    opened by the same press. Not map data: no revision, no undo.
+   The order of the saves and the reads is `D.layoutQueue()`'s (2026-11-18):
+   one save out at a time (Re-arrange's too), what is moved meanwhile sent
+   when it comes back, and a read that crossed a save not laid but read again.
 
    THE TOOLS, in ARRANGE AND EXPORT (`addTool`):
      Draw cables          toggles drawing. In it: drag from one card to another
@@ -68,10 +71,7 @@ const S = {
   pick: null,       // end A, picked by a press: {id, type, name}
   drag: null,       // {id, thing, pointerId, x0, y0, from, moved, mode}
   swallow: false,   // the press that ends a drag is ours
-  stamp: null,      // the layout's stamp, as last read or written
-  pending: {},      // moves not yet sent
-  timer: 0,
-  saving: false,
+  timer: 0,         // the wait after the last move, or 0
   armed: false,     // Re-arrange asked once
   armTimer: 0,
   form: null,       // the open form
@@ -82,6 +82,8 @@ const S = {
 };
 const el = { msg: null };
 const removers = new Map();
+/** What waits to be saved, what is out, the stamp, and which read may be laid. */
+const Q = D.layoutQueue();
 
 /* ── small things ─────────────────────────────────────────────────────────── */
 
@@ -121,60 +123,73 @@ function say(words, kind = 'info') {
 
 let firstLayout = true;
 
-/** Read the layout and lay it over the canvas. `fit` once, the first time
-    cards come back, since the first Fit was made without them. */
+/** Read the layout and lay it over the canvas, with the moves not yet sent
+    over it. A read that crossed a save is not laid: it is read again once
+    nothing is out. `fit` once, the first time cards come back, since the
+    first Fit was made without them. */
 async function loadLayout() {
+  const ticket = Q.read();
   let body = null;
   try {
     const res = await fetch(LAYOUT, { headers: { Accept: 'application/json' } });
-    if (!res.ok) return;
-    body = await res.json();
-  } catch { return; }
-  S.stamp = typeof body?.stamp === 'string' ? body.stamp : null;
-  const cards = body?.cards && typeof body.cards === 'object' ? body.cards : {};
+    if (res.ok) body = await res.json();
+  } catch { /* read as no answer */ }
+  const got = Q.land(ticket, body);
+  if (got) lay(got.cards);
+  // moves that waited for this read go now (a save says when it is done
+  // what it owes); else a read that crossed a save is made again
+  if (Q.waiting && !Q.busy) { if (!S.timer) flush(); } else if (Q.owed) loadLayout();
+}
+
+function lay(cards) {
   const some = Object.keys(cards).length > 0;
   const first = firstLayout;
   firstLayout = false;
   if (!some && !T.saved) return;
-  setSaved(some ? { ...cards } : null);
+  setSaved(some ? cards : null);
   if (!T.up) return;
   if (first && some) hooks.fit?.();
   else repaint();
 }
 
-/** Send what moved, one save at a time, with the stamp last seen. */
+/** Send what waits, one save at a time, with the stamp last seen. */
 async function flush() {
   clearTimeout(S.timer);
-  if (S.saving || !Object.keys(S.pending).length) return;
-  const cards = S.pending;
-  S.pending = {};
-  S.saving = true;
+  S.timer = 0;
+  // held after a conflict whose re-read failed: read again, once per ask
+  if (Q.stale && Q.waiting) { loadLayout(); return; }
+  const batch = Q.take();
+  if (!batch) return;
+  let again = false;
   try {
     // keepalive: a move made just before the page goes is still sent
-    const res = await postJSON(LAYOUT, { cards, expect: S.stamp }, { keepalive: true });
+    const res = await postJSON(LAYOUT, batch, { keepalive: true });
     const body = await readJSON(res);
     if (res.ok) {
-      S.stamp = body?.stamp || S.stamp;
+      again = Q.done('saved', body?.stamp);
+      if (batch.replace) say(t('tp_rearranged'));
     } else if (res.status === 409) {
-      S.pending = {};
+      Q.done('stale');
       say(t('tp_layout_conflict'), 'warn');
-      await loadLayout();
+      loadLayout();   // what was moved meanwhile is laid over it, then sent
     } else {
+      again = Q.done(res.status >= 500 ? 'failed' : 'refused');
       say(t('tp_layout_failed', { why: body?.error || `${res.status}` }), 'bad');
     }
   } catch (err) {
+    again = Q.done('failed');
     say(t('tp_layout_failed', { why: err.message || String(err) }), 'bad');
-  } finally {
-    S.saving = false;
-    if (Object.keys(S.pending).length) S.timer = setTimeout(flush, SAVE_MS);
   }
+  // what was moved meanwhile goes now (or when its own wait ends); else a
+  // read that crossed this save is made again
+  if (again) { if (!S.timer) flush(); } else if (Q.owed) loadLayout();
 }
 
 /** Keep a card where it was put: on screen now, saved a moment later. */
 function keep(id, corner) {
   const p = D.clampPoint(corner);
+  if (!Q.move(id, p)) return;
   setSaved({ ...(T.saved || {}), [id]: p });
-  S.pending[id] = p;
   clearTimeout(S.timer);
   S.timer = setTimeout(flush, SAVE_MS);
   repaint();
@@ -192,17 +207,9 @@ guardRearrange(() => {
   }
   S.armed = false;
   clearTimeout(S.armTimer);
-  clearTimeout(S.timer);
-  S.pending = {};
+  Q.clear();
   setSaved(null);
-  postJSON(LAYOUT, { cards: {}, replace: true, expect: S.stamp })
-    .then(async (res) => {
-      const body = await readJSON(res);
-      if (res.ok) { S.stamp = body?.stamp || S.stamp; say(t('tp_rearranged')); }
-      else if (res.status === 409) { say(t('tp_layout_conflict'), 'warn'); await loadLayout(); }
-      else say(t('tp_layout_failed', { why: body?.error || `${res.status}` }), 'bad');
-    })
-    .catch((err) => say(t('tp_layout_failed', { why: err.message || String(err) }), 'bad'));
+  flush();   // now, or as soon as the save that is out comes back
   return true;
 });
 
@@ -888,7 +895,6 @@ addEventListener('atlas:view', (e) => {
     loadLayout();
     requestAnimationFrame(syncTools);
   } else if (e.detail?.prev === 'topology') {
-    clearTimeout(S.timer);
     flush();
     if (S.drawing) setDrawing(false);
     closeForm(false);
@@ -905,7 +911,7 @@ addEventListener('resize', () => {
 });
 // a move not yet sent goes before the page does
 addEventListener('pagehide', () => {
-  if (Object.keys(S.pending).length) flush();
+  if (Q.waiting) flush();
 });
 // the first view is chosen before this file listens (views.js)
 if (A.VIEW === 'topology' || document.body.dataset.view === 'topology') {

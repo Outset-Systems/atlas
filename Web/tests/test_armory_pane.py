@@ -160,6 +160,11 @@ def test_the_old_names_are_gone_from_the_scene_band():
     # the pull-tab card (2026-11-11) draws its glyphs, so the words stand alone
     assert "}Draw route</button>" in card and "}Topology</button>" in card
     assert "}Wiring</button>" in card, "the service pane's way into WIRING (2026-11-17)"
+    # and the two do not wear one icon (walked 2026-11-17): the tiers for the
+    # scene, two cards and their cable for the canvas
+    assert "${ICON.topo}Topology</button>" in card and "${ICON.wire}Wiring</button>" in card
+    assert card.count("${ICON.topo}") == 1 and card.count("${ICON.wire}") == 1
+    assert """  wire: '<svg viewBox="0 0 16 16" aria-hidden="true">""" in card
     assert "ROAD" not in card and ">PATH" not in card and "◈ PATH" not in card
 
 

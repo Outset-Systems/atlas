@@ -439,6 +439,88 @@ def _copy(data):
         return copy.deepcopy(data)
 
 
+# ── A PORT RENAMED TAKES ITS CABLES ALONG (2026-11-18) ───────────────────────
+# A cable names a port by the place and the port's `name` (`a` + `a_port`).
+# Renaming the port in PORTS used to leave the cable naming a port the place
+# no longer has, silently: a port name with no interface is allowed. Like a
+# renamed place (`_carry_rename`), this is part of the save itself, whoever
+# writes and whatever the map's settings say. It is worked out once, at the
+# end of the batch, from the map as it was: renaming `1` to `2` and `2` to `3`
+# in one save moves each cable one step, never one cable twice.
+
+def _port_name(value):
+    """A port name as a cable is matched to it (`validation._port`)."""
+    return value.strip().casefold() if isinstance(value, str) else ""
+
+
+def _port_row(data, op):
+    """(index, row) of the port an upsert is about to change, or None."""
+    rows = data.get("interfaces")
+    if op.get("section") != "interfaces" or op.get("op") != "upsert" or not isinstance(rows, list):
+        return None
+    try:
+        index = _target_index(data, op)
+    except RejectedError:
+        return None                      # the op itself says what is wrong
+    if index < 0 or not isinstance(rows[index], dict):
+        return None
+    return index, rows[index]
+
+
+def _note_port(data, seen, ports, at):
+    """Remember the port an upsert changed: [row now, place, name at the start
+    of the batch, the op that changed it last]."""
+    index, was = seen
+    now = data["interfaces"][index]
+    for entry in ports:
+        if entry[0] is was:
+            entry[0], entry[3] = now, at
+            return
+    ports.append([now, was.get("device"), was.get("name"), at])
+
+
+def _carry_ports(before, data, ports, summaries):
+    """Point the cables at the new names of the ports this batch renamed.
+
+    A port is the same port when it is the same row of the same place with
+    another name. Left alone: a name two ports of the place had (which one
+    the cable is in is not known), and a cable end the batch itself changed
+    (a person who re-plugged it in the same save has said where it goes)."""
+    rows = data.get("interfaces") if isinstance(data.get("interfaces"), list) else []
+    cables = data.get("cables") if isinstance(data.get("cables"), list) else []
+    had = before.get("interfaces") if isinstance(before.get("interfaces"), list) else []
+    renamed = {}
+    for row, place, name, at in ports:
+        new = row.get("name")
+        old = _port_name(name)
+        if (not cables or not old or not isinstance(place, str) or row.get("device") != place
+                or not isinstance(new, str) or not new.strip() or name.strip() == new.strip()
+                or not any(r is row for r in rows)):
+            continue
+        if sum(1 for r in had if isinstance(r, dict) and r.get("device") == place
+               and _port_name(r.get("name")) == old) != 1:
+            continue
+        renamed[(place, old)] = (new.strip(), at)
+    if not renamed:
+        return
+    laid = before.get("cables") if isinstance(before.get("cables"), list) else []
+    was = {c["id"]: c for c in laid if isinstance(c, dict) and isinstance(c.get("id"), str)}
+    counts = {}
+    for cable in cables:
+        prior = was.get(cable.get("id")) if isinstance(cable, dict) and isinstance(cable.get("id"), str) else None
+        if prior is None:
+            continue
+        for side in ("a", "b"):
+            place, port = cable.get(side), cable.get(side + "_port")
+            hit = renamed.get((place, _port_name(port))) if isinstance(place, str) else None
+            if hit and prior.get(side) == place and prior.get(side + "_port") == port:
+                cable[side + "_port"] = hit[0]
+                counts[hit[1]] = counts.get(hit[1], 0) + 1
+    for at, n in counts.items():
+        summaries[at] += (f" (and {n} cable{'s' if n != 1 else ''} that named it, "
+                          "carried to the new name)")
+
+
 def apply_ops(data, ops):
     """Apply a batch to a copy of `data`. Returns (new_data, [summaries])."""
     if not isinstance(ops, list) or not ops:
@@ -447,13 +529,19 @@ def apply_ops(data, ops):
         raise RejectedError("too many changes in one save (max 500)")
     out = _copy(data)
     summaries = []
+    ports = []                           # the ports this batch changes (`_note_port`)
     for i, op in enumerate(ops):
         if not isinstance(op, dict):
             raise RejectedError(f"change #{i + 1} is not an operation")
         try:
+            seen = _port_row(out, op)
             summaries.append(_apply_one(out, op))
+            if seen:
+                _note_port(out, seen, ports, i)
         except RejectedError as e:
             raise RejectedError([f"change #{i + 1}: {p}" for p in e.problems])
+    if ports:
+        _carry_ports(data, out, ports, summaries)
     return out, summaries
 
 
