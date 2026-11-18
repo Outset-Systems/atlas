@@ -361,17 +361,18 @@ flowchart TD
   the boot sequence calls is defined somewhere.
 - **Scenes** are full-screen views over the map (addresses, the
   racks, resources, the calendar, certificates, tripwires, the event history,
-  accounts). `scene.js` provides `makeScene({ id, closeId, build,
+  the topology, accounts). `scene.js` provides `makeScene({ id, closeId, build,
   onClose })` so each module supplies only what it draws.
 - **Views** stand in the map's place under the band: overview, nodes and,
-  since 2026-11-17, the topology (`topology.js` and its parts), which replaced
-  the tier scene `path.js`.
+  since 2026-11-17, wiring (the view `topology`: `topology.js` and its
+  parts), where cables are drawn. The topology scene in the band is the
+  tier diagram `path.js`, which stayed beside it.
 - **Pure models** (`camera-model.js`, `region-model.js`, `world-model.js`,
-  `card-model.js`, `calendar-model.js`, `ipam.js`, `topology-model.js`,
-  `connections-model.js`, `editor/form-model.js`, `project.js`,
-  `rack-model.js` and the other `*-model.js` files) have no DOM access and are
-  unit tested with node. Logic that decides something goes in a model; the
-  module beside it draws.
+  `card-model.js`, `calendar-model.js`, `ipam.js`, `path-model.js`,
+  `topology-model.js`, `connections-model.js`, `editor/form-model.js`,
+  `project.js`, `rack-model.js` and the other `*-model.js` files) have no
+  DOM access and are unit tested with node. Logic that decides something
+  goes in a model; the module beside it draws.
 - **The editor** (`editor/`) is inert unless the server rendered the page as
   editable. Every form submit is one atomic ops write, then the map redraws
   from the server's answer. `wizard.js` is the first-run setup.

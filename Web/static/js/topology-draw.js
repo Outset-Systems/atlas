@@ -712,7 +712,7 @@ function cableForm(cable, ends) {
       if (!(await ready())) return;
       const still = (Editor.data?.cables || []).some((c) => c && c.id === cable.id);
       if (!still) { closeForm(); say(t('tp_cable_gone'), 'warn'); return; }
-      const out = await write([{ op: 'delete', section: 'cables', id: cable.id }], 'took a cable out on the topology', problems, go);
+      const out = await write([{ op: 'delete', section: 'cables', id: cable.id }], 'took a cable out in WIRING', problems, go);
       if (out !== 'saved') return;
       closeForm(false);
       say(t('tp_cable_removed', { id: cable.id }));
@@ -735,7 +735,7 @@ function cableForm(cable, ends) {
       return;
     }
     if (!ops.length) { closeForm(false); say(t('tp_nothing_changed')); focusCard(ends[0].id); return; }
-    const out = await write(ops, cable ? 'changed a cable on the topology' : 'drew a cable on the topology', problems, go);
+    const out = await write(ops, cable ? 'changed a cable in WIRING' : 'drew a cable in WIRING', problems, go);
     if (out !== 'saved') { form.querySelector('input:not([hidden]), select')?.focus(); return; }
     const made = ops.filter((op) => op.section === 'interfaces').length;
     const name = values.id.trim();
@@ -772,7 +772,7 @@ async function openStub() {
     const taken = new Set([...D.takenIds(Editor.data, 'nodes'), ...D.takenIds(Editor.data, 'stubs')]);
     const body = { id: D.stubIdFor(words, taken), name: words, kind: kind.value };
     if (note.value.trim()) body.note = note.value.trim();
-    const out = await write([{ op: 'insert', section: 'stubs', body }], 'added a stub on the topology', problems, go);
+    const out = await write([{ op: 'insert', section: 'stubs', body }], 'added a stub in WIRING', problems, go);
     if (out !== 'saved') { name.focus(); return; }
     closeForm(false);
     say(t('tp_stub_saved', { name: words }));
@@ -836,7 +836,7 @@ async function openRoutes() {
     if (!picked.length) return;
     if (!(await ready())) return;
     const ops = D.cablesFromRoutes(picked);
-    const out = await write(ops, 'made cables from routes on the topology', problems, go);
+    const out = await write(ops, 'made cables from routes in WIRING', problems, go);
     if (out !== 'saved') return;
     closeForm(false);
     say(ops.length === 1 ? t('tp_routes_made_one') : t('tp_routes_made', { n: ops.length }));
@@ -851,7 +851,7 @@ async function openRoutes() {
 // on the window, in the capture phase, before the conductor's own Escape
 // (which would let go of the selection too): one step back at a time
 addEventListener('keydown', (e) => {
-  if (e.key !== 'Escape' || !T.up || !mayDraw() || A.cardOpen?.() || A.glassOpen?.()) return;
+  if (e.key !== 'Escape' || !T.up || !mayDraw() || A.sceneOpen || A.cardOpen?.() || A.glassOpen?.()) return;
   // the keyboard elsewhere (the Desk that Add a place opened): not ours
   const a = document.activeElement;
   if (document.getElementById('desk')?.classList.contains('open')) return;

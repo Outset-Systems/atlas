@@ -7,10 +7,11 @@
    opens on, and THE ATLAS is the way back from it. MAP is the map itself;
    OVERVIEW is the realm's own facts in tiles, then the Deck below them (the
    Sky's and the Depths' charts in one column, 2026-11-13 stage 3); NODES is
-   one table of every place; TOPOLOGY (2026-11-17) is the device cards and
-   the cables between them, drawn on one canvas (topology.js); ALERTS is the
-   rules and destinations that send word out when the map changes (stage 4),
-   and is an admin's only.
+   one table of every place; WIRING (2026-11-17, the view `topology`) is
+   the device cards and the cables between them, drawn on one canvas
+   (topology.js), where TOPOLOGY in the band is the tier scene (path.js);
+   ALERTS is the rules and destinations that send word out when the map
+   changes (stage 4), and is an admin's only.
    views.js does the showing; this file only decides.
    Unit-tested by tests/test_views_model.mjs under plain node.
 

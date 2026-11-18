@@ -97,7 +97,7 @@ const nodeLogo = (n) => {
   return onStyle && (CFG.THEME.sceneryLogos || []).includes(themed) ? '' : themed;
 };
 
-/* TOPOLOGY's cards wear the same emblem (2026-11-17) */
+/* WIRING's cards (the view `topology`) wear the same emblem (2026-11-17) */
 A.nodeLogo = nodeLogo;
 
 function setPortrait(n) {
@@ -576,11 +576,15 @@ function showServiceDetail(node, link) {
           `${glassAttrs(link.label, `a service of ${node.name}`, link.open_in)}>Open ${esc(link.label)}${ICON.out}</a>`
         : '') +
       `<div class="csv-twin">` +
-      `<button class="csv-metrics" id="csv-path" title="Show its place in TOPOLOGY, lit from the head down">${ICON.topo}Topology</button>` +
+      `<button class="csv-metrics" id="csv-path" title="Show it in TOPOLOGY — the tier diagram">${ICON.topo}Topology</button>` +
       // the map-side twin of TOPOLOGY: the same road, drawn where you already
-      // are instead of in the topology (2026-08-11)
+      // are instead of in the tier diagram (2026-08-11)
       `<button class="csv-metrics" id="csv-road" title="Follow its route on the map">${ICON.route}Draw route</button>` +
-      `</div></div>`;
+      `</div>` +
+      // WIRING (2026-11-17, the view `topology`): a row of its own under the
+      // twin, the full width as Open is, so the twin keeps its pair
+      `<button class="csv-metrics" id="csv-wiring" title="Show its place in WIRING, lit from the head down">${ICON.topo}Wiring</button>` +
+      `</div>`;
   svc.querySelector('#csv-back').addEventListener('click', (e) => {
     e.stopPropagation();
     svc.hidden = true;
@@ -590,9 +594,17 @@ function showServiceDetail(node, link) {
   svc.querySelector('#csv-path').addEventListener('click', (e) => {
     e.stopPropagation();
     A.closeCard?.();
-    // the TOPOLOGY view (2026-11-17), centred on the service's place with its
-    // way up to the head lit, as `?view=topology&at=<id>` opens it; the tier
-    // scene that lit the service's reach (THE PATH) retired with it
+    A.setSceneActive?.('path');
+    // THE PATH, with this service's host haloed and its reach web lit; the
+    // road out wins over the unordered set, same precedence highlightService
+    // uses — the two views must not disagree about what this service touches
+    A.openPath?.(node.id, link.path || link.connects || node.reaches || [], link.label);
+  });
+  svc.querySelector('#csv-wiring').addEventListener('click', (e) => {
+    e.stopPropagation();
+    A.closeCard?.();
+    // the WIRING view (2026-11-17), centred on the service's place with its
+    // way up to the head lit, as `?view=topology&at=<id>` opens it
     A.openTopology?.(node.id);
   });
   svc.querySelector('#csv-road').addEventListener('click', (e) => {

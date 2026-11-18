@@ -15,10 +15,10 @@ import { buildDesk, closeDesk, deskOpen, editPlace, newPlace, openDesk, removePl
 import { buildWizard, close as closeWizard, openWizard } from './wizard.js';
 
 /** Every scene that can be edited: where its ✎ goes, and what it opens.
-    Selectors are scoped to the panel because THE CALENDAR and THE STONES reuse
-    the Ledger's `.ldg-head` (TOPOLOGY did too, until it became a view on
-    2026-11-17; drawing on it is a later stage of its own), and THE ARMORY's
-    toolbar is a class, not an id.
+    Selectors are scoped to the panel because THE PATH, THE CALENDAR and THE
+    STONES reuse the Ledger's `.ldg-head`, and THE ARMORY's toolbar is a class,
+    not an id. (WIRING, the view `topology`, is drawn on in its own canvas,
+    topology-draw.js, and has no ✎ here.)
     ⚠ These are the only place a scene's markup is named from outside its own
     module: rename a panel and the pencil silently stops appearing, which is
     what `#rites` did the moment THE RITES became THE CALENDAR (v1.45.0).
@@ -27,6 +27,7 @@ const SCENE_EDITORS = [
   { at: '#reliquary .rel-tools', section: 'rack', title: 'Add, remove or re-describe the rack' },
   { at: '#tribute .trb-head', section: 'vms', title: 'Add or remove guests' },
   { at: '#ledger .ldg-head', section: 'prefixes', title: 'Edit networks, prefixes and addressing' },
+  { at: '#path .ldg-head', section: 'routes', title: 'Add or remove routes' },
   { at: '#calendar .ldg-head', section: 'rites', title: 'Add or remove scheduled jobs' },
   { at: '#stones .ldg-head', section: 'stones', title: 'Add a honeypot or a canary token' },
   { at: '#chronicle .chron-head', section: 'chronicle', title: 'Add or remove charts' },

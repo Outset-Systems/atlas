@@ -150,15 +150,16 @@ def test_two_racks_keep_their_own_slots_and_heights():
 def test_the_old_names_are_gone_from_the_scene_band():
     """Plain words on the band and the flyout (2026-10-31)."""
     html = (WEB / "templates" / "index.html").read_text(encoding="utf-8")
-    for word in ("RACKS", "RESOURCES", "ADDRESSES"):
+    for word in ("RACKS", "RESOURCES", "ADDRESSES", "TOPOLOGY"):
         assert f">{word}</button>" in html
-    # TOPOLOGY left the band for the views (2026-11-17): the theme's word, in the menu
+    # WIRING, the canvas (2026-11-17), is a view: the theme's word, in the menu
     assert '<button type="button" role="menuitem" data-view="topology">{{ theme.text.view_topology }}</button>' in html
     for word in ("ARMORY", "TRIBUTE", "LEDGER", "PATH"):
         assert f">{word}</button>" not in html
     card = (WEB / "static" / "js" / "card.js").read_text(encoding="utf-8")
     # the pull-tab card (2026-11-11) draws its glyphs, so the words stand alone
     assert "}Draw route</button>" in card and "}Topology</button>" in card
+    assert "}Wiring</button>" in card, "the service pane's way into WIRING (2026-11-17)"
     assert "ROAD" not in card and ">PATH" not in card and "◈ PATH" not in card
 
 

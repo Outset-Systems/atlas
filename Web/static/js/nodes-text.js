@@ -299,12 +299,12 @@ export const NODES_TEXT = {
   nodes_asked_spent: "The checks' budget for this minute is spent. Ask again in {n} seconds.",
   nodes_asked_spent_one: "The checks' budget for this minute is spent. Ask again in 1 second.",
   nodes_asked_failed: 'The check could not be asked: {why}',
-  // 2026-11-17: where does it break, and the place on the TOPOLOGY canvas
+  // 2026-11-17: where does it break, and the place on the WIRING canvas
   nodes_menu_diagnose: 'Where does it break?',
   nodes_menu_diagnose_off: 'Where does it break? The checks source is off',
   nodes_menu_diagnose_unmanaged: 'Where does it break? Unmanaged, so not asked',
   nodes_menu_diagnose_planned: 'Where does it break? Planned, so nothing to ask yet',
-  nodes_menu_topology: 'Show in topology',
+  nodes_menu_topology: 'Show in wiring',
   nodes_dx_label: 'Where {name} breaks, step by step',
   nodes_dx_thing: '{name}',
   nodes_dx_dns: 'DNS for {name}',

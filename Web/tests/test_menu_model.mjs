@@ -583,7 +583,7 @@ const WORDS = (() => {
   return Function(`return {${src.match(/export const NODES_TEXT = \{([\s\S]*?)\n\};/)[1]}}`)();
 })();
 
-test('Where does it break? and Show in topology: after Check now, before Alerts, Edit and Remove', () => {
+test('Where does it break? and Show in wiring: after Check now, before Alerts, Edit and Remove', () => {
   assert.deepEqual(acts('place', { ...ALL, check: true, ask: true, diagnose: true, topology: true }),
     ['schedule', 'mode-on', 'unmanaged-on', 'check', 'check-now', 'diagnose', 'topology', 'alerts', 'edit', 'remove']);
   assert.deepEqual(menuItems('place', { diagnose: true, topology: true }).slice(3), [
@@ -611,7 +611,7 @@ test('Where does it break? held: shown with the reason in words, as the route wo
   }
 });
 
-test('a phone: Show in topology after Open its card; never Where does it break?', () => {
+test('a phone: Show in wiring after Open its card; never Where does it break?', () => {
   assert.deepEqual(acts('place', { ...RO, state: 'down', topology: true }), ['(nodes_state_down)', 'open', 'topology']);
   assert.deepEqual(menuItems('place', { ...RO, topology: true }).at(-1), { act: 'topology', key: 'nodes_menu_topology' });
   assert.deepEqual(acts('place', { ...RO, diagnose: true, check: true, ask: true }), ['(nodes_state_unknown)', 'open']);

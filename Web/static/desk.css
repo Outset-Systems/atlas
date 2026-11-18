@@ -427,14 +427,14 @@ body.pre #first-survey { display: none; }
 
 @media (prefers-reduced-motion: reduce) {
   /* Every scene overlay AND its panel. `#stones`, `#tribute`, `#reliquary` and
-     `#path` (THE PATH, retired 2026-11-17) were missing — they still slid and faded under reduced motion,
+     `#path` were missing — they still slid and faded under reduced motion,
      against the design notes's "always: full prefers-reduced-motion fallback, instant
      transitions". Found and closed 2026-08-25 while adding `#accounts`, which
      is what made the list worth reading rather than appending to. */
-  #annals, #ledger, #calendar, #seals, #stones, #tribute, #reliquary, #accounts, #trust, #settings,
+  #annals, #ledger, #calendar, #seals, #stones, #tribute, #reliquary, #path, #accounts, #trust, #settings,
   #annals .ldg-panel, #ledger .ldg-panel, #calendar .ldg-panel, #seals .ldg-panel,
   #stones .ldg-panel, #accounts .ldg-panel, #trust .ldg-panel, #settings .ldg-panel,
-  #tribute .trb-panel, #reliquary .rel-panel { transition: none; }
+  #tribute .trb-panel, #reliquary .rel-panel, #path .pth-panel { transition: none; }
 }
 
 /* ══ dependency-aware suppression ══════════════════════════════════════════

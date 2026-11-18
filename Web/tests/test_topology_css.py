@@ -149,3 +149,26 @@ def test_only_the_drawing_writes_and_only_through_its_two_doors():
         f"the store is used for more than one batch of ops: {calls}"
     # and only for an admin on a wide screen: every tool is offered behind mayDraw()
     assert "if (!mayDraw())" in code and "export const mayDraw" in _read(STATIC / "js" / "topology-state.js")
+
+
+def test_escape_under_a_scene_is_the_scenes():
+    """A scene (TOPOLOGY in the band, RACKS, any of them) opens over this view.
+    With the keyboard on the body, the view's three window Escapes once ran
+    first: the light, the drawing's form or the chain's note went, and the
+    scene stayed open (walked 2026-11-17). Each steps aside while a scene is
+    open, so the one Escape closes the scene and nothing under it changes."""
+    for name in ("topology.js", "topology-draw.js", "topology-diagnose.js"):
+        code = re.sub(r"/\*.*?\*/|//[^\n]*", "", _read(STATIC / "js" / name), flags=re.S)
+        guards = re.findall(r"if \(e\.key !== 'Escape' \|\| !T\.up[^\n]*\) return;", code)
+        assert len(guards) == 1, f"{name}: expected one window Escape, found {len(guards)}"
+        assert "|| A.sceneOpen ||" in guards[0], f"{name}: its Escape runs under an open scene"
+    # Ctrl+F is the fourth key the view takes on the window: the same rule
+    conductor = re.sub(r"/\*.*?\*/|//[^\n]*", "", _read(STATIC / "js" / "topology.js"), flags=re.S)
+    find = re.findall(r"if \(!T\.up[^\n]*!== 'f'\) return;", conductor)
+    assert len(find) == 1 and "|| A.sceneOpen ||" in find[0], "Ctrl+F reaches the find box under an open scene"
+    # and those four are every key the view listens for on the window
+    for name in ("topology.js", "topology-draw.js", "topology-diagnose.js"):
+        code = re.sub(r"/\*.*?\*/|//[^\n]*", "", _read(STATIC / "js" / name), flags=re.S)
+        on_window = re.findall(r"(?<![\w.])addEventListener\('keydown', \(e\) => \{\n\s*if \(([^\n]*)\) return;", code)
+        assert on_window and all("A.sceneOpen" in guard for guard in on_window), f"{name}: a window key runs under a scene"
+    assert "A.sceneOpen = name !== 'atlas';" in _read(STATIC / "js" / "ui.js")

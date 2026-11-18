@@ -1,6 +1,7 @@
-/* TOPOLOGY (2026-11-17), the conductor: a view under ATLAS beside MAP,
-   OVERVIEW and NODES (views.js shows `#view-topology` in the map's place).
-   It replaces THE PATH, the tier scene (path.js), whose rows were one lab's
+/* WIRING (2026-11-17; the view's id, its files and its code say `topology`),
+   the conductor: a view under ATLAS beside MAP, OVERVIEW and NODES
+   (views.js shows `#view-topology` in the map's place). It stands beside
+   TOPOLOGY, the tier scene in the band (path.js), whose rows are one lab's
    own ids: here the heads come from the data and everything hangs below them
    by cable, then a guest from its host, then route, then parent
    (topology-model.js), so a map with no cables yet is drawn from its routes and hosts, never flat.
@@ -14,7 +15,7 @@
    they reach through `hooks` in topology-state.js):
      topology-state.js   the shared state, the words, and the doors later
                          stages use (drawing, export, "where does it break",
-                         "Show in topology"); also on `A.topology`
+                         "Show in wiring"); also on `A.topology`
      topology-canvas.js  the one <svg>: cards, cables, the quieter layer
      topology-panel.js   VLANS, VIEW, LABELS, ARRANGE AND EXPORT, LEGEND
      topology-model.js   every rule and every sum, with no DOM
@@ -22,7 +23,7 @@
    OPENING IT: the views' menu and the phone's strip; `?view=topology`; and
    `?view=topology&at=<place id>`, which opens it centred on that place with
    its way up to the head lit. `A.openTopology(id)` does the same from the
-   page (the place card's Topology button; NODES' "Show in topology").
+   page (the service pane's Wiring button; NODES' "Show in wiring").
 
    THE HANDS: drag (or a finger) pans, the wheel and a pinch zoom, Fit fits.
    The arrow keys pan the canvas; on a card they move to the nearest card that
@@ -455,10 +456,12 @@ function wire(svg) {
 
   // Escape lets go of what is lit and selected, wherever the keyboard is (a
   // page opened at `?at=` has it on the body): on the window, before
-  // camera.js. A card or the glass over the view goes first (camera.js closes
-  // those), a find box empties first, and a key nothing here used goes on.
+  // camera.js. A scene, a card or the glass over the view goes first
+  // (camera.js closes those; a scene such as TOPOLOGY in the band stands over
+  // this view, and its Escape is its own, 2026-11-17), a find box empties
+  // first, and a key nothing here used goes on.
   addEventListener('keydown', (e) => {
-    if (e.key !== 'Escape' || !T.up || A.cardOpen?.() || A.glassOpen?.()) return;
+    if (e.key !== 'Escape' || !T.up || A.sceneOpen || A.cardOpen?.() || A.glassOpen?.()) return;
     const a = document.activeElement;
     if (a && a !== document.body && !el.main.contains(a)) return;
     if (e.target === el.find && el.find.value) { el.find.value = ''; runFind(); e.stopPropagation(); return; }
@@ -588,10 +591,10 @@ A.openTopology = function openTopology(id) {
 /** The feed was read (signals.js): the dots and "Watched by" follow it. */
 A.paintTopology = () => { if (T.up) C.draw(); };
 
-/* Ctrl+F inside the view is find on the canvas; anywhere else the browser's
-   own find stands. */
+/* Ctrl+F inside the view is find on the canvas; anywhere else, and under an
+   open scene (2026-11-17), the browser's own find stands. */
 addEventListener('keydown', (e) => {
-  if (!T.up || !el.find || e.altKey || !(e.ctrlKey || e.metaKey) || String(e.key).toLowerCase() !== 'f') return;
+  if (!T.up || A.sceneOpen || !el.find || e.altKey || !(e.ctrlKey || e.metaKey) || String(e.key).toLowerCase() !== 'f') return;
   const a = document.activeElement;
   if (a && a !== document.body && !el.main.contains(a)) return;
   e.preventDefault();

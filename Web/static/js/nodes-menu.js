@@ -37,8 +37,8 @@
    one line per step and a summary, until Close, Escape in it, or another
    place is asked; the keyboard goes to its summary as it lands and back
    to the row's ⋯ when it goes. Its "Show on the canvas" hands the answer
-   to the TOPOLOGY view (`A.showDiagnosis`, topology-diagnose.js), which
-   lights the chain as far as the step that failed. "Show in topology"
+   to the WIRING view (`A.showDiagnosis`, topology-diagnose.js), which
+   lights the chain as far as the step that failed. "Show in wiring"
    opens the view on the place (`A.openTopology`; a service's: its place).
    After a write the keyboard goes back to the thing's ⋯ (`focusMore`),
    and is put back there on any redraw in the next few seconds that took
@@ -132,7 +132,7 @@ function silentWhy() {
 }
 
 /** The presses that only read, which a write running does not hold back:
-    opening a card, and the TOPOLOGY view (2026-11-17). */
+    opening a card, and the WIRING view (2026-11-17). */
 const READS = new Set(['open', 'topology']);
 
 /** The mark on each kind's ⋯, and where a write names the kind. */
@@ -420,7 +420,7 @@ export function onMenuClick(e) {
     case 'check-now': closeMenu(false); focusMore(kind, id); askNow(kind, id); break;
     // the place's chain, listed under its name (2026-11-17)
     case 'diagnose': closeMenu(false); focusMore(kind, id); diagnose(id, name); break;
-    // the TOPOLOGY view, centred on the place (a service's: its place)
+    // the WIRING view, centred on the place (a service's: its place)
     case 'topology': closeMenu(false); A.openTopology?.(kind === 'service' ? what.svc.place : id); break;
     case 'alerts': closeMenu(false); pressBell(kind, id); break;
     case 'edit': closeMenu(false); A.editPlace?.(id); break;
@@ -520,7 +520,7 @@ function sayAsked(kind, id, text, tone, extra = {}) {
 let dxSeq = 0;
 
 /** Ask a place's chain once: `{status, body}`, status 0 when nothing
-    answered. The one place it is asked from: the TOPOLOGY canvas asks
+    answered. The one place it is asked from: the WIRING canvas asks
     through it too (`A.askDiagnose`), so its parts send nothing of their
     own. An admin's POST with the write proof; it writes nothing to the map. */
 async function askDiagnose(id) {

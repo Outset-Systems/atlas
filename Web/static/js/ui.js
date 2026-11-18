@@ -348,7 +348,7 @@ A.setSceneActive = setSceneActive;
    one. Stated once so a scene added to the band cannot be closed by one route
    and not the other. */
 function closeAllScenes() {
-  A.closeReliquary?.(); A.closeTribute?.(); A.closeLedger?.();
+  A.closeReliquary?.(); A.closeTribute?.(); A.closeLedger?.(); A.closePath?.();
   A.closeCalendar?.(); A.closeSeals?.(); A.closeStones?.(); A.closeAnnals?.();
   A.closeAccounts?.(); A.closeTrust?.(); A.closeSettings?.();
 }
@@ -394,7 +394,7 @@ document.querySelectorAll('[data-scene]').forEach(btn => {
     // themselves are untouched — they still suppress alarms server-side and are
     // still edited from the Desk; only the read-only viewer is gone.
     const scenes = { rack: A.openReliquary, tribute: A.openTribute, ledger: A.openLedger,
-                     calendar: A.openCalendar,
+                     path: A.openPath, calendar: A.openCalendar,
                      seals: A.openSeals, stones: A.openStones, annals: A.openAnnals,
                      accounts: A.openAccounts, trust: A.openTrust,
                      settings: A.openSettings };

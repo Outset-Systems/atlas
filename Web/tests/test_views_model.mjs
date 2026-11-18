@@ -31,7 +31,7 @@ test('the views are one list, and phone is a layout, not a view', () => {
   assert.equal(isView('alerts'), false, 'alerts is an old name since 2026-11-14');
   assert.deepEqual(ALIASES, { charts: 'overview', alerts: 'nodes' });
   assert.equal(isView('nodes'), true);
-  assert.equal(isView('topology'), true, 'TOPOLOGY is a view since 2026-11-17, not a scene');
+  assert.equal(isView('topology'), true, 'WIRING (the view `topology`) is a view since 2026-11-17, not a scene');
   assert.equal(isView('path'), false, 'the old scene id never named a view');
   assert.equal(DECK_KEY, 'atlas.view');
 });
@@ -221,7 +221,7 @@ test('?place= opens the map over a stored pick, never over ?view=', () => {
   assert.equal(openingView(null, false, 'nodes', { place: 'a b' }), 'nodes');
 });
 
-test('TOPOLOGY opens from the address, a stored pick and a press, on a phone too (2026-11-17)', () => {
+test('WIRING (`topology`) opens from the address, a stored pick and a press, on a phone too (2026-11-17)', () => {
   assert.equal(parseView('topology'), 'topology');
   assert.equal(parseView(' TOPOLOGY '), 'topology');
   assert.equal(openingView('topology', false, null), 'topology');

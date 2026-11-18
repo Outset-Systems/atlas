@@ -207,7 +207,7 @@ A.showDiagnosis = function showDiagnosis(answer) {
 // on the window, in the capture phase, before the conductor's Escape (which
 // would let go of the selection too); after the drawing's, which goes first
 addEventListener('keydown', (e) => {
-  if (e.key !== 'Escape' || !T.up || !N.el || N.el.hidden || A.cardOpen?.() || A.glassOpen?.()) return;
+  if (e.key !== 'Escape' || !T.up || !N.el || N.el.hidden || A.sceneOpen || A.cardOpen?.() || A.glassOpen?.()) return;
   const a = document.activeElement;
   if (a && a !== document.body && !document.getElementById('view-topology')?.contains(a)) return;
   // a box with words in it empties first (the find box: the conductor's)

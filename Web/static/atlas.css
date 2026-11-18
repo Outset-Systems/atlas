@@ -52,8 +52,7 @@
      stays a number a human can derive. That number used to be hand-baked into `.atlas-tools`
      (62) and `.zoom-stack` (70) and NOTHING else knew it — which is exactly
      why every scene opened underneath the band. It is one token now, spent
-     on both hanging clusters, the six scene panels, THE PATH (a view since
-     2026-11-17, TOPOLOGY) and the Index.
+     on both hanging clusters, the six scene panels, THE PATH and the Index.
      `--crown-clear` is the first y anything below the band may occupy.
      MUST TRACK `#scenes-list` — its inset, padding, border AND row height;
      the ≤720px block re-measures it (54) rather than guessing. */
@@ -117,7 +116,7 @@
    --gilt keeps its name because every rule says `gilt`; here it is a deep
    blue, picked to clear AA at panel sizes even on glass (below). All measured
    by tests/test_scheme_css.py. The bar has its own block, next. */
-:root[data-scheme="light"] :is(.ldg-panel, .trb-panel, .rel-panel, #topology-sheet,
+:root[data-scheme="light"] :is(.ldg-panel, .trb-panel, .rel-panel, .pth-panel, #topology-sheet,
                                .pal-panel, .gl-panel, .dsk-panel, .wiz-panel, #nodes-sheet,
                                #overview-tiles) {
   --abyss: #d6dae0;
@@ -243,7 +242,7 @@
    panels went nearly solid. These numbers are not a taste: tests/test_scheme_css.py
    composites glass over scrim over black, the worst thing behind a panel, and every
    text token must still clear AA there. */
-:root[data-scheme="light"] :is(.ldg-panel, .trb-panel, .rel-panel, .pal-panel,
+:root[data-scheme="light"] :is(.ldg-panel, .trb-panel, .rel-panel, .pth-panel, .pal-panel,
                                .gl-panel, .dsk-panel, .wiz-panel) {
   background: rgba(214, 218, 224, 0.94);
   color: var(--text);   /* the page's cream is inherited as a colour, not a token */
@@ -2287,6 +2286,7 @@ body.drawer-open #calendar, body.drawer-open #seals,
 body.drawer-open #stones, body.drawer-open #annals, body.drawer-open #accounts,
 body.drawer-open #trust,
 body.drawer-open #settings { padding-right: calc(var(--drawer-clear) + 3vw); }
+body.drawer-open .pth-panel { right: calc(5vw + var(--drawer-clear)); }
 
 /* ── the emblem: a disc in the zone's ink, the place's own glyph in ivory ── */
 .card-medallion {
@@ -3231,10 +3231,9 @@ body.pre #scenes-list { opacity: 0; pointer-events: none; }
    ════════════════════════════════════════════════════════════════════════════ */
 
 /* (`.ldg-roads` / `.ldg-road*` lived here — the roads list THE PATH had when it
-   was a block inside the Ledger. THE PATH became its own scene (path.js,
-   retired 2026-11-17 for the TOPOLOGY view) and the Ledger's route table
-   emits `.ldg-r-*` (ledger.js); no `ldg-road` has been rendered since.
-   Removed 2026-08-21.) */
+   was a block inside the Ledger. THE PATH is its own scene drawing `.pth-*`
+   (path.js) and the Ledger's route table emits `.ldg-r-*` (ledger.js); no
+   `ldg-road` has been rendered since. Removed 2026-08-21.) */
 
 .ldg-ports { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
 .ldg-port {
@@ -3296,12 +3295,124 @@ body.pre #scenes-list { opacity: 0; pointer-events: none; }
 #embed-max-next { right: 16px; }
 
 /* ════════════════════════════════════════════════════════════════════════════
-   2026-07-11b — THE PATH scene (retired 2026-11-17) · marker kinds · ledger utilization
+   2026-07-11b — THE PATH scene (topology) · marker kinds · ledger utilization
    ════════════════════════════════════════════════════════════════════════════ */
 
-/* (THE PATH, the tier scene `#path` and its `.pth-*` rules, lived here. It
-   retired on 2026-11-17 for the TOPOLOGY view, whose rules are topology.css
-   and, inside its drawing, topology-canvas.css.) */
+/* THE PATH — tiered topology, seated under the crown like every other scene */
+/* ⚠ This sat at z-1200 until 2026-08-15, which was correct when it was the
+   full-screen scene of a map whose chrome lived in the corners: it covered
+   everything. With the scene band across the crown it BURIED the switcher —
+   the band lifts to 988 on `body.scene-open`, so THE PATH was the one scene
+   you could not leave from the band, and its backdrop swallowed those clicks.
+   It joins the family at 985: under the band, over the drawer at 970, and the
+   command palette at 990 still covers the lot. */
+#path {
+  position: fixed; inset: 0; z-index: 985;
+  background: rgba(13,11,7,0.82); backdrop-filter: blur(6px);
+  opacity: 0; pointer-events: none; transition: opacity 220ms ease;
+}
+#path.open { opacity: 1; pointer-events: auto; }
+.pth-panel {
+  position: absolute; inset: var(--crown-clear) 5vw 4vh;
+  background: var(--surface); border: 1px solid var(--ink-line); border-radius: 8px;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+/* Sized to the realm, not to the window. --pth-cols is set by path.js to the
+   busiest tier's node count; 168px is one comfortable column (a .pth-dot is
+   30px, its name and IP the rest). Without the cap the tiers spread across the
+   whole monitor and the diagram visibly restyled itself on every resize.
+   `auto` margins centre it; the min() keeps narrow windows behaving exactly as
+   before. */
+.pth-body {
+  position: relative; flex: 1;
+  width: min(100% - 36px, calc(var(--pth-cols, 8) * 168px));
+  margin: 8px auto;
+}
+#pth-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.pth-edge {
+  fill: none; stroke: var(--ink-soft); stroke-width: 0.35;
+  vector-effect: non-scaling-stroke; stroke-width: 1.4px; opacity: 0.85;
+}
+.pth-k-wan    { stroke: var(--tone-info); stroke-dasharray: 6 5; }
+.pth-k-edge   { stroke: var(--tone-warn); }
+.pth-k-vlan   { stroke: var(--tone-up); }
+.pth-k-mesh   { stroke: var(--tone-up); stroke-dasharray: 1.5 5; opacity: 0.7; }
+.pth-k-telemetry { stroke: var(--sem-info); stroke-dasharray: 1 6; opacity: 0.5; }
+.pth-k-vassal { stroke: var(--ink-soft); stroke-dasharray: 2 4; opacity: 0.6; }
+.pth-warn   { stroke: var(--tone-warn) !important; }
+.pth-dark   { stroke: var(--tone-down) !important; stroke-width: 2px; animation: pth-alarm 1.6s ease-in-out infinite; }
+@keyframes pth-alarm { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+.pth-node {
+  position: absolute; transform: translate(-50%, -50%);
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  background: none; border: none; cursor: pointer; padding: 6px 10px;
+  border-radius: 6px;
+}
+.pth-node:hover { background: rgba(var(--gilt-rgb), 0.08); }
+.pth-dot {
+  width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;
+  border: 1.5px solid var(--n-hue, var(--gilt)); background: var(--surface-2);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--n-hue, var(--gilt)) 30%, transparent);
+}
+.pth-node.k-vm .pth-dot { border-radius: 50%; }                       /* vm — circle */
+.pth-node.k-physical .pth-dot { border-radius: 4px; transform: rotate(45deg); } /* iron — diamond */
+.pth-node.k-physical .pth-dot .svc-health { transform: rotate(-45deg); }
+.pth-node.k-network .pth-dot { border-radius: 4px; }                  /* ways — square */
+.pth-node.st-down .pth-dot { border-color: var(--tone-down); animation: pth-alarm 1.6s ease-in-out infinite; }
+/* arrived from a service card — halo its host */
+.pth-node.pth-focus .pth-dot {
+  box-shadow: 0 0 0 3px rgba(var(--gilt-rgb), 0.55), 0 0 18px rgba(var(--gilt-rgb), 0.5);
+  animation: pth-focus-pulse 2.2s ease-in-out infinite;
+}
+.pth-node.pth-focus .pth-name { color: var(--gilt); }
+/* focus mode: the service's reach web stays bright, the rest recedes */
+#path.pth-focus-mode .pth-edge:not(.pth-reach) { opacity: 0.18; }
+#path.pth-focus-mode .pth-node:not(.pth-focus):not(.pth-lit) { opacity: 0.35; }
+.pth-edge.pth-reach { stroke: var(--gilt); stroke-width: 1.6; opacity: 0.95; }
+/* Traceable hops (2026-08-09). The click target is a fat transparent twin of
+   The edge — `non-scaling-stroke` makes that 14 SCREEN px on a diagram whose
+   viewBox is stretched by preserveAspectRatio:none, where a plain stroke-width
+   would be squashed to a thread on one axis and a slab on the other. Only hops
+   a charted road actually crosses get a twin, so the pointer is a promise. */
+.pth-hit {
+  fill: none; stroke: transparent; stroke-width: 14px;
+  vector-effect: non-scaling-stroke; pointer-events: stroke; cursor: pointer;
+}
+/* the hop you clicked, inside the roads it belongs to: brighter and thicker
+   than the rest of the chain, so the question keeps its place in the answer */
+.pth-edge.pth-hop {
+  stroke: var(--gilt-bright) !important; stroke-width: 2.6; opacity: 1;
+  filter: drop-shadow(0 0 6px var(--gilt));
+}
+#path .pth-lg-trace { color: var(--gilt); }
+#path .pth-lg-from { color: var(--text-dim); }
+.pth-node.pth-lit .pth-name { color: var(--text); }
+.pth-node.pth-lit .pth-dot { box-shadow: 0 0 10px rgba(var(--gilt-rgb), 0.45); }
+.pth-lg-svc strong { color: var(--gilt); }
+@keyframes pth-focus-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(var(--gilt-rgb), 0.55), 0 0 18px rgba(var(--gilt-rgb), 0.5); }
+  50%      { box-shadow: 0 0 0 5px rgba(var(--gilt-rgb), 0.3), 0 0 26px rgba(var(--gilt-rgb), 0.65); }
+}
+.pth-name {
+  font-family: 'Cinzel', serif; font-size: 0.62rem; font-weight: 600;
+  letter-spacing: 0.14em; color: var(--text); white-space: nowrap;
+}
+.pth-ip { font-family: 'JetBrains Mono', monospace; font-size: 0.6rem; color: var(--text-dim); }
+.pth-legend {
+  display: flex; gap: 18px; align-items: center; flex-wrap: wrap;
+  padding: 10px 24px 14px; border-top: 1px solid var(--ink-line);
+  font-family: 'Alegreya Sans', sans-serif; font-size: 0.78rem; color: var(--text-dim);
+}
+.pth-lg { display: inline-flex; align-items: center; gap: 7px; }
+.pth-lg-line { display: inline-block; width: 26px; height: 0; border-top: 2px solid var(--ink-soft); }
+.pth-lg-line.pth-k-wan { border-top-style: dashed; border-color: var(--tone-info); }
+.pth-lg-line.pth-k-edge { border-color: var(--tone-warn); }
+.pth-lg-line.pth-k-vlan { border-color: var(--tone-up); }
+.pth-lg-line.pth-k-mesh { border-top-style: dotted; border-color: var(--tone-up); }
+.pth-lg-line.pth-k-telemetry { border-top-style: dotted; border-color: var(--sem-info); }
+.pth-lg-line.pth-k-vassal { border-top-style: dotted; border-color: var(--ink-soft); }
+.pth-lg-note { margin-left: auto; font-style: italic; font-family: 'IM Fell English', serif; }
 
 /* Ledger prefix utilization bar (NetBox-flavored) */
 .ldg-util {
@@ -4589,6 +4700,10 @@ button.rl-crumb:focus-visible { outline: 2px solid var(--gilt-bright); outline-o
   background: color-mix(in srgb, var(--c-hue) 45%, var(--text));
   box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.3);
 }
+/* a line passes behind a label instead of through it */
+:root[data-scheme="light"] :is(.pth-name, .pth-ip) {
+  background: rgba(202, 206, 212, 0.92); padding: 0 4px; border-radius: 2px;
+}
 :root[data-scheme="light"] .trb-seg.reserve {
   background: repeating-linear-gradient(45deg, #d5c4a1, #d5c4a1 4px, #ebdbb2 4px, #ebdbb2 8px);
 }
@@ -4605,7 +4720,7 @@ button.rl-crumb:focus-visible { outline: 2px solid var(--gilt-bright); outline-o
    cue, and on some controls nothing showed). Mouse clicks draw nothing
    (:focus-visible). The two search fields keep their borderless inputs and
    light their frame instead. */
-:is(#index-drawer, .ldg-panel, .trb-panel, .rel-panel, .pal-panel, .gl-panel,
+:is(#index-drawer, .ldg-panel, .trb-panel, .rel-panel, .pth-panel, .pal-panel, .gl-panel,
     .dsk-panel, .wiz-panel) :is(button, a, summary, [role="button"], [tabindex]):focus-visible {
   outline: 2px solid var(--gilt); outline-offset: 2px;
 }
@@ -4663,7 +4778,7 @@ body.style-bright #overlay.net-on .territory { fill-opacity: 0.16; stroke-opacit
    `:root[data-scheme="light"]` until stage 1, which made every glow follow the OS. */
 
 /* list rows and chips that were square */
-:is(.scroll-row, .trb-row, .ldg-host, .dsk-nav, .ann-filter, .rel-seg, .rel-tool,
+:is(.scroll-row, .trb-row, .ldg-host, .pth-node, .dsk-nav, .ann-filter, .rel-seg, .rel-tool,
     .rel-legend-item, .dtab, .sp-sec > .sp-sub) { border-radius: 4px; }
 
 :is(
@@ -4680,7 +4795,7 @@ body.style-bright #overlay.net-on .territory { fill-opacity: 0.16; stroke-opacit
   /* chips */
   .rel-legend-item, button.rel-port, .wiz-choice, .dsk-mapart-tile, .chart-ip,
   /* list rows */
-  .svc-row, .idx-item, .scroll-row, .trb-row, .ldg-host, .tp-vlan, .spm-row, .rel-rear-item
+  .svc-row, .idx-item, .scroll-row, .trb-row, .ldg-host, .pth-node, .tp-vlan, .spm-row, .rel-rear-item
 ):is(:hover, :focus-visible):not(:disabled) {
   box-shadow: 0 0 14px rgba(var(--gilt-rgb), var(--hover-glow-a));
 }

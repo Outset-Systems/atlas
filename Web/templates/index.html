@@ -177,10 +177,12 @@
      foot takes only the colophon and the way back to the map. ALERTS
      (stage 4, 2026-11-13) is a view no longer (owner, 2026-11-14): its rules
      are made in NODES and where word goes is Settings › Alerts; `?view=alerts`
-     opens NODES. TOPOLOGY (2026-11-17, topology.js) is the device cards and
-     their cables on one canvas, its own thing as NODES is; it replaced the
-     tier scene THE PATH. A menu item or strip entry with `data-admin` and
-     `hidden` is drawn by views.js for an admin and removed for anyone else. -->
+     opens NODES. WIRING (2026-11-17, topology.js; its id is still `topology`)
+     is the device cards and their cables on one canvas, its own thing as
+     NODES is; TOPOLOGY in the band is the tier scene `#path` (path.js),
+     which stayed (owner, 2026-11-17). A menu item or strip entry with
+     `data-admin` and `hidden` is drawn by views.js for an admin and removed
+     for anyone else. -->
 <main class="atlas-view" id="view-overview" data-view="overview" hidden aria-label="{{ theme.text.view_overview|capitalize }}">
   <div class="view-band view-band-sky" id="overview-sky"></div>
   <a class="view-edge view-edge-up" href="#overview-sky">↑ {{ theme.text.sky }}</a>
@@ -262,6 +264,7 @@
   <button class="scene" data-scene="rack">RACKS</button>
   <button class="scene" data-scene="tribute">RESOURCES</button>
   <button class="scene" data-scene="ledger">ADDRESSES</button>
+  <button class="scene" data-scene="path">TOPOLOGY</button>
   <!-- THE RITES and THE FORGE live here since v1.45.0; the title says so for
        anyone who comes looking for either by its old name. -->
   <button class="scene" data-scene="calendar" title="Every scheduled job in the lab on one clock">CALENDAR</button>
@@ -472,6 +475,19 @@
       <div class="trb-summary" id="trb-summary-cpu"></div>
     </div>
     <div class="trb-list" id="trb-list"></div>
+  </div>
+</div>
+
+<!-- TOPOLOGY — the realm's topology, tier by tier (SolarWinds-style, hand-drawn) -->
+<div id="path" aria-hidden="true">
+  <div class="pth-panel" role="dialog" aria-label="Topology — the network, tier by tier">
+    <div class="ldg-head">
+      <span class="ldg-title">TOPOLOGY</span>
+      <span class="ldg-sub">from the internet to the guests — every route, live</span>
+      <button class="ldg-close" id="pth-close" title="Close (Esc)">×</button>
+    </div>
+    <div class="pth-body"><svg id="pth-svg"></svg><div id="pth-nodes"></div></div>
+    <div class="pth-legend" id="pth-legend"></div>
   </div>
 </div>
 

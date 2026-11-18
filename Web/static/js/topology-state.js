@@ -62,9 +62,9 @@ import { withSaved } from './topology-draw-model.js';
 /** Every word the view shows, with its plain fallback (the theme's `tp_*`
     and `view_topology`, Web/themes/plain.json, win). */
 export const TP_TEXT = {
-  view_topology: 'TOPOLOGY',
-  tp_sub: 'every device and the cables between them, live',
-  tp_canvas: 'Topology: {n} devices and {c} cables',
+  view_topology: 'WIRING',
+  tp_sub: 'where the wiring is drawn: every card, cable and stub, live',
+  tp_canvas: 'Wiring: {n} devices and {c} cables',
   tp_empty: 'Nothing to draw yet. Places, routes and cables appear here as the map gains them.',
   tp_find: 'Find a place, address or port',
   tp_find_count: '{i} of {n}',
@@ -76,7 +76,7 @@ export const TP_TEXT = {
   tp_vlan_cables: '{n} cables',
   tp_vlan_lit: 'Lit: press again to clear',
   tp_view: 'View',
-  tp_view_all: 'Topology',
+  tp_view_all: 'Wiring',
   tp_view_infra: 'Infrastructure',
   tp_labels: 'Labels',
   tp_label_address: 'Address',
@@ -120,7 +120,7 @@ export const TP_TEXT = {
   tp_x_csv_title: 'Save every connection as a spreadsheet',
   tp_x_report: 'Site report',
   tp_x_report_title: 'Print the map, its connections, what is down and the certificates near their end, or save them as a PDF',
-  tp_x_title: '{map}: topology',
+  tp_x_title: '{map}: wiring',
   tp_x_date: 'Taken out {date}',
   tp_x_working: 'Making the file…',
   tp_x_busy: 'One file at a time: the last one is still being made.',
@@ -266,7 +266,7 @@ export const T = {
   layout: null,        // arrange(shown): {positions, width, height, bounds}
   view: { k: 1, x: 0, y: 0 },   // a world point p is drawn at p * k + (x, y)
   fitted: false,       // has the canvas been fitted since the data changed shape
-  mode: prefs.mode,    // 'all' (Topology) or 'infra' (Infrastructure)
+  mode: prefs.mode,    // 'all' (Wiring) or 'infra' (Infrastructure)
   labels: prefs.labels,
   vlan: null,          // the VLAN pressed in the panel, or null
   path: null,          // {things, links, failedAt}, head first (lightPath), or null

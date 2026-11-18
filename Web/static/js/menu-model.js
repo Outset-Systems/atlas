@@ -33,7 +33,7 @@
    WHERE DOES IT BREAK, AND THE CANVAS (2026-11-17). An admin's place menu
    adds "Where does it break?" after Check now (held, as Check now is,
    where the route would refuse it: `diagnoseAsk`), and a place's or a
-   service's adds "Show in topology", which a phone's sheet lists too.
+   service's adds "Show in wiring", which a phone's sheet lists too.
    What the chain answered is `diagnoseLines` and `diagnoseSummary`, what
    the canvas lights `diagnoseLight`, a refusal `diagnoseRefusal`; any
    line's words are `wordsOf`.
@@ -91,7 +91,7 @@ export const ACTIONS = [
     },
   },
   // 2026-11-17: the place's chain asked from the head down, held where the
-  // route would refuse it (`diagnoseAsk`); and the place on the TOPOLOGY
+  // route would refuse it (`diagnoseAsk`); and the place on the WIRING
   // canvas (a service's: its place)
   {
     act: 'diagnose', needs: 'diagnose', words: { place: 'nodes_menu_diagnose' },
@@ -194,8 +194,8 @@ function wayItem(action, kind, fact) {
       diagnose   (a place) what `diagnoseAsk` says: true, "Where does it
                  break?" may be pressed; `off`, `unmanaged` or `planned`, it
                  is shown held with that reason; anything else, not listed
-      topology   (a place, a service) the TOPOLOGY view is there to open:
-                 "Show in topology" (a service's opens its place). The
+      topology   (a place, a service) the WIRING view is there to open:
+                 "Show in wiring" (a service's opens its place). The
                  read-only way lists it too, after Open its card
       readonly   true: the read-only way (a phone), below
     Anything left out reads as no. An unknown kind has no menu.
@@ -408,7 +408,7 @@ export function refusalLine(status, body) {
 /** One line's words: its key filled in with its `vars`, and each of its
     `words` (vars whose values are theme keys) filled in as words first,
     with the same vars. `t(key, vars)` is the caller's (nodes-text.js), so
-    NODES and the TOPOLOGY canvas say a line the same way. */
+    NODES and the WIRING canvas say a line the same way. */
 export function wordsOf(item, t) {
   const it = isObj(item) ? item : {};
   const vars = { ...(isObj(it.vars) ? it.vars : {}) };
@@ -451,7 +451,7 @@ export function patched(entry, patch) {
    `POST api/v2/admin/diagnose` asks one place's chain from the head of the
    network down (diagnose.py) and answers {id, name, steps, broke_at, path}.
    What may be asked, the lines and the summary that say the answer, the
-   chain the TOPOLOGY canvas lights, and a refusal in words. NODES (under
+   chain the WIRING canvas lights, and a refusal in words. NODES (under
    the place's row) and the canvas (a note beside it) both say it through
    these, with nodes-text.js's words. */
 

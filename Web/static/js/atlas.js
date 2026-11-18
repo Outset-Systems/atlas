@@ -20,6 +20,7 @@ import './signals.js';
 import './reliquary.js';
 import './tribute.js';
 import './ledger.js';
+import './path.js';
 import './calendar.js';   // THE CALENDAR — the realm's day: THE RITES and THE FORGE, one page (v1.45.0)
 import './seals.js';
 import './stones.js';
@@ -32,7 +33,7 @@ import './regions.js';   // REGIONS (v1.49.0): after world.js — it wraps build
 import { applyOverrides } from './places.js';
 import './nodes.js';     // NODES (2026-11-13): the table view; reads A.VIEW on load and hears `atlas:view`
 import './overview.js';  // OVERVIEW (2026-11-13): the facts above the Deck's charts; reads A.VIEW on load too
-import './topology.js';  // TOPOLOGY (2026-11-17): the device cards and cables on one canvas; the tier scene (path.js) retired with it
+import './topology.js';  // WIRING (2026-11-17, the view `topology`): the device cards and cables on one canvas; TOPOLOGY, the tier scene in the band, is path.js
 import './alert-setup.js';   // Settings › Alerts (2026-11-14): destinations, the digest, the log; hears `atlas:settings`
 // (the ALERTS view, alerts.js, 2026-11-13, left on 2026-11-14: its rules are made in NODES, alert-rules.js)
 import './editor/index.js';
@@ -128,6 +129,7 @@ async function boot() {
   A.buildReliquary();
   A.buildTributeScene();
   A.buildLedgerScene();
+  A.buildPathScene();
   A.buildCalendarScene();
   A.buildSealsScene();
   A.buildStonesScene();

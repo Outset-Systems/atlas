@@ -7,11 +7,11 @@
    in tests/topology_cases.json, which the server's twin of `heads`, `layers`,
    `pathToHead` and `connections` reads too.
 
-   It replaces the tier diagram's rules (path-model.js), which drew routes plus
-   `parent` on rows named after one lab's own ids. Here nothing is named: the
-   heads come from the data, everything hangs below them by cable, then a
-   guest from its host, then by route, then by parent, and the same input
-   always gives the same picture.
+   It stands beside the tier diagram's rules (path-model.js, TOPOLOGY in the
+   band), which draw routes plus `parent` on rows named after one lab's own
+   ids. Here nothing is named: the heads come from the data, everything
+   hangs below them by cable, then a guest from its host, then by route,
+   then by parent, and the same input always gives the same picture.
 
    The contract the drawing codes against:
 

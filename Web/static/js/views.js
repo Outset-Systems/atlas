@@ -5,12 +5,14 @@
    `#overview-body`, inside the tiles' sheet) and, below them, THE DECK (v1.66.0 phone, v1.67.0
    everywhere): one scrolling column of the watchings, the Sky's charts and
    then the Depths'. NODES is one table of every place (nodes.js draws it into
-   `#view-nodes`). TOPOLOGY (2026-11-17) is the device cards and their cables
-   on one canvas (topology.js draws it into `#view-topology`; its own thing,
-   as NODES is). ALERTS was a view (2026-11-13) and is not since
-   2026-11-14: its rules are made in NODES (alert-rules.js) and where word
-   goes is Settings › Alerts (alert-setup.js); a stored or addressed `alerts`
-   opens NODES. An admin's menu item or strip entry (`data-admin`) is drawn
+   `#view-nodes`). WIRING (2026-11-17, the view `topology`) is the device
+   cards and their cables on one canvas (topology.js draws it into
+   `#view-topology`; its own thing, as NODES is); TOPOLOGY in the band is
+   the tier scene (path.js), which opens over a view as any scene does.
+   ALERTS was a view (2026-11-13) and is not since 2026-11-14: its rules
+   are made in NODES (alert-rules.js) and where word goes is Settings ›
+   Alerts (alert-setup.js); a stored or addressed `alerts` opens NODES.
+   An admin's menu item or strip entry (`data-admin`) is drawn
    here for an admin and removed for anyone else.
    `?place=<id>` (the link an alert carries) opens the map on that place's
    card once the opening shot is over; a place this viewer may not see, or

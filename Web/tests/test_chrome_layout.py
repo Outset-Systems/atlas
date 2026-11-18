@@ -5,6 +5,7 @@ paints. What CAN be asserted is the STRUCTURE the layout depends on, and two of
 the rules below were each a bug in the writing of them.
 """
 
+import json
 import os
 import pathlib
 import re
@@ -233,16 +234,24 @@ def test_nothing_under_the_crown_hand_bakes_its_own_top(rule):
         "deriving it from --crown-b / --crown-clear")
 
 
-def test_topology_never_buries_the_scene_band():
-    """THE PATH sat at z-1200, over the band's own z-988, so the switcher was
-    unclickable in the one scene you most want to leave from it; it joined the
-    other scenes at 985. Since 2026-11-17 TOPOLOGY is a view, which stands in
-    the map's place under the band (`body.deck .atlas-view`, z-index 1): the
-    old scene and its rule are gone, and nothing of the view's own may climb
-    back to the band's height."""
+def test_the_path_no_longer_buries_the_scene_band():
+    """THE PATH sat at z-1200, over the band's own z-988 — so the switcher was
+    unclickable in the one scene you most want to leave from it. It joins the
+    other scenes at 985."""
     css = _read(CSS)
-    assert not re.search(r"^#path \{", css, re.M), "the retired scene's overlay came back"
-    assert 'data-scene="path"' not in _read(INDEX), "the band has a door to a scene that is gone"
+    m = re.search(r"^#path \{.*?\}", css, re.S | re.M)
+    assert m, "#path rule is gone"
+    assert "z-index: 985;" in m.group(0), (
+        "#path is not at z-985 — check it against `body.scene-open "
+        "#scenes-list`'s 988, or the band is buried again")
+
+
+def test_wiring_never_buries_the_scene_band():
+    """WIRING (the view `topology`, 2026-11-17) stands in the map's place under
+    the band (`body.deck .atlas-view`, z-index 1): nothing of the view's own may
+    climb to the band's height or over the scenes. The tier scene's door and
+    overlay stay (owner, 2026-11-17): the band opens `#path`, at 985, as above."""
+    assert 'data-scene="path"' in _read(INDEX), "the band has lost its TOPOLOGY door"
     for sheet in ("topology.css", "topology-canvas.css"):
         text = _read(WEB / "static" / sheet)
         for z in re.findall(r"z-index:\s*(\d+)", text):
@@ -396,7 +405,7 @@ def test_the_views_menu_is_a_sibling_of_the_band():
     assert re.findall(r'data-view="(\w+)"', menu) == ["map", "overview", "nodes", "topology"]
     assert menu.count('role="menuitem"') == 4, (
         "the four views (the map's tools went to the band, and ALERTS into NODES, 2026-11-14; "
-        "TOPOLOGY joined them 2026-11-17)")
+        "WIRING, the view `topology`, joined them 2026-11-17)")
     css = _read(CSS)
     rule = re.search(r"^\.view-menu \{.*?^\}", css, re.S | re.M).group(0)
     assert "position: fixed" in rule and "var(--bar-glass-firm)" in rule
@@ -463,8 +472,8 @@ def test_every_view_has_a_main_and_one_shows_at_a_time():
 
 
 def test_the_phone_names_the_views_in_a_strip():
-    """No ATLAS and no map on a phone: OVERVIEW · NODES · TOPOLOGY (2026-11-17)
-    at the top of the column."""
+    """No ATLAS and no map on a phone: OVERVIEW · NODES · WIRING (the view
+    `topology`, 2026-11-17) at the top of the column."""
     html = _read(INDEX)
     strip = re.search(r'<nav class="view-strip" id="view-strip"[^>]*>(.*?)</nav>', html, re.S)
     assert strip, "the phone's strip is gone"
@@ -558,8 +567,7 @@ def test_every_section_sits_on_the_dark_dim_in_the_light_scheme():
     css = _read(CSS)
     dim = re.search(r'#accounts, #trust, #settings\) \{\s*background: rgba\(13, 11, 7, 0\.82\)', css)
     assert dim, "the light scheme's sections are not on Topology's dim"
-    # Topology's own overlay (`#path`) that set the dim retired 2026-11-17: it
-    # is a view now, with no dim behind it; the sections keep the value above
+    assert "background: rgba(13,11,7,0.82); backdrop-filter: blur(6px);" in css
 
 
 def test_the_addresses_grid_reads_in_the_light_scheme():
@@ -801,7 +809,7 @@ def test_nodes_stands_alone():
     assert "(parts.foot || parts.down)?.append(foot);" in views, "the way back sits at NODES' foot"
     css = _read(CSS)
     assert 'body:is([data-view="overview"], [data-view="nodes"], [data-view="topology"]) #colophon' in css, (
-        "the colophon in flow in OVERVIEW, NODES and TOPOLOGY (2026-11-17)")
+        "the colophon in flow in OVERVIEW, NODES and WIRING (2026-11-17)")
     assert '[data-view="nodes"]) :is(#chronicle, #abyss)' not in css
     nodes = _read(WEB / "static" / "js" / "nodes.js")
     for piece in ('class="nv-summary"', 'class="nv-recent"', "R.stateCounts(counted)",
@@ -868,6 +876,23 @@ def test_the_band_is_hidden_from_the_first_paint_not_from_the_boot():
     assert "body.pre #scenes-list { opacity: 0; pointer-events: none; }" in css
     boot = _read(WEB / "static" / "js" / "atlas.js")
     assert "document.body.classList.remove('pre')" in boot, "nothing would ever show the band"
+
+
+def test_topology_in_the_band_and_wiring_in_the_views():
+    """The owner (2026-11-17): "I like the new topology map, but I want to keep
+    the old one." The band's TOPOLOGY opens the tier scene `#path` again, and
+    the canvas stays as a view under its own name, WIRING, in the views' menu
+    (its id, `topology`, and its sheet `#topology-sheet` are unchanged)."""
+    html = _read(INDEX)
+    assert '<button class="scene" data-scene="path">TOPOLOGY</button>' in _band(html), (
+        "the band has no TOPOLOGY door")
+    assert '<div id="path" aria-hidden="true">' in html, "the tier scene's overlay is gone"
+    assert 'id="topology-sheet"' in html, "the canvas's sheet is gone"
+    menu = _view_menu(html)
+    assert '<button type="button" role="menuitem" data-view="topology">{{ theme.text.view_topology }}</button>' in menu
+    theme = json.loads((WEB / "themes" / "plain.json").read_text(encoding="utf-8"))
+    assert theme["text"]["view_topology"] == "WIRING", "the views' menu does not name WIRING"
+    assert ">TOPOLOGY<" not in menu, "the views' menu names the scene's word"
 
 
 if __name__ == "__main__":
