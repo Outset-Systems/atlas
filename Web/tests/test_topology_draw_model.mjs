@@ -8,7 +8,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { arrange, buildGraph, cableGeometry } from '../static/js/topology-model.js';
+import { arrange, buildGraph } from '../static/js/topology-model.js';
+import { cableGeometry } from '../static/js/topology-geometry.js';
 import {
   HIT, ID_MAX, LIMIT, NUDGE,
   cableBody, cableIdFor, cableOps, cablesFromRoutes, changedCards, clampPoint, distanceToCurve,

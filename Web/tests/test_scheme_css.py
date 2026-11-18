@@ -450,9 +450,12 @@ def test_the_toggle_is_in_the_band_and_boots_first():
     assert m and 'id="btn-scheme"' not in m.group(1), "☀/☾ came back to the ⚙ cluster"
     boot = _read(BOOT)
     imports = re.findall(r"^import (?:[^'\n]* from )?'\./([^']+)'", boot, re.M)
-    assert imports[:2] == ["config.js", "scheme.js"], (
-        f"scheme.js must load right after config.js (got {imports[:3]}): data-scheme "
-        "has to stand before any panel can open")
+    # visit.js stands before both since 2026-11-17: on the demo it forgets what an
+    # earlier visit stored, and the scheme is one of the things it must forget
+    # before scheme.js reads it. Nothing else may come between.
+    assert imports[:3] == ["visit.js", "config.js", "scheme.js"], (
+        f"scheme.js must load right after config.js, and only visit.js before them (got "
+        f"{imports[:4]}): data-scheme has to stand before any panel can open")
 
 
 def test_the_glass_still_reads_with_black_behind_it():

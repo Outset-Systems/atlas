@@ -168,6 +168,14 @@ export const FALLBACK_HUE = '#C9A554';
     capture lost — so every drag handler registers and removes the same three */
 export const DRAG_END = ['pointerup', 'pointercancel', 'lostpointercapture'];
 
+/** The one state-to-dot-class map (a `.svc-health` dot's class for a
+    state): signals.js publishes it as A.svcHealthClass, NODES reads it as
+    DOT (nodes-state.js) and OVERVIEW imports it. */
+export const HEALTH_DOT = Object.freeze({
+  healthy: 'h-up', degraded: 'h-degraded', down: 'h-down',
+  maintenance: 'h-maint', slumbering: 'h-slumber',
+});
+
 /** "3m ago" from an elapsed span in milliseconds. The one shape every panel
     speaks (THE SENTINELS, THE ANNALS, THE CALENDAR, the sources strip);
     tripwire-model.js keeps a standalone twin because the Node tests import
@@ -195,11 +203,36 @@ export const postJSON = (path, body, opts = {}) => fetch(path, {
   ...(body === undefined ? {} : { body: JSON.stringify(body) }),
 });
 
+/** A response's JSON body, or null for an empty or non-JSON answer. */
+export const readJSON = (res) => res.json().catch(() => null);
+
+/** GET `url` fresh and return its JSON body; a refusal throws the server's
+    `error`, else the status line. */
+export async function getJSON(url) {
+  const res = await fetch(url, { cache: 'no-store' });
+  const body = await readJSON(res);
+  if (!res.ok) throw new Error(body?.error || `${res.status} ${res.statusText}`);
+  return body;
+}
+
 /** escape a data-file string for safe interpolation into innerHTML */
 export function esc(s) {
   return String(s ?? '')
     .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;').replaceAll("'", '&#39;');
+}
+
+/** A notice line, with the server's problems under it. One spelling for the
+    alerts' notices, NODES' message line and the forms' refusals. */
+export const noticeHTML = (m) => (!m ? '' : `<div class="dsk-notice dsk-notice-${m.kind}">${esc(m.text)}` +
+  (m.problems?.length ? `<ul class="dsk-problems">${m.problems.map((p) => `<li>${esc(p)}</li>`).join('')}</ul>` : '') +
+  '</div>');
+
+/** What the server refused (or a line of our own), as a bad notice: its
+    words, and each problem that is not the same words again. */
+export function refusalHTML(err) {
+  const msg = typeof err === 'string' ? err : (err.message || '');
+  return noticeHTML({ kind: 'bad', text: msg, problems: (err.problems || []).filter((p) => p && p !== msg) });
 }
 
 /** Would framing `abs` here be MIXED CONTENT — an http document inside an

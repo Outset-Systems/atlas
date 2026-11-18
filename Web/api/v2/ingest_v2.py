@@ -48,7 +48,7 @@ def _gate():
 @ingest_bp.route("/signals", methods=["POST"])
 def ingest_signals():
     """Store a merged health feed; the `relay` signals source serves it back."""
-    from signals import _coerce_feed
+    from engines.base import _coerce_feed
     from sqlalchemy import select
     from store import session_scope
     from store.models import SignalSnapshot, Site

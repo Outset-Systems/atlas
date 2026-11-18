@@ -1,6 +1,7 @@
 """ntfy: the message as plain text, its title, priority, tags and link in
 headers, the secret as a bearer token (2026-11-16)."""
 
+from . import shape as guard
 from .common import SECRET_FIELD, add_secret, url_field
 
 kind = "ntfy"
@@ -18,7 +19,6 @@ def check_path(path):
 
 def build(message, secret=None):
     """`(headers, body_bytes)`. The guard cleans the message and cuts the body."""
-    import alert_send as guard          # at call time: alert_send imports this package
     m = guard.prepared(message)
     headers = guard.base_headers("text/plain; charset=utf-8")
     if m.title:

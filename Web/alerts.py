@@ -50,7 +50,7 @@ import settings
 from filelock import LockTimeout, exclusive, lock_for
 from jsonio import iso_utc
 from jsonstore import JsonStore
-from signals import NODE_STATES
+from engines.base import NODE_STATES
 
 log = logging.getLogger("atlas.live.alerts")
 
@@ -244,8 +244,8 @@ def _visible_targets(view):
 def _visible_services(view):
     """{service key: place id} for the services on the no-group view: a link
     on a visible place that is not behind its own group (stage 3b)."""
-    import signals
-    return signals.service_places(view)
+    from engines.places import service_places
+    return service_places(view)
 
 
 def _visible_all(view):
@@ -254,8 +254,11 @@ def _visible_all(view):
 
 
 def _target_in(target, visible):
-    """`target_visible` against targets already worked out (`_visible_all`,
-    or `_visible_targets`, which knows no services)."""
+    """True when a rule's target survives the no-group view: a place in it, a
+    collection that survives it, a network with a visible place in it, a
+    service on a visible place and not behind its own group. Judged against
+    targets already worked out (`_visible_all`, or `_visible_targets`, which
+    knows no services)."""
     if not isinstance(target, dict):
         return False
     places, collections, networks = visible[:3]
@@ -265,13 +268,6 @@ def _target_in(target, visible):
         return False
     return ((kind == "place" and tid in places) or (kind == "collection" and tid in collections)
             or (kind == "network" and tid in networks) or (kind == "service" and tid in services))
-
-
-def target_visible(target, view):
-    """True when a rule's target survives the no-group view: a place in it, a
-    collection that survives it, a network with a visible place in it, a
-    service on a visible place and not behind its own group."""
-    return _target_in(target, _visible_all(view))
 
 
 def suspended(doc, data):
@@ -565,8 +561,8 @@ def compose_service(key, state, event, view, services):
     place = _name(places, pid) if pid else ""
     label = key
     for link in (places.get(pid) or {}).get("links") or []:
-        import signals
-        if isinstance(link, dict) and signals.service_key(pid, link) == key:
+        from engines.places import service_key
+        if isinstance(link, dict) and service_key(pid, link) == key:
             label = str(link.get("label") or key)
             break
     event = event or {}
@@ -624,8 +620,8 @@ def _mode_left_on(view, places, now):
             if isinstance(key, str) and key in svc:
                 label = key
                 for link in (places.get(svc[key]) or {}).get("links") or []:
-                    import signals
-                    if isinstance(link, dict) and signals.service_key(svc[key], link) == key:
+                    from engines.places import service_key
+                    if isinstance(link, dict) and service_key(svc[key], link) == key:
                         label = str(link.get("label") or key)
                 found.setdefault(f"{label} on {_name(places, svc[key])}", (began, day))
     return [f"{label} (since {day})" for label, (_, day) in sorted(found.items(), key=lambda kv: kv[1][0])]

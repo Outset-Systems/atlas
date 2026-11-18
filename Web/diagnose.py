@@ -4,8 +4,9 @@ From the Atlas host, in order, and stopping at the first step that fails:
 
 1. the path: each thing on the place's chain from the head of the network
    down to it (topology.py's `path_to_head`, read head first: cables, then
-   routes, then parent ties), nearest the head first. A stub, and a place with
-   no address, is listed as not asked, never guessed;
+   a guest from its host, then routes, then parent ties), nearest the head
+   first. A stub, and a place with no address, is listed as not asked,
+   never guessed;
 2. DNS: the place's charted name, when it has one (the name its own check
    asks, else the host of one of its own service addresses), resolves;
 3. the place itself: its own check, asked exactly as "Check now" asks it
@@ -35,10 +36,13 @@ import re
 import threading
 import time
 
+import engines.authority as authority
 import settings
-import signals
 import topology
 import watch
+from engines.base import HEALTHY
+from engines.checks import _check_url
+from engines.places import unmanaged_ids
 
 log = logging.getLogger("atlas.live.diagnose")
 
@@ -137,7 +141,7 @@ def dns_name(node):
     if _is_name(host):
         return host
     for link in _live_links(node):
-        url = signals._check_url(link.get("url")) or ""
+        url = _check_url(link.get("url")) or ""
         name = watch._parts(url)[0] if url else ""
         if _is_name(name):
             return name
@@ -154,7 +158,7 @@ def _charted_port(node, ip, ts, pid):
     if own["port"]:
         return own["port"]
     for t in ts:
-        if t.place != pid or t.kind in (watch.authority.PLACE, watch.authority.SHADOW_PLACE):
+        if t.place != pid or t.kind in (authority.PLACE, authority.SHADOW_PLACE):
             continue
         host, port = watch._parts(t.url) if t.url else (t.host, t.port)
         if host == ip and port:
@@ -183,7 +187,7 @@ def _plain(node, pid, ts):
 def _own(ts, pid):
     """The place's own check (or its shadow beside Kuma), or None. Only a
     place target of this very place: never a service that shares its name."""
-    return next((t for t in ts if t.kind in (watch.authority.PLACE, watch.authority.SHADOW_PLACE)
+    return next((t for t in ts if t.kind in (authority.PLACE, authority.SHADOW_PLACE)
                  and t.place == pid and t.key == pid), None)
 
 
@@ -191,7 +195,7 @@ def _hop_target(data, ts, node, pid):
     """(Target, None) for a place on the path, or (None, why)."""
     if node.get("planned"):
         return None, "planned"
-    if pid in signals.unmanaged_ids(data):
+    if pid in unmanaged_ids(data):
         return None, "unmanaged"
     t = _own(ts, pid)
     if t is not None:
@@ -223,7 +227,7 @@ def _judged(step, answer):
         step.update(state=SKIPPED, why="not-asked", ms=None)
         return step
     step["ms"] = ms
-    if state == signals.HEALTHY:
+    if state == HEALTHY:
         step["state"] = UP
     else:
         why = extra.get("why")
@@ -299,7 +303,7 @@ def diagnose(data, pid, hidden=frozenset(), path=None, now=None):
                  if isinstance(n, dict) and n.get("id") == pid), None)
     if node is None:
         return "none", None
-    if pid in signals.unmanaged_ids(data):
+    if pid in unmanaged_ids(data):
         return "unmanaged", None
     if node.get("planned"):
         return "planned", None
@@ -407,7 +411,7 @@ def _ask_own(step, data, pid, ts, path, now):
         step.update(state=SKIPPED, why="not-asked", error=value.get("error"))
         return step
     step["ms"] = value.get("ms")
-    if value["said"] == signals.HEALTHY:
+    if value["said"] == HEALTHY:
         step["state"] = UP
     else:
         step.update(state=DOWN, error=value.get("error") or watch.NOT_HEALTHY)

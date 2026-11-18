@@ -22,6 +22,8 @@ import shadow
 import signals
 import tripwires
 from context import atlas
+from engines.base import monitor_map
+from engines.places import service_places, services_of, unmanaged_ids, unmanaged_service_keys
 from redaction import (redact_for_groups, cleared, hidden_node_ids, sees_everything, vary_on_viewer,
                        viewer_groups, visible_monitors)
 
@@ -40,14 +42,7 @@ def _apply_kuma_map(ctx):
         data, _, _ = ctx.dataset()
     except (OSError, ValueError):
         return
-    for adapter in getattr(ctx.signals, "adapters", []):
-        use_map = getattr(adapter, "use_map", None)
-        if use_map is not None:
-            try:
-                use_map(data)     # each adapter takes its own (signals.py)
-            except Exception as e:  # noqa: BLE001 — one odd entry must not 500 the feed
-                log.warning("signals: %s could not read the map (%s: %s)",
-                            getattr(adapter, "name", "a source"), type(e).__name__, e)
+    signals.push_map(getattr(ctx.signals, "adapters", []), data)   # the hub's work (signals.py)
 
 
 def _label_for(ctx):
@@ -81,8 +76,8 @@ def _drift(ctx, feed):
         return None
     # a link with no monitor is charted under its own key, which is what a
     # built-in check reports it by: its result is not an uncharted monitor
-    import signals
-    charted = {signals.service_key(node.get("id"), link)
+    from engines.places import service_key
+    charted = {service_key(node.get("id"), link)
                for node in data.get("nodes") or [] if isinstance(node, dict)
                for link in (node.get("links") or []) if isinstance(link, dict)}
     block = data.get("signals") if isinstance(data.get("signals"), dict) else {}
@@ -240,9 +235,9 @@ def compose(ctx, before_rites=None):
     # their answer is set aside, so it has no state, is in no maintenance,
     # names no source, and its services say nothing. It beats maintenance.
     # `unmanaged` (and its services) are listed so the annals forget them.
-    unmanaged = signals.unmanaged_ids(map_now) if map_now is not None else set()
-    quiet = signals.services_of(map_now, unmanaged) | (
-        signals.unmanaged_service_keys(map_now) if map_now is not None else set())
+    unmanaged = unmanaged_ids(map_now) if map_now is not None else set()
+    quiet = services_of(map_now, unmanaged) | (
+        unmanaged_service_keys(map_now) if map_now is not None else set())
     feed["unmanaged"] = sorted(unmanaged)
     feed["unmanaged_services"] = sorted(quiet)
     if unmanaged:
@@ -258,7 +253,7 @@ def compose(ctx, before_rites=None):
     # Unmanaged beats it. Shown even when no source reports the service.
     # only services on the map: a window naming one since gone covers nothing,
     # and must not make one up (it read as an uncharted monitor; review)
-    charted = (set(signals.service_places(map_now)) | set(signals.monitor_map(map_now))) if map_now is not None else set()
+    charted = (set(service_places(map_now)) | set(monitor_map(map_now))) if map_now is not None else set()
     fixing = [k for k in repairs.get("services_under_repair") or [] if k not in quiet and k in charted]
     feed["maintenance_services"] = sorted(fixing)
     if fixing:

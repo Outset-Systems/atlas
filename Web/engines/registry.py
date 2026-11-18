@@ -50,13 +50,15 @@ class Source:
     listed       whether an operator may name it in the list of sources
     handed       True for a source that serves a feed handed to Atlas (a
                  file, a relay's push) and asks nothing itself
+    guarded      True for a source whose failed build is skipped (said in the
+                 log) instead of raised: only unifi (2026-11-17)
     """
 
     __slots__ = ("name", "label", "needs", "answers_for", "rank", "adapter", "build",
-                 "listed", "handed")
+                 "listed", "handed", "guarded")
 
     def __init__(self, name, label, adapter, build, answers_for, needs=None, rank=None,
-                 listed=True, handed=False):
+                 listed=True, handed=False, guarded=False):
         self.name = name
         self.label = label
         self.needs = needs
@@ -66,6 +68,7 @@ class Source:
         self.build = build
         self.listed = listed
         self.handed = handed
+        self.guarded = guarded
 
     def __repr__(self):
         return f"<Source {self.name}>"
@@ -87,7 +90,7 @@ REGISTRY = (
     Source("deception", "Decoy feed", DeceptionAdapter, _deception_adapter, (STONE,),
            needs="ATLAS_DECOYS_URL", rank=5),
     Source("unifi", "UniFi", UniFiAdapter, _unifi_adapter, (PLACE,),
-           needs="ATLAS_UNIFI_URL", rank=3),
+           needs="ATLAS_UNIFI_URL", rank=3, guarded=True),
     Source("checks", "Atlas", ChecksAdapter, _checks_adapter, (PLACE, SERVICE), rank=4),
     Source("relay", "Relay", RelayAdapter, RelayAdapter, (PLACE, SERVICE, STONE),
            handed=True),

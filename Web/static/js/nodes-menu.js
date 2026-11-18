@@ -48,7 +48,7 @@
    Five of NODES' parts import each other in circles, which is safe because
    none of them calls another while it loads. */
 
-import { A, esc, WRITE_HEADERS } from './config.js';
+import { A, esc, WRITE_HEADERS, readJSON } from './config.js';
 import * as R from './roster-model.js';
 import * as M from './menu-model.js';
 import * as AM from './alerts-model.js';
@@ -94,8 +94,7 @@ function readCheck(key) {
     let entry;
     try {
       const res = await fetch(checkPath(key), { cache: 'no-store' });
-      let body = null;
-      try { body = await res.json(); } catch { /* an empty or non-JSON answer */ }
+      const body = await readJSON(res);
       entry = { at: Date.now(), ok: res.ok, status: res.status, body: res.ok ? body : null };
     } catch {
       entry = { at: Date.now(), ok: false, status: 0, body: null };
@@ -486,7 +485,7 @@ async function askNow(kind, id) {
   let body = null;
   try {
     res = await fetch('api/v2/admin/checks/run', { method: 'POST', headers: WRITE_HEADERS, body: JSON.stringify({ key: id }) });
-    try { body = await res.json(); } catch { /* an empty or non-JSON answer */ }
+    body = await readJSON(res);
   } catch { /* no answer at all: said below */ }
   let text;
   let tone;
@@ -527,8 +526,7 @@ let dxSeq = 0;
 async function askDiagnose(id) {
   try {
     const res = await fetch('api/v2/admin/diagnose', { method: 'POST', headers: WRITE_HEADERS, body: JSON.stringify({ id }) });
-    let body = null;
-    try { body = await res.json(); } catch { /* an empty or non-JSON answer */ }
+    const body = await readJSON(res);
     return { status: res.status, ok: res.ok, body };
   } catch {
     return { status: 0, ok: false, body: null };

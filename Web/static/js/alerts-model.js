@@ -267,8 +267,6 @@ export const ruleOn = (rule) => ((rule && rule.enabled) ?? true) === true;
 
 /** What a rule can watch. */
 export const TARGETS = ['place', 'collection', 'network', 'service'];
-/** The digest's four conditions. */
-export const CONDITIONS = ['cert_days', 'review_days', 'drift', 'uncharted'];
 
 const list = (v) => (Array.isArray(v) ? v : []);
 const blank = (v) => v === null || v === undefined || String(v).trim() === '';

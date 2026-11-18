@@ -2,6 +2,7 @@
    Modules: config.js (CFG + shared context A) · camera.js · world.js · ui.js.
    Hub contract: relative paths only. */
 
+import './visit.js';    // A VISIT TO THE DEMO STARTS CLEAN (2026-11-17): before anything reads the browser's storage
 import { A, REDUCED, $, esc } from './config.js';
 import './scheme.js';   // THE COLOUR SCHEME (v1.52.0): first, so data-scheme stands before any panel opens
 import './views.js';    // THE VIEWS (2026-11-13; the Deck, v1.66.0/v1.67.0, is CHARTS): before every sibling, so a page that opens on a view has it first

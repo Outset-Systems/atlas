@@ -52,8 +52,10 @@ from dataclasses import dataclass
 from urllib.parse import urlsplit
 
 import settings
-import signals
 import engines.authority as authority
+from engines.base import DEGRADED, DOWN, HEALTHY, NODE_STATES, monitor_map
+from engines.checks import _check_url
+from engines.places import service_key, services_of, unmanaged_ids, unmanaged_service_keys
 
 log = logging.getLogger("atlas.live.watch")
 
@@ -214,7 +216,7 @@ def _resolve(kind, spec, url, fallback_host):
     """(url, host, port) a check of `kind` asks, or None when the map does not
     give it enough to ask."""
     if kind in ("http", "keyword", "json"):
-        asked = signals._check_url(spec["host"]) or url
+        asked = _check_url(spec["host"]) or url
         if not asked:
             return None
         host, _ = _parts(asked)
@@ -247,12 +249,12 @@ def targets(data):
     out, seen = [], set()
     if not isinstance(data, dict):
         return out
-    watched = {nid for nid in signals.monitor_map(data).values() if nid}
-    unmanaged = signals.unmanaged_ids(data)
-    quiet = signals.unmanaged_service_keys(data)
+    watched = {nid for nid in monitor_map(data).values() if nid}
+    unmanaged = unmanaged_ids(data)
+    quiet = unmanaged_service_keys(data)
     meta = data.get("meta")
     shadow = isinstance(meta, dict) and meta.get("shadow_kuma") is True
-    mapped = set(signals.monitor_map(data))
+    mapped = set(monitor_map(data))
     for node in data.get("nodes") or []:
         if not isinstance(node, dict) or not isinstance(node.get("id"), str) or node.get("planned"):
             continue
@@ -281,14 +283,14 @@ def targets(data):
             asks = authority.service_check(bool(named), tied, shadow)
             if asks is None:
                 continue
-            key = signals.service_key(nid, link)
+            key = service_key(nid, link)
             ckey = f"k:{key}" if named else f"s:{key}"
             if ckey in seen or key in quiet:
                 continue
             spec = spec_of(link)
             if spec["type"] == "off":
                 continue
-            url = signals._check_url(link.get("url")) or ""
+            url = _check_url(link.get("url")) or ""
             kind = spec["type"] or ("http" if url else "")
             if not kind:
                 continue
@@ -410,25 +412,25 @@ def _http(t):
         code = resp.status_code
         if t.type == "http":
             if t.expect:
-                state = signals.HEALTHY if _codes_ok(code, t.expect) else signals.DOWN
+                state = HEALTHY if _codes_ok(code, t.expect) else DOWN
                 extra = {"why": "status", "status": code}
             else:
-                state = signals.HEALTHY if code < 500 else signals.DEGRADED
+                state = HEALTHY if code < 500 else DEGRADED
                 extra = {"why": "server-error", "status": code}
         elif code >= 400:
-            state = signals.DOWN
+            state = DOWN
             extra = {"why": "status", "status": code}
         else:
             body = _read(resp)
             found = (t.expect in body) if t.type == "keyword" else _json_ok(body, t.expect)
-            state = signals.HEALTHY if found else signals.DOWN
+            state = HEALTHY if found else DOWN
             extra = {"why": t.type}
-        if state == signals.HEALTHY:
+        if state == HEALTHY:
             extra = {}
     except requests.Timeout:   # before ConnectionError: a connect timeout is both
-        state, extra = signals.DOWN, {"why": "timeout"}
+        state, extra = DOWN, {"why": "timeout"}
     except requests.ConnectionError:
-        state, extra = signals.DOWN, {"why": "unreachable"}
+        state, extra = DOWN, {"why": "unreachable"}
     except Exception as e:  # noqa: BLE001 - one bad address never stops the round
         log.debug("watch: one address could not be asked (%s)", type(e).__name__)
     finally:
@@ -448,15 +450,15 @@ def _tcp(t):
     try:
         with socket.create_connection((t.host, t.port), timeout=t.timeout):
             pass
-        return signals.HEALTHY, _ms(start), {}
+        return HEALTHY, _ms(start), {}
     except socket.timeout:   # TimeoutError
-        return signals.DOWN, _ms(start), {"why": "timeout"}
+        return DOWN, _ms(start), {"why": "timeout"}
     except ConnectionRefusedError:
-        return signals.DOWN, _ms(start), {"why": "refused"}
+        return DOWN, _ms(start), {"why": "refused"}
     except socket.gaierror:
-        return signals.DOWN, _ms(start), {"why": "no-name"}
+        return DOWN, _ms(start), {"why": "no-name"}
     except OSError:          # unreachable, reset, or anything else the socket says
-        return signals.DOWN, _ms(start), {"why": "unreachable"}
+        return DOWN, _ms(start), {"why": "unreachable"}
 
 
 def _dns(t):
@@ -464,13 +466,13 @@ def _dns(t):
     try:
         found = {info[4][0] for info in socket.getaddrinfo(t.host, None)}
     except socket.gaierror:
-        return signals.DOWN, _ms(start), {"why": "no-name"}
+        return DOWN, _ms(start), {"why": "no-name"}
     except OSError:
         return None, _ms(start), {}
     want = t.expect
     if not want or want in found:
-        return signals.HEALTHY, _ms(start), {}
-    return signals.DOWN, _ms(start), {"why": "address"}
+        return HEALTHY, _ms(start), {}
+    return DOWN, _ms(start), {"why": "address"}
 
 
 def probe(t):
@@ -592,11 +594,11 @@ def judge(entry, t, answer, now):
     why, code = extra.get("why"), extra.get("status")
     entry.pop("why", None)
     entry.pop("status", None)
-    if state != signals.HEALTHY and why in WHY:
+    if state != HEALTHY and why in WHY:
         entry["why"] = why
         if isinstance(code, int) and not isinstance(code, bool):
             entry["status"] = code
-    if state == signals.HEALTHY:
+    if state == HEALTHY:
         entry["fails"] = 0
         entry["state"] = state
         entry["since"] = now if entry.get("said") != state else entry.get("since", now)
@@ -725,7 +727,7 @@ def as_feed(store, ts, now=None, factor=None):
         if t.kind in SHADOW_KINDS:
             continue                  # Kuma's to say: compared in shadow.py, never served
         entry = checks.get(t.ckey)
-        if not entry or entry.get("state") not in signals.NODE_STATES:
+        if not entry or entry.get("state") not in NODE_STATES:
             continue
         heard = entry.get("heard")
         if not isinstance(heard, (int, float)) or now - heard > stale_after(t, factor):
@@ -745,12 +747,12 @@ def as_feed(store, ts, now=None, factor=None):
     for place, states in rolled.items():
         if place in own:
             continue
-        if all(s == signals.HEALTHY for s in states):
-            nodes[place] = {"state": signals.HEALTHY}
-        elif all(s == signals.DOWN for s in states):
-            nodes[place] = {"state": signals.DOWN}
+        if all(s == HEALTHY for s in states):
+            nodes[place] = {"state": HEALTHY}
+        elif all(s == DOWN for s in states):
+            nodes[place] = {"state": DOWN}
         else:
-            nodes[place] = {"state": signals.DEGRADED}
+            nodes[place] = {"state": DEGRADED}
     return {"services": services, "nodes": nodes}
 
 
@@ -784,14 +786,14 @@ def not_asked(data, key):
         return None
     nodes = [n for n in (data.get("nodes") if isinstance(data.get("nodes"), list) else [])
              if isinstance(n, dict) and isinstance(n.get("id"), str)]
-    unmanaged = signals.unmanaged_ids(data)
-    monitors = signals.monitor_map(data)
+    unmanaged = unmanaged_ids(data)
+    monitors = monitor_map(data)
     if any(n["id"] == key for n in nodes):
         if key in unmanaged:
             return {"why": "unmanaged"}
         named = sorted(m for m, nid in monitors.items() if nid == key)
         return {"why": "kuma", "monitor": named[0]} if named else None
-    if key in signals.services_of(data, unmanaged) | signals.unmanaged_service_keys(data):
+    if key in services_of(data, unmanaged) | unmanaged_service_keys(data):
         return {"why": "unmanaged"}
     named = key in monitors or any(
         isinstance(link, dict) and link.get("kuma") == key
@@ -828,15 +830,15 @@ def answer_for(store, t, now=None, factor=1.0):
     now = time.time() if now is None else now
     entry = ((store or {}).get("checks") or {}).get(t.ckey)
     entry = entry if isinstance(entry, dict) else {}
-    said = entry.get("said") if entry.get("said") in signals.NODE_STATES else None
-    held = entry.get("state") if entry.get("state") in signals.NODE_STATES else None
+    said = entry.get("said") if entry.get("said") in NODE_STATES else None
+    held = entry.get("state") if entry.get("state") in NODE_STATES else None
     heard, asked = entry.get("heard"), entry.get("asked")
     numeric = lambda v: isinstance(v, (int, float)) and not isinstance(v, bool)   # noqa: E731
     stale = bool(held) and (not numeric(heard) or now - heard > stale_after(t, factor))
     answered = numeric(asked) and numeric(heard) and heard >= asked
     if numeric(asked) and not answered:
         error = NO_ANSWER
-    elif said and said != signals.HEALTHY:
+    elif said and said != HEALTHY:
         why = entry.get("why")
         error = (WHY.get(why) if isinstance(why, str) else None) or NOT_HEALTHY
     else:

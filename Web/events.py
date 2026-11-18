@@ -34,7 +34,7 @@ import time
 import settings
 from jsonio import iso_utc
 from jsonstore import JsonStore
-from signals import NODE_STATES
+from engines.base import NODE_STATES
 
 log = logging.getLogger("atlas.live.events")
 

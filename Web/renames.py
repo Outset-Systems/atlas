@@ -16,7 +16,7 @@ that address is on one link only; otherwise the one at the same position,
 when the list kept its length. A link that cannot be paired moves nothing.
 """
 
-import signals
+from engines.places import service_key
 
 
 def enabled(data):
@@ -60,7 +60,7 @@ def key_moves(before, after_links, old_id, new_id):
             pairs.append((l, match))
     out = {}
     for was, now in pairs:
-        a, b = signals.service_key(old_id, was), signals.service_key(new_id, now)
+        a, b = service_key(old_id, was), service_key(new_id, now)
         if a != b:
             out[a] = b
     return out

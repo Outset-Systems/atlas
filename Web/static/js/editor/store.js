@@ -11,7 +11,7 @@
    write and can put any of them back. That is strictly better than local
    pending state, because it survives a closed tab. */
 
-import { A, WRITE_HEADERS } from '../config.js';
+import { A, WRITE_HEADERS, readJSON } from '../config.js';
 
 const API = 'api/v2/admin';
 
@@ -25,8 +25,7 @@ export class EditorError extends Error {
 
 async function call(path, options) {
   const res = await fetch(`${API}/${path}`, options);
-  let body = null;
-  try { body = await res.json(); } catch { /* an empty or non-JSON body */ }
+  const body = await readJSON(res);
   if (!res.ok) {
     throw new EditorError(body?.error || `${res.status} ${res.statusText}`,
                           body?.problems, res.status);

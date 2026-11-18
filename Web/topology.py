@@ -3,7 +3,8 @@
 
 The dataset becomes a graph of things (places, then stubs) and links (cables,
 then routes, then parent ties); the heads of the network come from the data;
-everything hangs below a head by cable, then by route, then by parent. The
+everything hangs below a head by cable, then a guest by its host, then by
+route, then by parent. The
 same input gives the same answers as the client, case for case: both read
 `tests/topology_cases.json`, and a change to a rule is made in both or in
 neither.
@@ -357,12 +358,17 @@ def layers(graph):
 
     The walk: heads at depth 0; cables breadth first, a depth at a time, each
     depth's things in thing order and each thing's cables in link order, the
-    first to reach a thing winning. When cables reach nothing more, a thing
-    not yet reached with a route to a reached one hangs by that route, one
-    hop (least depth of the reached end, then its thing order, then link
-    order), and cables are walked again from all of them. Parent ties are
-    tried the same way only when no route adds anything. Until nothing is
-    added."""
+    first to reach a thing winning. When cables reach nothing more, a guest
+    hangs from its host (2026-11-17): every place not yet reached whose
+    `parent` is reached hangs from it, one hop, by whatever joins the two
+    (the route between them, else the parent tie), and cables are walked
+    again. When no host adds anything, a thing not yet reached with a route
+    to a reached one hangs by that route, one hop (least depth of the
+    reached end, then its thing order, then link order); a guest whose host
+    is not reached yet waits and takes no route in this step. When that
+    adds nothing either, the guests still waiting hang by their routes. The
+    parent ties left are tried the same way only when no route adds
+    anything. Until nothing is added."""
     return _cached(graph, "layers", lambda: _layers(graph))
 
 
@@ -370,14 +376,21 @@ def _layers(graph):
     adj = _adjacency(graph)
     by_id = graph["by_id"]
     info = {}
-    since = {"route": [], "parent": []}
+    since = {"host": [], "route": [], "wait": [], "parent": []}
+    # each host's guests, in thing order: the places whose `parent` it is
+    guests = {}
+    for t in graph["things"]:
+        if t["parent"] is not None and t["parent"] in by_id:
+            guests.setdefault(t["parent"], []).append(t["id"])
 
     def order(tid):
         return by_id[tid]["order"]
 
     def reach(tid, entry):
         info[tid] = entry
+        since["host"].append(tid)
         since["route"].append(tid)
+        since["wait"].append(tid)
         since["parent"].append(tid)
 
     def flood(seeds):
@@ -403,11 +416,17 @@ def _layers(graph):
                         hi = max(hi, d + 1)
             d += 1
 
-    def attach(layer, sources):
+    def waits(tid):
+        """A guest whose host is not reached yet waits for it: no route
+        takes it while its host may still be reached."""
+        p = by_id[tid]["parent"]
+        return p is not None and p in by_id and p not in info
+
+    def attach(layer, sources, skip=None):
         candidates = set()
         for tid in sources:
             for link, other, _ in adj[tid]:
-                if link["layer"] == layer and other not in info:
+                if link["layer"] == layer and other not in info and not (skip and skip(other)):
                     candidates.add(other)
         chosen = []
         for tid in sorted(candidates, key=order):
@@ -424,13 +443,41 @@ def _layers(graph):
                         "head": info[win["other"]]["head"], "loose": False})
         return [tid for tid, _ in chosen]
 
+    def attach_host(sources):
+        """A guest hangs from its host: each unreached guest of a thing in
+        `sources`, by the first link (in link order) that joins the two and
+        is no cable. A guest nothing joins to its host is left for the routes."""
+        chosen = []
+        for host in sources:
+            for tid in guests.get(host, ()):
+                if tid in info:
+                    continue
+                via = next((link for link, other, _ in adj[tid]
+                            if other == host and link["layer"] != "cable"), None)
+                if via is not None:
+                    chosen.append((tid, host, via))
+        chosen.sort(key=lambda c: order(c[0]))
+        for tid, host, link in chosen:
+            above = info[host]
+            reach(tid, {"depth": above["depth"] + 1,
+                        "up": {"id": host, "link": link["id"], "layer": link["layer"]},
+                        "head": above["head"], "loose": False})
+        return [tid for tid, _, _ in chosen]
+
     tops = heads(graph)
     for tid in tops:
         reach(tid, {"depth": 0, "up": None, "head": tid, "loose": False})
     flood(tops)
     while True:
-        via_route, since["route"] = since["route"], []
-        added = attach("route", via_route)
+        via_host, since["host"] = since["host"], []
+        added = attach_host(via_host)
+        if not added:
+            via_route, since["route"] = since["route"], []
+            added = attach("route", via_route, waits)
+        if not added:
+            # nothing else moves: the guests still waiting hang by their routes
+            via_wait, since["wait"] = since["wait"], []
+            added = attach("route", via_wait)
         if not added:
             via_parent, since["parent"] = since["parent"], []
             added = attach("parent", via_parent)

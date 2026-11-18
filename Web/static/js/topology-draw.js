@@ -46,8 +46,9 @@
    the stage beside the svg, never inside it. Every rule inside the svg is in
    topology-canvas.css (its drawing block); the rest is in topology.css. */
 
-import { A, esc, postJSON, REDUCED } from './config.js';
+import { A, esc, postJSON, REDUCED, refusalHTML, readJSON } from './config.js';
 import * as M from './topology-model.js';
+import * as Geo from './topology-geometry.js';
 import * as D from './topology-draw-model.js';
 import {
   T, t, tools, hooks, addTool, onPointer, svgEl, stageEl, mayDraw, setSaved, onLayout, guardRearrange,
@@ -151,8 +152,7 @@ async function flush() {
   try {
     // keepalive: a move made just before the page goes is still sent
     const res = await postJSON(LAYOUT, { cards, expect: S.stamp }, { keepalive: true });
-    let body = null;
-    try { body = await res.json(); } catch { /* an empty answer */ }
+    const body = await readJSON(res);
     if (res.ok) {
       S.stamp = body?.stamp || S.stamp;
     } else if (res.status === 409) {
@@ -197,8 +197,7 @@ guardRearrange(() => {
   setSaved(null);
   postJSON(LAYOUT, { cards: {}, replace: true, expect: S.stamp })
     .then(async (res) => {
-      let body = null;
-      try { body = await res.json(); } catch { /* an empty answer */ }
+      const body = await readJSON(res);
       if (res.ok) { S.stamp = body?.stamp || S.stamp; say(t('tp_rearranged')); }
       else if (res.status === 409) { say(t('tp_layout_conflict'), 'warn'); await loadLayout(); }
       else say(t('tp_layout_failed', { why: body?.error || `${res.status}` }), 'bad');
@@ -377,11 +376,11 @@ function cableGeometries() {
   // where each cable is DRAWN: the ends of the cables meeting one card are
   // spread along its edge, so the lane alone is not where such a cable runs
   // (a press on a cable beside a busy switch picked nothing, 2026-11-17)
-  const drawn = M.cableLayout(T.shown, pos);
+  const drawn = Geo.cableLayout(T.shown, pos);
   const out = [];
   for (const l of T.shown.links) {
     if (l.layer !== 'cable' || !pos[l.a] || !pos[l.b]) continue;
-    out.push({ id: l.id, l, g: drawn.get(l.id)?.geom || M.cableGeometry(pos[l.a], pos[l.b], l.lane, l.lanes) });
+    out.push({ id: l.id, l, g: drawn.get(l.id)?.geom || Geo.cableGeometry(pos[l.a], pos[l.b], l.lane, l.lanes) });
   }
   return out;
 }
@@ -404,7 +403,7 @@ function drawHits() {
     const b = thingOf(l.b);
     const label = `${t('tp_cable_edit', { id })}: ${t('tp_cable_between', {
       a: [a?.name || l.a, l.aPort].filter(Boolean).join(' '), b: [b?.name || l.b, l.bPort].filter(Boolean).join(' ') })}`;
-    return `<path class="tp-hit${id === editing ? ' tp-hit-on' : ''}" d="${M.cablePath(geo)}" data-link="${esc(id)}" tabindex="0" role="button" ` +
+    return `<path class="tp-hit${id === editing ? ' tp-hit-on' : ''}" d="${Geo.cablePath(geo)}" data-link="${esc(id)}" tabindex="0" role="button" ` +
       `aria-label="${esc(label)}"${id === editing ? ' aria-current="true"' : ''}><title>${esc(label)}</title></path>`;
   }).join('');
   if (had) g.querySelector(`.tp-hit[data-link="${CSS.escape(had)}"]`)?.focus({ preventScroll: true });
@@ -600,11 +599,7 @@ function problemsBox() {
 /** The server's words for what it refused (or ours), inside the form. */
 function showProblems(box, err) {
   if (!err) { box.innerHTML = ''; return; }
-  const message = typeof err === 'string' ? err : (err.message || '');
-  const problems = (err.problems || []).filter((p) => p && p !== message);
-  box.innerHTML = `<div class="dsk-notice dsk-notice-bad">${esc(message)}` +
-    (problems.length ? `<ul class="dsk-problems">${problems.map((p) => `<li>${esc(p)}</li>`).join('')}</ul>` : '') +
-    '</div>';
+  box.innerHTML = refusalHTML(err);
 }
 
 function formBar(goLabel) {

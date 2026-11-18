@@ -33,7 +33,11 @@
      without re-encoding the art. -->
 <link rel="preload" as="image" href="{{ map_image }}" fetchpriority="high">
 </head>
-<body data-editable="{{ '1' if editable else '0' }}" data-seeded="{{ '1' if seeded else '0' }}" data-demo="{{ '1' if demo else '0' }}">
+<!-- `pre` from the first paint (2026-11-17): atlas.js used to add it when it
+     booted, which is after every module has loaded, so until then the band
+     (above the veil) stood over the splash and then faded out. The boot still
+     takes it off 1.6s after the veil lifts. -->
+<body class="pre" data-editable="{{ '1' if editable else '0' }}" data-seeded="{{ '1' if seeded else '0' }}" data-demo="{{ '1' if demo else '0' }}">
 
 <!-- Cinematic intro veil -->
 <div id="veil">

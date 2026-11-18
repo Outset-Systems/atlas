@@ -44,7 +44,8 @@ import maintenance
 import provenance
 import roster_query
 import schema
-import signals
+from engines.base import NODE_STATES
+from engines.places import unmanaged_ids
 from context import atlas
 from jsonio import iso_utc
 from redaction import no_store, redact_for_groups, sees_everything, viewer_groups
@@ -142,7 +143,7 @@ def build(data, feed, admin, stamp, now=None):
     live = feed.get("nodes") or {}
     confirmed = feed.get("confirmed_by") or {}
     under = set(feed.get("maintenance") or [])
-    unmanaged = signals.unmanaged_ids(data)   # this viewer's map: its own places only
+    unmanaged = unmanaged_ids(data)   # this viewer's map: its own places only
     windows = maintenance.annotated()
     upcoming = _upcoming(windows, data)
     mode_since = _mode_since(windows, data)
@@ -155,7 +156,7 @@ def build(data, feed, admin, stamp, now=None):
             continue
         nid = node["id"]
         info = live.get(nid) if isinstance(live.get(nid), dict) else {}
-        state = info.get("state") if info.get("state") in signals.NODE_STATES else None
+        state = info.get("state") if info.get("state") in NODE_STATES else None
         cause = info.get("cause") if isinstance(info.get("cause"), str) else None
         mark = node.get(provenance.KEY) if isinstance(node.get(provenance.KEY), dict) else {}
         described = provenance.describe(node)

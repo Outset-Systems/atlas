@@ -253,7 +253,7 @@
   box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28);
 }
 :root[data-scheme="light"] #settings-panel { color: var(--text); }
-:root[data-scheme="light"] :is(#ledger, #calendar, #seals, #stones, #tribute, #reliquary,
+:root[data-scheme="light"] :is(#annals, #ledger, #calendar, #seals, #stones, #tribute, #reliquary,
                                #accounts, #trust, #settings) {
   background: rgba(13, 11, 7, 0.82);
   -webkit-backdrop-filter: blur(6px);
@@ -850,7 +850,7 @@ body::after {
   position: absolute; left: 50%; bottom: calc(100% + 8px); transform: translateX(-50%);
   width: max-content; max-width: 260px; z-index: 8;
   display: flex; flex-direction: column; gap: 8px; text-align: left;
-  padding: 12px 14px; border-radius: 6px;
+  padding: 12px 14px; border-radius: 4px;
   background: color-mix(in srgb, var(--surface-2) 92%, transparent);
   border: 1px solid var(--ink-line); box-shadow: var(--pop-shadow);
   backdrop-filter: blur(6px);
@@ -1345,7 +1345,7 @@ body:not(.on-style) .mk[data-id="hypervisor"] .mk-ring { inset: -6px; border-rad
    to its corners, and a flex item that is a scroll container is the one that
    may shrink below its content. */
 #settings-panel {
-  padding: 8px 22px 24px; color: var(--parchment); font-family: 'Alegreya Sans', sans-serif;
+  padding: 8px 22px 24px; color: var(--text); font-family: 'Alegreya Sans', sans-serif;   /* the body ink every other panel has (2026-11-17; it was the card's brighter parchment) */
   overflow-y: auto; min-height: 0;
   scrollbar-width: thin; scrollbar-color: var(--ink-line) transparent;
 }
@@ -1400,7 +1400,7 @@ body:not(.on-style) .mk[data-id="hypervisor"] .mk-ring { inset: -6px; border-rad
 .sp-btn {
   flex: 1; padding: 6px 8px; font-size: 0.72rem; font-family: inherit;
   background: rgba(var(--gilt-rgb), 0.12); border: 1px solid rgba(var(--gilt-rgb), 0.4);
-  color: var(--gilt); border-radius: 7px; cursor: pointer; transition: background 150ms;
+  color: var(--gilt); border-radius: 4px; cursor: pointer; transition: background 150ms;   /* 4px since 2026-11-17: the rows and folds beside it are 4px, and the design notes has no 7 */
 }
 .sp-btn:hover { background: rgba(var(--gilt-rgb), 0.24); }
 /* hybrid's "sign in to the Atlas" is a real link (a navigation, not a fetch),

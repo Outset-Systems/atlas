@@ -24,11 +24,11 @@ import events
 import heartbeats
 import overview as realm_overview
 import provenance
-import signals
 import topology
 import tripwires
 from api.v2.feeds import _redact_feed, build_feed
 from context import atlas
+from engines.places import service_key
 from redaction import (hidden_words, redact_for_groups, sees_everything, viewer_groups,
                        visible_monitors)
 
@@ -282,7 +282,7 @@ def place(args):
     out["live"] = _live(feed, node.get("id"))
     services = feed.get("services") or {}
     out["services"] = [_marked(node, {"name": l.get("label"), "url": l.get("url"), "about": l.get("desc"),
-                                      "state": _state(services.get(signals.service_key(node.get("id"), l)))},
+                                      "state": _state(services.get(service_key(node.get("id"), l)))},
                                ("name", "about"))
                        for l in node.get("links") or []]
     return _marked(node, out)

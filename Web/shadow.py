@@ -29,14 +29,15 @@ import logging
 import os
 import time
 
+import engines.authority as authority
 import settings
-import signals
+from engines.base import DEGRADED, DOWN, HEALTHY
 
 log = logging.getLogger("atlas.live.shadow")
 
 FILE = "shadow.json"
 KEEP = 20            # the last disagreements kept per thing
-COUNTED = (signals.HEALTHY, signals.DEGRADED, signals.DOWN)
+COUNTED = (HEALTHY, DEGRADED, DOWN)
 
 
 def on(data):
@@ -89,7 +90,7 @@ def _kuma_state(t, feed):
     if t.kind == "shadow":
         info = (feed.get("services") or {}).get(t.key)
         return info.get("state") if isinstance(info, dict) else None
-    if (feed.get("confirmed_by") or {}).get(t.place) != "kuma":
+    if (feed.get("confirmed_by") or {}).get(t.place) != authority.MONITOR:
         return None                   # the place's state did not come from its monitor
     info = (feed.get("nodes") or {}).get(t.place)
     return info.get("state") if isinstance(info, dict) else None
@@ -146,7 +147,7 @@ def _observe(feed, data, path, watch_path, now):
                 believed = entry.get("said") == atlas
                 if (isinstance(heard, (int, float)) and heard != rec.get("counted")
                         and believed and atlas in COUNTED and kuma in COUNTED):
-                    agree = (atlas == signals.HEALTHY) == (kuma == signals.HEALTHY)
+                    agree = (atlas == HEALTHY) == (kuma == HEALTHY)
                     key = "agree" if agree else "differ"
                     rec[key] = int(rec.get(key) or 0) + 1
                     if not agree:

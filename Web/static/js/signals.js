@@ -7,7 +7,7 @@
    grey for the slumbering. If the feed can't be read, the map goes quietly static
    and the colophon whispers "the watchers are silent" — never an error. */
 
-import { A, CFG, $, esc, themeText } from './config.js';
+import { A, CFG, $, esc, themeText, HEALTH_DOT } from './config.js';
 import { tally, colophonText } from './signals-model.js';
 
 const STATE_CLASS = { degraded: 's-degraded', down: 's-down', slumbering: 's-slumber', maintenance: 's-maint' };
@@ -47,10 +47,7 @@ A.signalsAt = 0;           // Date.now() of the last successful read
 
 const markersEl = () => $('markers');
 
-const SVC_HEALTH_CLASS = {
-  healthy: 'h-up', degraded: 'h-degraded', down: 'h-down',
-  maintenance: 'h-maint', slumbering: 'h-slumber',
-};
+const SVC_HEALTH_CLASS = HEALTH_DOT;   // config.js holds it
 // The one state→dot-class map for the whole app, exported like its sibling
 // A.stateHue — the card, the Index, THE LEDGER and THE PATH all read this
 // instead of keeping a private copy (they had drifted into five identical ones).

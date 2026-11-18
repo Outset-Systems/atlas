@@ -129,9 +129,16 @@ body.phone .nv-recent-said { grid-column: 3; }
   font-family: 'JetBrains Mono', monospace; font-size: 0.72rem;
   color: var(--text-dim); font-variant-numeric: tabular-nums;
 }
+/* ONE SMALL BUTTON (2026-11-17, owner: "make sure the buttons in the node
+   section are all properly aligned"): the ⋯, the bell and the Services
+   toggle were three boxes (23, 19 and 21px tall, each with its own padding).
+   They are one now: 24px tall, at least 26px wide, its mark centred. The
+   phone card's ⋯ keeps its thumb's 44px square (below). */
 .nv-rail-more {
   flex-shrink: 0; background: none; border: 1px solid transparent; border-radius: 4px;
-  padding: 2px 7px; cursor: pointer; color: var(--text-dim); font-size: 0.9rem; line-height: 1.2;
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 26px; height: 24px; padding: 0 6px;
+  cursor: pointer; color: var(--text-dim); font-size: 0.9rem; line-height: 1;
 }
 .nv-rail-more:hover, .nv-rail-more[aria-expanded="true"] { color: var(--gilt); border-color: rgba(var(--gilt-rgb), 0.3); }
 /* under a collection's row: its name box, its armed Remove and notes, the
@@ -144,6 +151,16 @@ body.phone .nv-recent-said { grid-column: 3; }
 .nv-rail-warn { color: var(--sem-warn); }
 .nv-rail-empty { margin: 4px 8px; font-size: 0.82rem; color: var(--text-dim); }
 .nv-rail .nv-saved { margin: 6px 0 0; padding: 0 6px; }
+/* ONE COLUMN OF COUNTS (2026-11-17): a collection's row ends in a bell and a
+   ⋯, a network's in a bell, a kind's in neither, so the counts stood at
+   three different places. A row without a button the rail holds elsewhere
+   keeps that button's room (the bell's 36px or the ⋯'s 26px, and the 2px
+   gap), so every count ends on one line. A viewer's rail has no buttons and
+   gives up no room. */
+.nv-rail-li > .nv-rail-more { width: 26px; padding: 0; }   /* exactly the room the rows without one keep */
+.nv-rail:has(.nv-rail-bell) .nv-rail-li:not(:has(.nv-rail-bell)) { padding-right: 38px; }
+.nv-rail:has(.nv-rail-li > .nv-rail-more) .nv-rail-li:not(:has(> .nv-rail-more)) { padding-right: 28px; }
+.nv-rail:has(.nv-rail-bell):has(.nv-rail-li > .nv-rail-more) .nv-rail-li:not(:has(.nv-rail-bell)):not(:has(> .nv-rail-more)) { padding-right: 66px; }
 /* a wide screen has the rail; a phone has the pickers and the chip row */
 body:not(.phone) .nv-pick-rail, body:not(.phone) .nv-saved-row { display: none; }
 body.phone .nv-body { display: block; }
@@ -151,7 +168,21 @@ body.phone .nv-rail { display: none; }
 
 /* ── the filter bar ── */
 .nv-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin: 16px 0 10px; }
-.nv-filters .dsk-input { width: auto; }
+.nv-filters .dsk-input { width: auto; height: 32px; }
+/* ONE FIELD ON A DARK SHEET (2026-11-17, owner: "refine the dark theme to
+   make it more unified across all the menus"). The Desk's field is inked for
+   its parchment form (a pale box, dark ink), and NODES, the alert forms and
+   TOPOLOGY's drawing form borrowed it as it was: pale boxes on a night
+   sheet. Here it takes the field Settings already has (`.dir-input`: the
+   sunken well, the body ink, the ink-line edge), from tokens, so the light
+   scheme follows by itself. The Desk's own form is untouched. */
+:is(.nv-sheet, .al-form, .tp-form) .dsk-input {
+  color: var(--text);
+  background: rgba(var(--shade-rgb), calc(0.25 * var(--shade-k)));
+  border-color: var(--ink-line);
+}
+:is(.nv-sheet, .al-form, .tp-form) .dsk-input::placeholder { color: var(--text-dim); }
+:is(.nv-sheet, .al-form, .tp-form) .dsk-input:focus { border-color: var(--gilt); }
 .nv-search { flex: 1 1 240px; max-width: 320px; }
 .nv-pick { max-width: 190px; }
 .nv-toggle {
@@ -199,8 +230,13 @@ body.phone .nv-rail { display: none; }
    `.nv-scroll`); the panel's frame and the Desk's buttons. Since 2026-11-16
    a service's ⋯ and a collection's ⋯ in the rail open this same menu, and
    it needed no rule of its own for them. */
-.nv-name-cell { display: inline-flex; align-items: center; gap: 4px; }
-.nv-row-more { padding: 0 6px; }
+/* the ⋯ stands at the Name column's far edge in every row (2026-11-17): it
+   followed each name's end, so the column of them was ragged */
+.nv-name-cell { display: flex; align-items: center; gap: 4px; }
+.nv-name-cell > .nv-row-more { margin-left: auto; }
+/* while Check now's line or the chain's note is out, the Name column is as
+   wide as that note: the ⋯ goes back beside its name until it is closed */
+.nv-table:has(.nv-dx, .nv-asked) .nv-name-cell > .nv-row-more { margin-left: 0; }
 .nv-add-place { margin-left: 10px; }
 /* maintenance mode on more than a week: the digest's guard, said here too */
 .nv-now.nv-mode-long { color: var(--sem-warn); font-weight: 600; }
@@ -208,7 +244,7 @@ body.phone .nv-rail { display: none; }
   position: fixed; z-index: 60; min-width: 230px; max-width: 320px;
   display: flex; flex-direction: column; gap: 2px; padding: 6px;
   background: var(--surface-2); color: var(--text);
-  border: 1px solid var(--ink-line); border-radius: 6px;
+  border: 1px solid var(--ink-line); border-radius: 4px;   /* the views menu's corners (6px until 2026-11-17) */
   box-shadow: 0 14px 40px rgba(var(--shade-rgb), calc(0.6 * var(--shade-k)));
 }
 .nv-menu[hidden] { display: none; }
@@ -309,9 +345,15 @@ body.phone .nv-card-more[aria-expanded="true"] { z-index: 61; }
 
 /* ── stage 3b (2026-11-15): a place's services, under its row ── */
 .nv-svc-toggle {
-  background: none; border: 1px solid transparent; border-radius: 4px; padding: 1px 6px;
+  background: none; border: 1px solid transparent; border-radius: 4px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+  min-width: 26px; height: 24px; padding: 0 6px; line-height: 1;
   cursor: pointer; color: var(--text);
 }
+/* a place with no services shows a bare count: where the table has toggles
+   (an admin's, on a wide screen) it keeps the toggle's edge, gap and arrow
+   in room, so the digits of the column end on one line */
+.nv-table:has(.nv-svc-toggle) .nv-num > .nv-mono:only-child { display: inline-block; padding-right: 22px; }
 .nv-svc-toggle:hover, .nv-svc-toggle[aria-expanded="true"] { color: var(--gilt); border-color: rgba(var(--gilt-rgb), 0.3); }
 /* THE WINDOW (2026-11-15, stage 5): a long table draws the rows on screen;
    a spacer above and below stands in for the rest (its height set by
@@ -319,7 +361,7 @@ body.phone .nv-card-more[aria-expanded="true"] { z-index: 61; }
 .nv-table tr.nv-gap > td { padding: 0; border: 0; background: none; }
 .nv-table[tabindex="-1"]:focus { outline: none; }   /* holding the keyboard for a row scrolled away */
 .nv-more-cards { display: block; margin: 12px auto 0; }
-.nv-svc-row > td { padding: 4px 8px 10px 40px; background: rgba(var(--shade-rgb), calc(0.12 * var(--shade-k))); }
+.nv-svc-row > td { padding: 4px 8px 10px 46px; background: rgba(var(--shade-rgb), calc(0.12 * var(--shade-k))); }
 .nv-svc-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .nv-svc {
   /* the bell and the ⋯ follow the name, never the far end of a wide table */
@@ -355,9 +397,9 @@ body.phone .nv-svc.nv-thing > .nv-svc-host { grid-column: 2; grid-row: 2; }
    its panel is open. The panel stands where the bulk forms do, in the bulk
    bar's frame, and is alert-rules.js's (the `al-*` pieces). */
 .nv-bell {
-  display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px; flex-shrink: 0;
   background: none; border: 1px solid transparent; border-radius: 4px;
-  padding: 2px 6px; cursor: pointer; color: var(--text-dim); line-height: 1;
+  min-width: 26px; height: 24px; padding: 0 6px; cursor: pointer; color: var(--text-dim); line-height: 1;
 }
 .nv-bell-i { width: 13px; height: 13px; opacity: 0.55; }
 .nv-bell-lit { color: var(--text); }
@@ -369,7 +411,14 @@ body.phone .nv-svc.nv-thing > .nv-svc-host { grid-column: 2; grid-row: 2; }
 .nv-bell-held .nv-bell-i { opacity: 0.3; }
 .nv-bell-held .nv-bell-n { color: var(--sem-warn); }
 .nv-td-alerts, .nv-th-alerts { width: 1%; white-space: nowrap; }
-.nv-rail-bell { padding: 3px 5px; }
+/* the Alerts head has no sort button, so its word stood 4px left of the
+   other heads' words; and the bell's mark stands under that word, not 7px
+   in from it (its own padding) */
+.nv-table th.nv-th-alerts { padding-left: 10px; }
+.nv-td-alerts > .nv-bell { margin-left: -7px; }
+/* in the rail a bell keeps room for its mark and a two-figure count, and
+   the mark stays at its left, so the counts beside it hold one line */
+.nv-rail-bell { min-width: 36px; justify-content: flex-start; }
 .nv-alerts {
   margin: 0 0 12px; padding: 10px 14px 12px;
   border: 1px solid var(--ink-line); border-left: 3px solid var(--gilt); border-radius: 3px;

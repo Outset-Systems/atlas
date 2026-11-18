@@ -61,7 +61,7 @@
    `show()` as it loads and so has to load after them all: what they call
    here they reach through `hooks` (nodes-state.js), filled at its foot. */
 
-import { A, $, esc, themeText, ago } from './config.js';
+import { A, $, esc, themeText, ago, getJSON } from './config.js';
 import * as R from './roster-model.js';
 import { parseCollection } from './views-model.js';
 import * as AM from './alerts-model.js';
@@ -105,11 +105,7 @@ function normalise(body) {
 }
 
 async function fetchRoster() {
-  const res = await fetch('api/v2/places/roster', { cache: 'no-store' });
-  let body = null;
-  try { body = await res.json(); } catch { /* an empty or non-JSON answer */ }
-  if (!res.ok) throw new Error(body?.error || `${res.status} ${res.statusText}`);
-  return normalise(body);
+  return normalise(await getJSON('api/v2/places/roster'));
 }
 
 let inflight = null;

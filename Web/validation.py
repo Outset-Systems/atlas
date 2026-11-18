@@ -345,12 +345,12 @@ def _check_watch(problems, data):
 
 def _check_problem(spec, url, ip):
     """Why a check could not be asked as charted, or None."""
-    import signals
     import watch
+    from engines.checks import _check_url
     kind = spec["type"]
-    asked = signals._check_url(url) if url else None
+    asked = _check_url(url) if url else None
     if kind in ("http", "keyword", "json"):
-        target = signals._check_url(spec["host"]) or asked
+        target = _check_url(spec["host"]) or asked
         if not target:
             return "needs an http(s) address (the service's own, or as its check address)"
         if watch.refused_host(watch._parts(target)[0]) or watch.refused_host(spec["host"]):

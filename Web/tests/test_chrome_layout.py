@@ -857,5 +857,18 @@ def test_cancel_never_acknowledges():
         assert block.index("if (note === null) return;") < block.index("btn.disabled = true;")
 
 
+def test_the_band_is_hidden_from_the_first_paint_not_from_the_boot():
+    """The owner's find (2026-11-17): the band showed before the splash. It
+    stands above the veil and was hidden only by `body.pre`, which atlas.js
+    added when it booted, after every module had loaded. The class is in the
+    page as served; the boot takes it off once the veil has lifted."""
+    html = _read(INDEX)
+    assert '<body class="pre" ' in html, "the band would paint over the splash until the scripts run"
+    css = _read(CSS)
+    assert "body.pre #scenes-list { opacity: 0; pointer-events: none; }" in css
+    boot = _read(WEB / "static" / "js" / "atlas.js")
+    assert "document.body.classList.remove('pre')" in boot, "nothing would ever show the band"
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-q"]))

@@ -28,10 +28,11 @@ import logging
 
 from flask import jsonify, make_response, request
 
+import engines.authority as authority
 import integrations
-import signals
 import watch
 from context import atlas
+from engines.places import service_key
 from redaction import (cleared, hidden_node_ids, no_store, sees_everything, viewer_groups,
                        visible_monitors)
 from security import is_admin
@@ -80,12 +81,12 @@ def _visible(data, t, groups, hidden, monitors):
                  if isinstance(n, dict) and n.get("id") == t.place), None)
     if node is None or not cleared(node, groups):
         return False
-    if t.kind in (watch.authority.PLACE, watch.authority.SHADOW_PLACE):
+    if t.kind in (authority.PLACE, authority.SHADOW_PLACE):
         return True
     if t.key not in monitors:
         return False
     links = [link for link in (node.get("links") if isinstance(node.get("links"), list) else [])
-             if isinstance(link, dict) and signals.service_key(t.place, link) == t.key]
+             if isinstance(link, dict) and service_key(t.place, link) == t.key]
     return bool(links) and all(cleared(link, groups) for link in links)
 
 
@@ -142,7 +143,7 @@ def check_run():
         why = watch.not_asked(data, key)
         if why and why["why"] == "unmanaged":
             return jsonify(UNMANAGED), 409
-        if why and why["why"] == "kuma":
+        if why and why["why"] == authority.MONITOR:
             return jsonify({**KUMA, "monitor": why["monitor"]}), 409
         return _not_found()
     if not _visible(data, t, groups, hidden_node_ids(data, groups), visible_monitors(data, groups)):

@@ -17,7 +17,7 @@ both read it from here now, and neither changed what it does:
     and its answer is a shadow: counted beside the monitor's, never shown in
     its place.
   * `signals._merge` decides between the sources that did answer: the one the
-    operator listed later speaks (`LATER_SPEAKS`), and only an answer that
+    operator listed later speaks (`merge`), and only an answer that
     carries a state is credited with it (`gives_state`). That order is the
     operator's setting. `registry.default_order` is the order this rule
     suggests for a new install, and it is only an offer.
@@ -33,11 +33,8 @@ SHADOW_PLACE = "shadow-place"
 SERVICE = "service"
 SHADOW = "shadow"
 
-#: Between two sources that both answer for a thing, the one listed later is
-#: believed. `signals._merge` walks the feeds in listed order and lets each
-#: one write over the last.
-LATER_SPEAKS = True
-
+#: The source a monitor the owner named speaks through: step 1 above.
+MONITOR = "kuma"
 
 def place_check(monitored, shadow):
     """How Atlas's own check asks a place, or None when it does not ask.
@@ -77,3 +74,30 @@ def gives_state(info):
     source that only adds another key to a place is not credited with its
     state ("Watched by")."""
     return isinstance(info, dict) and bool(info.get("state"))
+
+
+def merge(feeds, names=None):
+    """Deep-merge partial feeds. Later feeds win per-key (order = adapter priority:
+    `engines/authority.py` holds the rule, 2026-11-16).
+
+    With `names` (one adapter name per feed), the merged feed also says which
+    adapter supplied each place's state: `confirmed_by` = {place id: name}
+    (2026-11-13, for the places table). Only an entry that carries a `state`
+    counts, so an adapter that adds another key to a place does not take the
+    credit for its state. In memory only: nothing stores it.
+    """
+    merged = {"nodes": {}, "services": {}, "stones": {}, "metrics": {}}
+    confirmed = {}
+    for i, feed in enumerate(feeds):
+        for nid, info in feed.get("nodes", {}).items():
+            merged["nodes"].setdefault(nid, {}).update(info)
+            if names is not None and gives_state(info):
+                confirmed[nid] = names[i]
+        for sid, info in feed.get("services", {}).items():
+            merged["services"].setdefault(sid, {}).update(info)
+        for tid, info in feed.get("stones", {}).items():
+            merged["stones"].setdefault(tid, {}).update(info)
+        merged["metrics"].update(feed.get("metrics", {}))
+    if names is not None:
+        merged["confirmed_by"] = confirmed
+    return merged

@@ -22,8 +22,9 @@ import events
 import heartbeats
 import maintenance
 import provenance
-import signals
 import tripwires
+from engines.base import NODE_STATES, monitor_map
+from engines.places import service_key
 from jsonio import iso_utc
 
 #: How far ahead the maintenance tile looks, and the other tiles' edges.
@@ -91,7 +92,7 @@ def states(data, feed):
     places = _places(data)
     for node in places:
         state = _state(live.get(node["id"]))
-        out[state if state in signals.NODE_STATES else "unknown"] += 1
+        out[state if state in NODE_STATES else "unknown"] += 1
     out["total"] = len(places)
     return out
 
@@ -152,8 +153,8 @@ def _monitors(data):
     for node in _places(data):
         for link in node.get("links") or []:
             if isinstance(link, dict):
-                out.add(signals.service_key(node["id"], link))
-    out.update(signals.monitor_map(data))
+                out.add(service_key(node["id"], link))
+    out.update(monitor_map(data))
     return out
 
 

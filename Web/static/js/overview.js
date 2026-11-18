@@ -23,7 +23,7 @@
    The rules and every phrase are overview-model.js (OVERVIEW_TEXT, through
    the theme). The look is views.css. */
 
-import { A, $, esc, themeText } from './config.js';
+import { A, $, esc, themeText, HEALTH_DOT, getJSON } from './config.js';
 import * as M from './overview-model.js';
 
 const POLL_MS = 30000;
@@ -51,10 +51,7 @@ const shown = () => A.VIEW === 'overview';
 /* ── the data ────────────────────────────────────────────────────────────── */
 
 async function fetchOverview() {
-  const res = await fetch('api/v2/overview', { cache: 'no-store' });
-  let body = null;
-  try { body = await res.json(); } catch { /* an empty or non-JSON answer */ }
-  if (!res.ok) throw new Error(body?.error || `${res.status} ${res.statusText}`);
+  const body = await getJSON('api/v2/overview');
   if (!body || typeof body !== 'object') throw new Error('not an answer');
   return body;
 }
@@ -80,8 +77,7 @@ function read() {
 
 /* ── drawing ─────────────────────────────────────────────────────────────── */
 
-const DOT = { healthy: 'h-up', degraded: 'h-degraded', down: 'h-down', maintenance: 'h-maint', slumbering: 'h-slumber' };
-const dot = (state) => `<span class="svc-health ${DOT[state] || ''}" aria-hidden="true"></span>`;
+const dot = (state) => `<span class="svc-health ${HEALTH_DOT[state] || ''}" aria-hidden="true"></span>`;
 const place = (p) => `<button type="button" class="ov-place" data-open="${esc(p.id)}" title="${esc(t('ov_open'))}">${esc(p.name || p.id)}</button>`;
 const line = (text, cls = '') => (text ? `<p class="ov-line${cls ? ` ${cls}` : ''}">${esc(text)}</p>` : '');
 const more = (n) => (n > 0 ? `<li class="ov-more">${esc(t('ov_more', { n }))}</li>` : '');

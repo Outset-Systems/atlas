@@ -6,11 +6,11 @@
    imports these same objects and changes them in place; this file imports
    none of the parts. */
 
-import { canAdminWrite } from './config.js';
+import { canAdminWrite, HEALTH_DOT } from './config.js';
 import * as R from './roster-model.js';
 
 export const STATES = ['healthy', 'degraded', 'down', 'maintenance', 'slumbering', 'unknown', 'unmanaged'];
-export const DOT = { healthy: 'h-up', degraded: 'h-degraded', down: 'h-down', maintenance: 'h-maint', slumbering: 'h-slumber' };
+export const DOT = HEALTH_DOT;   // config.js holds the one map
 export const REPEATS = ['none', 'daily', 'weekly', 'monthly'];
 
 /** The columns, in order, and the roster-model key each sorts on. */

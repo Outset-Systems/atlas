@@ -22,6 +22,7 @@
 
 import { A, esc } from './config.js';
 import * as M from './topology-model.js';
+import * as Geo from './topology-geometry.js';
 import { T, t, stubWords } from './topology-state.js';
 import { watcherWords } from './nodes-cells.js';
 import { t as nodesWord } from './nodes-text.js';
@@ -227,7 +228,7 @@ function setTransform() {
 export function move() {
   setTransform();
   const { w, h } = size();
-  const box = M.viewBox(T.view, w, h);
+  const box = Geo.viewBox(T.view, w, h);
   if (!rbox || box.x < rbox.x || box.y < rbox.y || box.x + box.w > rbox.x + rbox.w || box.y + box.h > rbox.y + rbox.h) draw();
 }
 
@@ -253,13 +254,13 @@ const litClass = (lit, id, failed) => {
 const num = (v) => Math.round(v * 10) / 10;
 
 function chip(text, x, y, cls) {
-  const b = M.chipBox(text, x, y, 9);
+  const b = Geo.chipBox(text, x, y, 9);
   return `<rect class="tp-chip" x="${num(b.x)}" y="${num(b.y)}" width="${num(b.w)}" height="${num(b.h)}" rx="2"/>` +
     `<text class="${cls}" x="${num(x)}" y="${num(y)}">${esc(text)}</text>`;
 }
 
 function cableMarkup(l, g, cls) {
-  const d = M.cablePath(g);
+  const d = Geo.cablePath(g);
   const hues = M.stripes(l, zones()).filter((h) => HEX.test(h));
   const kind = CABLE_KINDS.includes(l.kind) ? l.kind : 'copper';
   const a = T.shown.byId.get(l.a);
@@ -300,19 +301,9 @@ function cablesOf(shown, pos) {
   for (const id in pos) sig = (sig * 31 + pos[id].x * 7 + pos[id].y * 13) % 1e15;
   const key = `${sig}|${t('tp_poe', { w: 1 })}`;
   if (laidFor.graph !== shown || laidFor.positions !== pos || laidFor.sig !== key) {
-    laidFor = { graph: shown, positions: pos, sig: key, layout: M.cableLayout(shown, pos, { midText: midWords }) };
+    laidFor = { graph: shown, positions: pos, sig: key, layout: Geo.cableLayout(shown, pos, { midText: midWords }) };
   }
   return laidFor.layout;
-}
-
-/** Every cable as it is drawn now: M.cableLayout's Map of id -> {geom, a, b,
-    mid}, or null before there is a layout. A part that picks a cable by
-    where it runs reads `geom` here: since 2026-11-17 the ends of cables
-    meeting one card are spread along its edge, so cableGeometry from the
-    lane alone is not where such a cable is drawn. */
-export function cableShapes() {
-  const pos = T.layout?.positions;
-  return T.shown && pos ? cablesOf(T.shown, pos) : null;
 }
 
 /* Where a card's lines run out (2026-11-17): the name stops short of the
@@ -327,7 +318,7 @@ function cardMarkup(th, p, cls, tab) {
   const kind = kindLine(th);
   const hue = th.type === 'stub' ? '' : zoneHue(th.zone);
   const word = live.by;
-  const wordW = word ? M.chipBox(M.clip(word, 12), 0, 0, 8.5).w : 0;
+  const wordW = word ? Geo.chipBox(Geo.clip(word, 12), 0, 0, 8.5).w : 0;
   // the kind line shares the chip's height only when the address is above it
   const kindRoom = (word && th.ip ? W - 8 - wordW - 6 : W - 8) - TEXT_X;
   const label = esc(readerLabel(th));
@@ -339,14 +330,14 @@ function cardMarkup(th, p, cls, tab) {
     `<circle class="tp-disc-ground" cx="24" cy="${H / 2}" r="15"/>` +
     (hue ? `<circle class="tp-disc" cx="24" cy="${H / 2}" r="15" fill="${hue}"/>` : '') +
     `<use href="#${glyphFor(th)}" x="14" y="${H / 2 - 10}" width="20" height="20"/>` +
-    `<text class="tp-name" x="${TEXT_X}" y="23">${esc(M.clipTo(name, th.type === 'place' ? NAME_ROOM.place : NAME_ROOM.other, 13, true))}</text>`;
-  if (th.ip) s += `<text class="tp-addr" x="${TEXT_X}" y="38">${esc(M.clip(th.ip, 19))}</text>`;
-  if (kind) s += `<text class="tp-kind" x="${TEXT_X}" y="${th.ip ? 53 : 38}">${esc(M.clipTo(kind, kindRoom, 10.5))}</text>`;
+    `<text class="tp-name" x="${TEXT_X}" y="23">${esc(Geo.clipTo(name, th.type === 'place' ? NAME_ROOM.place : NAME_ROOM.other, 13, true))}</text>`;
+  if (th.ip) s += `<text class="tp-addr" x="${TEXT_X}" y="38">${esc(Geo.clip(th.ip, 19))}</text>`;
+  if (kind) s += `<text class="tp-kind" x="${TEXT_X}" y="${th.ip ? 53 : 38}">${esc(Geo.clipTo(kind, kindRoom, 10.5))}</text>`;
   if (th.type === 'place') s += `<circle class="tp-state" cx="${W - 11}" cy="12" r="4.5"/>`;
   if (word) {
-    const b = M.chipBox(M.clip(word, 12), W - 8 - wordW / 2, 50, 8.5);
+    const b = Geo.chipBox(Geo.clip(word, 12), W - 8 - wordW / 2, 50, 8.5);
     s += `<g class="tp-watch"><rect x="${num(b.x)}" y="${num(b.y)}" width="${num(b.w)}" height="${num(b.h)}" rx="2"/>` +
-      `<text x="${num(b.x + b.w / 2)}" y="${num(b.y + b.h / 2)}" text-anchor="middle" dominant-baseline="central">${esc(M.clip(word, 12))}</text></g>`;
+      `<text x="${num(b.x + b.w / 2)}" y="${num(b.y + b.h / 2)}" text-anchor="middle" dominant-baseline="central">${esc(Geo.clip(word, 12))}</text></g>`;
   }
   return `${s}</g>`;
 }
@@ -364,7 +355,7 @@ export function draw() {
     return;
   }
   const { w, h } = size();
-  const box = M.viewBox(T.view, w || 800, h || 600);
+  const box = Geo.viewBox(T.view, w || 800, h || 600);
   const pad = Math.max(box.w, box.h) * 0.5;
   rbox = { x: box.x - pad, y: box.y - pad, w: box.w + 2 * pad, h: box.h + 2 * pad };
   for (const [k, v] of Object.entries(rbox)) layer.grid.setAttribute(k === 'w' ? 'width' : k === 'h' ? 'height' : k, num(v));
@@ -378,15 +369,15 @@ export function draw() {
     if (l.shadowed) continue;
     const pa = pos[l.a];
     const pb = pos[l.b];
-    if (!pa || !pb || !M.linkSeen(pa, pb, rbox)) continue;
+    if (!pa || !pb || !Geo.linkSeen(pa, pb, rbox)) continue;
     const cls = litClass(lit?.links, l.id, lit?.failedLink);
     const lay = l.layer === 'cable' ? laid.get(l.id) : null;
-    const g = lay ? lay.geom : M.cableGeometry(pa, pb, l.lane, l.lanes);
+    const g = lay ? lay.geom : Geo.cableGeometry(pa, pb, l.lane, l.lanes);
     if (lay) {
       cables.push(cableMarkup(l, g, cls));
       chips.push(chipsMarkup(lay, cls));
     } else {
-      ties.push(`<path class="tp-link tp-tie tp-${l.layer === 'parent' ? 'parent' : 'route'}${cls}" data-link="${esc(l.id)}" d="${M.cablePath(g)}"/>`);
+      ties.push(`<path class="tp-link tp-tie tp-${l.layer === 'parent' ? 'parent' : 'route'}${cls}" data-link="${esc(l.id)}" d="${Geo.cablePath(g)}"/>`);
     }
   }
   const ids = M.seen(pos, rbox, 0);

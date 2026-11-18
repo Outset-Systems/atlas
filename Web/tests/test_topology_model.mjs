@@ -8,13 +8,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  ASPECT, CARD_H, CARD_W, EDGE_INSET, FIT_FLOOR, FOLD_LIMIT, GAP_X, GAP_Y, INFRA_STUBS, LANE_GAP, MAX_ZOOM,
-  MIN_ZOOM, MONO_ADVANCE, PIECE_GAP, PORT_REACH, ROW, SIDE_INSET, SLOT,
-  arrange, boxesMeet, buildGraph, cableGeometry, cableLayout, cablePath, cardBox, carries, centreOn, chipBox,
-  clip, clipTo, connections, find, fitView, foldLeaves, groupHolding, heads, infrastructure, layers, linkSeen,
-  nearEnd, neighbour, onVlan, pathMarks, pathToHead, pointOn, seen, spreadEnds, stripes, textWidth, viewBox,
-  vlanLabel, vlanList, vlanLit, vlanNumber, zoomAt,
+  ASPECT, CARD_H, CARD_W, FOLD_LIMIT, GAP_X, GAP_Y, INFRA_STUBS, PIECE_GAP, ROW, SLOT,
+  arrange, buildGraph, carries, connections, find, foldLeaves, groupHolding, heads, infrastructure, layers,
+  onVlan, pathMarks, pathToHead, seen, stripes, vlanLabel, vlanList, vlanLit, vlanNumber,
 } from '../static/js/topology-model.js';
+import {
+  EDGE_INSET, FIT_FLOOR, LANE_GAP, MAX_ZOOM, MIN_ZOOM, MONO_ADVANCE, PORT_REACH, SIDE_INSET,
+  boxesMeet, cableGeometry, cableLayout, cablePath, cardBox, centreOn, chipBox, clip, clipTo, fitView,
+  linkSeen, nearEnd, neighbour, pointOn, spreadEnds, textWidth, viewBox, zoomAt,
+} from '../static/js/topology-geometry.js';
 
 const here = (path) => new URL(path, import.meta.url);
 const CASES = JSON.parse(readFileSync(here('./topology_cases.json'), 'utf8')).cases;
@@ -732,6 +734,13 @@ test('the model touches no DOM and imports nothing', () => {
   assert.ok(!SOURCE.includes('window.'), 'no window.');
   assert.ok(!/^\s*import\s/m.test(SOURCE), 'no imports');
   assert.ok(!SOURCE.includes('\u2014'), 'no em dash in its words');
+});
+
+test('the drawing geometry touches no DOM', () => {
+  const geometry = readFileSync(here('../static/js/topology-geometry.js'), 'utf8');
+  assert.ok(!geometry.includes('document.'), 'no document.');
+  assert.ok(!geometry.includes('window.'), 'no window.');
+  assert.ok(!geometry.includes('\u2014'), 'no em dash in its words');
 });
 
 /* ── the drawing's own sums (2026-11-17) ──────────────────────────────────── */

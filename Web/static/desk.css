@@ -431,9 +431,9 @@ body.pre #first-survey { display: none; }
      against the design notes's "always: full prefers-reduced-motion fallback, instant
      transitions". Found and closed 2026-08-25 while adding `#accounts`, which
      is what made the list worth reading rather than appending to. */
-  #annals, #ledger, #rites, #seals, #stones, #tribute, #reliquary, #accounts, #settings,
-  #annals .ldg-panel, #ledger .ldg-panel, #rites .ldg-panel, #seals .ldg-panel,
-  #stones .ldg-panel, #accounts .ldg-panel, #settings .ldg-panel,
+  #annals, #ledger, #calendar, #seals, #stones, #tribute, #reliquary, #accounts, #trust, #settings,
+  #annals .ldg-panel, #ledger .ldg-panel, #calendar .ldg-panel, #seals .ldg-panel,
+  #stones .ldg-panel, #accounts .ldg-panel, #trust .ldg-panel, #settings .ldg-panel,
   #tribute .trb-panel, #reliquary .rel-panel { transition: none; }
 }
 

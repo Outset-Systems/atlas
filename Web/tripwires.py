@@ -44,7 +44,7 @@ import settings
 from ingest import _RateLimiter
 from jsonio import iso_utc
 from jsonstore import JsonStore
-from signals import STONE_STATES
+from engines.base import STONE_STATES
 
 log = logging.getLogger("atlas.live.tripwires")
 

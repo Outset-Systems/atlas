@@ -40,28 +40,30 @@ import settings
 # The adapters and what they share live in `engines/`. Every name below is
 # still read as `signals.<name>` by the app, the relay and the tests.
 from engines.base import (  # noqa: F401
-    DEGRADED, DOWN, HEALTHY, MAINTENANCE, NODE_STATES, SILENT, SLUMBERING, SPEAKING,
-    STIRRED, STONE_STATES, _Adapter, _STATE_RANK, _TIMEOUT, _VALID_STATES,
-    _VALID_STONE_STATES, _coerce_feed, _read_secret, _states_only, _worse, monitor_map,
+    DEGRADED, DOWN, HEALTHY, MAINTENANCE, NODE_STATES, STONE_STATES, _Adapter, _TIMEOUT,
+    _VALID_STATES, _VALID_STONE_STATES, _coerce_feed, _read_secret, monitor_map,
 )
 from engines.checks import (  # noqa: F401
-    CHECKS_BUDGET, CHECKS_FRESH, CHECKS_MAX_AGE, ChecksAdapter, _check_url, _checks_adapter,
+    ChecksAdapter, _check_url, _checks_adapter,
 )
 from engines.deception import DeceptionAdapter, _deception_adapter  # noqa: F401
 from engines.demo import DemoFeedAdapter  # noqa: F401
 from engines.kuma import (  # noqa: F401
     KumaAdapter, _KUMA_STATE, _kuma_adapter, _parse_kuma_metrics,
 )
-from engines.prometheus import PrometheusAdapter, _prometheus_adapter, ip_map  # noqa: F401
+from engines.places import (  # noqa: F401
+    service_key, service_places, services_of, unmanaged_ids, unmanaged_service_keys,
+)
+from engines.prometheus import PrometheusAdapter, _prometheus_adapter  # noqa: F401
 import engines.authority as authority
 from engines.registry import builders as _registered_builders, find as _registered
 from engines.relay import (  # noqa: F401
-    RELAY_MAX_AGE, RelayAdapter, _as_utc, _latest_relay, relay_age_seconds,
+    RELAY_MAX_AGE, RelayAdapter, relay_age_seconds,
 )
 import engines.runtime as runtime  # noqa: F401  # the HTTP sources' one call
 from engines.static import StaticFileAdapter  # noqa: F401
 from engines.unifi import (  # noqa: F401
-    UniFiAdapter, _UNIFI_GATEWAYS, _unifi_adapter, unifi_places,
+    UniFiAdapter, _unifi_adapter, unifi_places,
 )
 
 log = logging.getLogger("atlas.live.signals")
@@ -73,43 +75,28 @@ def demo_feed_path():
     return path if os.path.isfile(path) else None
 
 
-def service_key(node_id, link):
-    """The feed key of one service link: the Kuma monitor it names, else
-    `<place id>/<label>`. The page computes the same key (`svcKey` in
-    config.js), which is how a built-in check finds its dot."""
-    monitor = link.get("kuma")
-    if isinstance(monitor, str) and monitor:
-        return monitor
-    # a hand edit's list or number names no monitor: the place's own key (round 15)
-    label = link.get("label")
-    return f"{node_id}/{label if isinstance(label, str) else ''}"
+#: Deep-merge partial feeds: the rule and the code live in `engines/authority.py`
+#: (2026-11-17). The hub and the tests call it by this name.
+_merge = authority.merge
 
 
-def _merge(feeds, names=None):
-    """Deep-merge partial feeds. Later feeds win per-key (order = adapter priority:
-    `engines/authority.py` holds the rule, 2026-11-16).
+#: Where a source that cannot read the map is said: the logger
+#: `api.v2.feeds._apply_kuma_map` said it on before `push_map` moved here.
+_map_log = logging.getLogger("atlas.api.v2")
 
-    With `names` (one adapter name per feed), the merged feed also says which
-    adapter supplied each place's state: `confirmed_by` = {place id: name}
-    (2026-11-13, for the places table). Only an entry that carries a `state`
-    counts, so an adapter that adds another key to a place does not take the
-    credit for its state. In memory only: nothing stores it.
-    """
-    merged = {"nodes": {}, "services": {}, "stones": {}, "metrics": {}}
-    confirmed = {}
-    for i, feed in enumerate(feeds):
-        for nid, info in feed.get("nodes", {}).items():
-            merged["nodes"].setdefault(nid, {}).update(info)
-            if names is not None and authority.gives_state(info):
-                confirmed[nid] = names[i]
-        for sid, info in feed.get("services", {}).items():
-            merged["services"].setdefault(sid, {}).update(info)
-        for tid, info in feed.get("stones", {}).items():
-            merged["stones"].setdefault(tid, {}).update(info)
-        merged["metrics"].update(feed.get("metrics", {}))
-    if names is not None:
-        merged["confirmed_by"] = confirmed
-    return merged
+
+def push_map(adapters, data):
+    """Hand each adapter what it needs from the dataset (its `use_map`):
+    `api.v2.feeds._apply_kuma_map` reads the dataset and calls this. One
+    that cannot read the map is said in the log and skipped (2026-11-17)."""
+    for adapter in adapters:
+        use_map = getattr(adapter, "use_map", None)
+        if use_map is not None:
+            try:
+                use_map(data)     # each adapter takes its own (signals.py)
+            except Exception as e:  # noqa: BLE001 — one odd entry must not 500 the feed
+                _map_log.warning("signals: %s could not read the map (%s: %s)",
+                                 getattr(adapter, "name", "a source"), type(e).__name__, e)
 
 
 class SignalsHub:
@@ -278,7 +265,7 @@ def make_adapters():
         try:
             adapter = _build(source, integrations)
         except Exception as e:  # noqa: BLE001 — a source that cannot be built is skipped, never fatal
-            if name != "unifi":
+            if not source.guarded:
                 raise                  # only the unifi build is guarded
             log.warning("unifi source could not be built (%s) — skipping", type(e).__name__)
             adapter = None
@@ -293,69 +280,3 @@ def build_hub_from_env():
     """The app's hub: built from THE SOURCES now, and self-rebuilding when the
     settings file changes (the name is kept — app.py and the tests call it)."""
     return SignalsHub(factory=make_adapters)
-
-
-# ── UNMANAGED (2026-11-14, the owner's Q4 answer) ────────────────────────────
-def unmanaged_ids(data):
-    """The places not ours to watch: marked `unmanaged: true` themselves, or
-    in a collection marked so. Only `True` counts (a hand edit's "yes" is not)."""
-    import schema
-    data = data if isinstance(data, dict) else {}
-    nodes = data.get("nodes") if isinstance(data.get("nodes"), list) else []
-    out = {n["id"] for n in nodes
-           if isinstance(n, dict) and isinstance(n.get("id"), str) and n.get("unmanaged") is True}
-    listed = data.get("collections")
-    for c in listed if isinstance(listed, list) else []:
-        if isinstance(c, dict) and c.get("unmanaged") is True:
-            out.update(p for p in schema.as_list(c.get("places")) if isinstance(p, str) and p)
-    return out
-
-
-def services_of(data, place_ids):
-    """The service keys (monitor names, or `<place>/<label>`) the feed files
-    under these places: a place's own links and the monitors charted on it."""
-    if not place_ids or not isinstance(data, dict):
-        return set()
-    out = {m for m, pid in monitor_map(data).items() if pid in place_ids}
-    for node in data.get("nodes") if isinstance(data.get("nodes"), list) else []:
-        if isinstance(node, dict) and node.get("id") in place_ids:
-            for link in node.get("links") if isinstance(node.get("links"), list) else []:
-                if isinstance(link, dict):
-                    out.add(service_key(node["id"], link))
-    return out
-
-
-# ── SERVICES AS WATCHED THINGS (2026-11-15, stage 3b) ────────────────────────
-def service_places(data):
-    """{service key: place id} for every service link on the map: the key the
-    feed files it under (`service_key`). Two links naming one monitor share
-    a key, and the first place keeps it."""
-    out = {}
-    data = data if isinstance(data, dict) else {}
-    for node in data.get("nodes") if isinstance(data.get("nodes"), list) else []:
-        if not (isinstance(node, dict) and isinstance(node.get("id"), str)):
-            continue
-        for link in node.get("links") if isinstance(node.get("links"), list) else []:
-            if isinstance(link, dict):
-                out.setdefault(service_key(node["id"], link), node["id"])
-    return out
-
-
-def unmanaged_service_keys(data):
-    """The services not ours to watch on their own: a link marked
-    `unmanaged: true`, or a service in a collection marked so. (A service on
-    an unmanaged place goes with it: `services_of`.)"""
-    import schema
-    out = set()
-    data = data if isinstance(data, dict) else {}
-    for node in data.get("nodes") if isinstance(data.get("nodes"), list) else []:
-        if not (isinstance(node, dict) and isinstance(node.get("id"), str)):
-            continue
-        for link in node.get("links") if isinstance(node.get("links"), list) else []:
-            if isinstance(link, dict) and link.get("unmanaged") is True:
-                out.add(service_key(node["id"], link))
-    listed = data.get("collections")
-    for c in listed if isinstance(listed, list) else []:
-        if isinstance(c, dict) and c.get("unmanaged") is True:
-            out.update(k for k in schema.as_list(c.get("services")) if isinstance(k, str) and k)
-    return out

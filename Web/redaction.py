@@ -686,7 +686,8 @@ def visible_monitors(data, groups):
 
     A link that names no monitor is in the set under its own key
     (`signals.service_key`), which is what a built-in check reports it by."""
-    import signals
+    from engines.base import monitor_map
+    from engines.places import service_key
     out = set()
     for node in data.get("nodes", []):
         if not cleared(node, groups):
@@ -694,14 +695,14 @@ def visible_monitors(data, groups):
         links = node.get("links") if isinstance(node.get("links"), list) else []
         for link in links:
             if isinstance(link, dict) and cleared(link, groups):
-                out.add(signals.service_key(node.get("id"), link))
+                out.add(service_key(node.get("id"), link))
     hidden = hidden_node_ids(data, groups)
     # while anything is hidden, a monitor counts only when its place is a
     # visible place: "SECRET-PLACE" for a hidden secret-place is withheld,
     # as /lab-data withholds it (round 15)
     visible = {n.get("id") for n in data.get("nodes", [])
                if isinstance(n, dict) and isinstance(n.get("id"), str) and cleared(n, groups)}
-    for monitor, node_id in signals.monitor_map(data).items():
+    for monitor, node_id in monitor_map(data).items():
         if (node_id in visible) if hidden else True:
             out.add(monitor)
     return out

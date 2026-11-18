@@ -25,7 +25,7 @@ import alerts
 import settings
 from context import atlas
 from security import actor
-from signals import NODE_STATES
+from engines.base import NODE_STATES
 
 from .admin import _probe_allowed, admin_bp
 from .auth import write_required

@@ -2,8 +2,8 @@
    OVERVIEW and NODES (views.js shows `#view-topology` in the map's place).
    It replaces THE PATH, the tier scene (path.js), whose rows were one lab's
    own ids: here the heads come from the data and everything hangs below them
-   by cable, then route, then parent (topology-model.js), so a map with no
-   cables yet is drawn from its routes and hosts, never flat.
+   by cable, then a guest from its host, then route, then parent
+   (topology-model.js), so a map with no cables yet is drawn from its routes and hosts, never flat.
 
    It draws only what the page was given: the dataset already in memory
    (A.DATA, redacted for this viewer by the server) and the feed the page
@@ -36,6 +36,7 @@
 import { A, $, esc, REDUCED } from './config.js';
 import { parsePlace, parseView } from './views-model.js';
 import * as M from './topology-model.js';
+import * as Geo from './topology-geometry.js';
 import * as S from './topology-state.js';
 import { T, t, hooks, stubWords, writePrefs, emitPointer } from './topology-state.js';
 import * as C from './topology-canvas.js';
@@ -160,7 +161,7 @@ function fitAll(glide = true) {
   if (!T.layout) return;
   if (!T.fitted) layOutForStage();
   const { w, h } = C.size();
-  const target = M.fitView(T.layout.bounds, w, h, { pad: FIT_PAD });
+  const target = Geo.fitView(T.layout.bounds, w, h, { pad: FIT_PAD });
   T.fitted = w > 0 && h > 0;
   if (glide) glideTo(target);
   else { T.view = target; C.draw(); }
@@ -169,9 +170,9 @@ function fitAll(glide = true) {
 /** How far out the hand may zoom: MIN_ZOOM, or the fit when that is further
     out, so a big map can be zoomed back out to the whole of it. */
 function handMin() {
-  if (!T.layout) return M.MIN_ZOOM;
+  if (!T.layout) return Geo.MIN_ZOOM;
   const { w, h } = C.size();
-  return Math.min(M.MIN_ZOOM, M.fitView(T.layout.bounds, w, h, { pad: FIT_PAD }).k);
+  return Math.min(Geo.MIN_ZOOM, Geo.fitView(T.layout.bounds, w, h, { pad: FIT_PAD }).k);
 }
 
 let glideFrame = 0;
@@ -203,7 +204,7 @@ const scheduleMove = () => {
 function zoomBy(factor) {
   const { w, h } = C.size();
   cancelAnimationFrame(glideFrame);
-  T.view = M.zoomAt(T.view, w / 2, h / 2, factor, { min: handMin() });
+  T.view = Geo.zoomAt(T.view, w / 2, h / 2, factor, { min: handMin() });
   C.move();
 }
 
@@ -232,8 +233,8 @@ function focusThing(id, { focus = false } = {}) {
   T.selected = id;
   T.focusId = id;
   const { w, h } = C.size();
-  const k = Math.max(T.view.k, Math.min(0.9, M.MAX_ZOOM));
-  glideTo(M.centreOn({ k }, p.x + W / 2, p.y + H / 2, w, h));
+  const k = Math.max(T.view.k, Math.min(0.9, Geo.MAX_ZOOM));
+  glideTo(Geo.centreOn({ k }, p.x + W / 2, p.y + H / 2, w, h));
   C.draw();
   if (focus) C.cardEl(id)?.focus({ preventScroll: true });
   return true;
@@ -244,10 +245,10 @@ function focusCard(id) {
   const p = T.layout?.positions[id];
   if (!p) return;
   const { w, h } = C.size();
-  const onScreen = M.seen({ [id]: p }, M.viewBox(T.view, w, h), -8).length > 0;
+  const onScreen = M.seen({ [id]: p }, Geo.viewBox(T.view, w, h), -8).length > 0;
   if (!onScreen) {
     cancelAnimationFrame(glideFrame);
-    T.view = M.centreOn(T.view, p.x + W / 2, p.y + H / 2, w, h);
+    T.view = Geo.centreOn(T.view, p.x + W / 2, p.y + H / 2, w, h);
     C.move();
   }
   C.setTabStop(id);
@@ -352,7 +353,7 @@ function wire(svg) {
       if (pointers.size < 2) return;
       const [a, b] = [...pointers.values()];
       const m = mid(a, b);
-      const v = M.zoomAt(gesture.view, gesture.mid0.x - r.left, gesture.mid0.y - r.top, dist(a, b) / gesture.d0, { min: gesture.min });
+      const v = Geo.zoomAt(gesture.view, gesture.mid0.x - r.left, gesture.mid0.y - r.top, dist(a, b) / gesture.d0, { min: gesture.min });
       T.view = { k: v.k, x: v.x + (m.x - gesture.mid0.x), y: v.y + (m.y - gesture.mid0.y) };
       scheduleMove();
       return;
@@ -389,7 +390,7 @@ function wire(svg) {
     cancelAnimationFrame(glideFrame);
     const r = svg.getBoundingClientRect();
     const unit = e.deltaMode === 1 ? 0.05 : e.deltaMode === 2 ? 1 : 0.0015;
-    T.view = M.zoomAt(T.view, e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY * unit), { min: handMin() });
+    T.view = Geo.zoomAt(T.view, e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY * unit), { min: handMin() });
     scheduleMove();
   }, { passive: false });
 
@@ -401,7 +402,7 @@ function wire(svg) {
     if (dir) {
       e.preventDefault();
       if (id && !e.shiftKey) {
-        const next = M.neighbour(T.layout?.positions || {}, id, dir);
+        const next = Geo.neighbour(T.layout?.positions || {}, id, dir);
         if (next) focusCard(next);
         return;
       }

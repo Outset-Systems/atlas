@@ -17,7 +17,7 @@
    Admins only: the routes refuse anyone else, and nothing here is drawn
    without `A.MAY_ALERTS` (views.js). */
 
-import { WRITE_HEADERS } from './config.js';
+import { WRITE_HEADERS, getJSON, readJSON } from './config.js';
 import * as M from './alerts-model.js';
 
 export const API = 'api/v2/admin/alerts';
@@ -42,18 +42,11 @@ export function normalise(body) {
   };
 }
 
-export async function getJSON(url) {
-  const res = await fetch(url, { cache: 'no-store' });
-  let body = null;
-  try { body = await res.json(); } catch { /* an empty or non-JSON answer */ }
-  if (!res.ok) throw new Error(body?.error || `${res.status} ${res.statusText}`);
-  return body;
-}
+export { getJSON };   // config.js holds it
 
 export async function postJSON(url, payload) {
   const res = await fetch(url, { method: 'POST', headers: WRITE_HEADERS, body: JSON.stringify(payload ?? {}) });
-  let body = null;
-  try { body = await res.json(); } catch { /* an empty or non-JSON answer */ }
+  const body = await readJSON(res);
   return { ok: res.ok, status: res.status, body, why: body?.error || `${res.status} ${res.statusText}` };
 }
 

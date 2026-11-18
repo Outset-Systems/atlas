@@ -28,7 +28,7 @@ def _relay_metric(ctx):
     """The relay's freshness — reported, never load-bearing. db mode only."""
     if ctx.backend != "db":
         return []
-    from signals import RELAY_MAX_AGE, relay_age_seconds
+    from engines.relay import RELAY_MAX_AGE, relay_age_seconds
     age = relay_age_seconds(ctx.site)
     if age is None:
         return []

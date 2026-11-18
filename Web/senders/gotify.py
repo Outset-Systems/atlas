@@ -1,6 +1,7 @@
 """Gotify: a JSON message posted to the server's /message, the secret in
 X-Gotify-Key (2026-11-16)."""
 
+from . import shape as guard
 from .common import SECRET_FIELD, add_secret, url_field
 
 kind = "gotify"
@@ -27,7 +28,6 @@ def send_path(path):
 
 def build(message, secret=None):
     """`(headers, body_bytes)`. The guard cleans the message and fits the JSON."""
-    import alert_send as guard          # at call time: alert_send imports this package
     m = guard.prepared(message)
     headers = guard.base_headers("application/json")
     add_secret(headers, secret_use, secret)

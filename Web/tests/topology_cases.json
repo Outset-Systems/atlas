@@ -1,5 +1,5 @@
 {
- "note": "Shared by tests/test_topology_model.mjs and the server's twin of heads, layers, pathToHead and connections: both must give each case these answers. Written by hand, 2026-11-16, from the rules in static/js/topology-model.js. Thing order is nodes then stubs, as listed; link order is cables, then routes, then parent ties. A thing with no link at all is loose (depth null) and never a head. Heads per connected piece (over cables, routes and parent ties together): every internet stub; else the inside end of a wan route (the end with more links, the from end on a tie), a network-kind one first, then the most links, then thing order; else the network-kind place with the most links; else the thing with the most links; ties by thing order. Layers: cables are walked breadth first from the heads in depth order, each depth's things taken in thing order; a thing no cable reaches hangs by one route hop from a reached thing (fewest hops, then thing order of what it hangs from, then link order), then cables resume from it; parent ties only when no route attaches anything. A connections row is filled only when the thing hangs by a cable; to is the far thing's name; rows sort by lower-cased name, then id, in code-point order.",
+ "note": "Shared by tests/test_topology_model.mjs and the server's twin of heads, layers, pathToHead and connections: both must give each case these answers. Written by hand, 2026-11-16, from the rules in static/js/topology-model.js. Thing order is nodes then stubs, as listed; link order is cables, then routes, then parent ties. A thing with no link at all is loose (depth null) and never a head. Heads per connected piece (over cables, routes and parent ties together): every internet stub; else the inside end of a wan route (the end with more links, the from end on a tie), a network-kind one first, then the most links, then thing order; else the network-kind place with the most links; else the thing with the most links; ties by thing order. Layers: cables are walked breadth first from the heads in depth order, each depth's things taken in thing order; when cables reach nothing more, a guest hangs from its host: a place not yet reached whose parent is reached hangs from that parent by whatever joins the two (the route between them, else the parent tie), then cables resume; when no host attaches anything, a thing no cable reaches hangs by one route hop from a reached thing (fewest hops, then thing order of what it hangs from, then link order), except that a guest whose host is not reached yet waits for it; when that attaches nothing, the guests still waiting take their routes; parent ties only when no route attaches anything (a host only its guest reaches hangs from the guest). A connections row is filled only when the thing hangs by a cable; to is the far thing's name; rows sort by lower-cased name, then id, in code-point order.",
  "cases": [
   {
    "name": "a single chain",
@@ -347,6 +347,85 @@
     {"id": "gate", "to": "LINE 1", "port": "wan1", "farPort": "lan", "vlan": "", "poe": "", "path": "GATE \u203a LINE 1"},
     {"id": "line-1", "to": "", "port": "", "farPort": "", "vlan": "", "poe": "", "path": ""},
     {"id": "line-2", "to": "", "port": "", "farPort": "", "vlan": "", "poe": "", "path": ""}
+   ]
+  },
+  {
+   "name": "a guest with a route from the gateway hangs from its host, not the gateway",
+   "data": {
+    "nodes": [
+     {"id": "gate", "name": "GATE", "kind": "network", "ip": "192.0.2.1"},
+     {"id": "host", "name": "HOST", "kind": "physical", "ip": "192.0.2.10"},
+     {"id": "vm-1", "name": "VM 1", "kind": "vm", "ip": "192.0.2.11", "parent": "host"},
+     {"id": "vm-2", "name": "VM 2", "kind": "vm", "ip": "192.0.2.12", "parent": "host"}
+    ],
+    "stubs": [],
+    "cables": [
+     {"id": "c", "a": "gate", "a_port": "2", "b": "host", "b_port": "eth0", "vlan": 10}
+    ],
+    "routes": [
+     {"from": "gate", "to": "vm-1", "kind": "vlan"},
+     {"from": "gate", "to": "vm-2", "kind": "vlan"},
+     {"from": "host", "to": "vm-2", "kind": "vlan"}
+    ]
+   },
+   "heads": ["gate"],
+   "depth": {"gate": 0, "host": 1, "vm-1": 2, "vm-2": 2},
+   "up": {"gate": null, "host": "gate", "vm-1": "host", "vm-2": "host"},
+   "paths": {"vm-1": ["vm-1", "host", "gate"], "vm-2": ["vm-2", "host", "gate"]},
+   "connections": [
+    {"id": "gate", "to": "", "port": "", "farPort": "", "vlan": "", "poe": "", "path": ""},
+    {"id": "host", "to": "GATE", "port": "eth0", "farPort": "2", "vlan": "U10", "poe": "", "path": "HOST \u203a GATE"},
+    {"id": "vm-1", "to": "", "port": "", "farPort": "", "vlan": "", "poe": "", "path": ""},
+    {"id": "vm-2", "to": "", "port": "", "farPort": "", "vlan": "", "poe": "", "path": ""}
+   ]
+  },
+  {
+   "name": "a guest waits for a host that only a route reaches",
+   "data": {
+    "nodes": [
+     {"id": "gate", "name": "GATE", "kind": "network", "ip": "192.0.2.1"},
+     {"id": "host", "name": "HOST", "kind": "physical", "ip": "192.0.2.10"},
+     {"id": "vm", "name": "VM", "kind": "vm", "ip": "192.0.2.11", "parent": "host"}
+    ],
+    "stubs": [],
+    "cables": [],
+    "routes": [
+     {"from": "gate", "to": "vm", "kind": "vlan"},
+     {"from": "gate", "to": "host", "kind": "vlan"}
+    ]
+   },
+   "heads": ["gate"],
+   "depth": {"gate": 0, "host": 1, "vm": 2},
+   "up": {"gate": null, "host": "gate", "vm": "host"},
+   "paths": {"vm": ["vm", "host", "gate"]},
+   "connections": [
+    {"id": "gate", "to": "", "port": "", "farPort": "", "vlan": "", "poe": "", "path": ""},
+    {"id": "host", "to": "", "port": "", "farPort": "", "vlan": "", "poe": "", "path": ""},
+    {"id": "vm", "to": "", "port": "", "farPort": "", "vlan": "", "poe": "", "path": ""}
+   ]
+  },
+  {
+   "name": "a guest whose host nothing else reaches takes its route, and the host hangs from the guest",
+   "data": {
+    "nodes": [
+     {"id": "gate", "name": "GATE", "kind": "network", "ip": "192.0.2.1"},
+     {"id": "box", "name": "BOX", "kind": "physical", "ip": "192.0.2.10"},
+     {"id": "vm", "name": "VM", "kind": "vm", "ip": "192.0.2.11", "parent": "box"}
+    ],
+    "stubs": [],
+    "cables": [],
+    "routes": [
+     {"from": "gate", "to": "vm", "kind": "vlan"}
+    ]
+   },
+   "heads": ["gate"],
+   "depth": {"gate": 0, "box": 2, "vm": 1},
+   "up": {"gate": null, "box": "vm", "vm": "gate"},
+   "paths": {"box": ["box", "vm", "gate"]},
+   "connections": [
+    {"id": "box", "to": "", "port": "", "farPort": "", "vlan": "", "poe": "", "path": ""},
+    {"id": "gate", "to": "", "port": "", "farPort": "", "vlan": "", "poe": "", "path": ""},
+    {"id": "vm", "to": "", "port": "", "farPort": "", "vlan": "", "poe": "", "path": ""}
    ]
   }
  ]

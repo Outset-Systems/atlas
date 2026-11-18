@@ -26,15 +26,16 @@ and, when it has one, its rule for the address's path:
 
 The guard is not here. Off by default, the allowed hosts, resolving once and
 pinning, the refused addresses, POST only, no redirects, the time limits, the
-4 KB body and how a message is cut to fit it, the 1 KB read, the outcomes,
-secrets bound to an origin and the delivery log all stay in `alert_send.py`,
-one path every kind passes through. A kind only says what its request looks
-like.
+4 KB body, the 1 KB read, the outcomes, secrets bound to an origin and the
+delivery log all stay in `alert_send.py`, one path every kind passes through.
+How a message is cleaned and cut to fit is `shape.py`, beside the kinds, which
+the guard imports. A kind only says what its request looks like.
 
 The registry is ordered: the page offers the kinds in this order, the first
 one picked. Only a kind whose entry is whole can send, so only it is offered
-or accepted (`kinds`, `find`). Nothing here imports `alert_send` at load; a
-kind's `build` does, when it is called.
+or accepted (`kinds`, `find`). Nothing here imports `alert_send`: a kind's
+`build` takes the guard's cleaning and cutting from `shape.py`, which
+`alert_send` imports in turn (2026-11-17).
 """
 
 from . import common, discord, gotify, ntfy, webhook

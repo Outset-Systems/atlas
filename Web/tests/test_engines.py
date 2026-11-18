@@ -385,4 +385,4 @@ def test_the_checks_and_the_merge_read_the_rule_from_one_place():
     watch = _read("watch.py")
     assert "authority.place_check(" in watch and "authority.service_check(" in watch
     assert "authority.rolls_up(" in watch
-    assert "authority.gives_state(" in _read("signals.py")
+    assert "and gives_state(info)" in _read("engines", "authority.py")

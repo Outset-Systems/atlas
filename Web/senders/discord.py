@@ -23,6 +23,7 @@ Discord for no embed, so it does not fetch the link to draw a preview.
 
 import re
 
+from . import shape as guard
 from .common import SECRET_FIELD, url_field
 
 kind = "discord"
@@ -125,7 +126,6 @@ def build(message, secret=None):
     """`(headers, body_bytes)`. The guard cleans the message and fits the
     JSON to its 4 KB; this cuts the content to Discord's 2000 first. The
     secret is not in the body or a header: it is the end of the path."""
-    import alert_send as guard          # at call time: alert_send imports this package
     m = guard.prepared(message)
     headers = guard.base_headers("application/json")
     body, link = fitted(m.title, m.body, m.link)

@@ -176,10 +176,8 @@ export function sameEntry(a, b) {
   return JSON.stringify(norm(a ?? null)) === JSON.stringify(norm(b ?? null));
 }
 
-/** A notice line, with the server's problems under it. */
-export const noticeHTML = (m) => (!m ? '' : `<div class="dsk-notice dsk-notice-${m.kind}">${esc(m.text)}` +
-  (m.problems?.length ? `<ul class="dsk-problems">${m.problems.map((p) => `<li>${esc(p)}</li>`).join('')}</ul>` : '') +
-  '</div>');
+/** A notice line, with the server's problems under it (config.js holds it). */
+export { noticeHTML } from './config.js';
 
 /** The how-to-turn-it-on page, when alerts are off. */
 export function offHTML(state) {
