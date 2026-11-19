@@ -15,7 +15,7 @@
 
    All writes go through the existing admin routes, with the same header. */
 
-import { A, CFG, $, esc, WRITE_HEADERS } from './config.js';
+import { A, CFG, $, esc } from './config.js';
 import { bindNote, fromWords, kindNote, readLine, readsHead, setups } from './connections-model.js';
 import { post, reviewSystem } from './connection-review.js';
 import { folds } from './fold.js';
@@ -166,8 +166,9 @@ async function testSystem(key, card, box, btn) {
   }
 }
 
-async function saveSystem(card, box) {
-  const { r, j } = await post('api/v2/admin/integrations', { settings: systemValues(card) });
+async function saveSystem(card, box, btn) {
+  // post never throws and gives the button back (2026-11-19, Scenes 9)
+  const { r, j } = await post('api/v2/admin/integrations', { settings: systemValues(card) }, { button: btn });
   if (!r.ok) {
     box.className = 'dir-result dir-bad';
     box.textContent = j.error || 'Could not save.';
@@ -261,7 +262,7 @@ export async function renderConnections() {
   $('con-access')?.addEventListener('click', async (e) => {
     const on = e.target.dataset.on === '1';
     if (!on && !confirm('Turn agent access off? Every tool reading this map stops at once. Tokens are kept.')) return;
-    const { r, j } = await post('api/v2/admin/tokens/access', { on });
+    const { r, j } = await post('api/v2/admin/tokens/access', { on }, { button: e.target });
     if (!r.ok) {
       const box = $('con-result');
       box.className = 'dir-result dir-bad';
@@ -287,7 +288,7 @@ export async function renderConnections() {
     const days = $('con-life').value;
     const { r, j } = await post('api/v2/admin/tokens',
       { name: $('con-name').value, days: days ? Number(days) : null, profile: kind,
-        networks: $('con-lan').checked ? 'lan' : null });
+        networks: $('con-lan').checked ? 'lan' : null }, { button: $('con-issue') });
     if (!r.ok) {
       box.className = 'dir-result dir-bad';
       box.textContent = j.error || 'Could not create a token.';
@@ -317,7 +318,16 @@ export async function renderConnections() {
   for (const b of el.querySelectorAll('[data-revoke]')) {
     b.addEventListener('click', async () => {
       if (!confirm(`Revoke "${b.dataset.name}"? Anything using it stops at once.`)) return;
-      await fetch(`api/v2/admin/tokens/${encodeURIComponent(b.dataset.revoke)}`, { method: 'DELETE', headers: WRITE_HEADERS });
+      // its answer is read (2026-11-19, Scenes 9): a refused revoke used to
+      // redraw as if it had worked, the token still listed and nothing said
+      const { r, j } = await post(`api/v2/admin/tokens/${encodeURIComponent(b.dataset.revoke)}`, undefined,
+        { method: 'DELETE', button: b });
+      if (!r.ok) {
+        const box = $('con-result');
+        box.className = 'dir-result dir-bad';
+        box.textContent = j.error || 'Could not revoke that token.';
+        return;
+      }
       await renderConnections();
     });
   }
@@ -325,7 +335,7 @@ export async function renderConnections() {
     const key = card.dataset.system;
     const box = card.querySelector('[data-sys-result]');
     card.querySelector('[data-sys-test]').addEventListener('click', (e) => testSystem(key, card, box, e.target));
-    card.querySelector('[data-sys-save]').addEventListener('click', () => saveSystem(card, box));
+    card.querySelector('[data-sys-save]').addEventListener('click', (e) => saveSystem(card, box, e.target));
     card.querySelector('[data-sys-review]').addEventListener('click', (e) => reviewSystem(key, card, box, e.target));
   }
   A.applySettingsFolds?.();

@@ -88,6 +88,25 @@ export const Editor = {
     return this.data;
   },
 
+  /** After a write that landed: re-read the editor's copy and the map's.
+      A re-read that fails must not fail the write (2026-11-19, the 11-12
+      audit's Scenes 12: it ran inside the same promise, so a saved change
+      reported as a failed save). The result says `unread: true` instead,
+      and the stamp stays the one from before the write, so the next write
+      is refused as stale (the Desk re-reads on that refusal) rather than
+      applied over a copy that no longer matches the file. Said here, once,
+      for every caller (the Desk, NODES, WIRING, the wizard). */
+  async settle(result, reread = () => this.reload(), refresh = () => A.refreshData?.()) {
+    try {
+      await reread();
+      await refresh();
+      return result;
+    } catch {
+      A.showToast?.('Saved, but the map could not be read again. Reload to see the change.');
+      return { ...result, unread: true };
+    }
+  },
+
   /** Apply operations, then refresh both the editor's copy and the map's.
       `refresh: false` (a long run saved in parts, 2026-11-15) only takes the
       new stamp: the caller refreshes once after its last part, and must,
@@ -95,12 +114,8 @@ export const Editor = {
   async apply(ops, note = '', origin = '', { refresh = true } = {}) {
     // `origin` names an import ('survey'): what it writes starts unreviewed
     const result = await post('ops', { ops, expect: this.stamp, note, origin });
-    this.stamp = result.stamp;
-    if (refresh) {
-      await this.reload();
-      await A.refreshData?.();
-    }
-    return result;
+    if (!refresh) { this.stamp = result.stamp; return result; }
+    return this.settle(result);
   },
 
   upsert(section, id, body) {
@@ -155,9 +170,9 @@ export const Editor = {
     // strip the annotations the server added on read; they are derived
     const clean = windows.map(({ state, occurrence_start, occurrence_end, ...w }) => w);
     const result = await post('maintenance', { windows: clean, expect: this.repairs?.stamp });
-    await this.loadRepairs();
-    await A.refreshSignals?.();
-    return { ...result, changed: [`saved ${clean.length} repair window(s)`] };
+    // the same rule as a dataset write: a failed re-read leaves the old stamp
+    return this.settle({ ...result, changed: [`saved ${clean.length} repair window(s)`] },
+                       () => this.loadRepairs(), () => A.refreshSignals?.());
   },
 
   /* ── THE ANNALS ────────────────────────────────────────────────────── */
@@ -188,11 +203,7 @@ export const Editor = {
 
   revisions(limit = 40) { return call(`revisions?limit=${limit}`); },
   async revert(id) {
-    const result = await post(`revisions/${id}/revert`);
-    this.stamp = result.stamp;
-    await this.reload();
-    await A.refreshData?.();
-    return result;
+    return this.settle(await post(`revisions/${id}/revert`));
   },
 
   discovery() { return call('discovery'); },
@@ -209,10 +220,7 @@ export const Editor = {
   review(key) { return post('connections/review', { key }); },
   /** land the picked rows of a review, then re-read the map */
   async importPicks(key, picks, expect) {
-    const result = await post('connections/import', { key, picks, expect });
-    await this.reload();
-    await A.refreshData?.();
-    return result;
+    return this.settle(await post('connections/import', { key, picks, expect }));
   },
   decide(keys, action) { return post('discovery/decide', { keys, action }); },
   draftsFrom(keys) { return post('discovery/as-nodes', { keys }); },

@@ -350,6 +350,10 @@ function closeAllScenes() {
   A.closeReliquary?.(); A.closeTribute?.(); A.closeLedger?.(); A.closePath?.();
   A.closeCalendar?.(); A.closeSeals?.(); A.closeStones?.(); A.closeAnnals?.();
   A.closeAccounts?.(); A.closeTrust?.(); A.closeSettings?.();
+  // each closer now acts only when its scene is open (scene.js), so the band
+  // is set back here if the lamp still says a scene is up: A.sceneOpen is what
+  // the map's keys read (keys-model.js), and a stale true would put them away
+  if (A.sceneOpen) setSceneActive('atlas');
 }
 A.closeAllScenes = closeAllScenes;   // the Escape chain (camera.js) reads this list rather than keeping its own
 

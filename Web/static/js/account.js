@@ -8,7 +8,7 @@
    `A.applySettingsFolds`, `A.repaintSignals`). Registered in atlas.js after
    ui.js. */
 
-import { A, CFG, $, esc, themeText, WRITE_HEADERS, postJSON } from './config.js';
+import { A, CFG, $, esc, themeText, WRITE_HEADERS, postJSON, readJSON } from './config.js';
 import { renderConnections } from './connections.js';
 
 /* ── Who you are on this instance ─────────────────────────────────────────
@@ -649,19 +649,25 @@ async function saveDirectory() {
   const box = $('dir-result');
   try {
     const r = await postJSON('api/v2/admin/auth', { settings: directoryValues() });
-    const j = await r.json();
+    const j = await readJSON(r);
     if (!r.ok) {
       box.className = 'dir-result dir-bad';
-      box.textContent = j.error || 'That configuration was refused.';
+      box.textContent = j?.error || 'That configuration was refused.';
       return;
     }
-    box.className = 'dir-result dir-ok';
-    box.textContent = 'Saved. New sign-ins use this directory from now on.';
-    renderDirectory();
   } catch {
     box.className = 'dir-result dir-bad';
     box.textContent = 'The save did not reach the server.';
+    return;
   }
+  // saved. Redraw first, then say so in the redrawn section: the message was
+  // written and then replaced by the redraw (2026-11-18, the 11-12 audit's
+  // Scenes 8; saveSources already did it in this order). Outside the save's
+  // try, so a redraw that fails never reports a committed save as failed.
+  try { await renderDirectory(); } catch { /* the old section stays; the save stands */ }
+  const fresh = $('dir-result') || box;
+  fresh.className = 'dir-result dir-ok';
+  fresh.textContent = 'Saved. New sign-ins use this directory from now on.';
 }
 
 /** Ends the Atlas session (accounts/hybrid). The route requires the same-origin

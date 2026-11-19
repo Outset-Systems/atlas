@@ -82,10 +82,19 @@ function post(path, body) {
        preflight this app never answers. Same header the editor sends. */
     headers: { 'Content-Type': 'application/json', 'X-Atlas-Write': '1' },
     body: JSON.stringify(body || {})
-  }).then(function (r) { return r.json().then(function (j) {
-    return { status: r.status, body: j };
-  }); });
+  }).then(function (r) {
+    /* an answer that is not JSON (a proxy's error page, the Hub's sign-in)
+       reads as a refusal with no words, so each caller says its own */
+    return r.json().catch(function () { return {}; }).then(function (j) {
+      return { status: r.status, body: j || {} };
+    });
+  });
 }
+
+/* Every step says so when the gate does not answer (2026-11-19, the 11-12
+   audit's Scenes 6: the MFA, enrolment and enrolment-start calls had no
+   catch, so a dropped request left the page silent). */
+var NO_ANSWER = 'The gate did not answer.';
 
 document.getElementById('f-login').addEventListener('submit', function (e) {
   e.preventDefault();
@@ -104,7 +113,7 @@ document.getElementById('f-login').addEventListener('submit', function (e) {
     if (r.body.mfa_required) return show('mfa');
     if (r.body.mfa_setup_required) return startEnroll();
     window.location = NEXT;
-  }).catch(function () { btn.disabled = false; fail('The gate did not answer.'); });
+  }).catch(function () { btn.disabled = false; fail(NO_ANSWER); });
 });
 
 document.getElementById('f-mfa').addEventListener('submit', function (e) {
@@ -113,17 +122,20 @@ document.getElementById('f-mfa').addEventListener('submit', function (e) {
     .then(function (r) {
       if (!r.body.ok) return fail(r.body.error || 'Verification failed.');
       window.location = NEXT;
-    });
+    }).catch(function () { fail(NO_ANSWER); });
 });
 
+/* Reached from the password step with its button still held: if enrolment
+   cannot begin, the page stays on that step, so the button comes back. */
 function startEnroll() {
+  var again = function (msg) { document.getElementById('b-login').disabled = false; fail(msg); };
   post('/api/v2/auth/mfa/setup').then(function (r) {
-    if (!r.body.ok) return fail(r.body.error || 'Could not begin enrollment.');
+    if (!r.body.ok) return again(r.body.error || 'Could not begin enrollment.');
     /* markup on purpose: the SVG is drawn by this app's own server (auth/mfa) */
     document.getElementById('qr').innerHTML = r.body.qr_svg;
     document.getElementById('secret').textContent = r.body.secret;
     show('enroll');
-  });
+  }).catch(function () { again(NO_ANSWER); });
 }
 
 document.getElementById('f-enroll').addEventListener('submit', function (e) {
@@ -137,7 +149,7 @@ document.getElementById('f-enroll').addEventListener('submit', function (e) {
         var d = document.createElement('div'); d.textContent = c; box.appendChild(d);
       });
       show('codes');
-    });
+    }).catch(function () { fail(NO_ANSWER); });
 });
 
 document.getElementById('b-done').addEventListener('click', function () {

@@ -206,12 +206,37 @@ export const postJSON = (path, body, opts = {}) => fetch(path, {
 /** A response's JSON body, or null for an empty or non-JSON answer. */
 export const readJSON = (res) => res.json().catch(() => null);
 
+/** getJSON's pair for a write (2026-11-19, the refactor's stage 6): send
+    `body` as JSON with the write proof and read the answer whatever it is.
+    Never throws: a request that never reached the server comes back as
+    {ok: false, status: 0} with an `error` of its own, so a caller has one
+    branch for every failure (the 11-12 audit's Scenes 9: writes awaited with
+    no catch left their button held and said nothing). `button`, if given, is
+    held disabled for the call and given back whatever happens; a caller that
+    leaves the page on success holds its own button instead. `method` may be
+    PUT or DELETE; an undefined body sends none. */
+export async function sendJSON(path, body, { method = 'POST', button = null } = {}) {
+  if (button) button.disabled = true;
+  try {
+    const res = await postJSON(path, body, { method });
+    const j = await readJSON(res);
+    return { ok: res.ok, status: res.status, body: j && typeof j === 'object' ? j : {} };
+  } catch {
+    return { ok: false, status: 0, body: { error: 'The request did not reach the server.' } };
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
 /** GET `url` fresh and return its JSON body; a refusal throws the server's
-    `error`, else the status line. */
+    `error`, else the status line. A 200 that is not JSON throws too
+    (2026-11-19): the Hub's sign-in page, reached by a followed redirect,
+    is not an answer, and every caller reads the body as an object. */
 export async function getJSON(url) {
   const res = await fetch(url, { cache: 'no-store' });
   const body = await readJSON(res);
   if (!res.ok) throw new Error(body?.error || `${res.status} ${res.statusText}`);
+  if (body === null || typeof body !== 'object') throw new Error('the answer was not JSON');
   return body;
 }
 

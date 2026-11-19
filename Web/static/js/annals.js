@@ -14,7 +14,7 @@
    [{to, at}], and says "sent to <destination>" beside it. Acknowledging it
    here is also what stops its repeats. */
 
-import { A, $, esc, themeText, ago } from './config.js';
+import { A, $, esc, themeText, ago, getJSON } from './config.js';
 import { say } from './words.js';
 import { makeScene } from './scene.js';
 import { ALERTS_TEXT, fill, sentNote } from './alerts-model.js';
@@ -68,8 +68,9 @@ async function build() {
   listEl.innerHTML = `<div class="ldg-note">${say('reading the annals…')}</div>`;
   let body;
   try {
-    body = await (await fetch(`api/v2/events?limit=200${showAll ? '' : '&unacked=1'}`,
-                              { cache: 'no-store' })).json();
+    // a refusal is "could not be read", not "nothing has happened" (2026-11-18,
+    // the 11-12 audit's Scenes 4): getJSON throws on one
+    body = await getJSON(`api/v2/events?limit=200${showAll ? '' : '&unacked=1'}`);
   } catch {
     listEl.innerHTML = `<div class="ldg-note">${say('the annals could not be read.')}</div>`;
     return;

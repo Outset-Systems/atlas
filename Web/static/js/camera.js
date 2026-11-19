@@ -15,6 +15,7 @@
 import { A, CFG, REDUCED, $ } from './config.js';
 import { unproject } from './project.js';
 import * as model from './camera-model.js';
+import { mapKey, describe } from './keys-model.js';
 
 const viewport = $('viewport');
 const stage = $('stage');
@@ -321,28 +322,23 @@ viewport.addEventListener('click', () => {
 
 viewport.addEventListener('dblclick', (e) => zoomAt(e.clientX, e.clientY, CFG.ZOOM_DBLCLICK));
 
-/* keyboard */
+/* keyboard. WHICH key is the map's is decided in keys-model.js (2026-11-18),
+   shared with the region's handler and node-tested: a field and a chord keep
+   their keys, `/` opens the palette, a view or a scene over the map puts the
+   camera's keys away (the Index and Escape still answer). This only does it. */
 addEventListener('keydown', (e) => {
-  // `/` summons the command palette from anywhere on the map (H1)
-  if (e.key === '/' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
-    e.preventDefault(); A.openPalette?.(); return;
-  }
-  // a field or an editable keeps its own keys; so does any modifier chord
-  // (ctrl+minus is the browser's zoom, not the map's — editor/index.js wireKeys
-  // guards the same way). Escape alone stays reachable from everywhere.
-  if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName || '') || e.target.isContentEditable) return;
-  if (e.key !== 'Escape' && (e.ctrlKey || e.metaKey || e.altKey)) return;
-  /* The map is put away (a view is up, views.js): no key steers the hidden map
-     (2026-11-13; the Deck had this gap since v1.67.0). Escape still closes what
-     is over the view, and `/` (above) and M (the Index) still answer, but
-     nothing glides the camera behind it. */
   const away = document.body.classList.contains('deck');
-  if (away && e.key !== 'Escape' && e.key !== 'm') return;
+  const action = mapKey(describe(e), { scene: !!A.sceneOpen, away });
+  if (!action) return;
   const pan = CFG.PAN_KEY_PX;
-  switch (e.key) {
+  // through A.zoomAt, the zoom a region wraps with its floor (the `-` key
+  // called this module's own and zoomed past it: the 11-12 audit, Map 5)
+  const zoom = (f) => (A.zoomAt || zoomAt)(innerWidth / 2, innerHeight / 2, f);
+  switch (action) {
+    case 'palette': e.preventDefault(); A.openPalette?.(); break;
     // the glass sits over everything, so it swallows the first Escape alone —
     // otherwise closing the pane also threw away the card that opened it
-    case 'Escape': {
+    case 'escape': {
       if (A.glassOpen?.()) { A.closeGlass(); break; }
       // Escape is the keyboard ×, and a × leaves AND recentres — so Escape must
       // too, but only when it actually closed a scene or the card (both glide
@@ -356,18 +352,18 @@ addEventListener('keydown', (e) => {
       if (leaving && !away) A.recenter?.(true);
       break;
     }
-    case 'ArrowLeft': cam.x += pan; clampCam(); apply(false); break;
-    case 'ArrowRight': cam.x -= pan; clampCam(); apply(false); break;
-    case 'ArrowUp': cam.y += pan; clampCam(); apply(false); break;
-    case 'ArrowDown': cam.y -= pan; clampCam(); apply(false); break;
-    case '+': case '=': zoomAt(innerWidth / 2, innerHeight / 2, CFG.ZOOM_KEY); break;
-    case '-': zoomAt(innerWidth / 2, innerHeight / 2, 1 / CFG.ZOOM_KEY); break;
-    case 'Home': case 'h': A.closeCard?.(); home(true); break;
-    case 'm': A.toggleDrawer?.(); break;
-    case 'd': A.descend?.(); break;
-    case 's': A.ascend?.(); break;
-    case 'n': A.toggleNet?.(); break;
-    case 'g': A.toggleDecoys?.(); break;   // the decoys' watch, drawn in place
+    case 'pan-left': cam.x += pan; clampCam(); apply(false); break;
+    case 'pan-right': cam.x -= pan; clampCam(); apply(false); break;
+    case 'pan-up': cam.y += pan; clampCam(); apply(false); break;
+    case 'pan-down': cam.y -= pan; clampCam(); apply(false); break;
+    case 'zoom-in': zoom(CFG.ZOOM_KEY); break;
+    case 'zoom-out': zoom(1 / CFG.ZOOM_KEY); break;
+    case 'home': A.closeCard?.(); home(true); break;
+    case 'drawer': A.toggleDrawer?.(); break;
+    case 'descend': A.descend?.(); break;
+    case 'ascend': A.ascend?.(); break;
+    case 'net': A.toggleNet?.(); break;
+    case 'decoys': A.toggleDecoys?.(); break;   // the decoys' watch, drawn in place
   }
 });
 

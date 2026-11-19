@@ -27,7 +27,7 @@
 
    calendar-model.js decides what is where; this only paints. */
 
-import { A, $, esc, ago, nodeById } from './config.js';
+import { A, $, esc, ago, nodeById, getJSON } from './config.js';
 import { say } from './words.js';
 import { makeScene } from './scene.js';
 import {
@@ -272,7 +272,10 @@ function paint() {
 async function build() {
   listEl.innerHTML = `<div class="ldg-note">${say('asking the rites what they did…')}</div>`;
   try {
-    RITES = (await (await fetch('api/v2/rites', { cache: 'no-store' })).json()).rites || [];
+    // getJSON throws on a refusal (2026-11-18): an error body used to be read
+    // as no rites, and the scene said every timed rite was turning (the
+    // 11-12 audit, Scenes 4); now it falls back as a failed fetch does
+    RITES = (await getJSON('api/v2/rites')).rites || [];
   } catch {
     // the scene must still draw intent when the truth cannot be fetched — a
     // broken endpoint should degrade to the old behaviour, not to nothing
@@ -293,7 +296,7 @@ async function buildFleet() {
   if (!host || !window.OutsetCalendar) return;
   let v = null;
   try {
-    v = await (await fetch('api/v2/calendar', { cache: 'no-store' })).json();
+    v = await getJSON('api/v2/calendar');
   } catch { /* the realm's own day above is the whole story */ }
   if (!v?.fleet) { host.hidden = true; host.innerHTML = ''; return; }
   const n = (v.planned || []).length, o = (v.overlaps || []).length;

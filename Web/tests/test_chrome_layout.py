@@ -167,8 +167,11 @@ def test_the_sky_and_the_depths_have_no_button_in_the_bar():
     for script in sorted((WEB / "static" / "js").rglob("*.js")):
         text = _read(script)
         assert "btn-sky" not in text and "btn-depths" not in text, f"{script.name} reaches for a button that is gone"
+    # which key is which is keys-model.js since 2026-11-19 (node-tested there)
     camera = _read(WEB / "static" / "js" / "camera.js")
-    assert "case 'd': A.descend?.(); break;" in camera and "case 's': A.ascend?.(); break;" in camera
+    assert "case 'descend': A.descend?.(); break;" in camera and "case 'ascend': A.ascend?.(); break;" in camera
+    model = _read(WEB / "static" / "js" / "keys-model.js")
+    assert "case 'd': return 'descend';" in model and "case 's': return 'ascend';" in model
     world = _read(WEB / "static" / "js" / "world.js")
     assert "A.descend = function descend()" in world and "A.ascend = function ascend()" in world
     assert "shoreSnap = true; A.ascend();" in world, "the map's north shore no longer rises to the sky"
@@ -457,14 +460,18 @@ def test_the_menu_opens_by_hover_and_by_keyboard():
 
 def test_the_camera_takes_no_keys_while_the_map_is_away():
     """A view hides the map, and the hidden map must not move under it: the
-    window keydown steps aside under `body.deck`, except for Escape."""
+    window keydown steps aside under `body.deck`, except for Escape. Since
+    2026-11-19 the handler hands `away` to keys-model.js, whose node tests
+    (tests/test_keys_model.mjs) prove which keys still answer."""
     js = _read(WEB / "static" / "js" / "camera.js")
     keys = js[js.index("addEventListener('keydown'"):]
     keys = keys[:keys.index("\n});")]
     assert "document.body.classList.contains('deck')" in keys
     guard = keys.index("document.body.classList.contains('deck')")
-    assert guard < keys.index("case 'ArrowLeft'"), "the guard must come before the camera's keys"
-    assert "if (away && e.key !== 'Escape'" in keys
+    assert guard < keys.index("mapKey(describe(e)"), "the view must be read before the key is decided"
+    assert "if (!action) return;" in keys
+    model = _read(WEB / "static" / "js" / "keys-model.js")
+    assert "if (state.scene || state.away) return ev.key === 'm' ? 'drawer' : null;" in model
 
 
 def test_every_view_has_a_main_and_one_shows_at_a_time():

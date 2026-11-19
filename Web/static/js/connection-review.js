@@ -12,15 +12,19 @@
    sends the choices. `post` is here because both files send JSON the same way
    and this one cannot import the other. */
 
-import { A, esc, postJSON } from './config.js';
+import { A, esc, sendJSON } from './config.js';
 import { say } from './words.js';
 import {
   cableState, countsLine, follow, groupsOf, ignoreLocally, reviewCounts, tickable,
 } from './connections-model.js';
 
-export async function post(url, body) {
-  const r = await postJSON(url, body);
-  return { r, j: await r.json().catch(() => ({})) };
+/** sendJSON in the {r, j} shape both files read. It never throws (2026-11-19,
+    the 11-12 audit's Scenes 9): a request that did not reach the server is a
+    refusal with its own words, so every `if (!r.ok)` below covers it, and a
+    `button` passed in is given back whatever happens. */
+export async function post(url, body, opts = {}) {
+  const { ok, status, body: j } = await sendJSON(url, body, opts);
+  return { r: { ok, status }, j };
 }
 
 /* ── the review ───────────────────────────────────────────────────────── */
@@ -201,9 +205,10 @@ function wireReview(key, box, view) {
     if (!ignoring && t.dataset.unignore === undefined) return;
     const target = ignoring ? t.dataset.ignore : t.dataset.unignore;
     t.disabled = true;
-    const { r } = await post('api/v2/admin/discovery/decide',
+    const { r, j } = await post('api/v2/admin/discovery/decide',
       { keys: [target], action: ignoring ? 'ignore' : 'unignore' });
-    if (!r.ok) { t.disabled = false; return; }
+    // a refusal is said, not only the button given back (Scenes 9)
+    if (!r.ok) { t.disabled = false; resultLine(box, 'dir-bad', j.error || 'Could not change that.'); return; }
     ignoreLocally(view, target, ignoring);
     paintReview(key, box, view);
   });

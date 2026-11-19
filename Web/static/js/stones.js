@@ -214,6 +214,7 @@ function codeBlock(text, label) {
 
 function setupHTML() {
   const s = setupData;
+  if (s === false) return '<div class="ldg-note">the setup could not be read. Close it and open it again to ask again.</div>';
   if (!s) return '<div class="ldg-note">reading the setup…</div>';
   const parts = [];
   if (!s.enabled) {
@@ -283,10 +284,15 @@ function wire() {
     setupOpen = !setupOpen;
     paint();
     if (setupOpen && !setupData) {
+      // false, not null, when it failed (2026-11-18): null is "still reading",
+      // so a failed read said "reading the setup…" until the scene was closed
+      // (the 11-12 audit, Scenes 13). Opening it again asks again, and says
+      // "reading" while it does.
+      if (setupData === false) { setupData = null; paint(); }
       try {
         const r = await fetch('api/v2/tripwires/setup', { cache: 'no-store' });
-        setupData = r.ok ? await r.json() : null;
-      } catch { setupData = null; }
+        setupData = r.ok ? await r.json() : false;
+      } catch { setupData = false; }
       paint();
     }
   });

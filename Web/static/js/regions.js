@@ -15,6 +15,7 @@
 
 import { A, REDUCED, $, esc, canAdminWrite, DRAG_END } from './config.js';
 import * as M from './region-model.js';
+import { regionKey, describe } from './keys-model.js';
 import { chosenStyle, refreshStyle, styleName } from './table.js';
 
 const stage = $('stage');
@@ -518,21 +519,23 @@ A.leaveToMap = () => leaveTo(null, { home: true });
 locator.addEventListener('click', () => leaveOne());
 locator.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); leaveOne(); } });
 
-/* The keyboard: while a region is open, its keys come here first. */
+/* The keyboard: while a region is open, its keys come here first. Which
+   keys are the region's is decided in keys-model.js (2026-11-18): a scene or
+   the glass over the region takes Escape first, and a chord (Ctrl+S, Ctrl+D)
+   is the browser's (the 11-12 audit, Map 1 and Map 4). */
 addEventListener('keydown', (e) => {
-  if (!level) return;
-  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
-  let handled = true;
-  switch (e.key) {
-    case 'Escape':
-      if (A.glassOpen?.()) { handled = false; break; }
-      if (A.cardOpen?.()) { A.closeCard?.(); break; }
-      leaveOne(); break;
-    case 'Home': case 'h': leaveTo(null); break;
-    case 'd': case 's': break;   // the sky and the Depths belong to the main map
-    default: handled = false;
+  const action = regionKey(describe(e), {
+    region: !!level, scene: !!A.sceneOpen, glass: !!A.glassOpen?.(), card: !!A.cardOpen?.(),
+  });
+  if (!action) return;
+  switch (action) {
+    case 'close-card': A.closeCard?.(); break;
+    case 'leave-region': leaveOne(); break;
+    case 'leave-to-map': leaveTo(null); break;
+    case 'swallow': break;    // the sky and the Depths belong to the main map
   }
-  if (handled) { e.preventDefault(); e.stopImmediatePropagation(); }
+  e.preventDefault();
+  e.stopImmediatePropagation();
 }, true);
 
 /* − at the floor of a region is the same gesture as the wheel's. */

@@ -99,6 +99,14 @@ function buildTribute() {
 
 const scene = makeScene({ id: 'tribute', closeId: 'trb-close', build: () => { if (!built) { buildTribute(); built = true; } } });
 const { open, close } = scene;
+
+/* New map data: built once is no longer built (2026-11-19, the 11-12 audit's
+   Scenes 3: nothing set `built` back, so RESOURCES drew the first map it saw
+   for the life of the tab). Redrawn now if it is up, else on the next open. */
+addEventListener('atlas:data', () => {
+  built = false;
+  if ($('tribute')?.classList.contains('open')) { buildTribute(); built = true; }
+});
 A.openTribute = open;
 A.closeTribute = close;
 

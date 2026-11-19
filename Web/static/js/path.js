@@ -325,7 +325,7 @@ function open(focusId, reachIds, serviceLabel) {
   }
 }
 function close() {
-  if (!root) return;
+  if (!root?.classList.contains('open')) return;   // as scene.js: only an open scene closes
   // a trace is a selection inside this scene, not a thing to find still lit on
   // the next open — and lastFocus must go with it, or reopening THE PATH from
   // the scene switcher would silently restore a service view nobody asked for

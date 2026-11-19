@@ -44,7 +44,8 @@ export function problemList(err) {
 export async function run(action, okMessage) {
   try {
     const result = await action();
-    if (okMessage !== false) {
+    // a write whose re-read failed has said so already (Editor.settle)
+    if (!result?.unread && okMessage !== false) {
       A.showToast?.(okMessage || (result?.changed || []).join(' · ') || 'Saved.');
     }
     return result;

@@ -28,7 +28,10 @@ export function makeScene({ id, closeId, build, onClose }) {
     A.closeCard?.();
   }
   function close() {
-    if (!root) return;
+    // only an open scene closes (2026-11-19, the 11-12 audit's Scenes 14):
+    // closeAllScenes calls every closer, and each one that was not open still
+    // ran its onClose and set the band back, scrolling it, eleven times over
+    if (!root?.classList.contains('open')) return;
     onClose?.();
     root.classList.remove('open');
     root.setAttribute('aria-hidden', 'true');
