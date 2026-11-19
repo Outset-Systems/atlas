@@ -274,3 +274,21 @@ def test_an_offline_device_is_down_only_where_its_mac_is_charted(controller):
     lists["devices"] = [{"mac": "aa:bb:cc:00:00:66", "ip": "10.50.1.20", "state": 0}]
     lists["clients"] = []
     assert "tower" not in _adapter().fetch().get("nodes", {})
+
+
+def test_a_place_charted_with_another_mac_spelling_is_still_matched():
+    """`00-11-32-AA-BB-CC` on the map and `00:11:32:aa:bb:cc` from UniFi are
+    one card: the live source keyed the map's spelling as written and UniFi's
+    with colons, so a place charted with dashes was never matched (audit
+    2026-11-12, Live 11)."""
+    import schema
+    from engines.unifi import unifi_places
+    data = {"nodes": [{"id": "dashed", "mac": "00-11-32-AA-BB-CC"},
+                      {"id": "dotted", "mac": "0011.32aa.bbcd"},
+                      {"id": "plain", "mac": "00:11:32:aa:bb:ce"}]}
+    by_mac, _, _ = unifi_places(data)
+    assert by_mac == {"00:11:32:aa:bb:cc": "dashed", "00:11:32:aa:bb:cd": "dotted",
+                      "00:11:32:aa:bb:ce": "plain"}
+    for spelling in ("00-11-32-aa-bb-cc", "00:11:32:AA:BB:CC", "0011.32aa.bbcc"):
+        assert schema.mac_key(spelling) == "00:11:32:aa:bb:cc"
+    assert schema.mac_key("not a mac") == "" and schema.mac_key("00:11:32:aa:bb") == ""

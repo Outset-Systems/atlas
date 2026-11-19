@@ -101,6 +101,7 @@ def unifi_places(data):
     (`kind` vm or physical). A place that *is* a network (a prefix) has no
     address to be connected at.
     """
+    import schema   # here, not at the top: an engine loads with the standard library alone
     by_mac, by_ip, machine_at = {}, {}, set()
     nodes = [n for n in data.get("nodes", []) or [] if isinstance(n, dict) and n.get("id")]
     watched = {nid for nid in monitor_map(data).values() if nid}
@@ -109,7 +110,7 @@ def unifi_places(data):
         if node.get("monitors") or any(isinstance(link, dict) and link.get("kuma")
                                        for link in node.get("links") or []):
             watched.add(nid)
-        mac = str(node.get("mac") or "").strip().lower()
+        mac = schema.mac_key(node.get("mac"))
         if mac:
             by_mac.setdefault(mac, nid)
         ip = str(node.get("ip") or "").strip()

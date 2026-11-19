@@ -369,3 +369,28 @@ def test_the_bundled_fallback_is_still_available_when_asked_for(tmp_path, monkey
     monkeypatch.setattr(settings, "FALLBACK", "bundled")
     store = FileDatasetStore(str(tmp_path / "none.json"), BUNDLED, str(tmp_path / "rev"))
     assert len(store.read()[0]["nodes"]) > 10
+
+
+def test_a_deleted_place_leaves_no_pin_and_no_monitor_behind(store):
+    """A region's pins are keyed by place id and `signals.kuma` maps a monitor
+    to one: neither is a reference the catalogue can walk. The leftover pin
+    was a problem the save refused, so a place shown on a region could not be
+    deleted at all (audit 2026-11-12, Data 9)."""
+    store.apply([{"op": "insert", "section": "nodes", "body": a_node()},
+                 {"op": "insert", "section": "regions",
+                  "body": {"id": "test-region", "name": "Test region", "map": "plain.webp",
+                           "x": 10, "y": 10, "w": 20, "h": 20,
+                           "places": {"testhold": {"x": 10, "y": 20}, "gateway": {"x": 30, "y": 40}}}}],
+                actor="t")
+    with open(store.path, encoding="utf-8") as fh:
+        raw = json.load(fh)
+    raw.setdefault("signals", {}).setdefault("kuma", {})["Testhold web"] = "testhold"
+    with open(store.path, "w", encoding="utf-8") as fh:
+        json.dump(raw, fh)
+    store.apply([{"op": "delete", "section": "nodes", "id": "testhold", "cascade": True}],
+                actor="t")
+    data = store.read()[0]
+    region = next(r for r in data["regions"] if r["id"] == "test-region")
+    assert region["places"] == {"gateway": {"x": 30, "y": 40}}
+    assert "Testhold web" not in data["signals"]["kuma"]
+    assert not any(n.get("id") == "testhold" for n in data["nodes"])

@@ -310,8 +310,11 @@ def test_the_same_sweep_finds_them_all_with_a_full_token(realm, admin):
     most of these, so the same reading has to find them."""
     _trouble(realm)
     text = _everything(realm, issue(admin, "full"))
+    # a key the catalogue does not declare is given to no one below admin
+    # since 2026-11-18 (the refactor's stage 4), a full token included
+    assert "UNKNOWN-KEY-CANARY" not in text.replace("MAPART-UNKNOWN-KEY-CANARY", "")
     for seen in ("192.0.2.5", "AA:BB:CC", "3000/d/x", "HW-CANARY", "LORE-CANARY", "DESC-CANARY",
-                 "UNKNOWN-KEY-CANARY", "MONITOR-LINK-CANARY", "IGNORE PREVIOUS", "DELTA LEGACY",
+                 "MONITOR-LINK-CANARY", "IGNORE PREVIOUS", "DELTA LEGACY",
                  "container-says-hello", "RITE-HOST-CANARY", "OLD-NAME-CANARY", "GUEST-ZONE-CANARY",
                  "Snapshot of"):
         assert seen in text, seen

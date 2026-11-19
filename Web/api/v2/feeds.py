@@ -22,10 +22,11 @@ import shadow
 import signals
 import tripwires
 from context import atlas
-from engines.base import monitor_map
+import redaction
+from engines.base import NODE_STATES, monitor_map
 from engines.places import service_places, services_of, unmanaged_ids, unmanaged_service_keys
-from redaction import (redact_for_groups, cleared, hidden_node_ids, sees_everything, vary_on_viewer,
-                       viewer_groups, visible_monitors)
+from redaction import (redact_for_groups, cleared, hidden_node_ids, hidden_slugs, hidden_words,
+                       sees_everything, vary_on_viewer, viewer_groups, visible_monitors)
 
 from . import _count, bp
 
@@ -128,10 +129,23 @@ def _redact_feed(ctx, feed, groups, data=None):
         out["metrics"] = {k: v for k, v in out["metrics"].items()
                           if k not in ("unattributed_trips", "undelivered_alerts")}
 
+    # A PLACE ON THIS VIEWER'S MAP, IN A STATE ATLAS KNOWS (2026-11-18). The
+    # feed is keyed by place id and its values come from the sources: a relay
+    # or a static file can push a key that is no place at all and a state that
+    # is any text, and both went to every viewer below admin and on into an
+    # agent's tool answers (the 11-12 audit, API 1). Below admin the keys are
+    # an allowlist of the places this viewer sees, and a state Atlas does not
+    # know is no state.
+    below = not sees_everything(groups)
+    if below:
+        on_map = {n["id"] for n in data.get("nodes") or []
+                  if isinstance(n, dict) and isinstance(n.get("id"), str) and cleared(n, groups)}
     nodes = {}
     for node_id, info in (feed.get("nodes") or {}).items():
-        if node_id in hidden:
+        if node_id in hidden or (below and node_id not in on_map):
             continue
+        if below and isinstance(info, dict) and info.get("state") not in NODE_STATES:
+            info = {k: v for k, v in info.items() if k != "state"}
         # A visible place may name a hidden one as the CAUSE of its outage
         # ("dark behind the gateway") — that is the hidden id arriving by the
         # back door, so the fallout is reported without its explanation.
@@ -148,6 +162,11 @@ def _redact_feed(ctx, feed, groups, data=None):
 
     out["services"] = {name: info for name, info in (feed.get("services") or {}).items()
                        if name in monitors}
+    if below:
+        out["services"] = {name: ({k: v for k, v in info.items() if k != "state"}
+                                  if isinstance(info, dict) and info.get("state") not in NODE_STATES
+                                  else info)
+                           for name, info in out["services"].items()}
     # THE WATCH (2026-11-15): a certificate a check read lists the names it
     # covers, and a shared one can name a place this viewer may not see, so
     # those names are for a viewer who sees everything; its date stays
@@ -379,6 +398,20 @@ def rites_feed():
     import api_tokens
     if api_tokens.current():
         status = {key: heartbeats.without_job_words(row) for key, row in status.items()}
+    else:
+        # A PERSON BELOW ADMIN still reads what a job wrote (the calendar shows
+        # it), except where it names a place they may not see (2026-11-18, the
+        # 11-12 audit's API 15): a run's note is the job's own prose, and no
+        # reference walk can read it.
+        groups = viewer_groups()
+        names, slugs = hidden_words(data, groups), hidden_slugs(data, groups)
+        if names or slugs:
+            def says_hidden(row):
+                last = row.get("last") if isinstance(row.get("last"), dict) else {}
+                return any(redaction._names_hidden(last.get(k), "words", names, slugs)
+                           for k in heartbeats.JOB_WORDS)
+            status = {key: heartbeats.without_job_words(row) if says_hidden(row) else row
+                      for key, row in status.items()}
     out = []
     for rite in rites:
         if isinstance(rite, dict):

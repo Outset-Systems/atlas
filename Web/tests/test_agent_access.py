@@ -297,6 +297,11 @@ def test_the_events_of_a_rite_a_viewer_may_not_see_are_not_listed(realm, admin, 
     ("see https://a:b@host for it", "see https://a:b@host for it"),     # prose is not a URL: not caught
     ("static/map/plain.webp", "static/map/plain.webp"),
     ("", ""),
+    # a space anywhere after the scheme made it no URL, and the credential
+    # went to the token whole (audit 2026-11-12, Data 5)
+    ("https://u:p@host/x?token=a b", "https://host/x"),
+    ("https://user:pa ss@host/x", "https://host/x"),
+    ("https://host/a path?token=z", "https://host/a path"),
 ])
 def test_a_bare_url_keeps_the_address_and_drops_what_rides_on_it(given, bare):
     import redaction

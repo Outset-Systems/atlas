@@ -167,7 +167,10 @@ def group_key(groups):
 # Any scheme: rtsp, ssh and postgres URLs carry passwords as readily as http
 # ones. What this cannot see: a secret in the PATH (`/hooks/<secret>`), or a URL
 # inside a sentence in a note. Those leave as written.
-_URL = re.compile(r"^\s*([A-Za-z][A-Za-z0-9+.-]*)://(\S*)\s*$")
+#: Anything after `scheme://` counts, spaces included (2026-11-18): the
+#: pattern was `\S*` to the end, so `https://u:p@h/x?token=a b` was no URL at
+#: all and went to a token whole (the 11-12 audit, Data 5).
+_URL = re.compile(r"^\s*([A-Za-z][A-Za-z0-9+.-]*)://(.*?)\s*$", re.S)
 
 
 def bare_url(value):
@@ -228,27 +231,51 @@ _ORDERED_REF_FIELDS = {"path"}
 #: other members from the viewer.
 _FILTERED_SECTIONS = {"nodes", "collections"}
 
-#: Free text that can name a place in words, by section. No reference walker
-#: can read prose, so an entry whose words name a hidden place goes whole, the
-#: way rites always have (2026-11-13: certificates, collections, a rite's name and a
-#: rack slot's words joined them; the 11-12 audit found each of them open).
-_FREE_TEXT = {
-    "rites": ("name", "host", "note"),
-    "certs": ("name", "host", "note"),
-    # the id too: it is made from the name, and a rename keeps it (2026-11-14)
-    "collections": ("id", "name", "note"),
-    "rack": ("name", "desc"),
-    "rack_rear": ("name", "desc"),
-    # CABLES AND STUBS (2026-11-16): an id is often made from the ends'
-    # names (`gw-to-vault`), a port can be labelled for what it reaches
-    "cables": ("id", "a_port", "b_port", "note"),
-    "stubs": ("id", "name", "note"),
-}
+#: FREE TEXT THAT CAN NAME A PLACE (2026-11-18, the refactor's stage 4). Read
+#: from the catalogue's own declarations (`schema.HIDING`), not listed here:
+#: this module kept its own list until then (rites, certificates, collections,
+#: rack slots, cables, stubs), and every field nobody had added to it reached a
+#: restricted viewer as written, a link's label on a visible proxy naming the
+#: hidden place behind it included. `words` and `url` are matched as text,
+#: `slug` as an id the rail made from a name (`slugFor`).
+_WORDY = frozenset({"words", "slug", "url"})
 
 
-#: The free-text fields that are ids the rail made from a name (`slugFor`):
-#: matched against hidden slugs as ids are made, dashes only.
-_ID_FIELDS = frozenset({"id"})
+def _wordy(section_key):
+    """([(field, kind)], {field: [(part, kind)]}): the fields of a section, and
+    of the entries inside its fields, that can name a place in words."""
+    said = schema.HIDING.get(section_key)
+    if not isinstance(said, dict):
+        return [], {}
+    own = [(name, kind) for name, kind in said.items() if isinstance(kind, str) and kind in _WORDY]
+    parts = {name: [(part, kind) for part, kind in sub.items() if kind in _WORDY]
+             for name, sub in said.items() if isinstance(sub, dict)}
+    return own, {name: subs for name, subs in parts.items() if subs}
+
+
+def _keyed(section_key):
+    """The fields of a section that hold service keys (`schema.HIDING` "keys")."""
+    said = schema.HIDING.get(section_key)
+    return [name for name, kind in said.items() if kind == "keys"] if isinstance(said, dict) else []
+
+
+def _names_hidden(value, kind, names, slugs):
+    """True when `value` (text, or a list or object of it) names a hidden
+    place: its name, id or address as written (`names`), or as a slug
+    (`slugs`), an id the way the rail makes ids and free text list-aware."""
+    if value is None or value == "":
+        return False
+    if isinstance(value, (list, tuple)):
+        return any(_names_hidden(v, kind, names, slugs) for v in value)
+    if isinstance(value, dict):
+        return any(_names_hidden(v, kind, names, slugs) for v in value.values())
+    text = str(value)
+    if names is not None and names.search(text):
+        return True
+    if slugs:
+        return slugs.in_id(text) if kind == "slug" else slugs.in_text(text)
+    return False
+
 
 #: Sections that name places as the KEYS of a mapping, which the reference
 #: walker cannot read (regions' `places`): the shape guard covers them too.
@@ -510,6 +537,114 @@ def _scrub_wiring(d, whole, hidden):
         d["cables"] = [c for c in d["cables"] if (_stub_ends(c) or set()) <= left]
 
 
+def _words_pass(d, names, slugs, hidden_keys):
+    """Every field the catalogue declares as words, slug or url, read for a
+    hidden place's name (and every keys field for a hidden service's key).
+
+    Where the section is about the place its entry names
+    (`schema.WORDS_DROP_ENTRY`: a rite, a certificate, a rack slot, a cable,
+    a repair window, ...) the entry goes whole, as one that points at the
+    place by id does. Elsewhere the entry is the viewer's own (a place, a
+    network, a prefix, a watching) and only the field goes. A service on a
+    place goes whole: its label, address and description are one thing."""
+    for key in schema.SECTIONS:
+        value = d.get(key)
+        if value is None or schema.HIDING.get(key) == "admin":
+            continue
+        own, parts = _wordy(key)
+        keyed = _keyed(key)
+        if not (own or parts or keyed):
+            continue
+        whole = key in schema.WORDS_DROP_ENTRY
+        entries = value if isinstance(value, list) else [value] if isinstance(value, dict) else []
+        kept = []
+        for entry in entries:
+            if not isinstance(entry, dict):
+                kept.append(entry)
+                continue
+            gone = False
+            for field in keyed:
+                if any(isinstance(k, str) and k in hidden_keys
+                       for k in schema.as_list(entry.get(field))):
+                    if whole:
+                        gone = True
+                        break
+                    entry[field] = [k for k in schema.as_list(entry.get(field))
+                                    if not (isinstance(k, str) and k in hidden_keys)]
+            if gone:
+                continue
+            if names is not None or slugs:
+                for field, kind in own:
+                    if field in entry and _names_hidden(entry[field], kind, names, slugs):
+                        if whole:
+                            gone = True
+                            break
+                        entry.pop(field)
+                if gone:
+                    continue
+                for field, subs in parts.items():
+                    items = entry.get(field)
+                    if not isinstance(items, list):
+                        continue
+                    if key == "nodes" and field == "links":
+                        entry[field] = [item for item in items if not (
+                            isinstance(item, dict)
+                            and any(part in item and _names_hidden(item[part], kind, names, slugs)
+                                    for part, kind in subs))]
+                        continue
+                    for item in items:
+                        if isinstance(item, dict):
+                            for part, kind in subs:
+                                if part in item and _names_hidden(item[part], kind, names, slugs):
+                                    item.pop(part)
+            kept.append(entry)
+        if isinstance(value, list):
+            d[key] = kept
+
+
+def _declared_only(d):
+    """Keep only what the catalogue declares (2026-11-18, the refactor's
+    stage 4): a key a hand edit or a later release added to an entry, or to the map,
+    is not given below admin until the catalogue says what it is. A place's
+    `provenance` is the server's own stamp (`provenance.for_viewer` trims it),
+    and `signals` keeps the monitor map, scrubbed by hand below."""
+    for top in list(d):
+        if top not in schema.SECTIONS and top != "signals":
+            d.pop(top)
+    signals = d.get("signals")
+    if isinstance(signals, dict):
+        for name in list(signals):
+            if name != "kuma":
+                signals.pop(name)
+    elif "signals" in d:
+        d.pop("signals")
+    for key in list(d):
+        said = schema.HIDING.get(key)
+        if said == "admin":
+            d.pop(key)
+            continue
+        if key not in schema.SECTIONS:
+            continue
+        fields = {f["name"]: f for f in schema.fields_of(key)}
+        allowed = set(fields) | ({"provenance"} if key == "nodes" else set())
+        if isinstance(said, dict):
+            allowed -= {name for name, kind in said.items() if kind == "admin"}
+        value = d[key]
+        for entry in value if isinstance(value, list) else [value] if isinstance(value, dict) else []:
+            if not isinstance(entry, dict):
+                continue
+            for name in [n for n in entry if n not in allowed]:
+                entry.pop(name)
+            for name, fld in fields.items():
+                parts = {s["name"] for s in fld.get("of") or []}
+                if not parts or not isinstance(entry.get(name), list):
+                    continue
+                for item in entry[name]:
+                    if isinstance(item, dict):
+                        for part in [p for p in item if p not in parts]:
+                            item.pop(part)
+
+
 def hidden_node_ids(data, groups):
     """Ids of the places this viewer may not see. Empty when they see everything."""
     if sees_everything(groups):
@@ -690,7 +825,9 @@ def visible_monitors(data, groups):
     from engines.places import service_key
     out = set()
     for node in data.get("nodes", []):
-        if not cleared(node, groups):
+        # a stray entry is no place, for an admin as for anyone (cleared()
+        # says yes to anything for a viewer who sees everything)
+        if not isinstance(node, dict) or not cleared(node, groups):
             continue
         links = node.get("links") if isinstance(node.get("links"), list) else []
         for link in links:
@@ -776,26 +913,30 @@ def redact(data, groups, token=False):
             if isinstance(c, dict) and "services" in c:
                 c["services"] = [k for k in schema.as_list(c["services"])
                                  if isinstance(k, str) and k in seen_keys]
-    # a rite's `host` is free text, so no node reference covers it: a rite that
-    # names a hidden place in words goes as surely as one that points at it.
-    # The same for a certificate, a set and a rack slot (`_FREE_TEXT`).
-    if names:
-        def says_hidden(entry, fields):
-            # field by field: the gap between two fields is neither a space in
-            # a hidden name nor a dash in its slug ("lab" + "Core switches"
-            # is not "Lab core", 2026-11-14 review)
-            for f in fields:
-                text = str(entry.get(f) or "")
-                if names.search(text):
-                    return True
-                # an id is matched as the rail makes ids, free text list-aware
-                if slugs and (slugs.in_id(text) if f in _ID_FIELDS else slugs.in_text(text)):
-                    return True
-            return False
-
-        for key, fields in _FREE_TEXT.items():
-            if isinstance(d.get(key), list):
-                d[key] = [e for e in d[key] if not (isinstance(e, dict) and says_hidden(e, fields))]
+    # A KEY THE CATALOGUE DOES NOT DECLARE IS NOT GIVEN BELOW ADMIN (stage 4).
+    _declared_only(d)
+    # A PORT'S WORDS (2026-11-11). `peer` and `note` say what is on the other
+    # end in prose, and a connection import now writes them: "VAULT and 3
+    # guests" on a visible switch names a hidden place, its port and what it
+    # hosts. No reference walker can see prose, and matching it against the
+    # hidden names misses a place the controller calls something else. So
+    # the rule is the blunt one, as for `accounts`: while anything is hidden
+    # from this viewer, they get the ports and not the words on them. Before
+    # the words pass, so a port is not dropped for words it would not keep.
+    if hidden:
+        for port in d.get("interfaces") or []:
+            if isinstance(port, dict):
+                port.pop("peer", None)
+                port.pop("note", None)
+    # FREE TEXT. A rite's `host`, a link's label, a place's role: no node
+    # reference covers words, so every field the catalogue declares as words
+    # is read for a hidden place's name (`_words_pass`, field by field: the
+    # gap between two fields is neither a space in a hidden name nor a dash in
+    # its slug, 2026-11-14 review). A service key held by a section is read
+    # against the services this viewer cannot see.
+    hidden_keys = visible_monitors(data, None) - visible_monitors(data, groups)
+    if names or slugs or hidden_keys:
+        _words_pass(d, names, slugs, hidden_keys)
     for n in d["nodes"]:
         if n.get("links"):
             links = n["links"] if isinstance(n["links"], list) else []
@@ -833,7 +974,7 @@ def redact(data, groups, token=False):
             section = schema.get(key)
             if not section or section.get("kind", "list") != "list":
                 continue
-            if not (_node_refs(key) or key in _FREE_TEXT or key in _PINNED):
+            if not (_node_refs(key) or any(_wordy(key)) or key in _PINNED):
                 continue
             if not isinstance(d[key], list):
                 d.pop(key)
@@ -851,17 +992,6 @@ def redact(data, groups, token=False):
                       or _scrub_entry(e, refs, unseen, defining)]
         _scrub_signals_block(d, unseen)
         _scrub_wiring(d, data, unseen)
-        # A PORT'S WORDS (2026-11-11). `peer` and `note` say what is on the other
-        # end in prose, and a connection import now writes them: "VAULT and 3
-        # guests" on a visible switch names a hidden place, its port and what it
-        # hosts. No reference walker can see prose, and matching it against the
-        # hidden names misses a place the controller calls something else. So
-        # the rule is the blunt one, as for `accounts`: while anything is hidden
-        # from this viewer, they get the ports and not the words on them.
-        for port in d.get("interfaces") or []:
-            if isinstance(port, dict):
-                port.pop("peer", None)
-                port.pop("note", None)
         # REGIONS (v1.49.0): `places` is a json object keyed BY place id, so
         # the ref walker above cannot see it — a pin would name a hidden place
         # (and say where it sits) to a viewer not cleared for it.

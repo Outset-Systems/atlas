@@ -205,3 +205,30 @@ def test_bearer_token_is_read_one_way(realm):
             assert security.bearer_token() == want, header
     with realm.app.test_request_context("/api/v2/health"):
         assert security.bearer_token() == ""
+
+
+# ── a map file that is not an object (audit 2026-11-12, Data 8 and API 6) ────
+
+@pytest.mark.parametrize("body", ["[]", "[{\"id\": \"a\"}]", "5", "\"text\"", "null"])
+def test_a_map_that_is_not_an_object_is_unhealthy_not_a_500(tmp_path, body):
+    """A list or a number at the top of the file got through to the validator,
+    whose `.get` raised, and the status routes and the map answered 500."""
+    data = tmp_path / "lab-data.json"
+    data.write_text(body, encoding="utf-8")
+    handle = fresh_app(ATLAS_AUTH_MODE="standalone", ATLAS_DATA_BACKEND="file",
+                       ATLAS_DATA=str(data), ATLAS_ALLOW_INSECURE="1")
+    c = handle.app.test_client()
+    for path in ("/api/status", "/api/v2/health"):
+        r = c.get(path)
+        assert r.status_code < 500 or r.get_json().get("healthy") is False, (path, body)
+        assert r.get_json().get("healthy") is False, (path, body, r.get_json())
+    # the map route answers it exactly as it answers a file that is not JSON
+    broken = tmp_path / "broken.json"
+    broken.write_text("{not json", encoding="utf-8")
+    other = fresh_app(ATLAS_AUTH_MODE="standalone", ATLAS_DATA_BACKEND="file",
+                      ATLAS_DATA=str(broken), ATLAS_ALLOW_INSECURE="1").app.test_client()
+    want = other.get("/api/v2/lab-data")
+    handle = fresh_app(ATLAS_AUTH_MODE="standalone", ATLAS_DATA_BACKEND="file",
+                       ATLAS_DATA=str(data), ATLAS_ALLOW_INSECURE="1")
+    got = handle.app.test_client().get("/api/v2/lab-data")
+    assert got.status_code == want.status_code and set(got.get_json()) == set(want.get_json())

@@ -882,6 +882,128 @@ SIGNAL_FIELDS = [
            "charted monitor is redundant too."),
 ]
 
+# ── WHAT A FIELD IS TO A VIEWER WHO MAY NOT SEE EVERYTHING (2026-11-18) ─────
+# The refactor's stage 4. Every field above says, here, what it is to a person
+# or a token that some place is hidden from, and `redaction.py` reads this and
+# nothing else to decide what to do with it. A field that says nothing fails
+# `test_hiding.py`, so a new field cannot reach a restricted viewer unread:
+# before this, a field was given until someone remembered to hide it.
+#
+#   safe   cannot name a place: a number, a choice, a colour, a date, the
+#          entry's own id or name, a network's address. Given as it is.
+#   ref    names a place by id (`ref="nodes"`): the reference walk takes a
+#          hidden id out, or the entry with it (`redaction._scrub_entry`).
+#   words  free text that can name a place: when it names a hidden one (its
+#          name, id or address, `redaction.hidden_words`), the field goes, or
+#          the whole entry where the section is about the place it names
+#          (`WORDS_DROP_ENTRY`; a link on a place always goes whole).
+#   slug   an id made from a name (`gw-to-vault`): `words`, matched the way
+#          the rail makes ids.
+#   url    an address that may carry a hidden place's name or address, and
+#          a credential: `words`, and a token gets it without the credential.
+#   keys   service keys (`<place>/<label>`): `words`, and a collection keeps
+#          only the keys of services the viewer can see.
+#   pins   a place id as the KEY of an object (a region's pins): a hidden one
+#          is taken out.
+#   admin  never given below admin, whatever is hidden.
+#
+# A field of a type in `SAFE_TYPES` is `safe` unless it says otherwise, and a
+# field with `ref="nodes"` is `ref`; every other field is named below.
+SAFE_TYPES = frozenset({"bool", "number", "int", "percent", "select", "color", "date",
+                        "datetime", "ip", "cidr"})
+HIDING_KINDS = frozenset({"safe", "ref", "words", "slug", "url", "keys", "pins", "admin"})
+
+HIDING = {
+    # A network's, a region's, a prefix's, a rack's or a watching's own name is
+    # what it is called, as a place's is: given with it. Taking it away hid
+    # nothing (2026-11-18: a cloud token read the zone "The Surface" as its
+    # id, `workstation-vlan`, the same word); what is written ABOUT it is words.
+    "zones": {"id": "safe", "name": "safe", "vlan": "safe", "lore": "words", "origin": "words"},
+    "regions": {"id": "safe", "name": "safe", "map": "safe", "parent": "safe", "places": "pins"},
+    "nodes": {
+        # a place's own id and name are what makes it visible: given with it
+        "id": "safe", "name": "safe", "zone": "safe", "role": "words", "lore": "words",
+        "hw": "words", "mac": "safe", "scroll": "safe", "require_group": "safe",
+        "check_host": "words", "check_expect": "safe", "monitors": "words",
+        "origin": "words", "accounts": "admin",
+        "links": {"label": "words", "url": "url", "desc": "words", "kuma": "words",
+                  "container": "words", "check_host": "words", "check_expect": "safe",
+                  "require_group": "safe"},
+    },
+    "routes": {},
+    "cables": {"id": "slug", "a_stub": "safe", "a_port": "words", "b_stub": "safe",
+               "b_port": "words", "vlan": "safe", "tagged": "safe", "speed": "safe",
+               "source": "safe", "note": "words"},
+    "stubs": {"id": "slug", "name": "words", "note": "words"},
+    "prefixes": {"id": "safe", "zone": "safe", "name": "safe", "note": "words",
+                 "ranges": {"note": "words"}},
+    "interfaces": {"name": "words", "vlan": "safe", "speed": "safe", "peer": "words",
+                   "note": "words"},
+    "racks": {"id": "safe", "name": "safe", "location": "words"},
+    "rack": {"rack": "safe", "u": "safe", "name": "words", "desc": "words"},
+    "rack_rear": {"rack": "safe", "name": "words", "desc": "words"},
+    "vms": {"dynamic": "safe"},
+    "certs": {"name": "words", "issuer": "safe", "host": "words", "expires": "safe",
+              "renews": "safe", "note": "words"},
+    "rites": {"name": "words", "when": "words", "host": "words", "note": "words",
+              "key": "slug", "expect_every": "safe", "grace": "safe", "model": "safe",
+              "at": "safe", "days": "safe", "between": "safe"},
+    "stones": "admin",
+    "collections": {"id": "slug", "name": "words", "note": "words", "services": "keys"},
+    "chronicle": {"title": "safe", "note": "words", "url": "url", "embed": "url",
+                  "chart": "safe", "range": "safe", "about": "words", "pane_group": "safe"},
+    "abyss": {"title": "safe", "note": "words", "url": "url", "embed": "url",
+              "chart": "safe", "range": "safe", "about": "words", "pane_group": "safe"},
+    "maintenance": {"id": "slug", "reason": "words", "collections": "safe",
+                    "services": "keys", "note": "words"},
+    "meta": {"title": "safe", "surveyed": "safe", "art": "safe", "map_image": "safe",
+             "tribute": "safe"},
+}
+
+#: Sections whose entries are ABOUT the places they name: one whose words name
+#: a hidden place goes whole, as one that points at it by id does. Everywhere
+#: else (a place, a network, a region, a prefix, a rack, a watching) the
+#: entry is the viewer's own and only the field goes.
+WORDS_DROP_ENTRY = frozenset({"cables", "stubs", "interfaces", "rack", "rack_rear", "vms",
+                              "certs", "rites", "collections", "maintenance"})
+
+
+def hiding(section_key, field_name, sub_name=None):
+    """What `field_name` (or its `sub_name`) in `section_key` is to a viewer
+    who may not see everything: one of `HIDING_KINDS`, or None when the
+    catalogue declares nothing for it (which `test_hiding.py` refuses)."""
+    declared = HIDING.get(section_key)
+    if declared == "admin":
+        return "admin"
+    fld = field(section_key, field_name)
+    if fld is None:
+        return None
+    if sub_name is not None:
+        sub = next((s for s in fld.get("of") or [] if s.get("name") == sub_name), None)
+        if sub is None:
+            return None
+        said = ((declared or {}).get(field_name) or {})
+        if said == "admin":
+            return "admin"                    # a part of what only an admin gets
+        said = said.get(sub_name) if isinstance(said, dict) else None
+        if said:
+            return said
+        if sub.get("ref") == "nodes":
+            return "ref"
+        return "safe" if sub.get("type") in SAFE_TYPES else None
+    said = (declared or {}).get(field_name)
+    if isinstance(said, str):
+        return said
+    if fld.get("ref") == "nodes":
+        return "ref"
+    if fld.get("type") in SAFE_TYPES:
+        return "safe"
+    if isinstance(said, dict) or fld.get("type") == "objects":
+        # a list of entries: what it is lies in its parts
+        return "parts" if fld.get("of") else None
+    return None
+
+
 # Order the editor presents them in — inventory first, then the wiring.
 SECTION_ORDER = ["nodes", "zones", "regions", "prefixes", "routes", "interfaces",
                  "cables", "stubs", "racks", "rack", "rack_rear", "vms", "rites", "certs", "collections", "stones",
@@ -1002,6 +1124,22 @@ _SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
 _HEX_RE = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
 # The dataset's idiom for "no value here" — a real em-dash, not a missing key.
 NONE_MARKS = ("—", "-", "")
+
+
+_MAC_DIGITS = re.compile(r"[0-9a-f]{12}")
+
+
+def mac_key(text):
+    """One spelling of a MAC address, `aa:bb:cc:dd:ee:ff`, or "" when `text`
+    is not one (2026-11-18). A place charted as `00-11-32-AA-BB-CC`,
+    `0011.32aa.bbcc` or `00:11:32:aa:bb:cc` is the same card: the live source,
+    the review and the importers each compared their own spelling, so a place
+    charted with dashes was never matched to what UniFi reports (the 11-12
+    audit, Live 11). For matching only: the map keeps what was typed."""
+    digits = re.sub(r"[\s:.\-]", "", str(text or "")).lower()
+    if not _MAC_DIGITS.fullmatch(digits):
+        return ""
+    return ":".join(digits[i:i + 2] for i in range(0, 12, 2))
 
 
 def _check_text(fld, value):

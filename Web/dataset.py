@@ -233,7 +233,30 @@ def _cascade_delete(data, section_key, entry_id):
                 kept.append(entry)
         if other_key in data:
             data[other_key] = kept
+    if section_key == "nodes":
+        _unpin(data, entry_id)
     return removed
+
+
+def _unpin(data, place_id):
+    """A deleted place leaves no pin and no monitor behind (2026-11-18).
+
+    Two places hold a place's id where the catalogue's references cannot see
+    it: a region's `places` is an object KEYED by place id, and
+    `signals.kuma` maps a monitor's name TO one. Both were left as they were,
+    and the leftover pin is a problem the save then refused ("pins an unknown
+    place"), so a place shown on a region could not be deleted at all (the
+    11-12 audit, Data 9). A pin is a position and goes with its place; a
+    monitor's line goes too, and the monitor reads as uncharted, as one that
+    was never charted does."""
+    for region in data.get("regions") or []:
+        pins = region.get("places") if isinstance(region, dict) else None
+        if isinstance(pins, dict) and place_id in pins:
+            region["places"] = {k: v for k, v in pins.items() if k != place_id}
+    signals = data.get("signals")
+    kuma = signals.get("kuma") if isinstance(signals, dict) else None
+    if isinstance(kuma, dict):
+        signals["kuma"] = {name: target for name, target in kuma.items() if target != place_id}
 
 
 def _carry_rename(data, section_key, old_id, new_id):

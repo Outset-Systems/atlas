@@ -30,12 +30,9 @@ class LeaseError(ValueError):
     """The text is not a lease file this importer knows."""
 
 
-_MAC = re.compile(r"^[0-9a-f]{2}([:-][0-9a-f]{2}){5}$", re.I)
-
-
 def _mac(raw):
-    raw = (raw or "").strip().strip('"').lower().replace("-", ":")
-    return raw if _MAC.match(raw) else None
+    import schema
+    return schema.mac_key((raw or "").strip().strip('"')) or None
 
 
 def _ip(raw):

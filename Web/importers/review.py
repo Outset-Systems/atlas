@@ -260,8 +260,8 @@ class _Map:
         for n in self.nodes.values():
             if n.get("origin"):
                 self.by_origin[n["origin"]] = n
-            if isinstance(n.get("mac"), str) and n["mac"]:
-                self.by_mac.setdefault(n["mac"].lower(), n)
+            if isinstance(n.get("mac"), str) and schema.mac_key(n["mac"]):
+                self.by_mac.setdefault(schema.mac_key(n["mac"]), n)
             if _real_ip(n.get("ip")):
                 self.by_ip[n["ip"]] = n
                 self.at_ip.setdefault(n["ip"], []).append(n)
@@ -274,8 +274,9 @@ class _Map:
         things or a move, and only a person can say which."""
         if row["key"] in self.by_origin:
             return CHARTED, self.by_origin[row["key"]]
-        if row.get("mac") and row["mac"].lower() in self.by_mac:
-            return CHARTED, self.by_mac[row["mac"].lower()]   # the same card, whatever its address now
+        mac = schema.mac_key(row.get("mac"))
+        if mac and mac in self.by_mac:
+            return CHARTED, self.by_mac[mac]   # the same card, whatever its address now
         ip = _real_ip(row["ip"])
         held = ([ip] if ip else []) + list(row.get("also") or [])
         for addr in held:

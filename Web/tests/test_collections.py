@@ -571,7 +571,7 @@ def test_a_hidden_id_written_another_way_is_withheld_in_every_reference(spelling
     reference names a visible place or nothing."""
     import redaction
     data = viewers.dataset(
-        routes=[{"id": "r1", "from": "alpha", "to": spelling}, {"id": "r2", "from": "alpha", "to": "beta"}],
+        routes=[{"from": "alpha", "to": spelling}, {"from": "alpha", "to": "beta"}],
         regions=[{"id": "g", "name": "G", "places": {spelling: [1, 2], "alpha": [3, 4]}}],
         certs=[{"name": "x.example", "kind": "tls", "issuer": "I", "expires": "2027-01-01", "place": spelling},
                {"name": "y.example", "kind": "tls", "issuer": "I", "expires": "2027-01-01", "place": "beta"}])
@@ -580,7 +580,7 @@ def test_a_hidden_id_written_another_way_is_withheld_in_every_reference(spelling
     text = json.dumps(out)
     assert spelling not in text, spelling
     assert out["nodes"][0]["depends_on"] == ["beta"]
-    assert [r["id"] for r in out["routes"]] == ["r2"]
+    assert [r["to"] for r in out["routes"]] == ["beta"]
     assert out["regions"][0]["places"] == {"alpha": [3, 4]}
     assert [c["name"] for c in out["certs"]] == ["y.example"]
     # an admin sees it all, as stored

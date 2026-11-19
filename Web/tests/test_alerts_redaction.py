@@ -155,12 +155,18 @@ def test_a_rule_naming_a_hidden_place_never_sends_its_name_or_note(realm):
     _clean(realm, deliveries, tested.get_data(as_text=True))
 
 
-def test_a_message_that_would_name_a_hidden_place_is_blocked_and_logged(realm):
+def test_a_place_whose_words_name_a_hidden_place_is_alerted_without_them(realm):
+    """Talker's role names the hidden place. Until 2026-11-18 the role reached
+    the message and the last check blocked the whole alert, so nobody heard
+    that Talker was down. The view an alert is written from no longer holds a
+    field that names a hidden place (the refactor's stage 4), so the alert goes
+    out without it. The last check itself is tested in test_alerts_rules."""
     alertkit.store([rule("r-talker", "place", "talker")])
     realm["tick"].step({**realm["ok"], "talker": "down"}, T0)
-    assert realm["sent"].sent == []
+    assert realm["sent"].titles == ["Talker is down"]
+    assert "What it is for" not in realm["sent"].everything()
     line = alertkit.log_lines(realm["tmp"])[-1]
-    assert line["outcome"] == "blocked" and line["why"] == "would name a hidden place"
+    assert line["outcome"] == "delivered"
     _clean(realm)
 
 

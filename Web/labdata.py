@@ -37,8 +37,21 @@ def fallback_dataset(default_path):
     """The dataset for an instance that has never been seeded."""
     if settings.FALLBACK == "bundled":
         with open(default_path, encoding="utf-8") as fh:
-            return schema.upgrade(json.load(fh))
+            return schema.upgrade(_object(json.load(fh), default_path))
     return copy.deepcopy(EMPTY_DATASET)
+
+
+def _object(data, where):
+    """`data` when it is a JSON object; else a ValueError, which every reader
+    of the map already answers as "unreadable" (2026-11-18). A file holding a
+    list or a number used to get through to `validate`, whose `data.get`
+    raised AttributeError, and `/api/status` and the read routes answered 500
+    (the 11-12 audit, Data 8 and API 6). The store's own writer refuses it the
+    same way (`dataset.FileDatasetStore._load`)."""
+    if not isinstance(data, dict):
+        raise ValueError(f"{where}: the map is not a JSON object "
+                         f"(it is {type(data).__name__})")
+    return data
 
 
 def _checked(data, prefix, where, *args):
@@ -84,7 +97,8 @@ class FileLabData:
         mtime = os.path.getmtime(path)
         if self._data is None or self._mtime != mtime:
             with open(path, encoding="utf-8") as fh:
-                data = schema.upgrade(json.load(fh))   # old section names read as today's
+                # old section names read as today's
+                data = schema.upgrade(_object(json.load(fh), path))
             problems = _checked(data, "lab-data", "lab-data loaded: %s", path)
             schema.servable(data)   # after the problems are named: every reader can walk it
             self._mtime = mtime

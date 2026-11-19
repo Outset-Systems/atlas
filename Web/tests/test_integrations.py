@@ -298,7 +298,10 @@ def test_deployment_view_right(client, monkeypatch):
     import integrations
     monkeypatch.setenv("ATLAS_LDAP_URL", "ldaps://dc.test:636")
     monkeypatch.setenv("ATLAS_SECRET_KEY", "hush-hush")
-    integrations.save({"ATLAS_PROM_URL": "http://set.prom:9090", "ATLAS_KUMA_API_KEY": "k3y"})
+    # A secret with hyphens: the random part of a temp folder's name never has
+    # one, and one such name ("atlas-test-bng3k3yn") once held the old "k3y" and
+    # failed the public image build with no leak at all (2026-11-19).
+    integrations.save({"ATLAS_PROM_URL": "http://set.prom:9090", "ATLAS_KUMA_API_KEY": "kuma-api-k3y"})
     r = client.get("/api/v2/admin/deployment")
     assert r.status_code == 200
     body = r.get_json()
@@ -309,7 +312,7 @@ def test_deployment_view_right(client, monkeypatch):
     assert knobs["ATLAS_SECRET_KEY"] == {"name": "ATLAS_SECRET_KEY", "source": "environment", "secret": True, "value": "set"}
     assert knobs["ATLAS_KUMA_API_KEY"]["value"] == "set" and knobs["ATLAS_KUMA_API_KEY"]["secret"]
     assert knobs["ATLAS_READONLY"]["source"] in ("environment", "default")
-    assert "hush-hush" not in r.get_data(as_text=True) and "k3y" not in r.get_data(as_text=True)
+    assert "hush-hush" not in r.get_data(as_text=True) and "kuma-api-k3y" not in r.get_data(as_text=True)
     assert client.post("/api/v2/admin/deployment", headers=WRITE, json={}).status_code == 405
     # review, 2026-09-03: a DSN's password never shows; the metrics flag is
     # what /metrics will DO (registry up AND token set), not the token alone

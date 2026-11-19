@@ -83,8 +83,8 @@ def fetch_snapshot(get, site):
 
 
 def _mac(text):
-    mac = str(text or "").strip().lower()
-    return mac if re.fullmatch(r"[0-9a-f]{2}(:[0-9a-f]{2}){5}", mac) else ""
+    import schema
+    return schema.mac_key(text)
 
 
 def _speed(mbps):
