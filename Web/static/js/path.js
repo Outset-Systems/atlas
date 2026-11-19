@@ -36,6 +36,12 @@ let placedWidth = -1;
    gives way first when the words are a tight fit. */
 const NAME_EDGE = 2;
 const NAME_AIR = 6;
+/* The names' tracking on a phone, the type's own first (2026-11-19, the
+   owner: "fix the 320px breaks too"). Only when the longest words cannot
+   stand side by side at the type's own 0.14em is the next step tried, and so
+   on to the last: at 320px the demo's map needs 0.12em in the dark scheme and
+   0.10em in the light; at 340px and wider nothing changes. */
+const NAME_TRACKS = ['0.12em', '0.10em', '0.08em'];
 
 let tracedEdge = null;   // "<a> <b>" of the hop currently being traced, or null
 let lastFocus = null;    // the service-card view to return to when a trace is released
@@ -209,6 +215,14 @@ function needsOf() {
   return { needs, words };
 }
 
+/** Whether the phone's columns, cut from these needs with no air, leave some
+    place narrower than its longest word: the model cuts only when the words
+    themselves cannot stand side by side (path-model `columnWidths`). */
+function cutsAWord(nodes, needs) {
+  const { pos } = layout(nodes, true, needs, 0);
+  return nodes.some((n) => (pos[n.id]?.w ?? 100) < (needs[n.id] || 0) - 1e-6);
+}
+
 /** Put what build() drew where it belongs: the tiers on a normalized 100×100
     grid, rows on a wide screen, columns on a phone, where the body is cut to
     the busiest tier's rows and scrolls and a column is as wide as its longest
@@ -220,7 +234,15 @@ function place() {
   const narrow = phone.matches;
   root.classList.toggle('pth-narrow', narrow);
   const width = nodesEl.clientWidth;
-  const { needs, words } = narrow ? needsOf() : { needs: {}, words: {} };
+  root.style.removeProperty('--pth-track');
+  let { needs, words } = narrow ? needsOf() : { needs: {}, words: {} };
+  // a word the columns would have to cut: tighten the tracking a step, and
+  // measure again, until none is or the last step is reached
+  for (const track of narrow ? NAME_TRACKS : []) {
+    if (!cutsAWord(nodes, needs)) break;
+    root.style.setProperty('--pth-track', track);
+    ({ needs, words } = needsOf());
+  }
   const { tiers, pos, rows = 1, cols = 1 } = layout(nodes, narrow,
     needs, narrow && width ? (100 * NAME_AIR) / width : 0);
   root.style.setProperty('--pth-rows', String(rows));

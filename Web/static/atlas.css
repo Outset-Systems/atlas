@@ -3427,6 +3427,9 @@ body:not(.drawer-open) #path.pth-narrow .pth-panel { left: 2vw; right: 2vw; }
      pixel, read as one name); its longest word (--pth-word, path.js) may
      still take the whole column, so this breaks no word */
   max-width: max(var(--pth-word, 100%), calc(100% - 12px));
+  /* the type's own tracking, tightened by path.js only when the longest
+     words cannot otherwise stand side by side (2026-11-19, 320px) */
+  letter-spacing: var(--pth-track, 0.14em);
 }
 #path.pth-narrow .pth-legend {
   padding: 10px 16px 14px; gap: 8px 16px; max-height: 32vh; overflow-y: auto;

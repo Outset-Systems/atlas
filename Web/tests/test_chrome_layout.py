@@ -919,9 +919,12 @@ def test_topology_on_a_phone_is_columns_that_scroll():
     assert "pointer-events: none" in rules["#path.pth-narrow :is(#pth-nodes, .pth-node)"]
     assert "pointer-events: auto" in rules["#path.pth-narrow .pth-node > *"]
     # a name wraps inside its column; its type is the wide picture's, untouched
+    # but for its tracking, which path.js tightens only when a word cannot fit
+    # (2026-11-19, 320px; pinned in test_a_phone_name_tightens_...)
     name = rules["#path.pth-narrow .pth-name"]
     assert "white-space: normal" in name
-    assert "font" not in name and "letter-spacing" not in name, "the phone's names changed type"
+    assert "font-" not in name and "font:" not in name, "the phone's names changed type"
+    assert re.findall(r"letter-spacing:[^;]*;", name) == ["letter-spacing: var(--pth-track, 0.14em);"]
     # and nothing for the narrow picture is said in a media query of its own
     for block in re.findall(r"@media[^{]*\{(?:[^{}]|\{[^{}]*\})*\}", css):
         assert "pth-narrow" not in block and (".pth-" not in block or "prefers-reduced-motion" in block), (
@@ -960,7 +963,35 @@ def test_a_phone_column_is_as_wide_as_its_longest_word():
     name = re.search(r"#path\.pth-narrow \.pth-name \{([^}]*)\}", css).group(1)
     # the last resort stays, for a map whose longest words cannot stand side by side
     assert "overflow-wrap: anywhere" in name
-    assert "font" not in name and "letter-spacing" not in name, "the fix is the columns, not the type"
+    assert "font" not in name, "the fix is the columns, not the type's size"
+    # the tracking is the type's own unless path.js tightens it (2026-11-19, 320px:
+    # test_a_phone_name_tightens_its_tracking_only_when_the_words_cannot_fit)
+    assert re.findall(r"letter-spacing:[^;]*;", name) == ["letter-spacing: var(--pth-track, 0.14em);"]
+
+
+def test_a_phone_name_tightens_its_tracking_only_when_the_words_cannot_fit():
+    """2026-11-19 (the owner: "fix the 320px breaks too"). At 320px the
+    demo's longest words could not stand side by side in four columns at the
+    type's own tracking (0.14em), so two light names and one dark broke
+    mid-word. path.js tries the type's own tracking first and tightens a step
+    (0.12, 0.10, then 0.08em at most) only while the columns would still have
+    to cut a word; at 340px and wider nothing changes, and a wide screen never
+    carries the variable."""
+    js = _read(WEB / "static" / "js" / "path.js")
+    assert "const NAME_TRACKS = ['0.12em', '0.10em', '0.08em'];" in js
+    cuts = js[js.index("function cutsAWord(nodes, needs) {"):js.index("function place() {")]
+    assert "layout(nodes, true, needs, 0)" in cuts, "the words alone, with no air, decide"
+    place = js[js.index("function place() {"):js.index("function open(")]
+    assert place.index("root.style.removeProperty('--pth-track');") < place.index("needsOf()"), (
+        "every placing starts from the type's own tracking")
+    assert "for (const track of narrow ? NAME_TRACKS : [])" in place
+    assert "if (!cutsAWord(nodes, needs)) break;" in place
+    assert "root.style.setProperty('--pth-track', track);" in place
+    # measured again at the new tracking: the columns and the words are cut from what is drawn
+    assert "({ needs, words } = needsOf());" in place
+    css = re.sub(r"/\*.*?\*/", "", _read(CSS), flags=re.S)
+    base = re.search(r"^\.pth-name \{([^}]*)\}", css, re.M).group(1)
+    assert "letter-spacing: 0.14em" in base, "the type's own tracking moved; the fallback must follow it"
 
 
 def test_a_phone_name_in_the_light_scheme_is_whole_and_apart_from_its_neighbour():
