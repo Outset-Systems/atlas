@@ -26,6 +26,17 @@ let root, svg, nodesEl, legendEl;
    and, as `#path.pth-narrow`, the rules that go with it. */
 const phone = matchMedia(PHONE_MEDIA);
 
+/* What build() drew and place() last placed: the places, and the width the
+   columns were cut for (a phone's columns are cut from measured words, so a
+   new width asks again). */
+let drawn = [];
+let placedWidth = -1;
+/* A column is its longest word, the 2px its button is short of the column,
+   and 6px of air between one column's word and the next; the air is what
+   gives way first when the words are a tight fit. */
+const NAME_EDGE = 2;
+const NAME_AIR = 6;
+
 let tracedEdge = null;   // "<a> <b>" of the hop currently being traced, or null
 let lastFocus = null;    // the service-card view to return to when a trace is released
 
@@ -95,35 +106,18 @@ function build() {
   // both endpoints to have a position, so their routes drop out with them.
   const nodes = A.DATA.nodes.filter((n) => !n.off_map);
   const feed = A.signalsFeed?.nodes || {};
+  drawn = nodes;
 
-  // lay tiers out on a normalized 100×100 grid: rows on a wide screen, columns
-  // on a phone, where the body is cut to the busiest tier's rows and scrolls
-  const narrow = phone.matches;
-  const { tiers, pos, rows = 1, cols = 1 } = layout(nodes, narrow);
-  root.classList.toggle('pth-narrow', narrow);
-  root.style.setProperty('--pth-rows', String(rows));
-  root.style.setProperty('--pth-tiers', String(cols));
-
-  // Tell the CSS how many columns the busiest tier needs, so the table can be
-  // sized to the REALM rather than to the window. These x's are percentages of
-  // .pth-body, and .pth-body used to be the whole viewport: on a wide monitor a
-  // two-node tier planted its pair a third of the screen apart and the diagram
-  // changed shape every time the window did. Capping the body at
-  // widest-tier × one column keeps the spacing honest and stops the resize
-  // from restyling the realm. Narrow windows still win — the cap is a max.
-  root.style.setProperty('--pth-cols', String(Math.max(...tiers.map((t2) => t2.length), 1)));
-
-  // edges: routes[] + parent containment (drawn quieter)
-  const edges = edgesOf(A.DATA.routes, nodes, pos);
+  // edges: routes[] + parent containment (drawn quieter). Which are drawn is
+  // settled by which places are, not by where: place() gives every curve its
+  // path and every place its point, here and again when the width changes.
+  const edges = edgesOf(A.DATA.routes, nodes, layout(nodes).pos);
 
   svg.setAttribute('viewBox', '0 0 100 100');
   svg.setAttribute('preserveAspectRatio', 'none');
   svg.innerHTML = '';
   for (const e of edges) {
-    const a = pos[e.a], b = pos[e.b];
-    const d = edgePath(a, b, narrow, cols);
     const p = document.createElementNS(SVGNS, 'path');
-    p.setAttribute('d', d);
     const st = feed[e.b]?.state;
     p.setAttribute('class',
       `pth-edge pth-k-${e.kind}${st === 'down' ? ' pth-dark' : st === 'degraded' ? ' pth-warn' : ''}`);
@@ -137,7 +131,6 @@ function build() {
     const crossing = servicesCrossing(A.DATA.nodes, e.a, e.b);
     if (!crossing.length) continue;
     const hit = document.createElementNS(SVGNS, 'path');
-    hit.setAttribute('d', d);
     hit.setAttribute('class', 'pth-hit');
     hit.dataset.a = e.a;
     hit.dataset.b = e.b;
@@ -155,11 +148,10 @@ function build() {
   }
 
   nodesEl.innerHTML = nodes.map((n) => {
-    const p = pos[n.id];
     const z = zoneById(n.zone);
     const st = feed[n.id]?.state;
     return `<button class="pth-node k-${esc(n.kind || 'vm')}${st ? ' st-' + esc(st) : ''}"
-      style="left:${p.x}%;top:${p.y}%;--n-hue:${esc(n.hue || z?.hue || FALLBACK_HUE)}" data-id="${esc(n.id)}">
+      style="--n-hue:${esc(n.hue || z?.hue || FALLBACK_HUE)}" data-id="${esc(n.id)}">
       <span class="pth-dot"><span class="svc-health ${st ? (A.svcHealthClass[st] || '') : ''}"></span></span>
       <span class="pth-name">${esc(n.name)}</span>
       <span class="pth-ip">${esc(n.ip && n.ip !== '—' ? n.ip : (n.kind === 'network' ? 'beyond' : ''))}</span>
@@ -178,6 +170,78 @@ function build() {
     `<span class="pth-lg"><i class="pth-lg-line pth-k-telemetry"></i>telemetry</span>` +
     `<span class="pth-lg"><i class="pth-lg-line pth-k-vassal"></i>${say('vassal of the hypervisor')}</span>` +
     `<span class="pth-lg pth-lg-note">◇ iron · ○ vm · ◈ ways — click any to fly there</span>`;
+
+  place();
+}
+
+/** What each drawn place needs to be read on a phone, by id, as a share of the
+    picture's width out of 100: its longest word (a name breaks at a space or
+    after a hyphen, and nowhere else by choice) or its address, whichever is
+    wider, in the type the page is drawing them in. Measured on hidden copies,
+    since a name already broken has no honest width of its own. */
+function needsOf() {
+  const width = nodesEl.clientWidth;
+  if (!width) return {};
+  const items = [];
+  for (const b of nodesEl.querySelectorAll('.pth-node')) {
+    const name = b.querySelector('.pth-name')?.textContent || '';
+    const ip = b.querySelector('.pth-ip')?.textContent || '';
+    for (const word of name.replace(/-/g, '- ').split(/\s+/).filter(Boolean)) items.push([b.dataset.id, 'pth-name', word]);
+    if (ip) items.push([b.dataset.id, 'pth-ip', ip]);
+  }
+  const probe = document.createElement('div');
+  probe.setAttribute('aria-hidden', 'true');
+  probe.style.cssText = 'position:absolute;left:0;top:0;visibility:hidden;pointer-events:none';
+  probe.innerHTML = items.map(([, cls, text]) =>
+    `<span class="${cls}" style="display:block;width:max-content;white-space:nowrap">${esc(text)}</span>`).join('');
+  root.appendChild(probe);
+  const needs = {};
+  [...probe.children].forEach((el, i) => {
+    const id = items[i][0];
+    const share = (100 * (Math.ceil(el.getBoundingClientRect().width) + NAME_EDGE)) / width;
+    needs[id] = Math.max(needs[id] || 0, share);
+  });
+  probe.remove();
+  return needs;
+}
+
+/** Put what build() drew where it belongs: the tiers on a normalized 100×100
+    grid, rows on a wide screen, columns on a phone, where the body is cut to
+    the busiest tier's rows and scrolls and a column is as wide as its longest
+    word needs. Apart from build() so a new width, or a face that arrives late,
+    moves the picture without redrawing it: a traced hop, a service's lit
+    reach and the legend's lines stay as they are. */
+function place() {
+  const nodes = drawn;
+  const narrow = phone.matches;
+  root.classList.toggle('pth-narrow', narrow);
+  const width = nodesEl.clientWidth;
+  const { tiers, pos, rows = 1, cols = 1 } = layout(nodes, narrow,
+    narrow ? needsOf() : {}, narrow && width ? (100 * NAME_AIR) / width : 0);
+  root.style.setProperty('--pth-rows', String(rows));
+  root.style.setProperty('--pth-tiers', String(cols));
+
+  // Tell the CSS how many columns the busiest tier needs, so the table can be
+  // sized to the REALM rather than to the window. These x's are percentages of
+  // .pth-body, and .pth-body used to be the whole viewport: on a wide monitor a
+  // two-node tier planted its pair a third of the screen apart and the diagram
+  // changed shape every time the window did. Capping the body at
+  // widest-tier × one column keeps the spacing honest and stops the resize
+  // from restyling the realm. Narrow windows still win — the cap is a max.
+  root.style.setProperty('--pth-cols', String(Math.max(...tiers.map((t2) => t2.length), 1)));
+
+  // an edge and its click target are the same curve
+  for (const p of svg.querySelectorAll('path')) {
+    const a = pos[p.dataset.a], b = pos[p.dataset.b];
+    p.setAttribute('d', edgePath(a, b, narrow, cols));
+  }
+  for (const b of nodesEl.querySelectorAll('.pth-node')) {
+    const p = pos[b.dataset.id];
+    b.style.left = `${p.x}%`;
+    b.style.top = `${p.y}%`;
+    if (narrow) b.style.setProperty('--pth-w', `${p.w}%`); else b.style.removeProperty('--pth-w');
+  }
+  placedWidth = width;
 }
 
 function open(focusId, reachIds, serviceLabel) {
@@ -254,4 +318,12 @@ A.buildPathScene = function buildPathScene() {
     if (!root.classList.contains('open')) return;
     open(lastFocus?.focusId, lastFocus?.reachIds, lastFocus?.serviceLabel);
   });
+  // a phone's columns are cut from measured words for one width and one face:
+  // a phone turned between two widths that are both a phone's never crosses the
+  // line above, and a face can arrive after the first drawing, so both ask again
+  const again = () => { if (root.classList.contains('open') && phone.matches) place(); };
+  if (typeof ResizeObserver === 'function') {
+    new ResizeObserver(() => { if (nodesEl.clientWidth !== placedWidth) again(); }).observe(nodesEl);
+  }
+  document.fonts?.addEventListener?.('loadingdone', again);
 };

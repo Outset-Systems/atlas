@@ -3389,8 +3389,15 @@ body.pre #scenes-list { opacity: 0; pointer-events: none; }
    answer (it is written in the legend) is in sight when the hop is pressed,
    and nothing scrolls under a head that the light scheme draws as glass. The
    head's sub-line takes a row of its own. The panel takes
-   the width the other scenes' panels take on a phone (96vw), which is what
-   lets a ten-letter name stand on one line in a map of four tiers. */
+   the width the other scenes' panels take on a phone (96vw).
+   The columns are not cut equal when a name cannot stand in an equal one
+   (later the same day, owner: "Yes, fix it"; four equal columns of 86px broke
+   an eleven-letter name after its ninth letter): path.js measures each
+   place's longest word and its address and gives the place its column's
+   width as `--pth-w`, a column as wide as its neediest place asks and the
+   rest sharing what is left. A name still breaks only at a space or after a
+   hyphen; `anywhere` is what is left for a map whose longest words cannot
+   all stand side by side at that width. */
 body:not(.drawer-open) #path.pth-narrow .pth-panel { left: 2vw; right: 2vw; }
 #path.pth-narrow .ldg-head { flex-wrap: wrap; row-gap: 4px; }
 #path.pth-narrow .ldg-sub { order: 9; flex-basis: 100%; }
@@ -3410,7 +3417,7 @@ body:not(.drawer-open) #path.pth-narrow .pth-panel { left: 2vw; right: 2vw; }
 #path.pth-narrow :is(#pth-nodes, .pth-node) { pointer-events: none; }
 #path.pth-narrow .pth-node > * { pointer-events: auto; }
 #path.pth-narrow .pth-node {
-  width: calc(100% / var(--pth-tiers, 1) - 2px); padding: 4px 0;
+  width: calc(var(--pth-w, calc(100% / var(--pth-tiers, 1))) - 2px); padding: 4px 0;
   transform: translate(-50%, -19px);
 }
 #path.pth-narrow .pth-name {

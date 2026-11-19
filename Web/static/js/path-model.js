@@ -55,8 +55,16 @@ export function tierOf(n) {
     tier order, and a tier's places stack down from the top, every tier on the
     same rows. A phone has room downward and none across, and a name needs a
     column's width to be read. `rows` is the busiest tier's count (what the
-    narrow picture's height is cut by) and `cols` the number of columns it has. */
-export function layout(nodes, narrow = false) {
+    narrow picture's height is cut by) and `cols` the number of columns it has.
+
+    `needs` (narrow only) is what each place must have to be read, by id, as a
+    share of the picture's width out of 100: its longest word or its address,
+    measured by the caller, and `air` the room the caller would like beside
+    it. A column is as wide as its neediest place asks and the rest share what
+    is left (`columnWidths`), so with no needs, or none over an equal share,
+    the columns are the equal ones they always were. A narrow place also
+    carries `w`, its column's width, and `c`, its column. */
+export function layout(nodes, narrow = false, needs = {}, air = 0) {
   const tiers = [[], [], [], []];
   for (const n of nodes) tiers[tierOf(n)].push(n);
   const TIER_Y = [8, 30, 55, 82];
@@ -72,12 +80,64 @@ export function layout(nodes, narrow = false) {
   const held = tiers.filter((tier) => tier.length);
   const cols = Math.max(held.length, 1);
   const rows = Math.max(...tiers.map((tier) => tier.length), 1);
+  const widths = columnWidths(held.map((tier) => Math.max(0, ...tier.map((n) => Number(needs?.[n.id]) || 0))), air);
+  const even = widths.every((w) => w === 100 / cols);
+  let left = 0;
   held.forEach((tier, c) => {
+    const w = widths[c];
+    // equal columns keep the centres they had, to the last digit
+    const x = even ? (100 * (c + 0.5)) / cols : left + w / 2;
+    left += w;
     tier.forEach((n, i) => {
-      pos[n.id] = { x: (100 * (c + 0.5)) / cols, y: (100 * (i + 0.5)) / rows };
+      pos[n.id] = { x, y: (100 * (i + 0.5)) / rows, w, c };
     });
   });
   return { tiers, pos, rows, cols };
+}
+
+/** Share a width of 100 among columns that each need some of it, and would
+    each like `air` beside what they need. Every column gets an equal share
+    unless need and air together are more; one that asks more takes that, and
+    the others share what is left equally (asked again, since a smaller share
+    can be less than another column asks). The air gives way first: when the
+    needs fit and the air does not, every column gets its need and an equal
+    part of what is over. When the needs alone add up to 100 or more there is
+    nothing to share and something must be cut: the neediest columns are, down
+    to one width between them, and every column that needs less than that
+    keeps all of its need. The picture still fits its width, and as few of the
+    caller's names break as can (cutting every column in proportion broke the
+    longest name in each of them). */
+export function columnWidths(needs, air = 0) {
+  const need = (needs || []).map((v) => Math.max(0, Number(v) || 0));
+  if (!need.length) return [];
+  const room = Math.max(0, Number(air) || 0);
+  const bare = need.reduce((a, b) => a + b, 0);
+  if (bare >= 100) {
+    const out = new Array(need.length).fill(0);
+    const order = need.map((_, i) => i).sort((a, b) => need[a] - need[b]);
+    let left = 100;
+    order.forEach((i, k) => {
+      const share = left / (order.length - k);
+      out[i] = Math.min(need[i], share);
+      left -= out[i];
+    });
+    return out;
+  }
+  if (bare + room * need.length >= 100) return need.map((v) => v + (100 - bare) / need.length);
+  const want = need.map((v) => v + room);
+  const out = new Array(want.length).fill(0);
+  let open = want.map((_, i) => i);
+  let left = 100;
+  for (;;) {
+    const share = left / open.length;
+    const over = open.filter((i) => want[i] > share);
+    if (!over.length) {
+      for (const i of open) out[i] = share;
+      return out;
+    }
+    for (const i of over) { out[i] = want[i]; left -= want[i]; }
+    open = open.filter((i) => !over.includes(i));
+  }
 }
 
 /** The curve between two places, as an SVG path's `d` on the same grid. Wide,
@@ -85,15 +145,18 @@ export function layout(nodes, narrow = false) {
     (the tiers are columns). Narrow, two places in one column would be joined
     by a straight line down through every name between them, so that curve
     bows out into the gap beside the column instead: toward the column before
-    it, or after it for the first. `cols` is the narrow layout's column count. */
+    it, or after it for the first. `cols` is the narrow layout's column count;
+    a place that carries its column's own width and number (`w`, `c`, from
+    `layout`) is bowed by those, since columns need not be equal. */
 export function edgePath(a, b, narrow = false, cols = 1) {
   if (!narrow) {
     const my = (a.y + b.y) / 2;
     return `M ${a.x} ${a.y} C ${a.x} ${my}, ${b.x} ${my}, ${b.x} ${b.y}`;
   }
   if (a.x === b.x) {
-    const width = 100 / Math.max(cols, 1);
-    const bx = a.x + (a.x < width ? 0.62 : -0.62) * width;
+    const width = a.w ?? 100 / Math.max(cols, 1);
+    const first = a.c != null ? a.c === 0 : a.x < width;
+    const bx = a.x + (first ? 0.62 : -0.62) * width;
     return `M ${a.x} ${a.y} C ${bx} ${a.y}, ${bx} ${b.y}, ${b.x} ${b.y}`;
   }
   const mx = (a.x + b.x) / 2;

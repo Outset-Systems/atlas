@@ -896,7 +896,7 @@ def test_topology_on_a_phone_is_columns_that_scroll():
     js = _read(WEB / "static" / "js" / "path.js")
     assert "import { PHONE_MEDIA } from './views-model.js';" in js
     assert "const phone = matchMedia(PHONE_MEDIA);" in js
-    assert "layout(nodes, narrow)" in js and "edgePath(a, b, narrow, cols)" in js
+    assert "layout(nodes, narrow," in js and "edgePath(a, b, narrow, cols)" in js
     assert "root.classList.toggle('pth-narrow', narrow);" in js
     assert "phone.addEventListener('change'" in js, "a turned phone keeps the old picture"
     css = re.sub(r"/\*.*?\*/", "", _read(CSS), flags=re.S)
@@ -926,6 +926,41 @@ def test_topology_on_a_phone_is_columns_that_scroll():
     for block in re.findall(r"@media[^{]*\{(?:[^{}]|\{[^{}]*\})*\}", css):
         assert "pth-narrow" not in block and (".pth-" not in block or "prefers-reduced-motion" in block), (
             "a media query styles the scene: the flag is path.js's")
+
+
+def test_a_phone_column_is_as_wide_as_its_longest_word():
+    """Four equal columns across a phone are 86px, and an eleven-letter name
+    needs 91: it broke after its ninth letter (seen on the demo, 2026-11-18;
+    The owner: "Yes, fix it"). The type is not touched. path.js measures each
+    place's longest word and its address, the model cuts the columns from
+    those (tests/test_path_model.mjs), and each place is told its column's
+    width; drawing and placing are apart, so a new width or a late face moves
+    the picture without redrawing it and a traced hop stays traced."""
+    js = _read(WEB / "static" / "js" / "path.js")
+    # measured in the page's own type, on copies: a name already broken has no width of its own
+    assert "function needsOf()" in js and "getBoundingClientRect().width" in js
+    assert "name.replace(/-/g, '- ').split(/\\s+/)" in js, "a name breaks at a space or after a hyphen"
+    assert "(?<" not in js, "a lookbehind is a syntax error in an older Safari, and the scene with it"
+    assert "const NAME_EDGE = 2;" in js and "const NAME_AIR = 6;" in js
+    # build() draws and place() places, and place() is what a change asks for again
+    build = js[js.index("function build() {"):js.index("function needsOf()")]
+    place = js[js.index("function place() {"):js.index("function open(")]
+    assert "place();" in build and "setAttribute('d'" not in build and "left:" not in build
+    assert "layout(nodes, narrow," in place and "needsOf()" in place and "NAME_AIR" in place
+    assert "b.style.setProperty('--pth-w', `${p.w}%`)" in place
+    assert "b.style.removeProperty('--pth-w')" in place, "a wide screen keeps a phone's widths"
+    assert "innerHTML" not in place and "classList.remove" not in place, "placing redraws or clears what is lit"
+    scene = js[js.index("A.buildPathScene = function"):]
+    assert "new ResizeObserver(" in scene and "nodesEl.clientWidth !== placedWidth" in scene
+    assert "document.fonts?.addEventListener?.('loadingdone', again)" in scene
+    assert "phone.matches) place();" in scene
+    css = re.sub(r"/\*.*?\*/", "", _read(CSS), flags=re.S)
+    node = re.search(r"#path\.pth-narrow \.pth-node \{([^}]*)\}", css).group(1)
+    assert "width: calc(var(--pth-w, calc(100% / var(--pth-tiers, 1))) - 2px)" in node
+    name = re.search(r"#path\.pth-narrow \.pth-name \{([^}]*)\}", css).group(1)
+    # the last resort stays, for a map whose longest words cannot stand side by side
+    assert "overflow-wrap: anywhere" in name
+    assert "font" not in name and "letter-spacing" not in name, "the fix is the columns, not the type"
 
 
 if __name__ == "__main__":
