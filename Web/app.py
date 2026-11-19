@@ -147,15 +147,27 @@ def _generated_session_key(key_file):
     on roughly whichever request happened to land on the other worker.
     """
     import secrets as _secrets
+    import time as _time
 
-    for _ in range(2):
+    # A reader that finds the file created but still empty (the winner between
+    # its O_EXCL create and its write) WAITS for it, as the master key's reader
+    # does (2026-11-18). It read twice with no wait and then fell back to a key
+    # of its own, so on slow storage two workers could still disagree on every
+    # cookie's signature until a restart (the 11-12 audit, Foundations 3).
+    deadline = _time.monotonic() + 2.5
+    while _time.monotonic() < deadline:
         try:
             with open(key_file, encoding="utf-8") as f:
                 key = f.read().strip()
             if key:
                 return key
-        except OSError:
+            _time.sleep(0.05)       # created, not yet written: the winner is mid-write
+            continue
+        except FileNotFoundError:
             pass
+        except OSError:
+            _time.sleep(0.05)
+            continue
         candidate = _secrets.token_hex(32)
         os.makedirs(os.path.dirname(key_file), exist_ok=True)
         try:
@@ -171,7 +183,7 @@ def _generated_session_key(key_file):
             except OSError:
                 pass
         return candidate
-    # Two passes and the file is still unreadable: better a working process with
+    # The file is still unreadable after the wait: better a working process with
     # sessions that do not survive a restart than a boot loop.
     log.error("could not establish a stable session key at %s — sessions will "
               "not survive a restart", key_file)

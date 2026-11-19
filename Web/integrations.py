@@ -314,10 +314,31 @@ def save(values):
     # that is not mentioned keeps its stored value; a key posted as '' falls
     # back to the deployment; a secret posted as '' keeps the stored one and
     # `None` clears it.
-    clean = {k: v for k, v in _load().items() if v}
-    for key, raw in (values or {}).items():
+    for key in (values or {}):
         if key not in ALLOWED:
             raise ValueError(f"{key} is not an integration setting")
+    from filelock import exclusive, lock_for
+    from jsonio import write_json_atomic
+    # THE MERGE IS UNDER THE FILE'S LOCK (2026-11-18). It read what was stored
+    # before taking any lock, and the lock it did take was a thread lock, one
+    # per worker: two saves at once (two forms, or two workers) each merged
+    # into what they had read, and the second dropped the first one's keys
+    # (the 11-12 audit, Live 5). The stored file is read again inside the
+    # lock, past the mtime cache, so a save never merges into a stale copy.
+    with _lock, exclusive(lock_for(path())):
+        _cache["mtime"] = None
+        clean = _merge(values)
+        os.makedirs(os.path.dirname(path()), exist_ok=True)
+        write_json_atomic(path(), clean)
+        _cache["mtime"] = None
+    log.info("integration settings saved (%d keys)", len(clean))
+    return describe()
+
+
+def _merge(values):
+    """What is stored, with `values` laid over it by `save`'s rules."""
+    clean = {k: v for k, v in _load().items() if v}
+    for key, raw in (values or {}).items():
         if key in SECRETS:
             if raw is None:
                 clean.pop(key, None)          # cleared
@@ -333,10 +354,4 @@ def save(values):
                 clean[key] = text
             else:
                 clean.pop(key, None)          # '' = the deployment's value
-    from jsonio import write_json_atomic
-    with _lock:
-        os.makedirs(os.path.dirname(path()), exist_ok=True)
-        write_json_atomic(path(), clean)
-        _cache["mtime"] = None
-    log.info("integration settings saved (%d keys)", len(clean))
-    return describe()
+    return clean

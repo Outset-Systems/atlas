@@ -717,8 +717,13 @@ class DatasetStore:
             log.warning("dataset write by %s saved over %d problem(s) already on the map: %s",
                         actor, len(tolerated), "; ".join(tolerated[:5]))
 
-        revision = self._record(before, actor, summaries, ops, note)
+        # THE SAVE FIRST, THEN ITS RECORD (2026-11-18). The snapshot and the
+        # journal line were written before the save, so a save that failed
+        # left a revision for a change that never landed (the 11-12 audit,
+        # Data 14). The snapshot is `before`, held in memory, so nothing is
+        # lost by writing it second; both run under the site's write lock.
         self._save(after)
+        revision = self._record(before, actor, summaries, ops, note)
         log.info("dataset write by %s: %s", actor, "; ".join(summaries))
         return {
             "ok": True,
@@ -789,8 +794,12 @@ class DatasetStore:
             self._prune()
         except OSError as e:
             # History is valuable, but not more valuable than the edit. Losing
-            # the journal must not lose the change the user just made.
+            # the journal must not lose the change the user just made. No id is
+            # returned for it (2026-11-18): the id was handed back as if it
+            # existed, and the next save, finding no journal line, handed out
+            # the same one again (the 11-12 audit, Data 14).
             log.warning("could not record revision %d: %s", revision_id, e)
+            return None
         return revision_id
 
     def _prune(self):
@@ -859,9 +868,9 @@ class DatasetStore:
             before = self._load()
         provenance.restamp_revert(before, snapshot, actor)
         summary = [f"reverted to the state before revision {revision_id}"]
+        self._save(snapshot)
         new_id = self._record(before, actor, summary,
                               [{"op": "revert", "to": int(revision_id)}], "")
-        self._save(snapshot)
         log.info("dataset reverted to r%s by %s", revision_id, actor)
         return {"ok": True, "stamp": content_stamp(snapshot),
                 "revision": new_id, "changed": summary}

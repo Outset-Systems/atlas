@@ -80,9 +80,14 @@ class FileLabData:
     def __init__(self, path, default_path):
         self.path = path
         self.default_path = default_path
-        self._mtime = None
-        self._data = None
-        self._problems = []
+        # ONE VALUE, SWAPPED WHOLE (2026-11-18): (mtime, data, problems). It
+        # was three attributes written and read in separate statements, across
+        # a worker's threads, so a reader could return old data with the new
+        # mtime; the ETag then paired the new time with the old body, and a
+        # browser's revalidation answered 304 until the next write (the 11-12
+        # audit, Data 12). A tuple is replaced in one step and read into a
+        # local once.
+        self._cached = None
 
     def seeded(self):
         """True once a real dataset exists — false means show the wizard."""
@@ -95,15 +100,16 @@ class FileLabData:
             return data, 0, validate(data)
         path = self.path
         mtime = os.path.getmtime(path)
-        if self._data is None or self._mtime != mtime:
+        cached = self._cached
+        if cached is None or cached[0] != mtime:
             with open(path, encoding="utf-8") as fh:
                 # old section names read as today's
                 data = schema.upgrade(_object(json.load(fh), path))
             problems = _checked(data, "lab-data", "lab-data loaded: %s", path)
             schema.servable(data)   # after the problems are named: every reader can walk it
-            self._mtime = mtime
-            self._data, self._problems = data, problems
-        return self._data, self._mtime, self._problems
+            cached = (mtime, data, problems)
+            self._cached = cached
+        return cached[1], cached[0], cached[2]
 
     def invalidate(self):
         """Drop the cache after a write, so the next read sees it immediately.
@@ -112,8 +118,7 @@ class FileLabData:
         filesystem timestamp granularity is exactly the sequence the editor
         produces — save, then re-fetch to redraw.
         """
-        self._data = None
-        self._mtime = None
+        self._cached = None
 
 
 class DbLabData:
@@ -132,9 +137,7 @@ class DbLabData:
         self._dump, self._scope, self._stamp = dump_labdata, session_scope, site_stamp
         self._site = site_slug
         self.default_path = default_path
-        self._stamp_seen = None
-        self._data = None
-        self._problems = []
+        self._cached = None             # (stamp, data, problems): see FileLabData
 
     def seeded(self):
         from sqlalchemy.exc import SQLAlchemyError
@@ -155,20 +158,21 @@ class DbLabData:
                                 self._site, settings.FALLBACK)
                     data = fallback_dataset(self.default_path)
                     return data, 0, validate(data)
-                if self._data is None or stamp != self._stamp_seen:
+                cached = self._cached
+                if cached is None or stamp != cached[0]:
                     data = schema.upgrade(self._dump(session, self._site))
                     problems = _checked(
                         data, "lab-data(db)",
                         "lab-data loaded from db: site=%s v%d", self._site, stamp[0])
                     schema.servable(data)
-                    self._stamp_seen, self._data, self._problems = stamp, data, problems
+                    cached = (stamp, data, problems)
+                    self._cached = cached
         except SQLAlchemyError as e:
             raise ValueError(f"db backend unavailable: {e}") from e
-        return self._data, self._stamp_seen[1], self._problems
+        return cached[1], cached[0][1], cached[2]
 
     def invalidate(self):
-        self._data = None
-        self._stamp_seen = None
+        self._cached = None
 
 
 def build(backend, *, data_path, default_path, site):

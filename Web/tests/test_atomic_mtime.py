@@ -48,3 +48,40 @@ def test_a_saved_source_reaches_the_hub_without_a_restart(settings_file):
     integrations.save({"ATLAS_SIGNALS_SOURCES": "kuma"})
     hub.feed()
     assert hub.enabled == ["kuma"]
+
+
+# ── a save that fails leaves nothing behind (audit 2026-11-12, Foundations 2 and 12) ──
+
+def test_a_save_whose_rename_fails_leaves_no_temp_file(tmp_path, monkeypatch):
+    """The temp file was left when the last retry failed, and in the maps
+    folder it was then listed as a render."""
+    import jsonio
+    target = tmp_path / "x.json"
+    target.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(jsonio, "_REPLACE_BACKOFF", 0)
+
+    def refuse(src, dst):
+        raise PermissionError("locked")
+    monkeypatch.setattr(jsonio.os, "replace", refuse)
+    import pytest
+    with pytest.raises(PermissionError):
+        jsonio.write_json_atomic(str(target), {"a": 1})
+    assert sorted(p.name for p in tmp_path.iterdir() if not p.name.endswith(".bak")) == ["x.json"]
+    assert target.read_text(encoding="utf-8") == "{}"
+
+
+def test_an_unlock_that_fails_does_not_fail_a_save_that_succeeded(tmp_path, monkeypatch):
+    import filelock
+
+    def broken(fd):
+        raise OSError(95, "not supported")
+    real = filelock._unlock
+    calls = []
+    monkeypatch.setattr(filelock, "_unlock", lambda fd: (calls.append(fd), real(fd)))
+    with filelock.exclusive(str(tmp_path / "x.lock")):
+        pass
+    assert calls
+    if hasattr(filelock, "fcntl"):
+        monkeypatch.setattr(filelock.fcntl, "flock", lambda fd, op: broken(fd) if op == filelock.fcntl.LOCK_UN else None)
+        with filelock.exclusive(str(tmp_path / "y.lock")):
+            pass

@@ -334,6 +334,17 @@ def save_layout(name, body):
     if not isinstance(body, dict):
         raise ValueError("expected an object of places, zones and regions")
     target = os.path.join(settings.MAPS_DIR, filename)
+    # read, merge and write under the sidecar's writer lock (2026-11-18): two
+    # admins (or two workers) saving one style at once each merged into what
+    # they had read and the second write lost the first one's spots (the 11-12
+    # audit, Foundations 7)
+    from filelock import exclusive, lock_for
+    with exclusive(lock_for(target)):
+        return _merge_layout(target, filename, body)
+
+
+def _merge_layout(target, filename, body):
+    """`save_layout`'s read-merge-write, run under the sidecar's lock."""
     raw = {}
     if os.path.isfile(target):
         try:

@@ -388,3 +388,47 @@ def test_probes_are_rate_limited(client, monkeypatch):
                     json={"kind": "loki", "settings": {"ATLAS_LOKI_URL": "http://l:3100"}})
     assert r.status_code == 429
     adm._probe_log.clear()
+
+
+def test_a_save_merges_into_what_is_stored_when_it_writes_not_before(handle, monkeypatch):
+    """The merge read the file before taking any lock, and the lock was one per
+    worker: two saves at once each merged into what they had read, and the
+    second dropped the first one's keys (audit 2026-11-12, Live 5)."""
+    import json
+    import threading
+
+    import integrations
+    from filelock import exclusive, lock_for
+    integrations.save({"ATLAS_PROM_URL": "http://first.prom:9090"})
+    done, read = threading.Event(), threading.Event()
+    real_load = integrations._load
+
+    saver = {}
+
+    def load():
+        # only the saving thread's read counts: the app's own background
+        # poll reads the Sources too, whenever it likes
+        if threading.current_thread() is saver.get("thread"):
+            read.set()
+        return real_load()
+    monkeypatch.setattr(integrations, "_load", load)
+    with exclusive(lock_for(integrations.path())):
+        worker = threading.Thread(target=lambda: (integrations.save({"ATLAS_LOKI_URL": "http://loki:3100"}),
+                                                  done.set()))
+        saver["thread"] = worker
+        worker.start()
+        # the save may not read what is stored while another writer holds it
+        assert not read.wait(1.5), "the save read the stored file before taking its lock"
+        assert not done.is_set()
+        # another worker's save lands while this one waits
+        with open(integrations.path(), encoding="utf-8") as fh:
+            stored = json.load(fh)
+        stored["ATLAS_KUMA_URL"] = "http://other.worker:3001"
+        with open(integrations.path(), "w", encoding="utf-8") as fh:
+            json.dump(stored, fh)
+    worker.join(10)
+    assert done.is_set()
+    integrations._cache["mtime"] = None
+    assert integrations.get("ATLAS_KUMA_URL") == "http://other.worker:3001"
+    assert integrations.get("ATLAS_LOKI_URL") == "http://loki:3100"
+    assert integrations.get("ATLAS_PROM_URL") == "http://first.prom:9090"

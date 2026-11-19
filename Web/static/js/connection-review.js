@@ -145,6 +145,12 @@ async function runImport(key, box, view) {
   await A.refreshData?.();
   // the list redraws from a fresh read, and if that fails the import still happened
   const next = await drawReview(key, box).catch(() => box);
+  if (j.revision == null) {
+    // the save landed and its change-log entry could not be written: nothing
+    // to undo from here (2026-11-18)
+    resultLine(next, 'dir-ok', `Added ${j.added} to the map. The change log could not be written, so this cannot be undone from here. `);
+    return;
+  }
   const line = resultLine(next, 'dir-ok', `Added ${j.added} to the map. It is in the change log. `);
   const undo = document.createElement('button');
   undo.className = 'sp-btn';

@@ -170,14 +170,25 @@ def write_bytes_atomic(path, blob):
 
 
 def _replace_with_retry(tmp, path):
-    """`os.replace`, retried briefly through a transient sharing violation."""
-    for attempt in range(_REPLACE_ATTEMPTS):
+    """`os.replace`, retried briefly through a transient sharing violation.
+
+    The temp file goes when the replace finally fails (2026-11-18): it was
+    left behind, and in the maps folder `mapart.available()` then listed
+    `x.png.<pid>.<n>.tmp` as a render (the 11-12 audit, Foundations 12)."""
+    try:
+        for attempt in range(_REPLACE_ATTEMPTS):
+            try:
+                os.replace(tmp, path)
+                return
+            except PermissionError:
+                if attempt == _REPLACE_ATTEMPTS - 1:
+                    raise
+                time.sleep(_REPLACE_BACKOFF * (attempt + 1))
+                log.warning("%s was locked; retrying the save (%d/%d)",
+                            path, attempt + 2, _REPLACE_ATTEMPTS)
+    except BaseException:
         try:
-            os.replace(tmp, path)
-            return
-        except PermissionError:
-            if attempt == _REPLACE_ATTEMPTS - 1:
-                raise
-            time.sleep(_REPLACE_BACKOFF * (attempt + 1))
-            log.warning("%s was locked; retrying the save (%d/%d)",
-                        path, attempt + 2, _REPLACE_ATTEMPTS)
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise

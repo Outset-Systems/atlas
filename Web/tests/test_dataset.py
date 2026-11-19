@@ -394,3 +394,34 @@ def test_a_deleted_place_leaves_no_pin_and_no_monitor_behind(store):
     assert region["places"] == {"gateway": {"x": 30, "y": 40}}
     assert "Testhold web" not in data["signals"]["kuma"]
     assert not any(n.get("id") == "testhold" for n in data["nodes"])
+
+
+def test_a_save_that_fails_leaves_no_revision_behind(store, monkeypatch):
+    """The snapshot and the journal line were written before the save, so a
+    save that failed left a revision for a change that never landed (audit
+    2026-11-12, Data 14)."""
+    before = store.revisions(limit=None)
+
+    def fail(data):
+        raise OSError("the disk is full")
+    monkeypatch.setattr(store, "_save", fail)
+    with pytest.raises(OSError):
+        store.apply([{"op": "insert", "section": "nodes", "body": a_node()}], actor="t")
+    assert store.revisions(limit=None) == before
+
+
+def test_a_revision_that_could_not_be_recorded_is_not_handed_out(store, monkeypatch):
+    """A journal that could not be written still returned its revision id, and
+    the next save, finding no line for it, handed out the same id again."""
+    import builtins
+    real_open = builtins.open
+
+    def no_journal(path, *a, **k):
+        if str(path).endswith("-journal.jsonl") and a and a[0] == "a":
+            raise OSError("read-only")
+        return real_open(path, *a, **k)
+    with monkeypatch.context() as patched:
+        patched.setattr(builtins, "open", no_journal)
+        out = store.apply([{"op": "insert", "section": "nodes", "body": a_node()}], actor="t")
+    assert out["ok"] is True and out["revision"] is None
+    assert any(n.get("id") == "testhold" for n in store.read()[0]["nodes"])

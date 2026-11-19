@@ -110,6 +110,26 @@ def test_concurrent_workers_agree_on_one_session_key(tmp_path):
         assert f.read().strip() == keys.pop()
 
 
+def test_a_worker_that_finds_the_session_key_mid_write_waits_for_it(tmp_path):
+    """The winner creates the file, then writes it. A worker reading between
+    the two found it empty, read once more, and then kept a random key of its
+    own, so the workers disagreed on every cookie until a restart (audit
+    2026-11-12, Foundations 3)."""
+    import threading
+    import time
+
+    import app as app_module
+    key_file = tmp_path / "secrets" / "session.key"
+    key_file.parent.mkdir(parents=True)
+    key_file.write_text("", encoding="utf-8")          # created, not yet written
+
+    def winner_writes_late():
+        time.sleep(0.4)
+        key_file.write_text("the-winners-key", encoding="utf-8")
+    threading.Thread(target=winner_writes_late).start()
+    assert app_module._generated_session_key(str(key_file)) == "the-winners-key"
+
+
 def test_an_existing_session_key_is_reused(tmp_path):
     import app as app_module
     key_file = tmp_path / "secrets" / "session.key"

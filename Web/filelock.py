@@ -51,7 +51,14 @@ try:                                    # POSIX
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
 
     def _unlock(fd):
-        fcntl.flock(fd, fcntl.LOCK_UN)
+        # Guarded as the Windows one is (2026-11-18). On a filesystem with no
+        # flock (the degrade branch below) LOCK_UN raised in the `finally`
+        # after the body had already saved: the caller saw a failed save, and
+        # the descriptor was never closed (the 11-12 audit, Foundations 2).
+        try:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        except OSError:
+            pass
 
     _BUSY = (errno.EACCES, errno.EAGAIN, errno.EWOULDBLOCK)
 except ImportError:                     # Windows

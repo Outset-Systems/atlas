@@ -328,6 +328,43 @@ def test_the_viewer_gallery_carries_the_charted_theme_and_default(arena):
 PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 32
 
 
+def test_a_layout_save_reads_the_sidecar_under_its_lock(art, tmp_path, monkeypatch):
+    """Two admins (or two workers) saving one style at once each merged into
+    what they had read, and the second write lost the first one's spots: the
+    sidecar was read and written with no lock (audit 2026-11-12, Foundations 7)."""
+    import json
+    import threading
+
+    from filelock import exclusive, lock_for
+    _style_files(art, tmp_path, COVE)
+    target = str(tmp_path / "maps" / "isle.style.json")
+    read, done = threading.Event(), threading.Event()
+    real = art._read_sidecar
+    saver = {}
+
+    def reading(path):
+        # only the saving thread's read counts (the style listing reads too)
+        if threading.current_thread() is saver.get("thread"):
+            read.set()
+        return real(path)
+    monkeypatch.setattr(art, "_read_sidecar", reading)
+    with exclusive(lock_for(target)):
+        worker = threading.Thread(target=lambda: (art.save_layout(
+            "isle.png", {"places": {"mine": {"x": 1, "y": 1}}}), done.set()))
+        saver["thread"] = worker
+        worker.start()
+        assert not read.wait(1.5), "the save read the sidecar before taking its lock"
+        raw = json.loads(COVE)
+        raw["places"] = {"theirs": {"x": 2, "y": 2}}
+        with open(target, "w", encoding="utf-8") as fh:
+            json.dump(raw, fh)
+    worker.join(10)
+    assert done.is_set()
+    with open(target, encoding="utf-8") as fh:
+        places = json.load(fh)["places"]
+    assert places == {"theirs": {"x": 2, "y": 2}, "mine": {"x": 1, "y": 1}}
+
+
 def _style_files(art, tmp_path, sidecar):
     maps = tmp_path / "maps"
     maps.mkdir(exist_ok=True)
