@@ -114,6 +114,23 @@ def record(hosts, backend=None, site=None):
     return new
 
 
+def merge_into(existing, host):
+    """Fold one sighting into what is already known of a device, in place.
+    THE rule for both backends (2026-11-19, the 11-12 audit's Live 6: db mode
+    kept its own, and a UniFi client list overwrote what a scan had found):
+    a field the sighting carries replaces the known one, except that a lease
+    or a controller's client list only fills what is empty. They add what a
+    scan could not see (the MAC, the name the device gave itself) and never
+    overwrite what one found. Every source that saw the device is kept."""
+    incoming = {k: v for k, v in host.items() if v is not None}
+    if incoming.get("source") in ("dhcp", "unifi"):
+        incoming = {k: v for k, v in incoming.items()
+                    if k in ("ip", "source") or not existing.get(k)}
+    incoming["source"] = _sources(existing.get("source"), host.get("source"))
+    existing.update(incoming)
+    return existing
+
+
 def _merge_hosts(state, hosts):
     new = 0
     for host in hosts:
@@ -122,15 +139,7 @@ def _merge_hosts(state, hosts):
             continue
         existing = state["hosts"].get(key)
         if existing:
-            incoming = {k: v for k, v in host.items() if v is not None}
-            if incoming.get("source") in ("dhcp", "unifi"):
-                # a lease, or a controller's client list, adds what a scan could
-                # not see (the MAC, the name the device gave itself) and never
-                # overwrites what one found
-                incoming = {k: v for k, v in incoming.items()
-                            if k in ("ip", "source") or not existing.get(k)}
-            incoming["source"] = _sources(existing.get("source"), host.get("source"))
-            existing.update(incoming)
+            merge_into(existing, host)
             existing["last_seen"] = _now()
         else:
             state["hosts"][key] = {**host, "first_seen": _now(), "last_seen": _now(),
@@ -161,33 +170,43 @@ def _record_db(hosts, site_slug):
         if site is None:
             return 0
         for host in hosts:
-            row = session.scalar(select(ObservedNode).where(
-                ObservedNode.site_id == site.id,
-                ObservedNode.ip == host.get("ip"),
-                ObservedNode.mac == host.get("mac")))
+            if not key_of(host):
+                continue
+            row = _observed_row(session, select, ObservedNode, site.id, host)
             if row is None:
                 row = ObservedNode(site_id=site.id, ip=host.get("ip"), mac=host.get("mac"),
-                                   source=host.get("source") or "nmap")
+                                   hostname=host.get("hostname"),
+                                   source=host.get("source") or "nmap",
+                                   raw_json={"vendor": host.get("vendor"),
+                                             "ports": host.get("ports") or []})
                 session.add(row)
                 new += 1
             else:
-                row.source = _sources(row.source, host.get("source"))
-            # merge, as the file store does: a lease carries no vendor or ports,
-            # and must not erase what a scan of the same device found
-            raw = dict(row.raw_json or {})
-            if host.get("vendor"):
-                raw["vendor"] = host["vendor"]
-            if "ports" in host:
-                raw["ports"] = host.get("ports") or []
-            raw.setdefault("ports", [])
-            raw.setdefault("vendor", None)
-            if host.get("source") == "dhcp":
-                row.hostname = row.hostname or host.get("hostname")
-            else:
-                row.hostname = host.get("hostname") or row.hostname
-            row.raw_json = raw
+                # the file store's rule, on the row read as the file keeps it
+                raw = dict(row.raw_json or {})
+                known = merge_into({"ip": row.ip, "mac": row.mac, "hostname": row.hostname,
+                                    "vendor": raw.get("vendor"), "ports": raw.get("ports"),
+                                    "source": row.source}, host)
+                row.mac, row.hostname, row.source = known.get("mac"), known.get("hostname"), known["source"]
+                row.raw_json = {**raw, "vendor": known.get("vendor"), "ports": known.get("ports") or []}
             row.last_seen = now
     return new
+
+
+def _observed_row(session, select, ObservedNode, site_id, host):
+    """The row a sighting belongs to, keyed as the file store keys it
+    (`key_of`): by address when it has one, whatever MAC either side holds,
+    else by MAC among rows with no address. db mode used to match address AND
+    MAC, so a scan (no MAC) and a lease (a MAC) of one device were two rows
+    (the 11-12 audit's Live 6). Rows from before that can still pair up under
+    one address: the one with this MAC is taken first, else the oldest."""
+    ip, mac = host.get("ip"), host.get("mac")
+    q = select(ObservedNode).where(ObservedNode.site_id == site_id)
+    q = q.where(ObservedNode.ip == ip) if ip else q.where(ObservedNode.ip.is_(None), ObservedNode.mac == mac)
+    rows = session.scalars(q.order_by(ObservedNode.id)).all()
+    if not rows:
+        return None
+    return next((r for r in rows if mac and r.mac == mac), rows[0])
 
 
 def listing(data, backend=None, site=None):

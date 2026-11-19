@@ -434,3 +434,52 @@ def test_an_unchanged_place_keeps_its_row_and_its_import_time(db):
     changed = data["nodes"][0]["id"]
     assert {k: v for k, v in after.items() if k != changed} == {k: v for k, v in before.items() if k != changed}
     assert after[changed][0] == before[changed][0] and after[changed][1] != before[changed][1]
+
+
+def _sql_types(engine, table, col):
+    from sqlalchemy import text
+    with engine.connect() as c:
+        return {row[0]: row[1] for row in c.execute(text(f"SELECT slug, typeof({col}) FROM {table}"))}
+
+
+def test_a_value_its_column_cannot_hold_stays_as_written(db):
+    """The 11-12 audit's Data 11: the dataset's "—" for a zone with no VLAN
+    went into the integer column as given (SQLite kept it as text, a typed
+    database refuses it, and a sort by VLAN crashed). A value its column
+    cannot hold now stays in the row's extra as written, by both load paths,
+    and the map dumps exactly as it came in."""
+    engine, factory = db
+    data = copy.deepcopy(BUNDLED)   # not _fixture(): its old section name is renamed on load
+    data["zones"][0]["vlan"] = "—"
+    data["zones"][1]["label_x"] = "12"
+    data["zones"][1]["hide_label"] = "yes"
+    data["nodes"][0]["x"] = "left"
+    data["nodes"][1]["y"] = True
+    _write(factory, data, "full", partial=False)
+    assert _dump(factory, "full") == data
+    z0, z1 = data["zones"][0]["id"], data["zones"][1]["id"]
+    n0, n1 = data["nodes"][0]["id"], data["nodes"][1]["id"]
+    assert _sql_types(engine, "zones", "vlan")[z0] == "null"
+    assert _sql_types(engine, "zones", "label_x")[z1] == "null"
+    assert _sql_types(engine, "zones", "hide_label")[z1] == "null"
+    assert _sql_types(engine, "nodes", "x")[n0] == "null"
+    assert _sql_types(engine, "nodes", "y")[n1] == "null"
+    # a real number still goes in its column
+    numbered = [z for z in data["zones"] if isinstance(z.get("vlan"), int)]
+    if numbered:
+        assert _sql_types(engine, "zones", "vlan")[numbered[0]["id"]] == "integer"
+
+    # the Desk's partial save: a row written before the fix (text in the
+    # integer column) is healed by the next save, and the dump is unchanged
+    from sqlalchemy import text
+    _write(factory, data, "part", partial=False)
+    with engine.begin() as c:
+        c.execute(text("UPDATE zones SET vlan = :v WHERE slug = :s AND site_id = "
+                       "(SELECT id FROM sites WHERE slug = 'part')"), {"v": "—", "s": z0})
+    data["zones"][0]["name"] = "renamed"
+    _write(factory, data, "part", partial=True)
+    assert _dump(factory, "part") == data
+    with engine.connect() as c:
+        kind = c.execute(text("SELECT typeof(vlan) FROM zones WHERE slug = :s AND site_id = "
+                              "(SELECT id FROM sites WHERE slug = 'part')"), {"s": z0}).scalar()
+    assert kind == "null"

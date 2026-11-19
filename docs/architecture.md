@@ -225,6 +225,9 @@ filtered per viewer before it is served, and responses vary on the viewer.
 
 ### The db backend
 
+Experimental: no deployment runs on it yet, and the file backend is the one
+in daily use.
+
 `ATLAS_DATA_BACKEND=db` stores the same dataset in SQLAlchemy models
 (`store/models.py`: sites, zones, nodes and the rest), so one instance can
 hold several sites and accept pushes from relay agents. Schema changes are

@@ -51,7 +51,7 @@ beside `ATLAS_DATA` and rarely need changing.
 | Variable | Default | What it does | Secret | Settings screen |
 |---|---|---|---|---|
 | `ATLAS_DATA` | `/data/lab-data.json` | The dataset file (file backend). Its directory is the data directory every other default below is relative to, including the accounts store and the key files. | no | no |
-| `ATLAS_DATA_BACKEND` | `file` | `file` keeps the dataset as one JSON file. `db` keeps the same dataset in a SQL database through SQLAlchemy (needed for multiple sites and the relay ingest). | no | no |
+| `ATLAS_DATA_BACKEND` | `file` | `file` keeps the dataset as one JSON file. `db` keeps the same dataset in a SQL database through SQLAlchemy (needed for multiple sites and the relay ingest). `db` is experimental: no deployment runs on it yet. | no | no |
 | `ATLAS_DB_URL` | `sqlite:////data/atlas.db` | SQLAlchemy URL for the `db` backend and for `cli.py`'s dataset and importer commands, which work on this database only. A URL that carries a password is shown masked on the Settings screen. | treat as secret if it holds a password (no `_FILE` variant) | no |
 | `ATLAS_SITE` | `default` | Which site the `db` backend serves, and which site the `relay` signals source reads. | no | no |
 | `ATLAS_FALLBACK` | `empty` | What an instance with no dataset shows. `empty`: an empty map that invites you to start charting. `bundled`: the dataset baked into the image (the public image bundles an invented demo lab, plus a demo status feed that colours it while no source is configured and the instance is unseeded). The first save writes your own copy to `ATLAS_DATA` and silences the demo feed. | no | no |

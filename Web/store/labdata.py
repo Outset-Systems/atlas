@@ -42,6 +42,29 @@ _RELATIONAL_TOP_KEYS = ("zones", "nodes", "routes")
 _TOP_ORDER_KEY = "_top_keys"
 
 
+# The typed columns a dataset fills, and what each holds. A value of another
+# type (the dataset's "—" for a zone with no VLAN, a coordinate typed as text)
+# stays in extra_json as given, so it round-trips exactly and the column holds
+# only what its type says: SQLite kept the text in an integer column, which a
+# typed database refuses and which broke every sort by VLAN (2026-11-19, the
+# 11-12 audit's Data 11). bool is an int in Python, so it is refused by name.
+_COLUMN_TYPES = {
+    "vlan": (int,),
+    "label_x": (int, float), "label_y": (int, float),
+    "x": (int, float), "y": (int, float),
+    "hide_label": (bool,),
+}
+
+
+def _fits(col, v):
+    want = _COLUMN_TYPES.get(col)
+    if want is None:
+        return True
+    if isinstance(v, bool) and bool not in want:
+        return False
+    return isinstance(v, want)
+
+
 def _split(obj, keymap, skip=()):
     """Partition a dataset object into (columns, extra) per the fidelity rules."""
     cols, extra = {}, {}
@@ -49,7 +72,7 @@ def _split(obj, keymap, skip=()):
         if k in skip:
             continue
         col = keymap.get(k)
-        if col is not None and v is not None:
+        if col is not None and v is not None and _fits(col, v):
             cols[col] = v
         else:
             extra[k] = v

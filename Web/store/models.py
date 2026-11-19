@@ -172,7 +172,7 @@ class ObservedNode(Base):
     ip: Mapped[str | None] = mapped_column(String(64), index=True)
     mac: Mapped[str | None] = mapped_column(String(32))
     hostname: Mapped[str | None] = mapped_column(String(255))
-    source: Mapped[str] = mapped_column(String(16), default="nmap")
+    source: Mapped[str] = mapped_column(String(64), default="nmap")  # "nmap, dhcp, unifi" outgrew 16 (2026-11-19)
     matched_node_id: Mapped[int | None] = mapped_column(ForeignKey("nodes.id"))
     first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
