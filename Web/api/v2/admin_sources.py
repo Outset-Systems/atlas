@@ -15,7 +15,7 @@ import settings
 from context import atlas
 from security import actor
 
-from . import _body, admin
+from . import _body, _part, admin
 from .admin import (
     _probe_allowed, _secret_stays_home, _valid_url, admin_bp,
 )
@@ -36,10 +36,12 @@ def _hub_state():
         return {"enabled": [], "last": {}}
 
 
-def _probe(kind, url, key, path=None):
+def _probe(kind, url, key, path=None, verify=True):
     """Ask one source whether it is there, the way the Atlas will ask it.
     Returns (ok, detail). Never raises — the answer is the point. `path` is
-    the decoy feed's roster path as typed (None = the one in force)."""
+    the decoy feed's roster path as typed (None = the one in force). `verify`
+    is False when Kuma's "self-signed certificate" box is ticked: the live
+    adapter reads that box, so a Kuma that worked live used to fail "Test"."""
     import requests
     base = (url or "").rstrip("/")
     if not base:
@@ -58,7 +60,8 @@ def _probe(kind, url, key, path=None):
             r.raise_for_status()
             return True, "Loki is ready"
         if kind == "kuma":
-            r = requests.get(base + "/metrics", auth=("", key) if key else None, timeout=5)
+            r = requests.get(base + "/metrics", auth=("", key) if key else None, timeout=5,
+                             verify=verify)
             if r.status_code == 401:
                 return False, "Kuma refused the key"
             r.raise_for_status()
@@ -202,7 +205,7 @@ def integrations_test():
     kind = str(body.get("kind") or "").strip().lower()
     if kind not in _PROBE_FIELDS:
         return jsonify({"ok": False, "error": f"not a source that can be tested: {kind!r}"}), 400
-    proposed = body.get("settings") or {}
+    proposed = _part(body, "settings")
     unknown = [k for k in proposed if k not in integrations.ALLOWED]
     if unknown:
         return jsonify({"ok": False, "error": f"not an integration setting: {unknown[0]}"}), 400
@@ -221,10 +224,16 @@ def integrations_test():
         if path and not integrations.valid_decoys_path(path):
             return jsonify({"ok": False, "error": "ATLAS_DECOYS_PATH must be an absolute "
                                                   "path like /api/stones."}), 400
-    # the path only when one was typed: `_probe(kind, url, key)` stays the call shape.
-    # Asked through `admin`, the name the probe is reached by everywhere else.
-    ok, detail = (admin._probe(kind, url, key, path=path) if path
-                  else admin._probe(kind, url, key))
+    # the path only when one was typed, and `verify` only when the box is ticked:
+    # `_probe(kind, url, key)` stays the call shape. Asked through `admin`, the
+    # name the probe is reached by everywhere else.
+    extra = {"path": path} if path else {}
+    if kind == "kuma":
+        # the box as typed in the form, else as saved: what the adapter will read
+        ticked = str(proposed.get("ATLAS_KUMA_INSECURE") or "").strip()
+        if (ticked or integrations.get("ATLAS_KUMA_INSECURE").strip()) == "1":
+            extra["verify"] = False
+    ok, detail = admin._probe(kind, url, key, **extra)
     log.info("v2: source test %s by %s: ok=%s", kind, actor(), ok)
     return jsonify({"ok": ok, "detail": detail if ok else "", "error": "" if ok else detail})
 
@@ -233,7 +242,7 @@ def integrations_test():
 @write_required
 def integrations_save():
     import integrations
-    proposed = _body().get("settings") or {}
+    proposed = _part(_body(), "settings")
     unknown = [k for k in proposed if k not in integrations.ALLOWED]
     if unknown:
         return jsonify({"error": f"not an integration setting: {unknown[0]}"}), 400

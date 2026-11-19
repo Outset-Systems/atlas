@@ -340,3 +340,28 @@ def test_a_token_and_a_viewer_with_no_groups_do_not_share_a_cache_entry(realm, v
     again = realm.app.test_client().get("/api/v2/lab-data", headers={
         **bearer(token), "If-None-Match": as_viewer.headers["ETag"]})
     assert again.status_code == 200
+
+
+# ── the endpoint's own edge (audit 2026-11-12, API 8 and 12) ─────────────────
+
+def test_a_tool_name_that_is_not_text_names_no_tool(realm, admin, token):
+    for name in (["atlas_overview"], {"a": 1}, 7, None, True):
+        r = admin.post("/api/v2/mcp", headers={**bearer(token), "MCP-Protocol-Version": "2025-11-25"},
+                       json={"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                             "params": {"name": name, "arguments": {}}})
+        assert r.status_code < 500, (name, r.get_data(as_text=True)[:200])
+        assert "error" in r.get_json(), name
+
+
+def test_a_body_sent_without_a_length_is_still_measured(realm, admin, token):
+    """A chunked body states no length, so the length check passed it and the
+    whole of it was read."""
+    import io
+    from api.v2 import mcp
+    big = b'{"jsonrpc": "2.0", "id": 1, "method": "tools/list", "pad": "' + b"x" * (mcp.MAX_BODY + 10) + b'"}'
+    r = admin.post("/api/v2/mcp", input_stream=io.BytesIO(big), content_type="application/json",
+                   headers={**bearer(token), "MCP-Protocol-Version": MODERN},
+                   environ_overrides={"wsgi.input_terminated": True})
+    assert r.status_code == 413, r.get_data(as_text=True)[:200]
+    # one that fits is read as before
+    assert tools_list(admin, token).status_code == 200

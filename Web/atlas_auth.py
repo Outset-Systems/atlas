@@ -202,6 +202,11 @@ def establish_session(acc):
     session["_seen"] = now
 
 
+#: The account sources a policy may name (`accounts.py`: where a row came from).
+MFA_SOURCES = ("local", "ldap")
+_mfa_policy_warned = set()
+
+
 def mfa_policy_applies(acc):
     """Who MUST hold a second factor (ATLAS_MFA_REQUIRED, read live).
 
@@ -214,15 +219,28 @@ def mfa_policy_applies(acc):
     carried the `admins` branch and its v2 twin — the one the browser actually
     posts to since the 2026-08-25 cutover — did not, so the policy the settings
     described was never enforced on the live path (found at the v1 removal).
+
+    A word that is none of these fences EVERYONE and is logged (2026-11-18).
+    It used to be compared with the account's source and nothing else, so
+    `true` (which `settings` and the Deployment view both read as "on")
+    fenced nobody and said nothing: the policy an operator believed in was
+    not in force.
     """
     policy = settings.mfa_required()
-    if policy in ("", "0", "off", "no"):
+    said = envnames.yes_no(policy)
+    if policy == "" or said is False:
         return False
-    if policy in ("1", "all", "yes", "on"):
+    if said is True or policy == "all":
         return True
     if policy in ("admin", "admins"):
         return bool(acc.get("is_admin"))
-    return policy == acc.get("source")
+    if policy in MFA_SOURCES:
+        return policy == acc.get("source")
+    if policy not in _mfa_policy_warned:
+        _mfa_policy_warned.add(policy)
+        log.warning("ATLAS_MFA_REQUIRED=%r names no policy (all, admins, %s, or a yes/no word): "
+                    "requiring a second factor of everyone", policy[:40], ", ".join(MFA_SOURCES))
+    return True
 
 
 def require_atlas_auth(exempt_paths=None, exempt_prefixes=None):

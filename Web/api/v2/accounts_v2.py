@@ -34,7 +34,7 @@ from flask import Blueprint, abort, jsonify, request, session
 import atlas_auth
 import security
 
-from . import bp
+from . import NAME_LIMIT, _body, _text, bp
 
 log = logging.getLogger("atlas.api.v2")
 
@@ -130,14 +130,14 @@ def _reauth_refusal(acc, data):
     username = acc["username"]
     ip = atlas_auth.client_ip()
     if acc.get("mfa_enabled"):
-        code = str(data.get("code") or "").strip()
+        code = _text(data, "code").strip()
         if not code:
             return jsonify({"ok": False, "error":
                             "A current authenticator code is required."}), 400
         if not accounts.verify_mfa_code(username, code):
             accounts.record_failure(username, ip)
             return jsonify({"ok": False, "error": "Incorrect code."}), 403
-    current = data.get("current") or ""
+    current = _text(data, "current")
     if not current:
         return jsonify({"ok": False, "error": "Current password is required."}), 400
     if acc.get("source") == "local":
@@ -175,9 +175,9 @@ def _try_backends(username, password):
 @same_origin_required
 def api_login():
     import accounts
-    data = request.get_json(silent=True) or {}
-    username = _name(data.get("username") or "")
-    password = data.get("password") or ""
+    data = _body()
+    username = _name(_text(data, "username", NAME_LIMIT))
+    password = _text(data, "password")
     ip = atlas_auth.client_ip()
     if accounts.throttled(username, ip):
         accounts.audit("login_locked", username, ip)
@@ -236,7 +236,7 @@ def api_login_mfa():
         session.pop("_mfa_user", None)
         session.pop("_mfa_started", None)
         return jsonify({"ok": False, "error": "Login expired — sign in again."}), 401
-    code = (request.get_json(silent=True) or {}).get("code") or ""
+    code = _text(_body(), "code")
     if not accounts.verify_mfa_or_backup(username, code):
         accounts.record_failure(username, ip)
         accounts.audit("login_mfa_fail", username, ip)
@@ -298,7 +298,7 @@ def api_mfa_setup():
         # a full session proves itself; the forced-enrollment state is not
         # one (`_enroll_pending_user`) and was minted by the password login a
         # moment ago, which is the proof
-        refusal = _reauth_refusal(acc, request.get_json(silent=True) or {})
+        refusal = _reauth_refusal(acc, _body())
         if refusal:
             return refusal
     try:
@@ -319,7 +319,7 @@ def api_mfa_confirm():
         return jsonify({"ok": False, "error": "Sign in first."}), 401
     if accounts.throttled(username, ip):
         return _too_many()
-    code = (request.get_json(silent=True) or {}).get("code") or ""
+    code = _text(_body(), "code")
     try:
         backup_codes = accounts.confirm_mfa(username, code)
     except ValueError as exc:
@@ -346,7 +346,7 @@ def api_mfa_disable():
     ip = atlas_auth.client_ip()
     if accounts.throttled(acc["username"], ip):
         return _too_many()
-    refusal = _reauth_refusal(acc, request.get_json(silent=True) or {})
+    refusal = _reauth_refusal(acc, _body())
     if refusal:
         return refusal
     accounts.disable_mfa(acc["username"])
@@ -365,12 +365,12 @@ def api_change_password():
     if acc.get("source") != "local":
         return jsonify({"ok": False, "error":
                         "Directory accounts change their password in the directory."}), 400
-    data = request.get_json(silent=True) or {}
-    if not accounts.verify_password(acc["username"], data.get("current") or ""):
+    data = _body()
+    if not accounts.verify_password(acc["username"], _text(data, "current")):
         accounts.record_failure(acc["username"], atlas_auth.client_ip())
         return jsonify({"ok": False, "error": "Current password is wrong."}), 401
     try:
-        accounts.set_password(acc["username"], data.get("new") or "")
+        accounts.set_password(acc["username"], _text(data, "new"))
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
     fresh = accounts.get_user(acc["username"])
@@ -385,7 +385,7 @@ def api_change_password():
 def api_me_emblem():
     import accounts
     acc = atlas_auth.current_account()
-    emblem = str((request.get_json(silent=True) or {}).get("emblem") or "").strip()
+    emblem = _text(_body(), "emblem").strip()
     if len(emblem) > 8:
         return jsonify({"ok": False, "error": "An emblem is a mark, not a "
                         "sentence — 8 characters at most."}), 400

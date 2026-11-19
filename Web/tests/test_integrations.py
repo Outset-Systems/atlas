@@ -160,6 +160,26 @@ def test_probed_right(client, monkeypatch):
                     json={"kind": "kuma", "settings": {"ATLAS_KUMA_API_KEY": "wrong"}})
     assert r.get_json()["ok"] is False and "refused the key" in r.get_json()["error"]
 
+    # the test asks Kuma the way the live adapter will: with the certificate
+    # checked unless the self-signed box is ticked, as typed or as saved
+    # (audit 2026-11-12, API 11: the box was read live and ignored here)
+    def kuma_verify():
+        url, kw = [s for s in seen if s[0].endswith("/metrics")][-1]
+        return kw.get("verify", True)
+    client.post("/api/v2/admin/integrations/test", headers=WRITE, json={"kind": "kuma", "settings": {}})
+    assert kuma_verify() is True
+    client.post("/api/v2/admin/integrations/test", headers=WRITE,
+                json={"kind": "kuma", "settings": {"ATLAS_KUMA_INSECURE": "1"}})
+    assert kuma_verify() is False
+    integrations.save({"ATLAS_KUMA_INSECURE": "1"})
+    client.post("/api/v2/admin/integrations/test", headers=WRITE, json={"kind": "kuma", "settings": {}})
+    assert kuma_verify() is False
+    integrations.save({"ATLAS_KUMA_INSECURE": "0"})
+    client.post("/api/v2/admin/integrations/test", headers=WRITE, json={"kind": "kuma", "settings": {}})
+    assert kuma_verify() is True
+    from api.v2 import admin as adm
+    adm._probe_log.clear()   # those four were the limiter's to count, not the rest of this test's
+
     r = client.post("/api/v2/admin/integrations/test", headers=WRITE,
                     json={"kind": "decoys", "settings": {"ATLAS_DECOYS_URL": "http://s:5013",
                                                           "ATLAS_DECOYS_KEY": "stone-key"}})

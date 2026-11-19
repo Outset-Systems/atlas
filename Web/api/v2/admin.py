@@ -36,7 +36,7 @@ from context import atlas
 from overlays import slot_key
 from security import actor, is_admin
 
-from . import _body, bp
+from . import _body, _count, bp
 from .auth import write_required
 
 log = logging.getLogger("atlas.api.v2")
@@ -426,8 +426,7 @@ def dependents():
 # ── History ──────────────────────────────────────────────────────────────────
 @admin_bp.route("/revisions")
 def revisions():
-    limit = request.args.get("limit", type=int) or 25
-    return jsonify({"revisions": atlas().store.revisions(limit=min(limit, 200)),
+    return jsonify({"revisions": atlas().store.revisions(limit=_count("limit", 25, 200)),
                     "kept": ds.KEEP_REVISIONS})
 
 

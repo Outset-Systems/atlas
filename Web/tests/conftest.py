@@ -41,44 +41,75 @@ WEB = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if WEB not in sys.path:
     sys.path.insert(0, WEB)
 
-#: Variables a test module may set for itself and must not leave behind.
-ATLAS_ENV = [
-    "ATLAS_DATA", "ATLAS_DATA_BACKEND", "ATLAS_DB_URL", "ATLAS_SITE",
-    "ATLAS_POSITIONS", "ATLAS_RACK", "ATLAS_REVISIONS", "ATLAS_OBSERVED",
-    "ATLAS_REPORTS", "ATLAS_MAINTENANCE", "ATLAS_INGEST_ENABLED",
-    "ATLAS_BEATS", "ATLAS_BEATS_DIR", "ATLAS_BEAT_TOKEN", "ATLAS_BEAT_TOKEN_FILE",
-    "ATLAS_SIGNALS_SOURCES", "ATLAS_SIGNALS_FILE", "ATLAS_READONLY",
-    "ATLAS_FALLBACK", "ATLAS_ALLOW_INSECURE", "ATLAS_AGENT_API", "ATLAS_EVENTS",
-    "ATLAS_EMBED_HOSTS", "ATLAS_EMBED_SERVICES", "ATLAS_EMBED_PROBE", "ATLAS_WHOIS",
-    "ATLAS_DEFAULT_STYLE", "ATLAS_DEMO_TRUST", "ATLAS_DEMO_LINK",
-    "ATLAS_SCROLL_ROOT", "ATLAS_AUTH_MODE", "ATLAS_PROM_URL", "ATLAS_LOKI_URL",
-    # THE SOURCES (integrations.py) — the file and the env it layers over
-    "ATLAS_INTEGRATIONS", "ATLAS_KUMA_URL", "ATLAS_KUMA_API_KEY", "ATLAS_KUMA_API_KEY_FILE",
-    "ATLAS_DECOYS_URL", "ATLAS_DECOYS_KEY", "ATLAS_DECOYS_KEY_FILE",
-    # accounts mode (atlas_auth.py / accounts.py / ldap_backend.py)
-    "ATLAS_ACCOUNTS_DB", "ATLAS_SECRET_KEY", "ATLAS_SECRET_KEY_FILE",
-    "ATLAS_ENCRYPTION_KEY", "ATLAS_ENCRYPTION_KEY_FILE",
-    "ATLAS_AUTH_BACKENDS", "ATLAS_MFA_REQUIRED", "ATLAS_TRUSTED_PROXIES",
-    "ATLAS_INSECURE_COOKIES", "ATLAS_SESSION_IDLE_MIN", "ATLAS_SESSION_ABS_HOURS",
-    "ATLAS_BOOTSTRAP_ADMIN_USER", "ATLAS_BOOTSTRAP_ADMIN_PASSWORD",
-    "ATLAS_BOOTSTRAP_ADMIN_PASSWORD_FILE",
-    "ATLAS_LDAP_URL", "ATLAS_LDAP_BASE_DN", "ATLAS_LDAP_UPN_DOMAIN",
-    "ATLAS_LDAP_CA_FILE", "ATLAS_LDAP_ACCESS_GROUPS", "ATLAS_LDAP_ADMIN_GROUPS",
-    "ATLAS_LDAP_TIMEOUT",
-    "ATLAS_HUB_SECRET", "ATLAS_HUB_SECRET_FILE",
-    # TOPOLOGY (2026-11-17): the layout file, and the one outside address
-    "ATLAS_TOPOLOGY_LAYOUT", "ATLAS_DIAGNOSE_OUTSIDE",
-]
+#: WHERE AN UNSET PATH LANDS (2026-11-18). With nothing said, `settings` keeps
+#: the map at `/data/lab-data.json` and `store` keeps the db at
+#: `sqlite:////data/atlas.db`: right for the image, where `/data` is the
+#: volume. A test that forgot to say otherwise wrote there. On a Windows
+#: checkout that is `\data` at the root of whichever drive the tree is on, and
+#: one test passed "alone" only by making a database there. The two defaults
+#: are pointed into this run's own scratch folder before anything imports
+#: `settings`, so a forgotten path is a file nobody keeps, not one beside
+#: somebody's real data. A module that declares its own still gets its own.
+_UNSET = os.path.join(WEB, ".pytest-tmp", "unset-%d" % os.getpid())
+try:
+    os.makedirs(_UNSET, exist_ok=True)
+except OSError:                               # a tree that cannot be written to
+    import tempfile
+    _UNSET = tempfile.mkdtemp(prefix="atlas-tests-unset-")
+os.environ.setdefault("ATLAS_DATA", os.path.join(_UNSET, "lab-data.json"))
+os.environ.setdefault(
+    "ATLAS_DB_URL", "sqlite:///" + os.path.join(_UNSET, "atlas.db").replace(os.sep, "/"))
+
+
+#: Modules that read the environment once, at import, and keep what they read
+#: for the life of the process. `appfixture.fresh_app` reloads them, in this
+#: order, each time a test builds an app.
+_READ_ONCE = ("settings", "hub_auth.auth")
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _atlas_modules(request):
+    """Start each test module with the read-once modules as that module's own
+    declared environment would have made them.
+
+    The environment is put back around every test (below), but `settings` and
+    `hub_auth.auth` are not the environment: they are what was read from it
+    the last time something reloaded them, and that was whichever test built
+    an app last, in whatever module ran before. A suite that patches
+    `auth.AUTH_MODE` and trusts the rest of the module to be as it found it
+    passed after its alphabetical neighbour and failed after a suite that had
+    built a signed hub-mode app (found by running the modules shuffled,
+    2026-11-18: six tests in the site reads' suite). Only modules already
+    imported are reloaded; nothing is imported here.
+    """
+    import importlib
+
+    declared = getattr(request.module, "ATLAS_TEST_ENV", None) or {}
+    before = dict(os.environ)
+    os.environ.update({name: str(value) for name, value in declared.items()})
+    try:
+        for name in _READ_ONCE:
+            module = sys.modules.get(name)
+            if module is not None:
+                importlib.reload(module)
+    finally:
+        for name in [n for n in os.environ if n not in before]:
+            del os.environ[name]
+        for name, value in before.items():
+            if os.environ.get(name) != value:
+                os.environ[name] = value
+    yield
 
 
 @pytest.fixture(autouse=True)
 def _atlas_env(request, monkeypatch):
-    """Give each test the environment its own module declared.
+    """Give each test the environment its own module declared, and take back
+    everything the test did to the environment afterwards.
 
     pytest imports every test module before running any test, so the module
-    that happened to import last owned `os.environ` for the whole run — and
+    that happened to import last owned `os.environ` for the whole run, and
     `store.session_scope()` reads `ATLAS_DB_URL` live, which is why suites
-    passed alone and 401'd together. Each module now declares `ATLAS_TEST_ENV`
+    passed alone and 401'd together. Each module declares `ATLAS_TEST_ENV`
     and it is re-applied here, per test.
 
     The declared values go in through `monkeypatch` (2026-11-17). A test that
@@ -90,19 +121,22 @@ def _atlas_env(request, monkeypatch):
     its undo ran after the restore below and left `ATLAS_AUTH_MODE=accounts`
     behind for the next module: the alerts suites followed by the db suite
     answered 401.
+
+    The restore is the WHOLE environment, for EVERY test (2026-11-18). It was
+    a hand-kept list of names, applied only to modules that declared an
+    environment: `ATLAS_MAPS` was never on the list, a module with nothing
+    declared got no restore at all, and `fresh_app(ATLAS_READONLY="1")` in
+    one suite was still set when a later one ran. A list has to be remembered
+    each time a setting is added; a snapshot does not.
     """
-    declared = getattr(request.module, "ATLAS_TEST_ENV", None)
-    if not declared:
-        yield
-        return
-    before = {name: os.environ.get(name) for name in ATLAS_ENV}
-    for name, value in declared.items():
+    before = dict(os.environ)
+    for name, value in (getattr(request.module, "ATLAS_TEST_ENV", None) or {}).items():
         monkeypatch.setenv(name, str(value))
     yield
+    for name in [n for n in os.environ if n not in before]:
+        del os.environ[name]
     for name, value in before.items():
-        if value is None:
-            os.environ.pop(name, None)
-        else:
+        if os.environ.get(name) != value:
             os.environ[name] = value
 
 
@@ -125,9 +159,99 @@ PRIVATE_TREE = os.path.exists(os.path.join(WEB, "legacy_names.py"))
 def pytest_configure(config):
     config.addinivalue_line(
         "markers", "private_only: needs the original deployment's private files or dataset")
+    _own_basetemp(config)
+
+
+#: `pytest.ini` pins the scratch root beside the suite. pytest empties that
+#: directory when a run starts, so two runs of one checkout at once (two
+#: sessions, or a run started while another is going) deleted each other's
+#: files mid-test. Each run now works in its own folder under it.
+_SHARED_BASETEMP = ".pytest-tmp"
+_STALE_RUN_SECONDS = 24 * 3600
+
+
+def _own_basetemp(config):
+    """Move a run that was given the shared scratch root into `run-<pid>` under
+    it, and clear out what runs older than a day left behind. A run given any
+    other `--basetemp` is left exactly as asked."""
+    import shutil
+    import time
+
+    given = getattr(config.option, "basetemp", None)
+    if not given or os.path.normpath(str(given)) != _SHARED_BASETEMP:
+        return
+    if hasattr(config, "workerinput"):        # an xdist worker: the controller chose
+        return
+    root = os.path.join(str(config.rootpath), _SHARED_BASETEMP)
+    try:
+        os.makedirs(root, exist_ok=True)
+        cutoff = time.time() - _STALE_RUN_SECONDS
+        for name in os.listdir(root):
+            old = os.path.join(root, name)
+            if name.startswith(("run-", "unset-")) and os.path.getmtime(old) < cutoff:
+                shutil.rmtree(old, ignore_errors=True)
+    except OSError:
+        return                                # an unwritable root is pytest's to report
+    config.option.basetemp = os.path.join(root, "run-%d" % os.getpid())
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """A run that passed has nothing in its scratch folder worth keeping; one
+    that failed keeps it to be looked at, until it is a day old."""
+    import shutil
+    import time
+
+    if exitstatus != 0:
+        return
+    store = sys.modules.get("store")
+    if store is not None:                     # let go of the scratch database
+        try:
+            store.reset_engine_for_tests()
+        except Exception:                     # noqa: BLE001 - tidying only
+            pass
+    done = [_UNSET]
+    own = getattr(session.config.option, "basetemp", None)
+    if own and os.path.basename(str(own)) == "run-%d" % os.getpid():
+        done.append(str(own))
+    # A network share answers "not empty" for a folder whose files it has not
+    # finished deleting, so one pass can leave most of the tree: ask again.
+    for folder in done:
+        for _ in range(5):
+            shutil.rmtree(folder, ignore_errors=True)
+            if not os.path.isdir(folder):
+                break
+            time.sleep(0.4)
+
+
+def pytest_terminal_summary(terminalreporter):
+    """Say which order a shuffled run used, so a failure can be run again."""
+    seed = os.environ.get("ATLAS_TEST_SHUFFLE")
+    if seed:
+        terminalreporter.write_line(
+            "ATLAS_TEST_SHUFFLE=%s: the test modules ran in a shuffled order" % seed)
+
+
+def _shuffled_by_module(items, seed):
+    """The same tests, each module's own order kept, the modules in an order
+    drawn from `seed`. A suite that only passes in alphabetical order is
+    leaning on what an earlier module left behind; this is how to find out."""
+    import random
+
+    groups, order = {}, []
+    for item in items:
+        key = item.nodeid.split("::", 1)[0]
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(item)
+    random.Random(str(seed)).shuffle(order)
+    return [item for key in order for item in groups[key]]
 
 
 def pytest_collection_modifyitems(config, items):
+    seed = os.environ.get("ATLAS_TEST_SHUFFLE")
+    if seed:
+        items[:] = _shuffled_by_module(items, seed)
     if PRIVATE_TREE:
         return
     skip = pytest.mark.skip(reason="private tree only (not part of the public build)")

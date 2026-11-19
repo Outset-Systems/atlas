@@ -154,3 +154,15 @@ def test_a_hidden_place_has_no_vitals_for_the_uncleared(tmp_path, monkeypatch):
         assert c.get("/api/v2/vitals/not-a-place", headers=plain).get_json() == r.get_json()
     finally:
         auth.AUTH_MODE = original
+
+
+def test_a_places_vitals_are_one_viewers_and_nothing_may_keep_them(app, monkeypatch):
+    """Which place a viewer may ask about depends on who they are; a proxy in
+    front must not hand one viewer's answer to the next (audit 2026-11-12, API 4)."""
+    from api.v2 import vitals as vt
+    monkeypatch.setattr(vt, "_range_query", lambda *a: _matrix([[1700000000, "1"]]))
+    for _ in range(2):                       # asked, then answered from the cache
+        r = app.test_client().get("/api/v2/vitals/probe-me")
+        assert r.status_code == 200
+        assert r.headers["Cache-Control"] == "no-store"
+        assert "Cookie" in r.headers["Vary"]

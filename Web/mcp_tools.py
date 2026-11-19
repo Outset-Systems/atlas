@@ -505,7 +505,9 @@ _CALLS = {"atlas_overview": overview, "atlas_search": search, "atlas_place": pla
 
 
 def known(name):
-    return name in _CALLS
+    """True for a tool's name. Anything that is not text names no tool: a
+    list or an object cannot even be looked up, and used to be a 500."""
+    return isinstance(name, str) and name in _CALLS
 
 
 def call(name, args):

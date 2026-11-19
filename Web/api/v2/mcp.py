@@ -17,6 +17,7 @@ token has vouched for the request.
 """
 
 import base64
+import json
 import logging
 
 from flask import Response, jsonify, request
@@ -173,7 +174,18 @@ def mcp_post():
         return _err(None, INVALID_REQUEST, "Origin not allowed", status=403)
     if (request.content_length or 0) > MAX_BODY:
         return _err(None, INVALID_REQUEST, "Request too large", status=413)
-    msg = request.get_json(silent=True)
+    # A body sent in chunks states no length, so the check above passes it and
+    # the whole of it (up to the app's 25 MiB) used to be read. Read one byte
+    # past the limit and no further.
+    raw = request.stream.read(MAX_BODY + 1)
+    if len(raw) > MAX_BODY:
+        return _err(None, INVALID_REQUEST, "Request too large", status=413)
+    msg = None
+    if request.is_json:
+        try:
+            msg = json.loads(raw.decode("utf-8"))
+        except ValueError:                       # not JSON, or not UTF-8
+            msg = None
     if not isinstance(msg, dict):
         return _err(None, PARSE_ERROR, "Expected one JSON-RPC message", status=400)
     if "id" not in msg:

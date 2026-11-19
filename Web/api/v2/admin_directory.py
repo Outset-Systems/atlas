@@ -8,13 +8,14 @@ them as before.
 import logging
 import os
 
-from flask import jsonify, request
+from flask import jsonify
 
 import settings
 from security import actor, write_refusal
 
 
 log = logging.getLogger("atlas.api.v2")
+from . import NAME_LIMIT, _body, _part, _text  # noqa: E402
 from .admin import (  # noqa: E402
     _has_ldap_admin_proof, _local_admin_exists, _remember_ldap_admin_proof, admin_bp,
 )
@@ -41,10 +42,10 @@ def auth_settings_test():
     refusal = write_refusal()
     if refusal:
         return refusal
-    body = request.get_json(silent=True) or {}
-    proposed = body.get("settings") or {}
-    username = (body.get("username") or "").strip()
-    password = body.get("password") or ""
+    body = _body()
+    proposed = _part(body, "settings")
+    username = _text(body, "username", NAME_LIMIT).strip()
+    password = _text(body, "password")
     if not username or not password:
         return jsonify({"ok": False, "error": "A name and password are needed to test a bind."}), 400
     import auth_config
@@ -80,7 +81,7 @@ def auth_settings_save():
         return refusal
     import auth_config
     import ldap_backend
-    proposed = (request.get_json(silent=True) or {}).get("settings") or {}
+    proposed = _part(_body(), "settings")
     unknown = [k for k in proposed if k not in auth_config.ALLOWED]
     if unknown:
         return jsonify({"error": f"not a directory setting: {unknown[0]}"}), 400

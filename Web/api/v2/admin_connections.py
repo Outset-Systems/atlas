@@ -13,7 +13,7 @@ import token_log
 from context import atlas
 from security import actor
 
-from . import _body
+from . import _body, _part
 from .admin import (
     _commit, _probe_allowed, _read, _secret_stays_home, _valid_url, admin_bp,
 )
@@ -126,7 +126,7 @@ def connections_test():
     key = str(body.get("key") or "").strip().lower()
     if not connections.known(key):
         return jsonify({"ok": False, "error": "not a system that can be tested"}), 400
-    typed = body.get("settings") or {}
+    typed = _part(body, "settings")
 
     def value(name):
         return str(typed.get(name) or "").strip() or integrations.get(name)

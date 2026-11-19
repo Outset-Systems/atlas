@@ -248,7 +248,7 @@ drop directory), `maintenance.py` (planned windows), `discovery.py` and
 
 | Mode | What the gate accepts |
 |---|---|
-| `standalone` | Everything. The viewer is `ATLAS_STANDALONE_USER` and sees everything. Writes are refused unless `ATLAS_ALLOW_INSECURE=1`. |
+| `standalone` | Everything. There is no identity: the viewer sees everything, and a change is recorded as `standalone`. Writes are refused unless `ATLAS_ALLOW_INSECURE=1`. |
 | `hub` | A valid signed token in the `ATLAS_HUB_AUTH_HEADER` header (`hub_auth/auth.py`, HMAC-SHA256 with `ATLAS_HUB_SECRET`, short expiry). Without a secret: the plaintext `X-Remote-User` header (legacy; only safe when nothing else can reach the port). No sign-in page. |
 | `accounts` | A Flask session for an account that still exists, is active, carries the account's current session epoch (bumped on password change), is inside the idle and absolute lifetimes, and is not halfway through MFA. Otherwise 401 for the API and a redirect to `/auth/login` for pages. |
 | `hybrid` | A verified hub token if present, else an `accounts` session. Unsigned `X-Remote-*` headers are never accepted here; without `ATLAS_HUB_SECRET` the hub path is off and everyone uses the sign-in page. |

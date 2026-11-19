@@ -47,6 +47,25 @@ DEFAULTS = {
 }
 
 
+#: The one spelling of yes and of no, for every setting that is a switch.
+YES = ("1", "true", "yes", "on")
+NO = ("0", "false", "no", "off")
+
+
+def yes_no(raw):
+    """What a switch's value says: True for a yes word, False for a no word
+    (any case, spaces around it ignored), None for anything else, nothing at
+    all included. The caller decides what None means, because that differs:
+    a switch that adds a protection should stay on, one that removes a
+    protection should stay off."""
+    word = str(raw if raw is not None else "").strip().lower()
+    if word in YES:
+        return True
+    if word in NO:
+        return False
+    return None
+
+
 def old_name(name):
     """The pre-1.48 name for `name`, or None (always None in a public build)."""
     return _OLD_NAMES.get(name)
@@ -69,10 +88,18 @@ def default(name, fallback=None):
 
 def env(name, fallback=None):
     """The environment's value for `name`: the new name, then its old name,
-    then the default (legacy first, then neutral), then `fallback`."""
-    if name in os.environ:
-        return os.environ[name]
+    then the default (legacy first, then neutral), then `fallback`.
+
+    A new name that is set but EMPTY does not hide an old name that holds a
+    value (2026-11-18): a compose file's `${ATLAS_AUTH_MODE:-}` hands the app
+    an empty string, and with the old name saying `hub` beside it that used
+    to resolve to standalone. Nothing else about an empty value changes: with
+    no old name beside it, empty is still what was said, not the default."""
     old = _OLD_NAMES.get(name)
+    if name in os.environ:
+        if os.environ[name] == "" and old and os.environ.get(old):
+            return os.environ[old]
+        return os.environ[name]
     if old and old in os.environ:
         return os.environ[old]
     return default(name, fallback)

@@ -37,7 +37,9 @@ from . import bp
 log = logging.getLogger("atlas.api.manifest")
 
 _DAY = re.compile(r"\b(mon|tue|wed|thu|fri|sat|sun)[a-z]*\b", re.I)
-_HHMM = re.compile(r"\b(\d{1,2}):(\d{2})\b")
+#: A real clock time only: `24:00` or `13:75` is not one. Any two digits used
+#: to match, and the calendar then asked for hour 24 and answered 500.
+_HHMM = re.compile(r"\b([01]?\d|2[0-3]):([0-5]\d)\b")
 _MINUTE_ONLY = re.compile(r"^:(\d{2})$")
 
 

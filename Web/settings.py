@@ -46,17 +46,77 @@ APP_NAME = _theme.T["app_name"]
 # a public door (atlas.example.com) and again for the hosted edition, where
 # one login page fronts many realms and must not leak which one you asked for.
 APP_BRAND = os.environ.get("ATLAS_BRAND", "").strip() or "The Atlas"
-APP_VERSION = "0.2.0-dev.24"
+APP_VERSION = "0.2.0-dev.25"
 ACCENT_COLOR = "#C9A554"
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-PORT = int(os.environ.get("ATLAS_PORT", "5006"))
+# ── Reading the environment (2026-11-18) ─────────────────────────────────────
+# Three readers, so a switch and a number are each parsed in one place:
+# `env_flag` here, `env_int` further down (it was already there for the poll
+# knobs), and `envnames.yes_no` under both for the words. None of them raises:
+# a value that cannot be used means the safe reading and a line at startup.
+#: (name, the value given, what was used instead), for every setting whose
+#: value could not be used. Filled while this module is imported, when logging
+#: is not configured yet, so nothing is logged here: `app.py` reports the list
+#: once it can, the way it reports `LOG_LEVELS_REJECTED`. A reload starts it
+#: empty again.
+ENV_REJECTED = []
+
+
+def _rejected(name, raw, used):
+    """Note that `name` was given `raw` and `used` stands instead. Once each."""
+    entry = (name, str(raw)[:40], str(used))
+    if entry not in ENV_REJECTED:
+        ENV_REJECTED.append(entry)
+
+
+def env_flag(name, default=False, strict=False, unknown=None):
+    """A switch from the environment. Unset or empty is `default`.
+
+    Two kinds, because a wrong guess costs differently:
+
+    * `strict` (a switch that REMOVES a protection: no sign-in needed, the
+      debugger on, an unauthenticated endpoint open): `1` is on, `0` is off,
+      and anything else is OFF and noted. `true` does not turn one of these
+      on. It never did, and an install that wrote `true` and has been shut
+      ever since must not open because it was upgraded.
+    * otherwise (a switch that ADDS a protection, or is harmless): any yes
+      word is on, any no word is off (`envnames.yes_no`), and a word that is
+      neither is `unknown` (or `default` when that is not given) and noted.
+    """
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return default
+    if strict:
+        if raw in ("1", "0"):                 # exactly, as each was compared before
+            return raw == "1"
+        _rejected(name, raw, "off")
+        return False
+    said = envnames.yes_no(raw)
+    if said is None:
+        said = default if unknown is None else unknown
+        _rejected(name, raw, "on" if said else "off")
+    return said
+
+# PORT is read further down, beside the other startup numbers (it needs `env_int`).
 # Bind address for the dev server only (`python app.py`); gunicorn takes its
 # own. The local launchers set 127.0.0.1 — before 2026-09-24 this was ignored
 # and they listened on every interface while saying "loopback only".
 HOST = os.environ.get("ATLAS_HOST", "0.0.0.0")
-LOG_LEVEL = os.environ.get("ATLAS_LOG_LEVEL", "INFO")
+def _log_level(raw):
+    """The root log level as `logging` spells it. Any case is accepted; a
+    name `logging` does not know is INFO and noted. The raw value used to go
+    straight to `basicConfig`, which raises on `debug`, so a lowercase level
+    stopped the app booting."""
+    level = (raw or "").strip().upper() or "INFO"
+    if isinstance(getattr(logging, level, None), int):
+        return level
+    _rejected("ATLAS_LOG_LEVEL", raw, "INFO")
+    return "INFO"
+
+
+LOG_LEVEL = _log_level(os.environ.get("ATLAS_LOG_LEVEL", "INFO"))
 
 # Per-layer log levels — `ATLAS_LOG_LEVELS="atlas.data=DEBUG,atlas.auth=WARNING"`.
 # Every module logs to `atlas.<layer>.<module>` (the tree is described in
@@ -88,7 +148,7 @@ def _parse_log_levels(raw):
 
 LOG_LEVELS, LOG_LEVELS_REJECTED = _parse_log_levels(
     os.environ.get("ATLAS_LOG_LEVELS", ""))
-DEBUG = os.environ.get("ATLAS_DEBUG") == "1"
+DEBUG = env_flag("ATLAS_DEBUG", strict=True)
 
 # ── The dataset ──────────────────────────────────────────────────────────────
 def data_dir():
@@ -156,7 +216,7 @@ MAPS_DIR = os.environ.get("ATLAS_MAPS", os.path.join(DATA_DIR, "maps"))
 # operator lists (alert_send.py). OFF until both ATLAS_ALERTS=1 and a non-empty
 # ATLAS_ALERT_HOSTS: without both nothing is sent, and the admin routes that
 # write or test refuse. The demo and the public image ship it off.
-ALERTS_ENABLED = os.environ.get("ATLAS_ALERTS", "").strip().lower() in ("1", "true", "yes", "on")
+ALERTS_ENABLED = env_flag("ATLAS_ALERTS")
 #: `host:port,host:port`, raw; alert_send parses it (`allowed_hosts()`).
 ALERT_HOSTS = os.environ.get("ATLAS_ALERT_HOSTS", "").strip()
 #: The base address a message links to (`<base>?place=<id>`). Atlas cannot know
@@ -176,7 +236,7 @@ def alerts_on():
 
 # ── Posture ──────────────────────────────────────────────────────────────────
 # Acknowledge that standalone mode serves the whole map with no auth.
-ALLOW_INSECURE = os.environ.get("ATLAS_ALLOW_INSECURE") == "1"
+ALLOW_INSECURE = env_flag("ATLAS_ALLOW_INSECURE", strict=True)
 
 # Plain-http LAN testing: opt out of Secure cookies (app._configure_sessions),
 # or a browser silently drops the session cookie. Read once here; the cookie
@@ -203,15 +263,23 @@ def env_int(name, default, floor, zero_off=False):
     or not a number, or when below `floor`. With `zero_off`, 0 is kept (it
     turns the thing off). No upper bound. Read straight from `os.environ`,
     never through the old names. One reader for the poll and budget knobs
-    that watch.py and annalist.py each parsed for themselves (2026-11-16)."""
+    that watch.py and annalist.py each parsed for themselves (2026-11-16),
+    and for the numbers read once at startup (2026-11-18). A value that could
+    not be used is noted in `ENV_REJECTED`; it never raises."""
     raw = os.environ.get(name, str(default)).strip()
+    if not raw:
+        return default
     try:
         value = int(raw)
     except ValueError:
+        _rejected(name, raw, default)
         return default
     if zero_off and value == 0:
         return 0
-    return value if value >= floor else default
+    if value < floor:
+        _rejected(name, raw, default)
+        return default
+    return value
 
 
 def beat_token():
@@ -249,8 +317,16 @@ def accounts_db_path():
 def _read_only():
     """Whether this instance refuses every write.
 
-    Explicit `ATLAS_READONLY=1` always wins. Beyond that, **standalone mode
-    defaults to read-only**, because standalone has no authentication at all:
+    An explicit `ATLAS_READONLY` always wins: any yes word refuses every write,
+    any no word allows them (`0` is the documented one). A value that is
+    neither a yes nor a no (`maybe`, a typo) is READ-ONLY and noted: until
+    2026-11-18 only the exact `1` counted, so `true` or `yes` left the
+    instance writable while its operator believed it shut. An EMPTY value is
+    no value: a compose file's `${ATLAS_READONLY:-}` used to count as "said,
+    and not 1", which made a standalone instance writable with no
+    `ATLAS_ALLOW_INSECURE` at all.
+
+    Beyond that, **standalone mode defaults to read-only**, because standalone has no authentication at all:
     `redaction.viewer_groups()` returns None there and `sees_everything(None)`
     is True, so every admin check in the editing surface passes for anybody who
     can reach the port. That was survivable when the Atlas only served a map.
@@ -263,8 +339,8 @@ def _read_only():
     set deliberately, and never by forgetting one.
     """
     explicit = os.environ.get("ATLAS_READONLY")
-    if explicit is not None:
-        return explicit == "1"
+    if explicit is not None and explicit.strip():
+        return env_flag("ATLAS_READONLY", unknown=True)
     # `accounts` and `hybrid` both have a real gate (session sign-in, and for
     # hybrid the Hub's signed identity as well — atlas_auth.py), so they write
     # like hub mode does; the admin check still applies per request. `auth_mode`
@@ -295,13 +371,17 @@ DEMO_LINK = _DEMO_LINK if _DEMO_LINK.startswith("https://") and " " not in _DEMO
 # `auth_mode()` above and `mfa_required()` below.
 
 # Sign-in throttle (accounts.py): both caps always, per the note there.
-LOGIN_MAX_USER = int(os.environ.get("ATLAS_LOGIN_MAX_USER", "5"))
-LOGIN_MAX_IP = int(os.environ.get("ATLAS_LOGIN_MAX_IP", "20"))
-LOGIN_WINDOW_S = int(os.environ.get("ATLAS_LOGIN_WINDOW_MIN", "15")) * 60
+# Each is a whole number of at least 1. A value that is not (a word, an empty
+# string from an unset compose variable, zero) is the default and is said at
+# startup; `int()` on the raw value used to stop the app booting instead.
+LOGIN_MAX_USER = env_int("ATLAS_LOGIN_MAX_USER", 5, 1)
+LOGIN_MAX_IP = env_int("ATLAS_LOGIN_MAX_IP", 20, 1)
+LOGIN_WINDOW_S = env_int("ATLAS_LOGIN_WINDOW_MIN", 15, 1) * 60
 
 # Session lifetimes (atlas_auth.py), in seconds.
-SESSION_IDLE_S = int(os.environ.get("ATLAS_SESSION_IDLE_MIN", "60")) * 60
-SESSION_ABS_S = int(os.environ.get("ATLAS_SESSION_ABS_HOURS", "12")) * 3600
+SESSION_IDLE_S = env_int("ATLAS_SESSION_IDLE_MIN", 60, 1) * 60
+SESSION_ABS_S = env_int("ATLAS_SESSION_ABS_HOURS", 12, 1) * 3600
+PORT = env_int("ATLAS_PORT", 5006, 1)
 
 # The reverse proxies whose X-Forwarded-For this app believes, BY ADDRESS —
 # tls-proxy and the Hub, whose container IPs are PINNED in the internal host's
@@ -344,7 +424,7 @@ MAX_IP_KEY = 64
 
 # Relay ingest surface (ingest.init_app): live only when this is set AND the db
 # backend is on.
-INGEST_ENABLED = os.environ.get("ATLAS_INGEST_ENABLED") == "1"
+INGEST_ENABLED = env_flag("ATLAS_INGEST_ENABLED", strict=True)
 
 
 def mfa_required():

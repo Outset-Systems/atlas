@@ -12,6 +12,7 @@ from flask import jsonify, request
 
 import atlas_auth
 
+from . import NAME_LIMIT, _body, _text, _texts
 from .accounts_v2 import _name, admin_required, auth_bp, same_origin_required
 
 
@@ -29,13 +30,13 @@ def api_users():
 @admin_required
 def api_users_create():
     import accounts
-    data = request.get_json(silent=True) or {}
+    data = _body()
     try:
         acc = accounts.create_local_user(
-            data.get("username") or "", data.get("password") or "",
-            display_name=data.get("display_name") or "",
-            email=data.get("email") or "",
-            groups=data.get("groups") or (),
+            _text(data, "username", NAME_LIMIT), _text(data, "password"),
+            display_name=_text(data, "display_name"),
+            email=_text(data, "email"),
+            groups=_texts(data, "groups"),
             is_admin=bool(data.get("is_admin")))
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
@@ -63,7 +64,7 @@ def _admin_target_guard(username, *, demoting=False, deactivating=False):
 def api_user_admin(username):
     import accounts
     username = _name(username)
-    on = bool((request.get_json(silent=True) or {}).get("on"))
+    on = bool(_body().get("on"))
     acc = accounts.get_user(username)
     if acc and acc.get("source") == "ldap":
         return jsonify({"ok": False, "error":
@@ -84,7 +85,7 @@ def api_user_admin(username):
 def api_user_active(username):
     import accounts
     username = _name(username)
-    on = bool((request.get_json(silent=True) or {}).get("on"))
+    on = bool(_body().get("on"))
     blocked = _admin_target_guard(username, deactivating=not on)
     if blocked:
         return blocked
@@ -99,7 +100,7 @@ def api_user_active(username):
 @admin_required
 def api_user_groups(username):
     import accounts
-    groups = (request.get_json(silent=True) or {}).get("groups") or []
+    groups = _texts(_body(), "groups")
     try:
         accounts.set_groups(_name(username), groups)
     except ValueError as exc:

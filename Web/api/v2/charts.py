@@ -52,7 +52,7 @@ from flask import jsonify, request
 
 from chart_catalogue import CATALOGUE, WINDOWS, _LOKI_MAX_WINDOW
 from context import atlas
-from redaction import hidden_words, sees_everything, viewer_groups
+from redaction import hidden_words, no_store, sees_everything, viewer_groups
 
 from . import bp
 from .vitals import _prom_url
@@ -335,8 +335,8 @@ def _demo_chart(key, spec):
         return jsonify({"error": "the demo has no figures for this watching"}), 404
     if spec["kind"] == "table" and "rows" in part:
         part["rows"] = part["rows"][:spec.get("limit", 10)]
-    return jsonify(_for_viewer({**_head(key, spec, window, step_s, end - window_s, end),
-                                "demo": True, **part}))
+    return no_store(jsonify(_for_viewer({**_head(key, spec, window, step_s, end - window_s, end),
+                                         "demo": True, **part})))
 
 
 @bp.route("/charts/<key>")
@@ -361,7 +361,7 @@ def chart(key):
     with _cache_lock:
         hit = _cache.get((key, window))
         if hit and hit[0] > now:
-            return jsonify(_for_viewer(hit[1]))
+            return no_store(jsonify(_for_viewer(hit[1])))
 
     end = int(now)
     start = end - window_s
@@ -399,4 +399,4 @@ def chart(key):
 
     with _cache_lock:
         _cache[(key, window)] = (now + _CACHE_TTL_S, payload)
-    return jsonify(_for_viewer(payload))
+    return no_store(jsonify(_for_viewer(payload)))

@@ -138,3 +138,24 @@ def test_a_clock_with_seconds_or_a_zone_is_still_a_clock():
     assert cadence_of({"cadence": "daily", "at": "13:45:00"}) == plain
     assert cadence_of({"cadence": "daily", "at": "13:45 UTC"}) == plain
     assert cadence_of({"cadence": "daily", "at": "9:05"}) == cadence_of({"cadence": "daily", "at": "09:05"})
+
+
+def test_a_clock_that_is_not_one_does_not_break_the_calendar(app_env):
+    """`24:00` and `13:75` matched the clock pattern, the day view asked for
+    hour 24, and the calendar answered 500 (audit 2026-11-12, API 5)."""
+    import api.v2.manifest as mf
+    assert mf._HHMM.match("23:59") and mf._HHMM.match("7:05") and mf._HHMM.match("00:00")
+    for wrong in ("24:00", "13:75", "99:99"):
+        assert not mf._HHMM.match(wrong), wrong
+    data = app_env["ATLAS_DATA"]
+    d = json.loads(open(data, encoding="utf-8").read())
+    d["rites"] = RITES + [
+        {"name": "Midnight as 24", "cadence": "daily", "at": "24:00", "host": "x"},
+        {"name": "Minute 75", "cadence": "weekly", "when": "Sun 13:75", "host": "x"},
+    ]
+    with open(data, "w", encoding="utf-8") as fh:
+        json.dump(d, fh)
+    c = fresh_app(**app_env).app.test_client()
+    r = c.get("/api/v2/calendar?day=2026-09-07")
+    assert r.status_code == 200, r.get_data(as_text=True)[:300]
+    assert c.get("/api/v2/manifest").status_code == 200

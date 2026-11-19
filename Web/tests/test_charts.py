@@ -285,3 +285,16 @@ def test_cached_right(app, monkeypatch):
 def test_gated_right():
     from api import v2 as api_v2
     assert "/api/v2/charts" not in "".join(api_v2.EXEMPT_PATHS)
+
+
+def test_a_watching_is_one_viewers_and_nothing_may_keep_it(app, monkeypatch):
+    """A legend is cut to what the viewer may see; a proxy in front must not
+    replay an admin's to somebody else (audit 2026-11-12, API 4)."""
+    from api.v2 import charts as ch
+    monkeypatch.setattr(ch, "_range_query", lambda *a: _matrix(
+        ({"instance": "10.9.9.9:9100"}, [[1700000000, "1"]])))
+    for _ in range(2):                       # asked, then answered from the cache
+        r = app.test_client().get("/api/v2/charts/hosts.net")
+        assert r.status_code == 200, r.get_json()
+        assert r.headers["Cache-Control"] == "no-store"
+        assert "Cookie" in r.headers["Vary"]

@@ -27,7 +27,7 @@ from engines.places import service_places, services_of, unmanaged_ids, unmanaged
 from redaction import (redact_for_groups, cleared, hidden_node_ids, sees_everything, vary_on_viewer,
                        viewer_groups, visible_monitors)
 
-from . import bp
+from . import _count, bp
 
 log = logging.getLogger("atlas.api.v2")
 
@@ -410,7 +410,7 @@ def events_feed():
             rites = heartbeats.keys_of(redact_for_groups(data)[0].get("rites"))
         except (OSError, ValueError):
             visible, services, rites = set(), set(), set()
-    limit = min(request.args.get("limit", type=int) or 100, events.KEEP)
+    limit = _count("limit", 100, events.KEEP)
     unacked = request.args.get("unacked") == "1"
     if sees_everything(groups):
         body = {"events": events.listing(limit=limit, visible=visible, unacked_only=unacked),

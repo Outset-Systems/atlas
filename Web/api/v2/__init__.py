@@ -26,7 +26,7 @@ What v2 does NOT do, on purpose:
   the url map is identical in every mode.
 """
 
-from flask import Blueprint, request
+from flask import Blueprint, abort, jsonify, request
 
 URL_PREFIX = "/api/v2"
 
@@ -61,11 +61,94 @@ def init_app(app):
     return True
 
 
+# ── Reading a request body (2026-11-18) ──────────────────────────────────────
+# One reader for the body and three for what is in it, so a route says what it
+# expects and gets exactly that or never runs. Before these, `_body()` handed
+# back whatever JSON arrived: `[1]`, `"x"` or `7` is truthy, so `or {}` kept
+# it, the route's first `.get` raised, and seventeen admin routes, the beat
+# and the sign-in answered 500 to a body a stranger could send.
+#: The longest text a body's field may carry where a route names no cap.
+TEXT_LIMIT = 4096
+#: The longest sign-in name. The account store takes far less; this is only
+#: what may reach the sign-in log, which records the name on every attempt.
+NAME_LIMIT = 256
+
+
+def _refuse(sentence):
+    """End the request here with a 422 saying `sentence`. Raises, so a reader
+    below can be used inline; `ok` is false beside `error` because the
+    accounts surface's clients key on it and everything else reads `error`."""
+    response = jsonify({"ok": False, "error": sentence})
+    response.status_code = 422
+    abort(response)
+
+
 def _body():
-    """The request's JSON body, or `{}` when there is none, it is not JSON, or
-    it is a falsy value (`null`, `0`, `[]`). Any other body that is JSON but
-    not an object comes back as it is."""
-    return request.get_json(silent=True) or {}
+    """The request's JSON body as an object: `{}` when there is none, it is
+    not JSON, or it is empty (`null`, `0`, `[]`, `""`). A body that is JSON,
+    not empty and not an object is refused with a 422."""
+    body = request.get_json(silent=True)
+    if not body:
+        return {}
+    if not isinstance(body, dict):
+        _refuse("The request body must be a JSON object.")
+    return body
+
+
+def _count(name, default, most):
+    """A count from the query string (`?limit=`): `default` when it is absent,
+    not a whole number, or below 1, and never more than `most`. A negative
+    one used to reach a slice and count from the far end."""
+    value = request.args.get(name, type=int)
+    if value is None or value < 1:
+        return default
+    return min(value, most)
+
+
+def _part(body, key):
+    """`body[key]` as an object: `{}` when it is absent or empty, refused with
+    a 422 when it is anything else (`"settings": "x"`)."""
+    value = body.get(key)
+    if not value:
+        return {}
+    if not isinstance(value, dict):
+        _refuse(f"`{key}` must be a JSON object.")
+    return value
+
+
+def _text(body, key, limit=TEXT_LIMIT):
+    """`body[key]` as text: `""` when absent or null, a number as its digits
+    (a code typed into a form may arrive as one), and refused with a 422 when
+    it is a list, an object or true/false, or longer than `limit`."""
+    value = body.get(key)
+    if value is None:
+        return ""
+    if isinstance(value, bool) or not isinstance(value, (str, int, float)):
+        _refuse(f"`{key}` must be text.")
+    value = str(value)
+    if len(value) > limit:
+        _refuse(f"`{key}` is too long.")
+    return value
+
+
+def _texts(body, key, limit=TEXT_LIMIT, most=200):
+    """`body[key]` as a list of text: `[]` when absent or empty. A single
+    string is refused, not walked letter by letter; so is a member that is
+    not text, and a list longer than `most`."""
+    value = body.get(key)
+    if not value:
+        return []
+    if not isinstance(value, (list, tuple)) or len(value) > most:
+        _refuse(f"`{key}` must be a list.")
+    out = []
+    for member in value:
+        if isinstance(member, bool) or not isinstance(member, (str, int, float)):
+            _refuse(f"`{key}` must be a list of text.")
+        member = str(member)
+        if len(member) > limit:
+            _refuse(f"`{key}` holds something too long.")
+        out.append(member)
+    return out
 
 
 # Route modules attach to `bp` at import, and that import happens HERE — at

@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from appfixture import fresh_app  # noqa: E402
 
-# Non-empty so conftest snapshots/restores the whole ATLAS_ENV list per test.
+# What conftest applies before each test here, and takes back after it.
 ATLAS_TEST_ENV = {"ATLAS_AUTH_MODE": "accounts"}
 
 PW = "a-long-enough-password"

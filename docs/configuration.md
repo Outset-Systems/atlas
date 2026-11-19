@@ -32,15 +32,15 @@ restart.
 |---|---|---|---|---|
 | `ATLAS_BRAND` | `The Atlas` | The name shown on pages a visitor sees before signing in (the sign-in page). The map's own name comes from the theme, so the sign-in page does not reveal it. | no | no |
 | `ATLAS_THEME` | `plain` | Which theme file in `Web/themes/` supplies the words and emblems that describe your lab. `plain` names nothing. An unknown name falls back to `plain` and logs a warning. See [Theme](#theme). | no | no |
-| `ATLAS_LOG_LEVEL` | `INFO` | Log level for the whole app (`DEBUG`, `INFO`, `WARNING`, `ERROR`). | no | no |
+| `ATLAS_LOG_LEVEL` | `INFO` | Log level for the whole app (`DEBUG`, `INFO`, `WARNING`, `ERROR`), in any case. A level that does not exist is `INFO`, and the app says so at startup. | no | no |
 | `ATLAS_LOG_LEVELS` | (unset) | Per-layer log levels, comma separated, for example `atlas.data=DEBUG,atlas.auth=WARNING`. Layers: `atlas.web`, `atlas.api`, `atlas.auth`, `atlas.data`, `atlas.io`, `atlas.live`, `atlas.settings`, and any module under them. Bad entries are ignored and logged. | no | no |
 | `ATLAS_DEBUG` | (unset) | `1` turns on Flask debug mode for the development server (`python app.py`). Never set this in a container. | no | no |
 | `ATLAS_HOST` | `0.0.0.0` | Bind address for the development server only. The container runs gunicorn, which binds `0.0.0.0:5006` regardless. | no | no |
 | `ATLAS_PORT` | `5006` | Port for the development server only. In the container, change the published port in compose instead. | no | no |
-| `ATLAS_READONLY` | depends on mode | `1` refuses every write, `0` allows writes. When unset, `standalone` mode is read-only (it has no sign-in, so anyone who can reach the port would be an admin) unless `ATLAS_ALLOW_INSECURE=1`; `accounts`, `hybrid` and `hub` modes are writable and check admin rights per request. | no | no |
+| `ATLAS_READONLY` | depends on mode | `1` (or `true`, `yes`, `on`) refuses every write; `0` (or `false`, `no`, `off`) allows writes. A value that is neither is treated as read-only, and the app says so at startup. When unset or empty, `standalone` mode is read-only (it has no sign-in, so anyone who can reach the port would be an admin) unless `ATLAS_ALLOW_INSECURE=1`; `accounts`, `hybrid` and `hub` modes are writable and check admin rights per request. | no | no |
 | `ATLAS_AGENT_LOG_DAYS` | `90` | How long a line of the token read log (`token-reads.jsonl` in the data directory) is kept. Every request an API token makes adds one: when, which token, from which address, the path or MCP tool, and the size and hash of the answer. At least `1`; anything else falls back to 90. | no | no |
 | `ATLAS_AGENT_API` | (unset) | Whether API tokens and the MCP endpoint are served at all. Unset: off until an admin turns it on in Settings, Connections. `0`: off, and that screen cannot turn it on. `1`: on, until an admin turns it off there. While it is off the MCP endpoint answers 404, every token is refused, and none can be created. Tokens are kept, not revoked. | no | yes (Connections), unless `0` |
-| `ATLAS_ALLOW_INSECURE` | (unset) | `1` acknowledges that `standalone` mode serves the whole map with no sign-in. It silences the startup security warning and makes standalone writable. Use only on loopback or a trusted network. | no | no |
+| `ATLAS_ALLOW_INSECURE` | (unset) | `1` acknowledges that `standalone` mode serves the whole map with no sign-in. It silences the startup security warning and makes standalone writable. Use only on loopback or a trusted network. Only the exact `1` turns it on: any other value (`true` included) leaves it off, and the app says so at startup. | no | no |
 
 ## Data and storage
 
@@ -95,18 +95,18 @@ the default only when you run the code directly from a checkout (development).
 | Variable | Default | What it does | Secret | Settings screen |
 |---|---|---|---|---|
 | `ATLAS_AUTH_MODE` | `accounts` in the image, `standalone` from a checkout | `standalone`, `accounts`, `hub` or `hybrid`. Any other value makes every gated request fail with a 500 (fail closed). | no | no |
-| `ATLAS_ADMIN_GROUP` | `atlas-admins` | The group that makes a viewer an Atlas admin when the identity comes from the hub (or from `ATLAS_STANDALONE_GROUPS`). Also the default for `ATLAS_LDAP_ADMIN_GROUPS`. | no | no |
+| `ATLAS_ADMIN_GROUP` | `atlas-admins` | The group that makes a viewer an Atlas admin when the identity comes from the hub. Also the default for `ATLAS_LDAP_ADMIN_GROUPS`. | no | no |
 | `ATLAS_TRUSTED_PROXIES` | (unset) | Comma-separated IPs or CIDRs of the reverse proxies whose `X-Forwarded-For` header the app believes, for example `172.18.0.2` or `172.18.0.0/16`. Used for the sign-in throttle and the audit log. Unset trusts no proxy and uses the socket peer. A bare number (a hop count) is refused and logged. See [install.md](install.md#put-it-behind-a-reverse-proxy). | no | no |
 | `ATLAS_INSECURE_COOKIES` | (unset) | `1` (or `true`, `yes`) drops the `Secure` flag from the session cookie, for testing over plain http. Without it, most browsers discard the cookie on plain http to anything but `localhost`, and sign-in returns you to the sign-in page. Do not use behind TLS. | no | no |
 
 ### Standalone identity
 
-In `standalone` mode there is no sign-in; these name the single implied user.
+In `standalone` mode there is no sign-in and no identity. Every viewer sees everything, and a change is recorded as made by `standalone`. The two names below are read by the hub gate's own fallback, which no standalone request reaches, so **setting them changes nothing**. They are listed because the code still names them.
 
 | Variable | Default | What it does | Secret | Settings screen |
 |---|---|---|---|---|
-| `ATLAS_STANDALONE_USER` | `local` | The user name recorded as the author of changes. | no | no |
-| `ATLAS_STANDALONE_GROUPS` | (empty) | Comma-separated groups for that user. | no | no |
+| `ATLAS_STANDALONE_USER` | `local` | Nothing. A standalone change is recorded as `standalone`. | no | no |
+| `ATLAS_STANDALONE_GROUPS` | (empty) | Nothing. A standalone viewer has no groups and sees everything. | no | no |
 
 ### Accounts mode (and the sign-in half of hybrid)
 
@@ -114,7 +114,7 @@ In `standalone` mode there is no sign-in; these name the single implied user.
 |---|---|---|---|---|
 | `ATLAS_BOOTSTRAP_ADMIN_USER` | `admin` when a bootstrap password is set | First run only: while there is no active admin, create this local admin at start (or promote the account if it already exists). Inert once any admin exists, so it is safe to leave set. With no admin and no bootstrap password in `accounts` mode, the log says how to create one. | no | no |
 | `ATLAS_BOOTSTRAP_ADMIN_PASSWORD` | (unset) | The bootstrap admin's password, at least 12 characters. A shorter password is refused: the app logs an error and starts without an admin. Prefer the `_FILE` form. | yes, `ATLAS_BOOTSTRAP_ADMIN_PASSWORD_FILE` | no |
-| `ATLAS_MFA_REQUIRED` | (empty) | Who must enroll TOTP before they can use the map: empty (nobody; anyone may enroll), `all` (also `1`, `yes`, `on`), `admins`, or a sign-in source (`local` or `ldap`). Read live. | no | no |
+| `ATLAS_MFA_REQUIRED` | (empty) | Who must enroll TOTP before they can use the map: empty (nobody; anyone may enroll; also `0`, `false`, `no`, `off`), `all` (also `1`, `true`, `yes`, `on`), `admins`, or a sign-in source (`local` or `ldap`). Any other word requires it of everyone and is logged. Read live. | no | no |
 | `ATLAS_LOGIN_MAX_USER` | `5` | Failed sign-ins allowed per user name within the window. | no | no |
 | `ATLAS_LOGIN_MAX_IP` | `20` | Failed sign-ins allowed per client IP within the window. | no | no |
 | `ATLAS_LOGIN_WINDOW_MIN` | `15` | The throttle window, in minutes. | no | no |

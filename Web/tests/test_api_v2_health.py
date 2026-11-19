@@ -25,8 +25,8 @@ from parity import Call, assert_parity  # noqa: E402
 WEB = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BUNDLED = os.path.join(WEB, "default-lab-data.json")
 
-# Non-empty so conftest snapshots/restores ATLAS_ENV per test; each fixture
-# below sets its own mode explicitly through fresh_app().
+# What conftest applies before each test here; each fixture below sets its own
+# mode explicitly through fresh_app(), and conftest takes it back afterwards.
 ATLAS_TEST_ENV = {"ATLAS_DATA_BACKEND": "file", "ATLAS_ALLOW_INSECURE": "1",
                   "ATLAS_AUTH_MODE": "standalone"}
 

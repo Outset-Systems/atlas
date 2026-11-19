@@ -100,6 +100,10 @@ if settings.LOG_LEVELS_REJECTED:
     log.warning("ATLAS_LOG_LEVELS: ignored unparseable entr%s %s",
                 "y" if len(settings.LOG_LEVELS_REJECTED) == 1 else "ies",
                 ", ".join(repr(b) for b in settings.LOG_LEVELS_REJECTED))
+for _name, _given, _used in settings.ENV_REJECTED:
+    # The same rule for every switch and number `settings` reads: a value it
+    # could not use never stops the boot, and never passes for having worked.
+    log.warning("%s=%r is not a value this setting takes: using %s", _name, _given, _used)
 
 # ── A name the tests still import (`tests/test_store.py` reads `app._validate`).
 # Three redaction aliases sat beside it under a comment claiming other modules
