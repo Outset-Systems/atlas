@@ -187,9 +187,56 @@ def test_audit_appends(store):
 def test_admin_counting(store):
     store.create_local_user("ops", PW, is_admin=True)
     store.create_local_user("alice", PW)
+    store.create_local_user("bob", PW, is_admin=True)
+    assert store.count_active_admins() == 2
+    store.set_active("bob", False)
     assert store.count_active_admins() == 1
-    store.set_active("ops", False)
-    assert store.count_active_admins() == 0
+
+
+@pytest.mark.parametrize("take_away", [
+    lambda s: s.set_active("ops", False),
+    lambda s: s.set_admin("ops", False),
+    lambda s: s.delete_user("ops"),
+])
+def test_the_last_active_admin_cannot_be_taken_away_by_any_write(store, take_away):
+    store.create_local_user("ops", PW, is_admin=True)
+    store.create_local_user("alice", PW)
+    with pytest.raises(store.LastAdminError):
+        take_away(store)
+    acc = store.get_user("ops")
+    assert acc and acc["is_admin"] and acc["active"]
+    assert store.count_active_admins() == 1
+    # a plain account is not guarded, and turning an admin ON never is
+    store.set_active("alice", False)
+    store.set_admin("alice", True)
+    store.set_active("alice", True)
+    store.set_admin("ops", False)          # alice is an active admin now
+    assert store.count_active_admins() == 1
+
+
+def test_an_account_made_again_does_not_start_where_its_old_cookies_left_off(store):
+    """Every account started at session epoch 0, so one deleted and made again
+    under the same name took back its old cookies (audit 2026-11-12, Auth 8)."""
+    store.create_local_user("ops", PW, is_admin=True)
+    store.create_local_user("alice", PW)
+    first = store.session_epoch("alice")
+    assert first != 0
+    store.delete_user("alice")
+    store.create_local_user("alice", PW)
+    assert store.session_epoch("alice") not in (0, first)
+    mirrored = store.upsert_ldap_user("sheik", display_name="Sheik")
+    assert mirrored["session_epoch"] != 0
+
+
+def test_the_sign_in_log_keeps_the_newest_rows_and_no_more(store, monkeypatch):
+    """Every failed sign-in wrote a row and nothing pruned the table, so a
+    stranger could grow accounts.db without end (audit 2026-11-12, Auth 5)."""
+    monkeypatch.setattr(store, "AUDIT_KEEP", 5)
+    for i in range(12):
+        store.audit("login_fail", f"guess{i}", "198.51.100.7")
+    tail = store.audit_tail(100)
+    assert len(tail) == 5
+    assert [r["username"] for r in tail] == [f"guess{i}" for i in range(11, 6, -1)]
 
 
 if __name__ == "__main__":

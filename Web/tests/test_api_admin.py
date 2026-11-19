@@ -368,6 +368,29 @@ def test_the_directory_test_never_stages_settings_globally(client, monkeypatch):
     assert os.environ["ATLAS_LDAP_ADMIN_GROUPS"] == "Cartographers"
 
 
+def test_a_directory_test_judges_the_settings_the_save_will_put_in_force(client, monkeypatch):
+    """A blank field was the built-in default in the test and the deployment's
+    value after the save, and the group scope was always `base` in the test,
+    so a test could prove an admin on settings that would not be in force
+    (audit 2026-11-12, Auth 6)."""
+    monkeypatch.setenv("ATLAS_LDAP_ADMIN_GROUPS", "Cartographers")
+    monkeypatch.setenv("ATLAS_LDAP_GROUP_SCOPE", "subtree")
+    import ldap_backend
+    seen = {}
+
+    def fake_authenticate(username, password, overrides=None):
+        seen.update(overrides or {})
+        return False, {}
+    monkeypatch.setattr(ldap_backend, "authenticate", fake_authenticate)
+    r = client.post("/api/v2/admin/auth/test", headers=WRITE, json={
+        "settings": {"ATLAS_LDAP_URL": "ldaps://dc.example:636"},
+        "username": "ops", "password": "x"})
+    assert r.status_code == 200
+    assert seen["ATLAS_LDAP_URL"] == "ldaps://dc.example:636"      # as typed
+    assert seen["ATLAS_LDAP_ADMIN_GROUPS"] == "Cartographers"      # blank: the deployment's
+    assert seen["ATLAS_LDAP_GROUP_SCOPE"] == "subtree"             # read, not assumed
+
+
 def test_the_admin_proof_expires(client, monkeypatch):
     """The receipt used to be a bare `True` that was never cleared, so one
     successful test at any point unlocked every later ldap-only save for the

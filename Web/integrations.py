@@ -187,6 +187,10 @@ def _load():
         try:
             with open(p, encoding="utf-8") as fh:
                 loaded = json.load(fh)
+            if not isinstance(loaded, dict):
+                # `[]` or `null`: valid JSON, no settings, and an AttributeError
+                # no handler caught (2026-11-18, the 11-12 audit's Auth 7)
+                raise ValueError("not a JSON object")
             # NAMES THAT CHANGED (v1.48.0): a file written before the renames
             # keeps working; a key stored under both names keeps the new one.
             renamed = {}

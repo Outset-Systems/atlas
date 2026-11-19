@@ -326,6 +326,26 @@ def test_bootstrap_admin_env(tmp_path):
     assert accounts.verify_password("ops", PW)
 
 
+def test_a_bootstrap_password_for_an_account_that_exists_is_said_not_applied(tmp_path, caplog):
+    """The account was promoted and kept its OLD password, and nothing said
+    the bootstrap password was not used (audit 2026-11-12, Auth 12)."""
+    import logging
+    db = str(tmp_path / "boot.db")
+    common = dict(ATLAS_AUTH_MODE="accounts", ATLAS_DATA=str(_dataset(tmp_path)),
+                  ATLAS_ACCOUNTS_DB=db, ATLAS_SECRET_KEY="k", ATLAS_INSECURE_COOKIES="1",
+                  ATLAS_DATA_BACKEND="file")
+    fresh_app(**common)
+    import accounts
+    accounts.create_local_user("ops", PW)            # exists, and is no admin
+    with caplog.at_level(logging.WARNING, logger="atlas.auth.routes"):
+        fresh_app(**common, ATLAS_BOOTSTRAP_ADMIN_USER="ops",
+                  ATLAS_BOOTSTRAP_ADMIN_PASSWORD="a-brand-new-password")
+    acc = accounts.get_user("ops")
+    assert acc["is_admin"] and acc["active"]
+    assert accounts.verify_password("ops", PW)        # its own password, on purpose
+    assert any("was not applied" in r.getMessage() for r in caplog.records)
+
+
 def test_bootstrap_password_alone_creates_admin(tmp_path):
     """A bare `docker run -e ATLAS_BOOTSTRAP_ADMIN_PASSWORD=…` (no user name)
     created nobody before 2026-10-18; it now creates the documented `admin`."""
@@ -913,11 +933,42 @@ def test_source_conflict_still_refuses_and_is_recorded(realm, monkeypatch):
     # no session was established - the whole point is that it REFUSES
     with c.session_transaction() as s:
         assert "user" not in s
-    # and the operator can still see why, in the ledger the admin UI renders
-    rows = accounts_mod.recent_audit(20) if hasattr(accounts_mod, "recent_audit") else []
-    if rows:
-        assert any("source conflict" in str(row) for row in rows), \
-            "the audit trail should name the cause even though the caller is not told"
+    # and the operator can still see why, in the ledger the admin UI renders.
+    # This asked for `recent_audit`, which never existed, so the assertion
+    # never ran (audit 2026-11-12, Auth 15): it is `audit_tail`.
+    rows = accounts_mod.audit_tail(20)
+    assert any("source conflict" in str(row) for row in rows), \
+        "the audit trail should name the cause even though the caller is not told"
+
+
+# ── a session's two lifetimes (audit 2026-11-12, Auth 15: no test had them) ──
+
+def test_a_session_ends_when_it_has_sat_idle_too_long(realm, monkeypatch):
+    import settings
+    import atlas_auth
+    c = realm.app.test_client()
+    _login(c, "alice")
+    assert c.get("/api/v2/auth/me").get_json()["authenticated"] is True
+    now = atlas_auth.time.time()
+    monkeypatch.setattr(atlas_auth.time, "time", lambda: now + settings.SESSION_IDLE_S + 5)
+    assert c.get("/api/v2/auth/me").get_json()["authenticated"] is False
+
+
+def test_a_session_in_use_still_ends_at_its_absolute_lifetime(realm, monkeypatch):
+    import settings
+    import atlas_auth
+    c = realm.app.test_client()
+    _login(c, "alice")
+    start = atlas_auth.time.time()
+    clock = {"now": start}
+    monkeypatch.setattr(atlas_auth.time, "time", lambda: clock["now"])
+    # used every so often, never idle for long: it lives until the absolute end
+    step = max(settings.SESSION_IDLE_S // 2, 1)
+    while clock["now"] + step < start + settings.SESSION_ABS_S:
+        clock["now"] += step
+        assert c.get("/api/v2/auth/me").get_json()["authenticated"] is True
+    clock["now"] = start + settings.SESSION_ABS_S + 5
+    assert c.get("/api/v2/auth/me").get_json()["authenticated"] is False
 
 
 # ── The six routes on the most dangerous screen that had no test ────────────
@@ -1130,3 +1181,25 @@ def test_a_named_user_with_no_password_says_so_too(tmp_path, monkeypatch, caplog
         auth_routes.ensure_bootstrap_admin()
     assert accounts.count_active_admins() == 0
     assert any("no admin account exists" in r.getMessage() for r in caplog.records)
+
+
+@pytest.mark.parametrize("body", ["[]", "null", "5"])
+def test_a_settings_file_that_is_not_an_object_locks_no_one_out(realm, monkeypatch, tmp_path, body):
+    """`[]` or `null` is valid JSON and no settings: it raised an
+    AttributeError no handler caught, so every sign-in, local ones included,
+    answered 500 (audit 2026-11-12, Auth 7). The same hole was in the Sources."""
+    import auth_config
+    import integrations
+    directory = tmp_path / "auth-config.json"
+    directory.write_text(body, encoding="utf-8")
+    sources = tmp_path / "integrations.json"
+    sources.write_text(body, encoding="utf-8")
+    monkeypatch.setenv("ATLAS_AUTH_CONFIG", str(directory))
+    monkeypatch.setenv("ATLAS_INTEGRATIONS", str(sources))
+    monkeypatch.setenv("ATLAS_KUMA_URL", "http://kuma.example:3001")
+    auth_config._cache.update(mtime=None, data={})
+    integrations._cache["mtime"] = None
+    c = realm.app.test_client()
+    r, _ = _login(c, "alice")
+    assert r.status_code == 200, r.get_data(as_text=True)[:200]
+    assert integrations.get("ATLAS_KUMA_URL") == "http://kuma.example:3001"

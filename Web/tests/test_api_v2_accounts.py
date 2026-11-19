@@ -301,3 +301,88 @@ def test_login_throttle(realm, monkeypatch):
     r = c.post(f"{AUTH}/login", headers=WRITE, json={"username": "alice", "password": PW})
     assert r.status_code == 429
     assert r.get_json() == {"ok": False, "error": "Too many attempts. Try again later."}
+
+
+# ── stage 5 of the refactor (audit 2026-11-12: Auth 2, 3, 10) ────────────────
+
+def test_the_password_change_is_throttled_like_every_other_guess(realm):
+    """A stolen session could guess the current password here without limit:
+    the failures were counted and never looked at (Auth 2)."""
+    import settings
+    c = realm.app.test_client()
+    login_as(c, "alice", PW)
+    answers = [c.post(f"{AUTH}/password", headers=WRITE,
+                      json={"current": f"guess-{i}-wrong", "new": "another-long-password"}).status_code
+               for i in range(settings.LOGIN_MAX_USER + 2)]
+    assert answers[:settings.LOGIN_MAX_USER] == [401] * settings.LOGIN_MAX_USER
+    assert answers[-1] == 429
+    # and the right password is refused too while the throttle holds
+    r = c.post(f"{AUTH}/password", headers=WRITE, json={"current": PW, "new": "another-long-password"})
+    assert r.status_code == 429
+
+
+def test_a_forced_enrollment_left_too_long_is_no_longer_a_way_in(realm, monkeypatch):
+    """The forced-enrollment state checked the account and its epoch only, and
+    confirming a code turns it into a full session with no password: a cookie
+    from an abandoned first sign-in worked for weeks (Auth 3)."""
+    import time
+
+    import settings
+    from api.v2 import accounts_v2
+    monkeypatch.setattr(settings, "mfa_required", lambda: "admins")
+    c = realm.app.test_client()
+    r = c.post(f"{AUTH}/login", headers=WRITE, json={"username": "ops", "password": PW})
+    assert r.get_json() == {"ok": True, "mfa_setup_required": True}
+    assert c.get(f"{AUTH}/me").get_json()["mfa_setup_required"] is True
+    later = time.time() + accounts_v2._ENROLL_TTL + 5
+    monkeypatch.setattr(accounts_v2.time, "time", lambda: later)
+    assert c.get(f"{AUTH}/me").get_json() == {"authenticated": False}
+    r = c.post(f"{AUTH}/mfa/setup", headers=WRITE)
+    assert r.status_code == 401
+
+
+def test_an_admin_resets_their_own_second_factor_only_as_disable_would_let_them(realm, monkeypatch):
+    """The admin route reset any account's factor on the admin flag and the
+    cookie alone, the admin's own included, where /mfa/disable asks for the
+    password and a code (Auth 10). Another account's is still a click."""
+    import accounts
+    import pyotp
+
+    import settings
+    _enroll("ops")
+    secret = _enroll("alice")
+    c = realm.app.test_client()
+    r = c.post(f"{AUTH}/login", headers=WRITE, json={"username": "ops", "password": PW})
+    assert r.get_json()["mfa_required"] is True
+    link_secret = accounts.get_user("ops")["mfa_secret"]
+    import crypto_at_rest
+    totp = pyotp.TOTP(crypto_at_rest.decrypt_text(link_secret))
+    import time
+    r = c.post(f"{AUTH}/login/mfa", headers=WRITE, json={"code": totp.at(time.time() + 30)})
+    assert r.status_code == 200
+    # someone else's is the admin's to reset, with no more than the session
+    r = c.post(f"{AUTH}/users/alice/reset-mfa", headers=WRITE)
+    assert r.status_code == 200 and not accounts.get_user("alice")["mfa_enabled"]
+    assert secret
+    # one's own: the cookie alone is refused
+    r = c.post(f"{AUTH}/users/ops/reset-mfa", headers=WRITE)
+    assert r.status_code == 400 and accounts.get_user("ops")["mfa_enabled"]
+    # with the password and a fresh code it goes, as /mfa/disable would (a
+    # minute on: the sign-in above used up the codes before then), and this
+    # session stays signed in, as /mfa/disable keeps it
+    later = time.time() + 90
+    with monkeypatch.context() as clock:
+        clock.setattr(accounts.time, "time", lambda: later)
+        r = c.post(f"{AUTH}/users/ops/reset-mfa", headers=WRITE,
+                   json={"current": PW, "code": totp.at(later)})
+        assert r.status_code == 200 and not accounts.get_user("ops")["mfa_enabled"]
+        assert c.get(f"{AUTH}/me").get_json()["authenticated"] is True
+
+
+def test_an_admin_cannot_reset_their_own_factor_where_the_policy_requires_one(realm, monkeypatch):
+    import settings
+    c = realm.app.test_client()
+    login_as(c, "ops", PW)
+    monkeypatch.setattr(settings, "mfa_required", lambda: "all")
+    r = c.post(f"{AUTH}/users/ops/reset-mfa", headers=WRITE, json={"current": PW})
+    assert r.status_code == 403 and "ATLAS_MFA_REQUIRED" in r.get_json()["error"]

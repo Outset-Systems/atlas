@@ -363,10 +363,20 @@ def cmd_initdb(args):
 # Passwords are prompted (getpass) or read from --password-file, never argv —
 # argv is world-readable in a process listing.
 
+def _read_file(path, what):
+    """A secret read from a named file, or None with `error:` said: a wrong
+    path was a traceback (2026-11-18, the 11-12 audit's Foundations 11)."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            return f.read().strip()
+    except OSError as e:
+        print(f"error: cannot read the {what} file {path!r}: {e.strerror or e}", file=sys.stderr)
+        return None
+
+
 def _read_password(args):
     if getattr(args, "password_file", None):
-        with open(args.password_file, encoding="utf-8") as f:
-            return f.read().strip()
+        return _read_file(args.password_file, "password")
     import getpass
     pw = getpass.getpass("Password: ")
     if getpass.getpass("Again: ") != pw:
@@ -436,10 +446,20 @@ def cmd_user_mod(args):
             print("error: directory accounts get admin from ATLAS_LDAP_ADMIN_GROUPS",
                   file=sys.stderr)
             return 2
-        accounts.set_admin(args.username, args.set_admin)
+        # the last active admin is guarded in the store itself, as user-del
+        # was here: user-mod --no-admin / --deactivate could leave no admin
+        try:
+            accounts.set_admin(args.username, args.set_admin)
+        except accounts.LastAdminError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 2
         accounts.audit("user_admin", args.username, detail="atlasctl")
     if args.set_active is not None:
-        accounts.set_active(args.username, args.set_active)
+        try:
+            accounts.set_active(args.username, args.set_active)
+        except accounts.LastAdminError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 2
         accounts.audit("user_active", args.username, detail="atlasctl")
     if args.reset_mfa:
         accounts.disable_mfa(args.username)
@@ -459,7 +479,11 @@ def cmd_user_del(args):
     if acc["is_admin"] and acc["active"] and accounts.count_active_admins() <= 1:
         print("error: that is the last active admin", file=sys.stderr)
         return 2
-    accounts.delete_user(args.username)
+    try:
+        accounts.delete_user(args.username)
+    except accounts.LastAdminError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
     accounts.audit("user_deleted", args.username, detail="atlasctl")
     print(f"deleted {args.username}")
     return 0
@@ -469,8 +493,9 @@ def cmd_mcp(args):
     """MCP over stdio: a pipe to this Atlas's own MCP endpoint (mcp_stdio.py)."""
     token = os.environ.get("ATLAS_TOKEN", "").strip()
     if args.token_file:
-        with open(args.token_file, encoding="utf-8") as fh:
-            token = fh.read().strip()
+        token = _read_file(args.token_file, "token")
+        if token is None:
+            return 2
     import mcp_stdio
     return mcp_stdio.main(token)
 

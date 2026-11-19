@@ -13,7 +13,8 @@ from flask import jsonify, request
 import atlas_auth
 
 from . import NAME_LIMIT, _body, _text, _texts
-from .accounts_v2 import _name, admin_required, auth_bp, same_origin_required
+from .accounts_v2 import (_name, _reauth_refusal, _too_many, admin_required, auth_bp,
+                          same_origin_required)
 
 
 # ── Admin: user management (G14) ─────────────────────────────────────────────
@@ -73,7 +74,12 @@ def api_user_admin(username):
     blocked = _admin_target_guard(username, demoting=not on)
     if blocked:
         return blocked
-    accounts.set_admin(username, on)
+    try:
+        accounts.set_admin(username, on)
+    except accounts.LastAdminError as exc:
+        # the count read above can be overtaken by another admin's write; the
+        # store's own guard is the one that holds (2026-11-18)
+        return jsonify({"ok": False, "error": str(exc)}), 400
     accounts.audit("user_admin", username, atlas_auth.client_ip(),
                    f"{'granted' if on else 'revoked'} by {atlas_auth.current_user()}")
     return jsonify({"ok": True})
@@ -89,7 +95,12 @@ def api_user_active(username):
     blocked = _admin_target_guard(username, deactivating=not on)
     if blocked:
         return blocked
-    accounts.set_active(username, on)
+    try:
+        accounts.set_active(username, on)
+    except accounts.LastAdminError as exc:
+        # the count read above can be overtaken by another admin's write; the
+        # store's own guard is the one that holds (2026-11-18)
+        return jsonify({"ok": False, "error": str(exc)}), 400
     accounts.audit("user_active", username, atlas_auth.client_ip(),
                    f"{'activated' if on else 'deactivated'} by {atlas_auth.current_user()}")
     return jsonify({"ok": True})
@@ -118,7 +129,26 @@ def api_user_reset_mfa(username):
     username = _name(username)
     if not accounts.get_user(username):
         return jsonify({"ok": False, "error": "No such account."}), 404
+    me = atlas_auth.current_account()
+    if username == me["username"]:
+        # AN ADMIN'S OWN SECOND FACTOR (2026-11-18). This route took the admin
+        # flag and a session cookie and nothing else, where `/mfa/disable` asks
+        # for the password and a code and refuses while the policy requires a
+        # second factor: a stolen admin cookie could switch its own off here
+        # (the 11-12 audit, Auth 10). One's own goes through the same checks.
+        if atlas_auth.mfa_policy_applies(me):
+            return jsonify({"ok": False, "error":
+                            "MFA is required on this instance (ATLAS_MFA_REQUIRED)."}), 403
+        if accounts.throttled(username, atlas_auth.client_ip()):
+            return _too_many()
+        refusal = _reauth_refusal(me, _body())
+        if refusal:
+            return refusal
     accounts.disable_mfa(username)
+    if username == me["username"]:
+        # disabling ends every session of the account; keep THIS one, as
+        # /mfa/disable does
+        atlas_auth.establish_session(accounts.get_user(username))
     accounts.audit("mfa_reset", username, atlas_auth.client_ip(),
                    "by " + atlas_auth.current_user())
     return jsonify({"ok": True})
@@ -133,7 +163,12 @@ def api_user_delete(username):
     blocked = _admin_target_guard(username, deactivating=True)
     if blocked:
         return blocked
-    accounts.delete_user(username)
+    try:
+        accounts.delete_user(username)
+    except accounts.LastAdminError as exc:
+        # the count read above can be overtaken by another admin's write; the
+        # store's own guard is the one that holds (2026-11-18)
+        return jsonify({"ok": False, "error": str(exc)}), 400
     accounts.audit("user_deleted", username, atlas_auth.client_ip(),
                    "by " + atlas_auth.current_user())
     return jsonify({"ok": True})

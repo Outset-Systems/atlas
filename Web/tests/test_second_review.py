@@ -206,6 +206,22 @@ def test_hub_mode_keeps_the_schedule_from_an_unproved_caller(tmp_path):
     assert "pub.internal" not in c.get("/api/status").headers["Content-Security-Policy"]
 
 
+def test_signed_hub_mode_gives_the_schedule_to_a_signature_not_to_a_header(tmp_path):
+    """On the paths the gate waves through, the viewer check asked for a user
+    the way the unsigned mode does, so a plain `X-Remote-User` header counted
+    as a signed-in viewer and was given the manifest's schedule (audit
+    2026-11-12, Auth 1)."""
+    import hub_auth.auth as hub
+    from test_auth_gate_routes import _signed
+    secret = "s" * 32
+    app = fresh_app(ATLAS_AUTH_MODE="hub", ATLAS_HUB_SECRET=secret, **_common(tmp_path)).app
+    c = app.test_client()
+    forged = c.get("/api/manifest", headers={"X-Remote-User": "mallory"})
+    assert forged.get_json().get("gated") and "pointed" not in forged.get_data(as_text=True)
+    signed = c.get("/api/manifest", headers={hub.SIGNED_HEADER: _signed(secret.encode(), "ops", [])})
+    assert not signed.get_json().get("gated")
+
+
 def test_hub_mode_with_a_lost_secret_file_trusts_no_header(tmp_path):
     app = fresh_app(ATLAS_AUTH_MODE="hub", ATLAS_HUB_SECRET_FILE=str(tmp_path / "gone"),
                     **_common(tmp_path)).app

@@ -297,6 +297,31 @@ def is_last_active_admin(acc):
                 and count_active_admins() <= 1)
 
 
+class LastAdminError(ValueError):
+    """The write would leave no active admin (2026-11-18, the 11-12 audit's
+    Auth 11 and Foundations 11). A ValueError, so a caller that already turns
+    one into a refusal needs nothing new."""
+
+
+#: An account that is NOT the last active admin. Inside the one UPDATE or
+#: DELETE that changes it, so the count and the write are a single statement:
+#: the routes used to read the count in one connection and write in another,
+#: and two admins demoting each other on two workers could leave none. SQLite
+#: holds its write lock for the statement, so the second one sees the first.
+_NOT_THE_LAST_ADMIN = ("NOT (is_admin = 1 AND active = 1 AND "
+                       "(SELECT COUNT(*) FROM users WHERE is_admin = 1 AND active = 1) <= 1)")
+
+
+def _first_epoch():
+    """Where a new account's session epoch starts (2026-11-18). It was 0 for
+    every account, so an account deleted and made again under the same name
+    (or a directory user mirrored again on their next sign-in) started at the
+    epoch its old cookies carried, and they worked again inside their
+    lifetime (the 11-12 audit, Auth 8). A random start makes an old cookie
+    belong to no account."""
+    return secrets.randbelow(2 ** 31 - 1) + 1
+
+
 def create_local_user(username, password, *, display_name="", email="",
                       groups=(), is_admin=False):
     username = _norm(username)
@@ -310,10 +335,11 @@ def create_local_user(username, password, *, display_name="", email="",
     with _connect() as conn:
         conn.execute(
             "INSERT INTO users (username, display_name, email, source, password_hash, "
-            "groups_csv, is_admin, created) VALUES (?, ?, ?, 'local', ?, ?, ?, ?)",
+            "groups_csv, is_admin, created, session_epoch) "
+            "VALUES (?, ?, ?, 'local', ?, ?, ?, ?, ?)",
             (username, display_name or username, email,
              generate_password_hash(password),
-             groups_csv, 1 if is_admin else 0, _now()))
+             groups_csv, 1 if is_admin else 0, _now(), _first_epoch()))
         conn.commit()
     return get_user(username)
 
@@ -359,8 +385,8 @@ def upsert_ldap_user(username, *, display_name="", email="", groups=(), is_admin
     with _connect() as conn:
         conn.execute(
             "INSERT INTO users (username, display_name, email, source, password_hash, "
-            "groups_csv, is_admin, created, last_login) "
-            "VALUES (?, ?, ?, 'ldap', NULL, ?, ?, ?, ?) "
+            "groups_csv, is_admin, created, last_login, session_epoch) "
+            "VALUES (?, ?, ?, 'ldap', NULL, ?, ?, ?, ?, ?) "
             "ON CONFLICT(username) DO UPDATE SET "
             "display_name=excluded.display_name, email=excluded.email, "
             "source='ldap', groups_csv=excluded.groups_csv, "
@@ -369,7 +395,7 @@ def upsert_ldap_user(username, *, display_name="", email="", groups=(), is_admin
             # a concurrent create_local_user between its read and this write.
             "WHERE users.source = 'ldap'",
             (username, display_name or username, email, groups_csv,
-             1 if is_admin else 0, _now(), _now()))
+             1 if is_admin else 0, _now(), _now(), _first_epoch()))
         conn.commit()
     fresh = get_user(username)
     if not fresh or (fresh.get("source") or "") != "ldap":
@@ -420,19 +446,35 @@ def touch_login(username):
         conn.commit()
 
 
+def _guarded(conn, sql, args, username):
+    """Run a write that must not take away the last active admin. Raises
+    LastAdminError when the account exists and the guard held it back."""
+    cur = conn.execute(sql + " AND " + _NOT_THE_LAST_ADMIN, args)
+    if cur.rowcount == 0 and conn.execute(
+            "SELECT 1 FROM users WHERE username = ?", (_norm(username),)).fetchone():
+        raise LastAdminError("That is the last active admin.")
+    return cur
+
+
 def set_admin(username, on):
     with _connect() as conn:
-        conn.execute("UPDATE users SET is_admin = ? WHERE username = ?",
-                     (1 if on else 0, _norm(username)))
+        if on:
+            conn.execute("UPDATE users SET is_admin = 1 WHERE username = ?", (_norm(username),))
+        else:
+            _guarded(conn, "UPDATE users SET is_admin = 0 WHERE username = ?",
+                     (_norm(username),), username)
         conn.commit()
 
 
 def set_active(username, on):
     """Deactivation bumps the epoch so live sessions die with the account."""
     with _connect() as conn:
-        conn.execute(
-            "UPDATE users SET active = ?, session_epoch = session_epoch + 1 "
-            "WHERE username = ?", (1 if on else 0, _norm(username)))
+        sql = ("UPDATE users SET active = ?, session_epoch = session_epoch + 1 "
+               "WHERE username = ?")
+        if on:
+            conn.execute(sql, (1, _norm(username)))
+        else:
+            _guarded(conn, sql, (0, _norm(username)), username)
         conn.commit()
 
 
@@ -462,7 +504,7 @@ def set_emblem(username, emblem):
 def delete_user(username):
     username = _norm(username)
     with _connect() as conn:
-        conn.execute("DELETE FROM users WHERE username = ?", (username,))
+        _guarded(conn, "DELETE FROM users WHERE username = ?", (username,), username)
         conn.execute("DELETE FROM mfa_backup_codes WHERE username = ?", (username,))
         conn.commit()
 
@@ -702,13 +744,24 @@ def clear_failures(username):
 
 # ── Audit (append-only) ──────────────────────────────────────────────────────
 
+#: How many sign-in log rows are kept (2026-11-18). Every failed or throttled
+#: sign-in writes one, anonymous ones included, and nothing pruned the table,
+#: so a stranger could grow `accounts.db` without end and push every real
+#: event out of the 500 rows the Settings page shows (the 11-12 audit, Auth
+#: 5). The newest are kept; at a few hundred bytes a row this is a few MB.
+AUDIT_KEEP = 20000
+
+
 def audit(event, username="", ip="", detail=""):
     init_db()
     with _connect() as conn:
-        conn.execute(
+        cur = conn.execute(
             "INSERT INTO auth_audit (ts, event, username, ip, detail) "
             "VALUES (?, ?, ?, ?, ?)",
-            (_now(), event, _norm(username), ip or "", detail or ""))
+            (_now(), event, _norm(username), ip or "", (detail or "")[:500]))
+        # ids only grow, so everything this far below the newest is older than
+        # the newest AUDIT_KEEP: one indexed delete, no count
+        conn.execute("DELETE FROM auth_audit WHERE id <= ?", (cur.lastrowid - AUDIT_KEEP,))
         conn.commit()
 
 

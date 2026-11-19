@@ -54,7 +54,15 @@ def auth_settings_test():
         return jsonify({"ok": False, "error": f"not a directory setting: {unknown[0]}"}), 400
 
     import ldap_backend
-    overrides = {k: str(proposed.get(k, "") or "").strip() for k in auth_config.ALLOWED}
+    # THE SETTINGS THE SAVE WILL PUT IN FORCE (2026-11-18). A blank field was
+    # the built-in default here and the deployment's value after a save, and
+    # the group scope was never read here at all (always `base`), so a test
+    # could pass, and earn the admin proof that unlocks a directory-only save,
+    # on settings that would not be the ones in force (the 11-12 audit, Auth
+    # 6). A blank field is what the save makes it: the deployment's value.
+    overrides = {k: (str(proposed.get(k, "") or "").strip() or os.environ.get(k, "").strip())
+                 for k in auth_config.ALLOWED}
+    overrides["ATLAS_LDAP_GROUP_SCOPE"] = ldap_backend._cfg("ATLAS_LDAP_GROUP_SCOPE", "base")
     try:
         ok, info = ldap_backend.authenticate(username, password, overrides=overrides)
     except ValueError as e:            # ldaps:// enforcement, bad URL

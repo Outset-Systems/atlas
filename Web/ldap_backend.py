@@ -45,9 +45,12 @@ offline record; the directory stays the only credential authority.
 need it installed. Tests inject `_connect_fn` instead of a real server.
 """
 
+import logging
 import os
 import re
 import envnames
+
+log = logging.getLogger("atlas.auth.ldap")
 
 
 def _cfg(name, default="", overrides=None):
@@ -289,7 +292,17 @@ def authenticate(username, password, overrides=None):
     bound, conn = _bind(url, upn, password, timeout, overrides)
     if not bound:
         return False, {}
-    found = _lookup(conn, base_dn, username, upn)
+    try:
+        found = _lookup(conn, base_dn, username, upn)
+    except Exception as e:  # noqa: BLE001 - the directory is remote
+        # A directory that took the bind and then failed the search (a socket
+        # timeout, a referral it would not follow) raised past every caller,
+        # which catch a ValueError only: the sign-in answered 500 and counted
+        # no failure (2026-11-18, the 11-12 audit's Auth 9). It is a refusal,
+        # said in the log.
+        log.warning("ldap: the directory took the bind for %s and then failed the lookup: %s",
+                    username, e)
+        return False, {}
     if found is None:
         return False, {}
     raw_groups, display, email = found

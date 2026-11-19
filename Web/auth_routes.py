@@ -82,6 +82,18 @@ def ensure_bootstrap_admin():
         accounts.set_admin(username, True)
         accounts.set_active(username, True)
         accounts.audit("bootstrap_admin", username, detail="promoted existing account")
+        # SAID, NOT SILENT (2026-11-18). An operator who sets the bootstrap
+        # password to get back in is recovering a lost one, and the account
+        # kept its OLD password with nothing anywhere saying so (the 11-12
+        # audit, Auth 12). The password is not applied on purpose: a value in
+        # the compose would otherwise reset it on every restart.
+        if password:
+            log.warning("bootstrap: %r already exists, so it was made an active admin with "
+                        "its OWN password; ATLAS_BOOTSTRAP_ADMIN_PASSWORD was not applied. "
+                        "To set a new one: python cli.py user-passwd %s", username, username)
+        else:
+            log.warning("bootstrap: no active admin, so %r was made an active admin again",
+                        username)
         return
     if not password:
         # The compose file always names a user, so a blank password lands here.

@@ -68,6 +68,11 @@ def _load():
         try:
             with open(p, encoding="utf-8") as fh:
                 loaded = json.load(fh)
+            if not isinstance(loaded, dict):
+                # `[]` or `null` is valid JSON and no settings: it raised an
+                # AttributeError no handler caught, and every sign-in, local
+                # ones included, answered 500 (2026-11-18, the audit's Auth 7)
+                raise ValueError("not a JSON object")
             _cache["data"] = {k: v for k, v in loaded.items() if k in ALLOWED}
             _cache["mtime"] = mtime
         except (OSError, ValueError):

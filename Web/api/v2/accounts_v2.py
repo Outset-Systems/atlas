@@ -40,6 +40,13 @@ log = logging.getLogger("atlas.api.v2")
 
 _GENERIC_FAIL = "Invalid credentials."
 _MFA_PENDING_TTL = 300  # seconds a password-passed-but-no-code login may sit
+#: How long a forced enrollment may sit between the password and the first
+#: code (2026-11-18). It had no limit: the state checked the account and its
+#: epoch only, and `/mfa/confirm` turns it into a full session with no
+#: password, so a cookie left behind by an abandoned first sign-in worked
+#: until the epoch moved or the browser's cookie aged out (the 11-12 audit,
+#: Auth 3). Long enough to install an authenticator app and scan a code.
+_ENROLL_TTL = 15 * 60
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
 
@@ -98,7 +105,8 @@ def _enroll_pending_user():
     username = session.get("user")
     acc = accounts.get_user(username) if username else None
     if (acc and acc.get("active")
-            and session.get("_epoch") == acc.get("session_epoch", 0)):
+            and session.get("_epoch") == acc.get("session_epoch", 0)
+            and time.time() - session.get("_start", 0) <= _ENROLL_TTL):
         return username
     return None
 
@@ -366,8 +374,14 @@ def api_change_password():
         return jsonify({"ok": False, "error":
                         "Directory accounts change their password in the directory."}), 400
     data = _body()
+    ip = atlas_auth.client_ip()
+    # the throttle every other route that takes a guess has (2026-11-18): a
+    # stolen session could guess the current password here without limit, the
+    # failures counted and never looked at (the 11-12 audit, Auth 2)
+    if accounts.throttled(acc["username"], ip):
+        return _too_many()
     if not accounts.verify_password(acc["username"], _text(data, "current")):
-        accounts.record_failure(acc["username"], atlas_auth.client_ip())
+        accounts.record_failure(acc["username"], ip)
         return jsonify({"ok": False, "error": "Current password is wrong."}), 401
     try:
         accounts.set_password(acc["username"], _text(data, "new"))

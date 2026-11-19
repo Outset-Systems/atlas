@@ -303,6 +303,16 @@ def has_viewer():
         return True
     if mode() == "hub":
         import hub_auth.auth as hub
+        if hub.AUTH_SECRET:
+            # SIGNED HUB MODE BELIEVES ONLY THE SIGNATURE (2026-11-18). This
+            # asked `get_remote_user()`, which falls back to the plaintext
+            # `X-Remote-User` header when no valid token came: on a path the
+            # gate waves through, anyone who could reach the port and send
+            # that header counted as a signed-in viewer and was given the
+            # manifest's schedule (the 11-12 audit, Auth 1). The gate itself
+            # never believed the header once a secret was set; now this agrees.
+            claims = hub._claims()
+            return bool(claims and claims.get("u"))
         return bool(hub.get_remote_user())
     return bool(current_user())
 

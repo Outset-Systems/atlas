@@ -257,3 +257,19 @@ def test_the_base_dn_scope_is_a_component_boundary():
     assert not ldap_backend._under("CN=atlas-admins,DC=notexample,DC=com", base)
     assert not ldap_backend._under("CN=atlas-admins,DC=example,DC=com,DC=au", base)
     assert ldap_backend._under("CN=anything", "")                            # no base: no scope
+
+
+def test_a_directory_that_fails_after_the_bind_is_a_refusal_not_a_500(ldap_env, caplog):
+    """The search sat outside every handler: a socket timeout after a good bind
+    raised past the sign-in, which answered 500 and counted no failure (audit
+    2026-11-12, Auth 9)."""
+    import logging
+
+    class _Dropped(_FakeConn):
+        def search(self, **kw):
+            raise OSError("the directory went away")
+
+    ldap_backend._connect_fn = lambda url, upn, password, timeout: _Dropped([])
+    with caplog.at_level(logging.WARNING, logger="atlas.auth.ldap"):
+        assert ldap_backend.authenticate("ops", "pw") == (False, {})
+    assert any("failed the lookup" in r.getMessage() for r in caplog.records)
