@@ -178,10 +178,12 @@ function build() {
     picture's width out of 100: its longest word (a name breaks at a space or
     after a hyphen, and nowhere else by choice) or its address, whichever is
     wider, in the type the page is drawing them in. Measured on hidden copies,
-    since a name already broken has no honest width of its own. */
+    since a name already broken has no honest width of its own. `words` is each
+    name's longest word in px (2026-11-19): the CSS lets a name of several
+    words run to its column's edge only as far as that word must. */
 function needsOf() {
   const width = nodesEl.clientWidth;
-  if (!width) return {};
+  if (!width) return { needs: {}, words: {} };
   const items = [];
   for (const b of nodesEl.querySelectorAll('.pth-node')) {
     const name = b.querySelector('.pth-name')?.textContent || '';
@@ -196,13 +198,15 @@ function needsOf() {
     `<span class="${cls}" style="display:block;width:max-content;white-space:nowrap">${esc(text)}</span>`).join('');
   root.appendChild(probe);
   const needs = {};
+  const words = {};
   [...probe.children].forEach((el, i) => {
-    const id = items[i][0];
-    const share = (100 * (Math.ceil(el.getBoundingClientRect().width) + NAME_EDGE)) / width;
-    needs[id] = Math.max(needs[id] || 0, share);
+    const [id, cls] = items[i];
+    const px = Math.ceil(el.getBoundingClientRect().width);
+    needs[id] = Math.max(needs[id] || 0, (100 * (px + NAME_EDGE)) / width);
+    if (cls === 'pth-name') words[id] = Math.max(words[id] || 0, px);
   });
   probe.remove();
-  return needs;
+  return { needs, words };
 }
 
 /** Put what build() drew where it belongs: the tiers on a normalized 100×100
@@ -216,8 +220,9 @@ function place() {
   const narrow = phone.matches;
   root.classList.toggle('pth-narrow', narrow);
   const width = nodesEl.clientWidth;
+  const { needs, words } = narrow ? needsOf() : { needs: {}, words: {} };
   const { tiers, pos, rows = 1, cols = 1 } = layout(nodes, narrow,
-    narrow ? needsOf() : {}, narrow && width ? (100 * NAME_AIR) / width : 0);
+    needs, narrow && width ? (100 * NAME_AIR) / width : 0);
   root.style.setProperty('--pth-rows', String(rows));
   root.style.setProperty('--pth-tiers', String(cols));
 
@@ -239,7 +244,13 @@ function place() {
     const p = pos[b.dataset.id];
     b.style.left = `${p.x}%`;
     b.style.top = `${p.y}%`;
-    if (narrow) b.style.setProperty('--pth-w', `${p.w}%`); else b.style.removeProperty('--pth-w');
+    if (narrow) {
+      b.style.setProperty('--pth-w', `${p.w}%`);
+      b.style.setProperty('--pth-word', `${words[b.dataset.id] || 0}px`);
+    } else {
+      b.style.removeProperty('--pth-w');
+      b.style.removeProperty('--pth-word');
+    }
   }
   placedWidth = width;
 }
@@ -326,4 +337,10 @@ A.buildPathScene = function buildPathScene() {
     new ResizeObserver(() => { if (nodesEl.clientWidth !== placedWidth) again(); }).observe(nodesEl);
   }
   document.fonts?.addEventListener?.('loadingdone', again);
+  // and for one scheme (2026-11-19): a light name wears a plate the dark one
+  // does not, so a pick, the T key or the OS turning to dark while the scene is
+  // up asks again; all three move only <html data-scheme>
+  if (typeof MutationObserver === 'function') {
+    new MutationObserver(again).observe(document.documentElement, { attributes: true, attributeFilter: ['data-scheme'] });
+  }
 };

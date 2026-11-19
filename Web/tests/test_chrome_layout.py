@@ -963,5 +963,35 @@ def test_a_phone_column_is_as_wide_as_its_longest_word():
     assert "font" not in name and "letter-spacing" not in name, "the fix is the columns, not the type"
 
 
+def test_a_phone_name_in_the_light_scheme_is_whole_and_apart_from_its_neighbour():
+    """2026-11-19 (the owner: "fix the light-scheme name breaks at 340px").
+
+    The light scheme sets each name on a plate 4px wider each side, and those
+    8px were the whole difference: at 340px it broke HYPERVISOR, DOWNLOADS and
+    WORKSTATION mid-word where the dark scheme set them whole. On a phone the
+    plate keeps 1px a side. Measured beside it: two names in neighbouring
+    columns could stand ~4px apart and read as one ("GATEWAY CORE SWITCH"), in
+    both schemes; a name of several words now keeps 6px from each edge of its
+    column or breaks at its spaces, while its longest word may still take the
+    whole column. And the scheme changing while the scene is up places again:
+    the plate changes what a name needs."""
+    css = re.sub(r"/\*.*?\*/", "", _read(CSS), flags=re.S)
+    # the plate: 4px a side on a wide screen, 1px a side on a phone
+    assert re.search(r':root\[data-scheme="light"\] :is\(\.pth-name, \.pth-ip\) \{[^}]*padding: 0 4px;', css)
+    assert ':root[data-scheme="light"] #path.pth-narrow :is(.pth-name, .pth-ip) { padding: 0 1px; }' in css
+    name = re.search(r"#path\.pth-narrow \.pth-name \{([^}]*)\}", css).group(1)
+    assert "max-width: max(var(--pth-word, 100%), calc(100% - 12px))" in name
+    js = _read(WEB / "static" / "js" / "path.js")
+    needs = js[js.index("function needsOf()"):js.index("function place() {")]
+    assert "if (cls === 'pth-name') words[id] = Math.max(words[id] || 0, px);" in needs, (
+        "the longest word is the name's own, never its address")
+    assert "return { needs, words };" in needs
+    place = js[js.index("function place() {"):js.index("function open(")]
+    assert "b.style.setProperty('--pth-word', `${words[b.dataset.id] || 0}px`)" in place
+    assert "b.style.removeProperty('--pth-word')" in place, "a wide screen keeps no phone's word widths"
+    scene = js[js.index("A.buildPathScene = function"):]
+    assert "new MutationObserver(again).observe(document.documentElement, { attributes: true, attributeFilter: ['data-scheme'] })" in scene
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-q"]))
