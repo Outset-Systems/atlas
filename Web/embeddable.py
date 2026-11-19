@@ -118,16 +118,22 @@ def origins(data):
 #: Rebuilding the set per request cost ~100 µs a call for a value that changes
 #: only when the dataset does. `id(data)` rides along because two different
 #: temp datasets can land on the same mtime within filesystem resolution.
-_charted = {"key": None, "urls": frozenset()}
+#: Held as one (key, urls) pair, read once and replaced whole (2026-11-19,
+#: the 11-12 audit's API 3): the key used to be written a statement before
+#: the set, so a reader between the two got the previous dataset's set.
+_charted = (None, frozenset())
 
 
 def charted(data, stamp=None):
     """Every outward URL the map offers, as a set, memoized per dataset."""
+    global _charted
     key = (stamp, id(data))
-    if _charted["key"] != key:
-        _charted["key"] = key
-        _charted["urls"] = frozenset(urls_of(data))
-    return _charted["urls"]
+    have_key, have_urls = _charted
+    if have_key == key:
+        return have_urls
+    urls = frozenset(urls_of(data))
+    _charted = (key, urls)
+    return urls
 
 
 #: The most characters the map's own origins may add to `frame-src`.
@@ -284,12 +290,30 @@ def _judge(headers, self_origin, target_origin=None):
     return True, R_OK
 
 
+#: The two headers a framing answer is read from, by their usual names.
+_FRAMING = ("X-Frame-Options", "Content-Security-Policy")
+
+
 def _probe(url, self_origin):
-    """Ask the service, once. Never raises."""
+    """Ask the service once and judge its answer for `self_origin`. Never raises."""
+    answer = _ask(url)
+    if answer is None:
+        return None, R_UNREACHABLE
+    headers, landed = answer
+    return _judge(headers, self_origin, landed)
+
+
+def _ask(url):
+    """What the service says about being framed: ({header: value} for the two
+    framing headers, the origin it landed on), or None when it did not answer.
+    Never raises. Kept apart from the judging (2026-11-19, the 11-12 audit's
+    API 13): the cache holds this, the same for every caller, and each call
+    judges it for its own origin; a verdict cached for one origin used to be
+    served to another."""
     try:
         import requests  # local import: optional dep, exactly as signals.py
     except ImportError:                                    # pragma: no cover
-        return None, R_UNREACHABLE
+        return None
 
     for method in ("head", "get"):
         try:
@@ -303,7 +327,7 @@ def _probe(url, self_origin):
             # cross-VLAN unreachability is the *routine* case in this lab —
             # retrying it doubled how long a request thread stayed pinned.
             log.debug("embeddable: %s %s failed (%s)", method, url, e)
-            return None, R_UNREACHABLE
+            return None
         try:
             # A 405/501 to HEAD is common enough on app servers that treating
             # it as an answer would mislabel half a lab; fall through to GET.
@@ -312,10 +336,12 @@ def _probe(url, self_origin):
             # judge where it *ended up* — a redirect can land somewhere with
             # entirely different framing rules
             landed = origin_of(getattr(resp, "url", "") or url) or origin_of(url)
-            return _judge(resp.headers, self_origin, landed)
+            headers = {name: resp.headers.get(name) for name in _FRAMING
+                       if resp.headers.get(name) is not None}
+            return headers, landed
         finally:
             resp.close()
-    return None, R_UNREACHABLE
+    return None
 
 
 def _answer(url, ok, reason):
@@ -349,17 +375,23 @@ def verdict(url, self_origin="", enabled=True):
     if not enabled:
         return _answer(url, None, R_OFF)
 
+    # The SERVICE's answer is cached per URL; the verdict is judged on every
+    # call for this caller's origin. A cache keyed on the origin too would let
+    # any request's Host header force a fresh probe and grow the cache.
     now = time.monotonic()
     with _lock:
         hit = _cache.get(url)
-        if hit and (now - hit[1]) < TTL:
-            return dict(hit[0])
-
-    ok, reason = _probe(url, self_origin)
-    out = _answer(url, ok, reason)
-    with _lock:
-        _cache[url] = (out, now)
-    return dict(out)
+    if hit and (now - hit[1]) < TTL:
+        answer, checked = hit[0], hit[2]
+    else:
+        answer, checked = _ask(url), time.time()
+        with _lock:
+            _cache[url] = (answer, now, checked)
+    if answer is None:
+        ok, reason = None, R_UNREACHABLE
+    else:
+        ok, reason = _judge(answer[0], self_origin, answer[1])
+    return {**_answer(url, ok, reason), "checked": checked}
 
 
 def forget():

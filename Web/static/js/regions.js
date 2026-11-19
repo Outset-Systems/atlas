@@ -549,27 +549,38 @@ A.zoomAt = (sx, sy, factor) => {
    show it. Up when this region does not hold it, down when a region on this
    map keeps it folded away (search, a link, an index row all arrive here). */
 const mainFocus = A.focusNode;
+/* Returns false only when a transition already under way never finished:
+   the place was asked for mid-glide, so it waits that out first (the budget
+   followHash uses) rather than giving up and focusing a place this level does
+   not draw (2026-11-19, the 11-12 audit's Map 11). */
 async function reveal(id) {
   const n = nodes().find((x) => x.id === id);
-  if (!n || n._realOff) return;
+  if (!n || n._realOff) return true;
   for (let step = 0; step < 8; step++) {
+    for (let t = 0; busy && t < 40; t++) await wait(120);
+    if (busy) return false;
     const drawn = level ? Boolean(A.levelPlaces?.[id]) : !n.off_map;
-    if (drawn || busy) return;
+    if (drawn) return true;
     const { x, y } = A.mainPlace(n);
     const inside = M.childrenOf(regions(), level?.id ?? null)
       .find((c) => M.placeOn(regions(), c.id, { id, x, y }));
     if (inside) await enter(inside.id);
     else if (level) await leaveTo(level.parent || null);
-    else return;
+    else return true;
   }
+  return true;
 }
 A.focusNode = async (id, ...rest) => {
-  await reveal(id);
+  if (await reveal(id) === false) return;
   mainFocus(id, ...rest);
 };
 
 /* ── pinning a place on a region map (edit mode, admins) ─────────────────── */
 A.pinDrag = function pinDrag(e, mk, n) {
+  // a press starts clean: a drag the browser cancelled (pointercancel) has no
+  // click after it to clear the mark, and the next real click was swallowed
+  // as the end of a drag (2026-11-19, the 11-12 audit's Map 12)
+  delete mk.dataset.dragged;
   if (!A.editMode || !level) return;
   // on another style the pin is drafted for its sidecar; on the realm's it is the dataset's
   const styled = onOtherStyle();

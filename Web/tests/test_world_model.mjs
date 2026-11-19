@@ -1,7 +1,7 @@
 /* The arithmetic behind the map's lines and rings. `node tests/test_world_model.mjs` */
 
 import assert from 'node:assert/strict';
-import { convexHull, paddedHull, ringPoints, reachTargets, serviceEntries } from '../static/js/world-model.js';
+import { convexHull, paddedHull, ringPoints, reachTargets, serviceEntries, serviceWeb } from '../static/js/world-model.js';
 
 let passed = 0;
 function test(name, fn) {
@@ -143,6 +143,23 @@ test('a link that names its own place is not counted twice', () => {
 
 test('an unknown place has nothing to ring', () => {
   assert.deepEqual(serviceEntries(NODES, 'nowhere'), []);
+});
+
+test('Map 6 and 15: one precedence for what a service touches', () => {
+  const routes = [{ from: 'host', to: 'gw' }, { from: 'db', to: 'host' }];
+  const node = { id: 'host', reaches: ['nas'] };
+  const off = (id) => id === 'gone';
+  // a road out wins, in order, less what is not drawn
+  assert.deepEqual(serviceWeb(node, { path: ['a', 'gone', 'b'], connects: ['c'] }, routes, off).chain, ['a', 'b']);
+  // an empty road is no road: connects answers
+  assert.deepEqual([...serviceWeb(node, { path: [], connects: ['c', 'gone'] }, routes, off).ids], ['c']);
+  // nothing listed: the host's whole reach, routes in both directions included
+  assert.deepEqual([...serviceWeb(node, { path: [], connects: [] }, routes).ids].sort(), ['db', 'gw', 'nas']);
+  // connects that are all undrawn light nothing, not the host's reach
+  assert.equal(serviceWeb(node, { connects: ['gone'] }, routes, off).ids.size, 0);
+  // THE PATH passes no isOff: every place is drawn there
+  assert.deepEqual([...serviceWeb(node, { connects: ['gone'] }, routes).ids], ['gone']);
+  assert.deepEqual(serviceWeb(node, { path: [null, 'a'] }, routes).chain, ['a']);
 });
 
 console.log(`\n${passed} passed`);

@@ -323,6 +323,17 @@ def test_deployment_view_right(client, monkeypatch):
     knobs = {k["name"]: k for k in body["knobs"]}
     assert knobs["ATLAS_DB_URL"]["value"] == "postgresql://atlas:***@db.test:5432/atlas"
     assert "s3cr3t-dsn" not in json.dumps(body)
+    # the 11-12 audit's API 7: a DSN the URL parser cannot read (a port out of
+    # range, a broken bracket, a password with a slash) never shows its secret
+    for dsn in ("postgresql://atlas:s3cr3t-dsn@db.test:99999/atlas",
+                "postgresql://atlas:s3cr3t-dsn@[::1/atlas",
+                "postgresql://atlas:s3cr3t/dsn@db.test/atlas"):
+        monkeypatch.setenv("ATLAS_DB_URL", dsn)
+        body = client.get("/api/v2/admin/deployment").get_json()
+        shown = {k["name"]: k for k in body["knobs"]}["ATLAS_DB_URL"]["value"]
+        assert "s3cr3t" not in json.dumps(body), dsn
+        assert shown.startswith("postgresql://***@"), shown
+    monkeypatch.setenv("ATLAS_DB_URL", "postgresql://atlas:s3cr3t-dsn@db.test:5432/atlas")
     assert body["metrics"] is False and body["metrics_token"] is False
     monkeypatch.setenv("ATLAS_METRICS_TOKEN", "t")
     body = client.get("/api/v2/admin/deployment").get_json()

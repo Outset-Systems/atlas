@@ -203,6 +203,11 @@ function zoomAt(sx, sy, factor) {
 }
 A.zoomAt = zoomAt;
 
+/* Every zoom the camera's own gestures make goes through A.zoomAt, the one a
+   region wraps with its floor (2026-11-19, the 11-12 audit's Map 5: a pinch,
+   Ctrl+wheel, called this module's own and zoomed straight past it). */
+const zoomVia = (sx, sy, factor) => (A.zoomAt || zoomAt)(sx, sy, factor);
+
 /* ── drag pan with light inertia ─────────────────────────────────────────
    Capture the pointer only once a real drag starts: capturing on pointerdown
    retargets the eventual click to the viewport and markers never receive it. */
@@ -287,10 +292,10 @@ viewport.addEventListener('wheel', (e) => {
   A.toggleDrawer?.(false);
   if (e.ctrlKey) {
     // Ctrl+wheel always zooms, both ways, at any scale (a trackpad pinch sends ctrlKey)
-    zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? CFG.ZOOM_WHEEL : 1 / CFG.ZOOM_WHEEL);
+    zoomVia(e.clientX, e.clientY, e.deltaY < 0 ? CFG.ZOOM_WHEEL : 1 / CFG.ZOOM_WHEEL);
   } else if (!model.atSurveyOrBeyond(cam.k, view())) {
     // pushed in past the survey → the wheel pulls back toward it, whichever way it turns
-    zoomAt(e.clientX, e.clientY, 1 / CFG.ZOOM_WHEEL);
+    zoomVia(e.clientX, e.clientY, 1 / CFG.ZOOM_WHEEL);
   } else {
     // all the way out → travel up/down through the sky → table → Depths
     const y = cam.y;
@@ -320,7 +325,7 @@ viewport.addEventListener('click', () => {
   A.closeCard?.();
 });
 
-viewport.addEventListener('dblclick', (e) => zoomAt(e.clientX, e.clientY, CFG.ZOOM_DBLCLICK));
+viewport.addEventListener('dblclick', (e) => zoomVia(e.clientX, e.clientY, CFG.ZOOM_DBLCLICK));
 
 /* keyboard. WHICH key is the map's is decided in keys-model.js (2026-11-18),
    shared with the region's handler and node-tested: a field and a chord keep
@@ -333,7 +338,7 @@ addEventListener('keydown', (e) => {
   const pan = CFG.PAN_KEY_PX;
   // through A.zoomAt, the zoom a region wraps with its floor (the `-` key
   // called this module's own and zoomed past it: the 11-12 audit, Map 5)
-  const zoom = (f) => (A.zoomAt || zoomAt)(innerWidth / 2, innerHeight / 2, f);
+  const zoom = (f) => zoomVia(innerWidth / 2, innerHeight / 2, f);
   switch (action) {
     case 'palette': e.preventDefault(); A.openPalette?.(); break;
     // the glass sits over everything, so it swallows the first Escape alone —

@@ -15,6 +15,12 @@ import { A, CFG, $, esc, glassAttrs, isMixed } from './config.js';
 import { say } from './words.js';
 import { drawChart, destroyChart, toggleTwin } from './charts.js';
 
+/** A URL as the browser holds it in `src`: absolute, against the page. */
+function resolved(url) {
+  try { return new URL(url, document.baseURI).href; } catch { return url; }
+}
+
+
 /* CHRONICLE (sky) + ABYSS (depths) — the realm's live watchings, sourced from the
    data file (lab-data.json → "chronicle" / "abyss"): adding a dashboard is a data
    edit. Each region has a CAROUSEL of watchings — drawn NATIVELY when the server's
@@ -276,7 +282,10 @@ function makeCarousel(p) {
         if (warm) {
           // `scrying` marks a pane actually reaching for a dashboard — it is the
           // only state whose waiting-dots animate (parked slides stay still)
-          if (f.src !== f.dataset.src) { f.src = f.dataset.src; slide.classList.add('scrying'); }
+          // compared resolved: f.src reads back absolute, so a relative embed
+          // never matched its own data-src and was reloaded on every pass
+          // (2026-11-19, the 11-12 audit's Scenes 15)
+          if (f.src !== resolved(f.dataset.src)) { f.src = f.dataset.src; slide.classList.add('scrying'); }
         } else if (f.src && f.src !== 'about:blank') {
           f.src = 'about:blank';
           delete f.dataset.loaded;
@@ -463,7 +472,7 @@ function maxSrc(src) {
   if (n) { n.hidden = true; for (const b of n.querySelectorAll('.chron-native')) destroyChart(b); n.innerHTML = ''; }
   if (!f) return;
   f.hidden = false;
-  if (f.src === src) return;
+  if (f.src === resolved(src)) return;
   $('embed-max')?.classList.remove('scried');
   f.src = src;
 }

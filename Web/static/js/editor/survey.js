@@ -24,11 +24,14 @@ export const LEASE_HELP =
   'on Pi-hole, <code>/tmp/dhcp.leases</code> on OpenWrt, or on Windows Server ' +
   '<code>Get-DhcpServerv4Lease -ScopeId 10.0.0.0 | ConvertTo-Csv</code>.';
 
-export async function drawSurvey() {
+/** `still()` says whether this is still the section being shown: false once
+    another was chosen while this one waited (panel.js show, Scenes 11). */
+export async function drawSurvey(still = () => true) {
   desk.setHead(VIRTUAL.survey.label, VIRTUAL.survey.lore);
   desk.body.innerHTML = '';
 
   const { observed, undocumented } = await Editor.discovery();
+  if (!still()) return;
   const badge = $('dsk-n-survey');
   if (badge) badge.textContent = undocumented ? String(undocumented) : '';
 
@@ -42,6 +45,7 @@ export async function drawSurvey() {
   try {
     observers = (await Editor.connections()).systems.filter((s) => s.observes && s.configured);
   } catch { /* not an admin of Connections, or it did not load: the paste box still works */ }
+  if (!still()) return;
   for (const sys of observers) {
     const read = el('button', 'dsk-btn', `Read ${esc(sys.name)}`);
     read.title = 'Everything connected now, filed here beside a scan. Nothing is charted.';

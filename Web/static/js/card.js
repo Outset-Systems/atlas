@@ -17,6 +17,7 @@ import { A, CFG, $, esc, host, glassAttrs, svcKey, zoneById, nodeById, FALLBACK_
 import { say } from './words.js';
 import { calendarPointerHTML } from './calendar.js';
 import * as M from './card-model.js';
+import { serviceWeb } from './world-model.js';
 import { checkWhere } from './watch-model.js';
 
 const card = $('card');
@@ -471,8 +472,11 @@ function loadPulse(n, info) {
      down) is a quiet absence: no tab, never a fake calm and never an error. */
   const vitals = $('card-vitals');
   vitals.innerHTML = '';
+  // every card stamps the box, not only one with a pulse (2026-11-19, the
+  // 11-12 audit's Map 2): a slow answer for the last card checked a stamp
+  // nobody had moved and painted its sparklines into this one
+  vitals.dataset.node = n.id;   // a slow answer must never paint a different card
   if (n.spark) {
-    vitals.dataset.node = n.id;   // a slow answer must never paint a different card
     fetch(`api/v2/vitals/${encodeURIComponent(n.id)}`, { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
       .then((v) => {
@@ -601,7 +605,11 @@ function showServiceDetail(node, link) {
     // THE PATH, with this service's host haloed and its reach web lit; the
     // road out wins over the unordered set, same precedence highlightService
     // uses — the two views must not disagree about what this service touches
-    A.openPath?.(node.id, link.path || link.connects || node.reaches || [], link.label);
+    // serviceWeb (world-model.js) is that precedence, written once: `path: []`
+    // used to win here and open THE PATH with nothing lit (the 11-12 audit's
+    // Map 15), and the host's reach left its routes out
+    const web = serviceWeb(node, link, A.DATA.routes);
+    A.openPath?.(node.id, web.chain.length ? web.chain : [...web.ids], link.label);
   });
   svc.querySelector('#csv-wiring').addEventListener('click', (e) => {
     e.stopPropagation();

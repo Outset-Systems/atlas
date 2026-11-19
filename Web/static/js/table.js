@@ -234,6 +234,9 @@ function buildProvisioners(holder) {
   q.addEventListener('keydown', (e) => { if (e.key === 'Enter') runSurvey(); });
 }
 
+/** the listeners of the picture being waited for, if any (Map 13) */
+let pending = null;
+
 function pick(m) {
   A.leaveRegion?.();   // the stage goes back to the realm's picture before it is redressed
   // choosing the realm's default = clearing the override, so a later Desk
@@ -243,7 +246,17 @@ function pick(m) {
   wear(stored());
   const target = m.default && !CFG.DEFAULT_STYLE ? (mapBase.dataset.realmSrc || m.url) : m.url;
   if (mapBase && mapBase.src !== new URL(target, location.href).href) {
+    // One pick's listeners at a time, load AND error, put away together
+    // (2026-11-19, the 11-12 audit's Map 13): a load that failed left its
+    // `once` listener waiting, and the next picture to load (another style, a
+    // region's art) ran it, rebuilding the world or reloading the page; two
+    // quick picks stacked two.
+    pending?.abort();
+    const done = new AbortController();
+    pending = done;
+    const { signal } = done;
     mapBase.addEventListener('load', () => {
+      done.abort();
       // same canvas → live redress; a different-sized render changes the whole
       // coordinate space, and one honest reload is the correct re-boot for that
       if (mapBase.naturalWidth === A.MAPW && mapBase.naturalHeight === A.MAPH) {
@@ -253,7 +266,11 @@ function pick(m) {
       } else {
         location.reload();
       }
-    }, { once: true });
+    }, { signal });
+    mapBase.addEventListener('error', () => {
+      done.abort();
+      A.showToast?.('That map could not be loaded. The table is as it was.');
+    }, { signal });
     mapBase.src = target;
   } else {
     A.showToast?.(m.default ? 'The map’s own backdrop stands.' : 'The table is redressed.');

@@ -9,6 +9,7 @@ the same log. And a URL carrying a user name or password is refused when it is
 saved.
 """
 import json
+from collections import deque
 import os
 import sys
 import time
@@ -351,7 +352,7 @@ def _ops(admin, ops):
 
 
 @pytest.mark.parametrize("url", ["https://ops:pw@10.0.0.5:3000/", "http://ops@host.example/x",
-                                 "HTTPS://a:b@h/"])
+                                 "HTTPS://a:b@h/", "https://ops:pa/ss@10.0.0.5/"])
 def test_a_url_with_a_user_name_or_password_is_refused_when_saved(realm, admin, url):
     r = _ops(admin, [{"op": "upsert", "section": "nodes", "id": "alpha",
                       "body": {"links": [{"label": "Wiki", "url": url}]}}])
@@ -507,3 +508,62 @@ def test_a_first_append_does_not_read_a_log_that_needs_no_pruning(realm, admin, 
     c.get("/api/v2/maps", headers=bearer(made["secret"]))
     monkeypatch.undo()
     assert read_whole == [] and len(lines()) == 2
+
+
+@pytest.mark.parametrize("url,carries", [
+    ("https://u:pa/ss@10.0.0.5/", True),        # a password with a slash
+    ("https://u:pa/ss@10.0.0.5:8443/x", True),
+    ("https://host:8080/@x", False),            # a port, then an "@" in the path
+    ("https://host/@someone", False),           # a path that names someone
+    ("https://[::1]:8080/@x", False),
+    ("https://host.example/x", False),
+])
+def test_the_save_check_reads_a_password_with_a_slash_as_redaction_does(url, carries):
+    """Known limits 7: the authority ended at the first "/", so `u:pa/ss@host`
+    saved. The check and `redaction.bare_url` now read it the same way."""
+    import redaction
+    import schema
+    assert schema.carries_credentials(url) is carries
+    assert ("pa/ss" not in redaction.bare_url(url)) or not carries
+
+
+def test_the_other_workers_count_survives_a_prune_that_the_file_then_outgrows(tmp_path, monkeypatch):
+    """Known limits 9: a prune was noticed only by the file being shorter than
+    where the reader stopped. A file pruned and then grown past that point
+    again was read from the old offset, in a different file: lines missed,
+    and the count of what the other worker served came out low."""
+    import token_log
+    target = tmp_path / "token-reads.jsonl"
+    monkeypatch.setattr(token_log, "path", lambda: str(target))
+    monkeypatch.setattr(token_log, "_seen", {"path": None, "offset": 0, "rows": deque()})
+    now = time.time()
+
+    def write(rows):
+        with open(target, "a", encoding="utf-8", newline="\n") as fh:
+            for row in rows:
+                fh.write(json.dumps(row, separators=(",", ":")) + "\n")
+    old = [{"t": 1.0, "token": "old", "status": 200, "w": "other1"}] * 300
+    recent = [{"t": now, "token": "tid", "status": 200, "w": "other1"}] * 5
+    write(old + recent)
+    assert token_log.recent_elsewhere("tid") == 5
+    token_log.prune()                                   # the 300 old lines go
+    more = [{"t": now, "token": "tid", "status": 200, "w": "other1"}] * 400
+    write(more)                                          # outgrows where the reader stopped
+    assert token_log.recent_elsewhere("tid") == 5 + 400
+
+
+def test_the_other_worker_is_a_real_second_process(tmp_path, monkeypatch):
+    """Known limits 9: the shared count was proved with hand-written lines; a
+    second interpreter appending through the module's own writer proves it."""
+    import subprocess
+    import token_log
+    target = tmp_path / "token-reads.jsonl"
+    monkeypatch.setattr(token_log, "path", lambda: str(target))
+    monkeypatch.setattr(token_log, "_seen", {"path": None, "offset": 0, "rows": deque()})
+    code = ("import sys, time; sys.path.insert(0, sys.argv[1]); import token_log; "
+            "token_log.path = lambda: sys.argv[2]; "
+            "[token_log._append({'t': time.time(), 'token': 'tid', 'status': 200, 'w': token_log.WORKER}) "
+            "for _ in range(3)]")
+    web = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    subprocess.run([sys.executable, "-c", code, web, str(target)], check=True, timeout=60)
+    assert token_log.recent_elsewhere("tid") == 3

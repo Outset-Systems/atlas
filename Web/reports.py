@@ -82,6 +82,31 @@ def _temperature(crowdsec_md):
     return "UNREAD"        # unreachable — the last band has no ceiling
 
 
+_HEADING = re.compile(r"#{1,3} ")
+_FENCE = re.compile(r"(```|~~~)")
+
+
+def _sections(md):
+    """`md` cut before each `#`, `##` or `###` heading line outside a code
+    fence; the pieces join back to `md` exactly."""
+    parts, current, fence = [], [], None
+    for line in md.splitlines(keepends=True):
+        stripped = line.lstrip()
+        mark = _FENCE.match(stripped)
+        if fence is None and _HEADING.match(line) and current:
+            parts.append("".join(current))
+            current = []
+        current.append(line)
+        if mark:
+            if fence is None:
+                fence = mark.group(1)
+            elif mark.group(1) == fence:
+                fence = None
+    if current:
+        parts.append("".join(current))
+    return parts or [""]
+
+
 def _fold_weekly(weekly_md):
     """The weekly scroll with its edge sections folded away.
 
@@ -89,9 +114,13 @@ def _fold_weekly(weekly_md):
     _WEEKLY_YIELDS, keep everything else (the SSH host-cert health above all).
     A section runs from one `#`, `##` or `###` line to the next, so a
     sub-section under a dropped heading stays unless its own heading matches.
-    The preamble before the first heading always survives.
+    The preamble before the first heading always survives. A `#` line inside
+    a fenced code block (``` or ~~~) is code, not a heading: a shell comment
+    in a fence started a section of its own, and one that named CrowdSec was
+    folded away with the rest of its section (2026-11-19, the 11-12 audit's
+    Foundations 15).
     """
-    parts = re.split(r"(?=^#{1,3} )", weekly_md, flags=re.M)
+    parts = _sections(weekly_md)
     kept = [p for p in parts
             if not (p.startswith("#") and _WEEKLY_YIELDS.search(p.splitlines()[0]))]
     folded = len(parts) - len(kept)

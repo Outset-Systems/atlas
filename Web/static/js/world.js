@@ -533,7 +533,11 @@ A.focusNode = focusNode;
    so the containers are emptied first — calling this twice used to give you
    two of every marker. */
 A.buildWorld = function buildWorld() {
-  A.collapseConstellation();   // its dots live in #satellites, its lines in #overlay
+  // clearHighlight collapses the constellation too, and also puts away a lit
+  // service web: a rebuild that skipped closeCard (a region pin dragged, a
+  // style redressed) left its old lines in place and the roads dimmed, and the
+  // next click on that place closed the card (2026-11-19, the 11-12 audit's Map 7)
+  if (A.clearHighlight) A.clearHighlight(); else A.collapseConstellation();
   resetFadeCache();            // the labels/markers about to be built are unwritten
   zoneLabelsEl.innerHTML = '';
   markersEl.innerHTML = '';

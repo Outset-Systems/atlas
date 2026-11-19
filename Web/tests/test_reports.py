@@ -160,3 +160,21 @@ def test_fold_of_a_report_that_is_all_matching_sections():
     assert subject._fold_weekly(text) == (
         "\n_(1 edge section folded away — "
         "the CrowdSec insight above speaks for the edge.)_\n")
+
+
+def test_fold_does_not_take_a_comment_in_a_code_fence_for_a_heading():
+    """The 11-12 audit's Foundations 15: a `#` line in a fence is code."""
+    text = ("# Weekly\n\n## Certificates\n\n```\n# crowdsec tidy-up ran\nok\n```\nall fine\n\n"
+            "~~~\n## CrowdSec in a tilde fence\n~~~\n")
+    assert subject._fold_weekly(text) == text.rstrip()
+
+
+def test_fold_still_drops_a_real_heading_after_a_closed_fence():
+    text = "# Weekly\n\n```\n# a comment\n```\n\n## CrowdSec summary\n\nrepeated\n"
+    out = subject._fold_weekly(text)
+    assert "# a comment" in out and "repeated" not in out and "1 edge section folded away" in out
+
+
+def test_sections_join_back_to_the_text():
+    for text in ("", "no heading\n", "# A\nx\n## B\ny", "pre\n```\n# c\n```\n# D\n"):
+        assert "".join(subject._sections(text)) == text

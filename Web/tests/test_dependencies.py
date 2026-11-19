@@ -206,3 +206,16 @@ def test_consequences_are_recorded_but_never_queued(arena):
         assert by_target[vassal]["cause"] == "hypervisor"
     assert body["counts"]["unacked"] == 1, \
         "one fault must leave exactly one thing demanding a human"
+
+
+def test_the_suppression_line_is_logged_when_it_changes_not_on_every_read(caplog):
+    """The 11-12 audit's Live 15: apply_to runs on every feed read, cached ones
+    too, and logged its summary every time."""
+    dependencies._last_said = None
+    data = data_of({"id": "hv"}, {"id": "a", "parent": "hv"}, {"id": "b", "parent": "hv"})
+    with caplog.at_level("INFO", logger="atlas.live.dependencies"):
+        for _ in range(3):
+            dependencies.apply_to(data, feed_of(hv="down", a="down", b="down"))
+        dependencies.apply_to(data, feed_of(hv="down", a="down"))
+    lines = [r.getMessage() for r in caplog.records if "dependency suppression" in r.getMessage()]
+    assert lines == ["dependency suppression: hv explains 2", "dependency suppression: hv explains 1"]

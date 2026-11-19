@@ -7,6 +7,7 @@ journey. The two fixed upstream hosts are asserted AS constants — the
 route becomes a proxy.
 """
 
+import io
 import json
 import os
 import shutil
@@ -193,3 +194,47 @@ def test_only_one_survey_at_a_time(monkeypatch):
 
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-q"]))
+
+
+
+def test_the_projection_is_not_a_mirror_image():
+    """The 11-12 audit's Foundations 9: east to north turned clockwise on the
+    screen. Canvas y grows down, so in y-up terms the turn from east to north
+    must be anticlockwise, and north must be up."""
+    ex, ey = worldsurvey._iso(1, 0)
+    nx, ny = worldsurvey._iso(0, 1)
+    assert ex * -ny - (-ey) * nx > 0, "east to north turns clockwise: a mirror image"
+    assert ny < 0 and ey < 0, "north and east are both away from the camera, so up the canvas"
+    assert nx < 0 < ex, "north is up-left, east up-right"
+    _x, up = worldsurvey._iso(0, 0, 10)
+    assert up < 0, "height is up"
+
+
+def _counts(png):
+    from PIL import Image
+    img = Image.open(io.BytesIO(png)).convert("RGB")
+    colours = img.getcolors(maxcolors=1 << 16)
+    return {c: n for n, c in colours}
+
+
+def test_a_building_is_lit_the_same_whichever_way_its_outline_runs():
+    """Foundations 10: the lit and shaded walls followed the edge's direction,
+    so the same block lit opposite walls when OpenStreetMap drew its outline
+    the other way round. One square, both windings: the same picture."""
+    square = [(-20.0, -20.0), (20.0, -20.0), (20.0, 20.0), (-20.0, 20.0)]   # anticlockwise
+    one = worldsurvey.render_iso([(square, 30.0)], [], canvas=256)
+    other = worldsurvey.render_iso([(list(reversed(square)), 30.0)], [], canvas=256)
+    a, b = _counts(one), _counts(other)
+    assert a.get(worldsurvey.WALL_LIT) and a.get(worldsurvey.WALL_SHADE), "both faces show"
+    assert a.get(worldsurvey.WALL_LIT) == b.get(worldsurvey.WALL_LIT)
+    assert a.get(worldsurvey.WALL_SHADE) == b.get(worldsurvey.WALL_SHADE)
+
+
+def test_the_near_building_is_painted_over_the_far_one():
+    """With far now at large x + y, a tower to the north-east must not be
+    painted over a low block south-west of it, in front of the camera."""
+    near = ([(-30.0, -30.0), (-10.0, -30.0), (-10.0, -10.0), (-30.0, -10.0)], 6.0)
+    far = ([(10.0, 10.0), (30.0, 10.0), (30.0, 30.0), (10.0, 30.0)], 80.0)
+    a = worldsurvey.render_iso([near, far], [], canvas=256)
+    b = worldsurvey.render_iso([far, near], [], canvas=256)
+    assert a == b, "the order in the list must not change the picture"

@@ -380,18 +380,44 @@ async function confirmDelete(key, entry, ref) {
 
 /* ── routing ──────────────────────────────────────────────────────────── */
 
+/* Which show() is the current one (2026-11-19, the 11-12 audit's Scenes 11):
+   the survey and the change log clear the body, wait for the server, then
+   draw, so a slow one finished after the next section was chosen and drew
+   over it. Each show takes a number; a view whose number is no longer the
+   latest gives up after every wait. Module state, not on A. */
+let showing = 0;
+
 async function show(key) {
+  const mine = ++showing;
+  const still = () => mine === showing;
   desk.active = key;
   drawSidebar();
   bodyEl.scrollTop = 0;
   try {
-    if (key === 'changes') return await drawChanges();
-    if (key === 'survey') return await drawSurvey();
-    return drawTable(key);
+    if (key === 'changes') await drawChanges(still);
+    else if (key === 'survey') await drawSurvey(still);
+    else drawTable(key);
   } catch (err) {
+    if (!still()) return;
     bodyEl.innerHTML = '';
     bodyEl.append(problemList(err));
   }
+  if (still()) readOnlyNote();
+}
+
+/* The read-only notice heads every section (2026-11-19, the 11-12 audit's
+   Scenes 1): it was put in once, before the first section drew, and that
+   draw cleared the body and took it away. Now it is put back after every
+   draw, once. */
+function readOnlyNote() {
+  if (!Editor.ctx || Editor.writable() || bodyEl.querySelector('.dsk-readonly')) return;
+  const n = notice(
+    Editor.ctx.read_only
+      ? 'This Atlas is read-only (ATLAS_READONLY=1). You can look, but nothing here will save.'
+      : 'The dataset is not writable by this process — check the mount and its permissions.',
+    'warn');
+  n.classList.add('dsk-readonly');
+  bodyEl.prepend(n);
 }
 
 export async function openDesk(sectionKey) {
@@ -410,13 +436,7 @@ export async function openDesk(sectionKey) {
       bodyEl.append(problemList(err));
       return;
     }
-    if (!Editor.writable()) {
-      bodyEl.prepend(notice(
-        Editor.ctx.read_only
-          ? 'This Atlas is read-only (ATLAS_READONLY=1). You can look, but nothing here will save.'
-          : 'The dataset is not writable by this process — check the mount and its permissions.',
-        'warn'));
-    }
+    // the read-only notice is put in after the section draws (readOnlyNote)
   } else {
     await Editor.reload();
   }

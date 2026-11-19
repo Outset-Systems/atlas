@@ -163,6 +163,14 @@ def deployment_view():
                 return urlunsplit((u.scheme, f"{u.username or ''}:***@{host}", u.path, u.query, u.fragment))
         except ValueError:
             pass
+        # a URL the parser cannot read (a port out of range, a broken bracket)
+        # or reads wrongly (a password with a `/` in it, taken for a host and
+        # a port) fails closed: everything up to its last `@` is hidden
+        # (2026-11-19, the 11-12 audit's API 7: the raw DSN fell through to
+        # the page, password and all)
+        if "@" in value:
+            scheme, sep, rest = value.partition("://")
+            return (scheme + sep if sep else "") + "***@" + rest.rpartition("@")[2]
         return value
 
     rows = []

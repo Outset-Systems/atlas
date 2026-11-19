@@ -275,3 +275,25 @@ def test_every_address_refusing_raises_so_the_route_can_say_so(monkeypatch):
 
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-q"]))
+
+
+class DripSock(FakeSock):
+    """A server that never stops: one byte a read, each read taking a second."""
+
+    def recv(self, n):
+        DripSock.clock[0] += 1.0
+        DripSock.reads += 1
+        return b"."
+
+
+def test_a_server_that_drips_is_cut_off_at_one_deadline(monkeypatch):
+    """The 11-12 audit's API 12: the timeout applied to each read, so a server
+    sending a byte at a time held the request until the 64 KB cap. Now the
+    whole conversation has one deadline. Deterministic: the clock moves a
+    second per read."""
+    DripSock.clock, DripSock.reads = [1000.0], 0
+    monkeypatch.setattr(whois.time, "monotonic", lambda: DripSock.clock[0])
+    monkeypatch.setattr(socket, "socket", lambda *a, **k: DripSock())
+    with pytest.raises(OSError):
+        whois.ask([(socket.AF_INET, ("199.7.83.42", 43))], "example.com")
+    assert DripSock.reads <= whois.TIMEOUT_S + 1

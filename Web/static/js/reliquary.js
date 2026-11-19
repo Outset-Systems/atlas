@@ -265,6 +265,7 @@ function renderRear() {
 
 function attachDrag(el, d) {
   el.addEventListener('pointerdown', (e) => {
+    delete el.dataset.dragged;   // a cancelled drag leaves no mark (the 11-12 audit's Map 12, as regions.js)
     if (!editing) return;
     e.preventDefault(); e.stopPropagation();
     el.setPointerCapture(e.pointerId);

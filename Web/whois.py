@@ -32,6 +32,7 @@ import ipaddress
 import logging
 import re
 import socket
+import time
 
 log = logging.getLogger("atlas.live.whois")
 
@@ -112,12 +113,21 @@ def ask(targets, query):
     for family, sockaddr in targets:
         chunks, total = [], 0
         sock = socket.socket(family, socket.SOCK_STREAM)
+        # one deadline for the whole conversation (2026-11-19, the 11-12
+        # audit's API 12): the timeout used to apply to each read, so a
+        # server that dripped a byte every few seconds held the request for
+        # as long as it liked, up to the size cap
+        deadline = time.monotonic() + TIMEOUT_S
         try:
             with sock:
                 sock.settimeout(TIMEOUT_S)
                 sock.connect(sockaddr)
                 sock.sendall((query + "\r\n").encode("ascii", "ignore"))
                 while total < MAX_BYTES:
+                    left = deadline - time.monotonic()
+                    if left <= 0:
+                        raise socket.timeout("the whois server took too long")
+                    sock.settimeout(left)
                     data = sock.recv(4096)
                     if not data:
                         break

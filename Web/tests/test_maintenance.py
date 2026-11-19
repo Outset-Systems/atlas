@@ -367,3 +367,14 @@ def test_a_window_on_a_collection_of_hidden_places_is_not_listed_to_a_reader_wit
     admin = viewers.signed_in(handle, "ops").get("/api/v2/overview").get_json()["maintenance"]
     assert [p["id"] for p in admin[0]["places"]] == ["secret-place"]
     monkeypatch.undo()
+
+
+def test_an_incoherent_window_is_warned_about_once_not_on_every_read(store, caplog):
+    """The 11-12 audit's Live 15: a window is evaluated on every feed read,
+    and the same broken one was warned about every time."""
+    window = {"id": "backwards-once", "nodes": ["downloads"],
+              "starts": "2026-07-20T14:00:00Z", "ends": "2026-07-20T11:00:00Z"}
+    with caplog.at_level("WARNING", logger="atlas.live.maintenance"):
+        for _ in range(3):
+            assert store.occurrence(window, NOW)[0] == "invalid"
+    assert sum("ends before it starts" in r.getMessage() for r in caplog.records) == 1

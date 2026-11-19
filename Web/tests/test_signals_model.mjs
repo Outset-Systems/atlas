@@ -1,7 +1,7 @@
 /* What a live feed adds up to. `node tests/test_signals_model.mjs` */
 
 import assert from 'node:assert/strict';
-import { tally, colophonText } from '../static/js/signals-model.js';
+import { tally, colophonText, colophonLook } from '../static/js/signals-model.js';
 
 let passed = 0;
 function test(name, fn) {
@@ -71,4 +71,16 @@ test('nothing dark, nothing to say', () => {
   assert.equal(colophonText(0, 0, 'GATE'), '');
 });
 
+test('Map 3: the colophon is heard again when the feed comes back', () => {
+  const fallback = 'at rest';
+  assert.deepEqual(colophonLook({ silentNote: 'the feed is silent', fallback }),
+                   { text: 'the feed is silent', alarm: false, silent: true });
+  // the live paint never carries a silent note, so silent is always cleared
+  assert.deepEqual(colophonLook({ warning: '2 places are dark', fallback }),
+                   { text: '2 places are dark', alarm: true, silent: false });
+  assert.deepEqual(colophonLook({ fallback }), { text: 'at rest', alarm: false, silent: false });
+  assert.deepEqual(colophonLook({ silentNote: '', fallback }), { text: 'at rest', alarm: false, silent: false });
+});
+
 console.log(`\n${passed} passed`);
+

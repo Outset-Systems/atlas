@@ -185,10 +185,23 @@ def test_index_addressed_sections(store):
                   "body": {"from": "app-host", "to": "gateway", "kind": "vlan"}}],
                 actor="t", expect=stamp)
     store.apply([{"op": "upsert", "section": "routes", "index": n,
-                  "body": {"kind": "mesh"}}], actor="t")
+                  "body": {"kind": "mesh"}}], actor="t", expect=store.read()[1])
     assert store.read()[0]["routes"][n]["kind"] == "mesh"
-    store.apply([{"op": "delete", "section": "routes", "index": n}], actor="t")
+    store.apply([{"op": "delete", "section": "routes", "index": n}], actor="t",
+                expect=store.read()[1])
     assert len(store.read()[0]["routes"]) == n
+
+
+def test_a_row_addressed_by_position_needs_a_stamp(store):
+    """The 11-12 audit's Data 13: with no stamp, a change aimed at row n
+    could land on whatever row n had become."""
+    data, stamp = store.read()
+    with pytest.raises(RejectedError, match="position"):
+        store.apply([{"op": "delete", "section": "routes", "index": 0}], actor="t")
+    assert store.read() == (data, stamp)
+    # a change addressed by id needs none, as before
+    node = data["nodes"][0]["id"]
+    store.apply([{"op": "upsert", "section": "nodes", "id": node, "body": {"role": "checked"}}], actor="t")
 
 
 def test_a_new_section_lands_where_the_catalogue_says(store):

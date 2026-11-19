@@ -31,6 +31,11 @@ import logging
 
 log = logging.getLogger("atlas.live.dependencies")
 
+#: The last suppression line logged. `apply_to` runs on every feed read,
+#: cached ones too, so the line is written when what it says changes, not on
+#: every read (2026-11-19, the 11-12 audit's Live 15).
+_last_said = None
+
 #: States that mean "this thing is not answering", for the purposes of asking
 #: whether a dependent's own silence is explained by it.
 _FAULTED = ("down",)
@@ -171,6 +176,9 @@ def apply_to(data, feed):
 
     feed["nodes"] = nodes
     feed["causes"] = {cause: sorted(ids) for cause, ids in grouped.items()}
-    log.info("dependency suppression: %s",
-             "; ".join(f"{cause} explains {len(ids)}" for cause, ids in grouped.items()))
+    global _last_said
+    said = "; ".join(f"{cause} explains {len(ids)}" for cause, ids in sorted(grouped.items()))
+    if said != _last_said:
+        _last_said = said
+        log.info("dependency suppression: %s", said)
     return feed

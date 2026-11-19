@@ -148,7 +148,8 @@ function drawConstellationLines(n, entries, points, auto) {
     spoke.style.setProperty('--con-hue', satGrey(i));
     g.appendChild(spoke);
     // each service's own charted reach, drawn quiet until it is the one asked about
-    for (const tid of (auto ? [] : link.connects || [])) {
+    // only places drawn on this level (the 11-12 audit's Map 6)
+    for (const tid of (auto ? [] : (link.connects || []).filter((id) => !nodeById(id)?.off_map))) {
       const t = nodeById(tid);
       if (!t) continue;
       const tx = t.x / 100 * A.MAPW, ty = t.y / 100 * A.MAPH;

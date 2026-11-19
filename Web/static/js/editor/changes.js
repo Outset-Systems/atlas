@@ -8,10 +8,13 @@ import { VIRTUAL, desk, notice, problemList, run } from './desk-kit.js';
 
 /* ── the change log ───────────────────────────────────────────────────── */
 
-export async function drawChanges() {
+/** `still()`: whether this is still the section being shown (panel.js show,
+    the 11-12 audit's Scenes 11). */
+export async function drawChanges(still = () => true) {
   desk.setHead(VIRTUAL.changes.label, VIRTUAL.changes.lore);
   desk.body.innerHTML = '';
   const { revisions, kept } = await Editor.revisions();
+  if (!still()) return;
   if (!revisions.length) {
     desk.body.append(notice('Nothing has been changed in the map editor yet.'));
     return;

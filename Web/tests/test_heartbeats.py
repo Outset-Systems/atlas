@@ -365,3 +365,24 @@ def test_a_dropped_file_outlives_a_store_that_would_not_take_it(beats, monkeypat
     assert beats.sweep_dropped_files() == ["nightly-backup"]
     assert not os.path.exists(path)
     assert beats.status_for([_rite()])[0]["verdict"] == "kept"
+
+
+def test_a_dropped_file_swept_by_two_workers_is_one_run(beats, monkeypatch):
+    """The 11-12 audit's Live 10: two workers read the file before either
+    removed it, and both appended its run. Deterministic: the file is never
+    removed, so the second sweep meets the same file the first recorded."""
+    directory = os.environ["ATLAS_BEATS_DIR"]
+    os.makedirs(directory, exist_ok=True)
+    with open(os.path.join(directory, "nightly-backup"), "w", encoding="utf-8") as handle:
+        handle.write("ok\n")
+    monkeypatch.setattr(beats.os, "remove", lambda _p: None)
+    assert beats.sweep_dropped_files() == ["nightly-backup"]
+    beats.sweep_dropped_files()
+    entry = beats._STORE.load()["beats"]["nightly-backup"]
+    assert len(entry["runs"]) == 1
+    # a later file for the same rite is a new run
+    path = os.path.join(directory, "nightly-backup")
+    later = os.path.getmtime(path) + 3600
+    os.utime(path, (later, later))
+    beats.sweep_dropped_files()
+    assert len(beats._STORE.load()["beats"]["nightly-backup"]["runs"]) == 2

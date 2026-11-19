@@ -145,7 +145,10 @@ export function buildTerritories() {
   g.id = 'territories';
   for (const z of A.DATA.zones) {
     const pts = A.DATA.nodes
-      .filter(n => n.zone === z.id && n.y >= -5 && n.y <= 105)   // on the table (exclude the void)
+      // on the table (exclude the void), and drawn on this level: a place a
+      // region leaves off still held its main-map spot and stretched the hull
+      // to an empty one (2026-11-19, the 11-12 audit's Map 6)
+      .filter(n => n.zone === z.id && n.y >= -5 && n.y <= 105 && !n.off_map)
       .map(n => [n.x / 100 * A.MAPW, n.y / 100 * A.MAPH]);
     if (pts.length < 3) continue;
     const { cx, cy, points: d } = M.paddedHull(pts, A.MAPW * 0.045);
@@ -328,9 +331,10 @@ A.highlightService = function highlightService(node, link) {
   selectedId = node.id;
   const hops = Array.isArray(link.path) ? link.path.filter(Boolean) : [];
   if (hops.length) { drawChain(node, hops, origin, link.connects || []); return; }
-  const targets = Array.isArray(link.connects) && link.connects.length
-    ? new Set(link.connects) : reachTargets(node);
-  drawReach(node, targets, origin);
+  // what it connects to, else its host's reach, less what is not drawn here:
+  // a `connects` line ran to an empty spot for a place a region leaves off
+  // (Map 6); world-model.js serviceWeb is the one precedence THE PATH shares
+  drawReach(node, M.serviceWeb(node, link, A.DATA.routes, (id) => nodeById(id)?.off_map).ids, origin);
 };
 
 /** light every road that touches a VLAN: its territory brightens, its roads +

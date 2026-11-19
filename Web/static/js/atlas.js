@@ -5,6 +5,7 @@
 import './visit.js';    // A VISIT TO THE DEMO STARTS CLEAN (2026-11-17): before anything reads the browser's storage
 import { A, REDUCED, $, esc } from './config.js';
 import './scheme.js';   // THE COLOUR SCHEME (v1.52.0): first, so data-scheme stands before any panel opens
+import { panFloor } from './camera-model.js';
 import './views.js';    // THE VIEWS (2026-11-13; the Deck, v1.66.0/v1.67.0, is CHARTS): before every sibling, so a page that opens on a view has it first
 // table.js FIRST among the siblings: it swaps the backdrop src at import time,
 // and boot() below measures whatever src is standing when the image settles
@@ -106,7 +107,9 @@ A.sizeWorld = function sizeWorld(src, w, h) {
   stage.style.width = w + 'px';
   stage.style.height = h + 'px';
   $('overlay').setAttribute('viewBox', `0 0 ${w} ${h}`);
-  A.cam.min = innerWidth / w;
+  // through panFloor, as the resize path is (2026-11-19, the 11-12 audit's
+  // Map 10): a map with no width kept the old floor there and was Infinity here
+  A.cam.min = panFloor(innerWidth, w, A.cam.min);
 };
 
 async function boot() {

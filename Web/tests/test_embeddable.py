@@ -7,6 +7,7 @@ answers "unknown" instead of raising, and the probe endpoint refuses any URL
 that is not already on the map — it is not an open fetcher.
 """
 
+import copy
 import json
 import os
 import shutil
@@ -114,7 +115,7 @@ def test_a_url_can_never_inject_a_csp_directive():
 
 # ── The verdict ──────────────────────────────────────────────────────────────
 def test_deny_is_a_refusal(monkeypatch):
-    monkeypatch.setattr(embeddable, "_probe", lambda u, o: (False, embeddable.R_REFUSED))
+    monkeypatch.setattr(embeddable, "_ask", lambda u: ({"X-Frame-Options": "DENY"}, None))
     v = embeddable.verdict("http://10.77.90.20:5000")
     assert v["embeddable"] is False
 
@@ -154,17 +155,17 @@ def test_an_unreachable_service_is_unknown_not_an_error(monkeypatch):
 def test_the_verdict_is_cached(monkeypatch):
     calls = []
 
-    def probe(url, origin):
+    def ask(url):
         calls.append(url)
-        return True, embeddable.R_OK
-    monkeypatch.setattr(embeddable, "_probe", probe)
+        return {}, None
+    monkeypatch.setattr(embeddable, "_ask", ask)
     embeddable.verdict("http://10.77.90.20:5000")
     embeddable.verdict("http://10.77.90.20:5000")
     assert len(calls) == 1
 
 
 def test_probing_can_be_switched_off(monkeypatch):
-    monkeypatch.setattr(embeddable, "_probe",
+    monkeypatch.setattr(embeddable, "_ask",
                         lambda *_a: pytest.fail("must not probe when disabled"))
     v = embeddable.verdict("http://10.77.90.20:5000", enabled=False)
     assert v["embeddable"] is None
@@ -276,7 +277,7 @@ def test_the_probe_needs_a_url_at_all(arena):
 
 
 def test_the_probe_answers_for_a_charted_url(arena, monkeypatch):
-    monkeypatch.setattr(embeddable, "_probe", lambda u, o: (True, embeddable.R_OK))
+    monkeypatch.setattr(embeddable, "_ask", lambda u: ({}, None))
     url = _a_charted_url(arena)
     r = arena.app.test_client().get("/api/v2/embeddable?url=" + url)
     assert r.status_code == 200
@@ -381,7 +382,7 @@ def test_the_probe_sends_a_service_past_the_budget_to_a_tab(arena, monkeypatch):
     answer is a refusal, without knocking on the service at all."""
     monkeypatch.setattr(embeddable, "FRAME_SRC_BUDGET", 0)
     asked = []
-    monkeypatch.setattr(embeddable, "_probe", lambda u, o: asked.append(u) or (True, embeddable.R_OK))
+    monkeypatch.setattr(embeddable, "_ask", lambda u: asked.append(u) or ({}, None))
     url = _a_charted_url(arena)
     body = arena.app.test_client().get("/api/v2/embeddable?url=" + url).get_json()
     assert body["embeddable"] is False
@@ -395,3 +396,87 @@ def test_the_csp_stays_narrow_when_the_widening_is_switched_off(tmp_path):
     csp = app.app.test_client().get("/").headers["Content-Security-Policy"]
     assert "frame-src 'self' http://grafana:3000" in csp
     assert "10.77.90.20" not in csp
+
+
+# ── The CSP memo (2026-11-19, the 11-12 audit's Foundations 5 and 6) ─────────
+def _frame_list_now(arena):
+    with arena.app.test_request_context("/"):
+        return arena.app.extensions["atlas_frame_list"]()
+
+
+def test_a_dataset_read_error_narrows_frame_src_to_the_floor(arena, monkeypatch):
+    """Fail closed, as the docstring now says: an unreadable map names no
+    origins it could not check."""
+    import settings
+    def broken():
+        raise OSError("disk went away")
+    monkeypatch.setattr(arena.app.extensions["atlas"], "dataset", broken)
+    assert _frame_list_now(arena) == embeddable.frame_list(None, settings.embed_hosts())
+
+
+def test_a_list_made_for_a_stale_stamp_is_not_stored_under_the_new_one(arena, monkeypatch):
+    """A viewer whose stamp went stale while its list was made must not leave
+    that list in the next stamp's bucket. Deterministic: the first viewer's
+    clearance lookup triggers a second viewer on a newer map, nested."""
+    import redaction
+    store = arena.app.extensions["atlas"]
+    real_dataset = store.dataset
+    data_a, stamp_a, extra = real_dataset()
+    data_b = copy.deepcopy(data_a)
+    data_b.setdefault("nodes", []).append({"id": "late-frame", "name": "LATE", "zone": data_b["zones"][0]["id"],
+                                           "x": 50, "y": 50,
+                                           "links": [{"label": "late", "url": "https://late.example:8443/"}]})
+    current = {"v": (data_a, stamp_a, extra)}
+    monkeypatch.setattr(store, "dataset", lambda: current["v"])
+    import api_tokens
+    real_groups, real_token = redaction.viewer_groups, api_tokens.current
+    calls, as_token = {"n": 0}, {"on": False}
+    monkeypatch.setattr(api_tokens, "current", lambda: {"id": "t"} if as_token["on"] else real_token())
+
+    def groups():
+        calls["n"] += 1
+        if calls["n"] == 1:
+            # a viewer of ANOTHER clearance (a token) on the newer map resets
+            # the memo to stamp B and fills only its own bucket
+            current["v"], as_token["on"] = (data_b, "stamp-b", extra), True
+            _frame_list_now(arena)
+            current["v"], as_token["on"] = (data_a, stamp_a, extra), False
+        return real_groups()
+    monkeypatch.setattr(redaction, "viewer_groups", groups)
+    with arena.app.test_request_context("/"):
+        arena.app.extensions["atlas_frame_list"]()   # the stale viewer, stamp A
+    current["v"] = (data_b, "stamp-b", extra)
+    got = _frame_list_now(arena)
+    assert "https://late.example:8443" in str(got), got
+
+
+def test_the_charted_memo_never_pairs_one_maps_key_with_anothers_urls(monkeypatch):
+    """The 11-12 audit's API 3: the key was written before the set, so a call
+    in between left key A holding map B's URLs. Deterministic: building B's
+    set calls charted() for map A, nested."""
+    data_a = {"nodes": [{"id": "a", "links": [{"url": "https://a.example/"}]}]}
+    data_b = {"nodes": [{"id": "b", "links": [{"url": "https://b.example/"}]}]}
+    real = embeddable.urls_of
+    nested = {"done": False}
+
+    def urls_of(data):
+        if data is data_b and not nested["done"]:
+            nested["done"] = True
+            embeddable.charted(data_a, "stamp-a")
+        return real(data)
+    monkeypatch.setattr(embeddable, "urls_of", urls_of)
+    assert "https://b.example/" in embeddable.charted(data_b, "stamp-b")
+    assert embeddable.charted(data_a, "stamp-a") == frozenset({"https://a.example/"})
+
+
+def test_a_verdict_is_judged_for_each_callers_origin_from_one_answer(monkeypatch):
+    """The 11-12 audit's API 13: the verdict was cached on the URL alone, so
+    the first caller's origin decided it for every caller after. The service
+    is asked once; each caller's origin is judged against its answer."""
+    asked = []
+    monkeypatch.setattr(embeddable, "_ask", lambda u: asked.append(u) or (
+        {"X-Frame-Options": "ALLOW-FROM https://atlas-a.example"}, "https://svc.example"))
+    url = "https://svc.example/panel"
+    assert embeddable.verdict(url, "https://atlas-a.example")["embeddable"] is True
+    assert embeddable.verdict(url, "https://atlas-b.example")["embeddable"] is False
+    assert asked == [url]

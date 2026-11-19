@@ -699,6 +699,14 @@ class DatasetStore:
     def _apply_locked(self, ops, actor, expect, note, origin=None):
         before = self._load()
         stamp = content_stamp(before)
+        # A row addressed by its position (a section with no ids: roads, a
+        # place's ports) means "the row that was there when I looked", which
+        # only the stamp can vouch for: with no stamp a change aimed at row 3
+        # could land on whatever row 3 is now (2026-11-19, the 11-12 audit's
+        # Data 13). The Desk and the review import always send one.
+        if not expect and any(isinstance(op, dict) and op.get("index") is not None for op in ops):
+            raise RejectedError("a change to a row addressed by its position needs the "
+                                "stamp of the map it was made against: reload and try again")
         if expect and expect != stamp:
             raise ConflictError(
                 "someone else changed the map while you were editing — "

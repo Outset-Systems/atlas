@@ -8,7 +8,7 @@
    and the colophon whispers "the watchers are silent" — never an error. */
 
 import { A, CFG, $, esc, themeText, HEALTH_DOT } from './config.js';
-import { tally, colophonText } from './signals-model.js';
+import { tally, colophonText, colophonLook } from './signals-model.js';
 
 const STATE_CLASS = { degraded: 's-degraded', down: 's-down', slumbering: 's-slumber', maintenance: 's-maint' };
 // A place that is down *behind* something else that is down keeps its red — it
@@ -125,14 +125,7 @@ function apply(feed) {
   // CAUSES, not craters: "the gateway fell, and nine places with it" is one
   // thing to go and fix, where "ten places are dark" is ten.
   if (colophon) {
-    const warning = colophonText(dark, caused, darkNames[0]);
-    if (warning) {
-      colophon.textContent = warning;
-      colophon.classList.add('alarm');
-    } else {
-      colophon.textContent = COLOPHON_DEFAULT;
-      colophon.classList.remove('alarm');
-    }
+    paintColophon(colophonLook({ warning: colophonText(dark, caused, darkNames[0]), fallback: COLOPHON_DEFAULT }));
   }
 }
 
@@ -199,11 +192,14 @@ function goStatic(note) {
   A.paintTopology?.();        // WIRING's cards lose their dots too
   A.paintDecoys?.();         // the eyes grey out — the watch cannot be heard
   paintDrift(null);           // drop the drift chip too
-  if (colophon) {
-    colophon.classList.remove('alarm');
-    colophon.classList.toggle('silent', Boolean(note));
-    colophon.textContent = note || COLOPHON_DEFAULT;
-  }
+  if (colophon) paintColophon(colophonLook({ silentNote: note, fallback: COLOPHON_DEFAULT }));
+}
+
+/** The colophon as colophonLook says, both marks every time. */
+function paintColophon(look) {
+  colophon.textContent = look.text;
+  colophon.classList.toggle('alarm', look.alarm);
+  colophon.classList.toggle('silent', look.silent);
 }
 
 async function poll() {

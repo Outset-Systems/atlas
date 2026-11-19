@@ -34,6 +34,7 @@ Prod entrypoint: `gunicorn app:app` (see Dockerfile). `python app.py` = dev.
 import logging
 import os
 import sys
+import threading
 
 from flask import Flask, jsonify
 
@@ -377,6 +378,7 @@ def _install_security_headers(app):
     # the floor and the memo both key on the hosts value in force, so a change
     # made in THE SETTINGS reaches the next response without a restart.
     _csp_cache = {"stamp": None, "hosts": None, "by_clearance": {}}
+    _csp_lock = threading.Lock()
 
     def _csp_floor():
         return embeddable.frame_list(None, settings.embed_hosts())
@@ -397,9 +399,17 @@ def _install_security_headers(app):
         Memoized on the dataset stamp the reader already returns: this runs in
         `after_request` — every response, every static file — and re-walking
         the dataset each time measured ~175 µs a response for a string that
-        changes only when the map does. A transient read error serves the last
-        derived value rather than quietly narrowing the CSP to the floor,
-        whose only symptom would be a blank glass pane on a few responses.
+        changes only when the map does. A read error narrows `frame-src` to the
+        floor for that response (fail closed: a header naming origins nobody
+        could check is worse than a blank glass pane on a few responses); the
+        docstring said it served the last derived value, which the code never
+        did (2026-11-19, the 11-12 audit's Foundations 5).
+
+        The memo's stamp check, its bucket and its store are under one lock,
+        and a list is stored only if the stamp it was made for is still the
+        memo's: a viewer whose stamp went stale mid-call could store its list
+        into the next stamp's bucket, served until the map changed again
+        (Foundations 6).
 
         Returns (the list, the map's origins left out of it for want of room:
         `embeddable.FRAME_SRC_BUDGET`). `/api/v2/embeddable` reads the second
@@ -414,19 +424,24 @@ def _install_security_headers(app):
             return _csp_floor()
         # Per clearance: the list names the origins of the places in it, so a
         # viewer's header may hold only the places that viewer can see.
-        if _csp_cache["stamp"] != stamp or _csp_cache["hosts"] != hosts:
-            _csp_cache.update(stamp=stamp, hosts=hosts, by_clearance={})
+        groups, token = redaction.viewer_groups(), bool(api_tokens.current())
+        clearance = redaction.clearance_key(groups, token)
         # Look up BEFORE redacting or deriving (2026-11-13): this used to be
         # `setdefault(clearance, frame_src(...))`, which evaluates its argument
         # on every call, so the redaction and the list were rebuilt on every
         # response anyway; at 10,000 places that was ~2.5 s per response.
-        groups, token = redaction.viewer_groups(), bool(api_tokens.current())
-        by_clearance = _csp_cache["by_clearance"]
-        clearance = redaction.clearance_key(groups, token)
-        if clearance not in by_clearance:
-            seen, _ = redaction.redact(data, groups, token)
-            by_clearance[clearance] = embeddable.frame_list(seen, hosts)
-        return by_clearance[clearance]
+        with _csp_lock:
+            if _csp_cache["stamp"] != stamp or _csp_cache["hosts"] != hosts:
+                _csp_cache.update(stamp=stamp, hosts=hosts, by_clearance={})
+            hit = _csp_cache["by_clearance"].get(clearance)
+        if hit is not None:
+            return hit
+        seen, _ = redaction.redact(data, groups, token)
+        made = embeddable.frame_list(seen, hosts)
+        with _csp_lock:
+            if _csp_cache["stamp"] == stamp and _csp_cache["hosts"] == hosts:
+                _csp_cache["by_clearance"].setdefault(clearance, made)
+        return made
 
     app.extensions["atlas_frame_list"] = _frame_list
 

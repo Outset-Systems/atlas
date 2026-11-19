@@ -1211,8 +1211,17 @@ def carries_credentials(value):
         text = value.strip()
         if not text.lower().startswith(("http://", "https://")):
             return False
-        authority = text.split("://", 1)[1].split("/", 1)[0].split("?", 1)[0].split("#", 1)[0]
-        return "@" in authority
+        rest = text.split("://", 1)[1].split("?", 1)[0].split("#", 1)[0]
+        authority, _, path = rest.partition("/")
+        if "@" in authority:
+            return True
+        # `user:pa/ss@host`: a password with a bare "/" in it ends the
+        # authority early, so the "@" lands in the path. The same rule
+        # `redaction.bare_url` strips it by: an "@" in the path and a colon
+        # in the authority with no port after it (2026-11-19, the 11-12
+        # audit's Known limits 7: such a URL saved, password and all).
+        return ("@" in path and not authority.startswith("[")
+                and re.search(r":(?!\d*$)", authority) is not None)
     if isinstance(value, dict):
         return any(carries_credentials(v) for v in value.values())
     if isinstance(value, (list, tuple)):

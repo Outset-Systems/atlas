@@ -230,7 +230,13 @@ function buildObjectList(field, value) {
       const drop = el('button', 'dsk-chip-x', '×');
       drop.type = 'button';
       drop.title = 'Remove';
-      drop.addEventListener('click', () => { rows.splice(i, 1); draw(); });
+      drop.addEventListener('click', () => {
+        // keep what's typed in the other rows, as + add does (2026-11-19, the
+        // 11-12 audit's Scenes 2: a removal redrew them from what was saved)
+        rows = rows.map((r) => ({ entry: collectSub(field, r) }));
+        rows.splice(i, 1);
+        draw();
+      });
       head.append(drop);
       card.append(head);
       row.widgets = {};

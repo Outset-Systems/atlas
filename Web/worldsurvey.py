@@ -190,8 +190,15 @@ _ISO_CX, _ISO_CY = math.cos(math.radians(30)), math.sin(math.radians(30))
 
 
 def _iso(x, y, z=0.0):
-    """metres → isometric canvas-space (unscaled)."""
-    return ((x - y) * _ISO_CX, (x + y) * _ISO_CY - z)
+    """metres east, metres north, metres up → isometric canvas-space
+    (unscaled; canvas y grows DOWN). North is up-left and east up-right: the
+    camera stands to the south-west looking north-east.
+
+    It used to be `(x + y) * _ISO_CY`, which put north DOWN-left: east to
+    north turned clockwise on the screen, so every survey was a mirror image
+    of the place (2026-11-19, the 11-12 audit's Foundations 9). Far is now
+    large x + y, and the painter's sort keys below follow it."""
+    return ((x - y) * _ISO_CX, -(x + y) * _ISO_CY - z)
 
 
 def render_iso(buildings, roads, canvas=CANVAS):
@@ -234,23 +241,38 @@ def render_iso(buildings, roads, canvas=CANVAS):
                       fill=ROAD, width=max(2, int(6 * scale)))
 
     def depth(b):
+        # far first: far is large x + y (north-east of the camera), so a
+        # building is placed by its nearest corner, the smallest x + y
         pts, _h = b
-        return min(x + y for x, y in pts)
+        return -max(x + y for x, y in pts)
+
+    def area(pts):
+        # the footprint's signed area, positive when it winds anticlockwise
+        # (east to north); its sign is what says which side of an edge is out
+        return sum(pts[i][0] * pts[(i + 1) % len(pts)][1] - pts[(i + 1) % len(pts)][0] * pts[i][1]
+                   for i in range(len(pts))) / 2
 
     for pts, h in sorted(buildings, key=depth):
         base = [cast(x, y) for x, y in pts]
         top = [cast(x, y, h) for x, y in pts]
         # walls: one quad per footprint edge, far edges first
         edges = list(range(len(pts)))
-        edges.sort(key=lambda i: (pts[i][0] + pts[i][1] +
-                                  pts[(i + 1) % len(pts)][0] +
-                                  pts[(i + 1) % len(pts)][1]))
+        edges.sort(key=lambda i: -(pts[i][0] + pts[i][1] +
+                                   pts[(i + 1) % len(pts)][0] +
+                                   pts[(i + 1) % len(pts)][1]))
+        outward = 1 if area(pts) >= 0 else -1
         for i in edges:
             j = (i + 1) % len(pts)
-            # face normal decides lit vs shaded — the sign of the edge's turn
+            # The wall's OUTWARD normal decides lit or shaded: west-facing
+            # walls are lit, south-facing shaded. It used to be the edge's
+            # direction alone, so the same building lit the opposite walls when
+            # its outline was drawn the other way round, and OpenStreetMap
+            # draws them both ways (2026-11-19, the 11-12 audit's
+            # Foundations 10).
             dx = pts[j][0] - pts[i][0]
             dy = pts[j][1] - pts[i][1]
-            fill = WALL_LIT if dx - dy >= 0 else WALL_SHADE
+            nx, ny = dy * outward, -dx * outward
+            fill = WALL_LIT if nx < ny else WALL_SHADE
             draw.polygon([base[i], base[j], top[j], top[i]],
                          fill=fill, outline=EDGE)
         draw.polygon(top, fill=ROOF, outline=EDGE)

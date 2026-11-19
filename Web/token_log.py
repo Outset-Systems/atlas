@@ -293,18 +293,25 @@ def recent_elsewhere(token, window=60.0):
     other processes: the other worker, or a stdio pipe. This process counts its
     own in memory, before the line exists.
 
-    Reads only what was appended since the last call. A prune makes the file
-    shorter than the place we stopped, and then the end is read again.
+    Reads only what was appended since the last call. A prune replaces the
+    file, and then the end of the new one is read again: told by the file's
+    identity, not only by its being shorter than where we stopped (2026-11-19,
+    the 11-12 audit's Known limits 9: a file pruned and then grown past that
+    point was read from the old offset, in a different file, and the other
+    worker's count came out low). Where a filesystem gives no inode, the
+    shorter-file test still catches a prune.
     """
     target = path()
     now = time.time()
     with _state:
         try:
-            size = os.path.getsize(target)
+            st = os.stat(target)
         except OSError:
             return 0
-        if _seen["path"] != target or size < _seen["offset"]:
-            _seen.update(path=target, offset=max(0, size - RATE_TAIL_BYTES), rows=deque())
+        size, ident = st.st_size, (st.st_dev, st.st_ino)
+        if _seen["path"] != target or size < _seen["offset"] or _seen.get("ident") != ident:
+            _seen.update(path=target, ident=ident,
+                         offset=max(0, size - RATE_TAIL_BYTES), rows=deque())
         if size > _seen["offset"]:
             try:
                 with open(target, "rb") as fh:

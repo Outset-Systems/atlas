@@ -28,6 +28,12 @@
    drawn except through esc(). */
 
 import { A, $, esc, themeText, canAdminWrite } from './config.js';
+
+/** Offer a write only where the server takes one (2026-11-19, the 11-12
+    audit's Scenes 10): canAdminWrite alone is "an admin", and on a read-only
+    Atlas the acknowledge and add buttons were offered and then refused. The
+    same spelling as NODES (nodes-state.js) and the ANNALS' gate. */
+const mayWrite = () => canAdminWrite() && document.body.dataset.editable === '1';
 import { makeScene } from './scene.js';
 import { folds, keepFocus } from './fold.js';
 import { opensAtFirst, tripsLoud } from './fold-model.js';
@@ -85,7 +91,7 @@ function rowHTML(t) {
     ? `<span class="gs-trips">${t.unacked | 0} to acknowledge</span>` : '';
   const tripRows = trips.slice(0, 3).map((x) => `<div class="gs-trip">
       <span class="gs-trip-line">${esc(tripLine(x))}</span>
-      ${x.event && !x.ack && canAdminWrite()
+      ${x.event && !x.ack && mayWrite()
         ? `<button class="gs-ack" type="button" data-event="${esc(x.event)}">acknowledge</button>` : ''}
       ${x.ack ? `<span class="gs-meta">seen by ${esc(x.ack.by || 'someone')}</span>` : ''}
     </div>`).join('');
@@ -192,7 +198,7 @@ function unmatchedHTML(list, sections) {
   return `<div ${f.box}>${f.head}
     ${list.slice(0, 8).map((x) => `<div class="gs-trip gs-trip-loose">
       <span class="gs-trip-line">${esc(x.sensor ? `${x.sensor} — ` : '')}${esc(tripLine(x))}</span>
-      ${x.event && !x.ack && canAdminWrite()
+      ${x.event && !x.ack && mayWrite()
         ? `<button class="gs-ack" type="button" data-event="${esc(x.event)}">acknowledge</button>` : ''}
     </div>`).join('')}</div>`;
 }
@@ -251,7 +257,7 @@ function setupHTML() {
 
 function setupBlock(adminRead) {
   if (!adminRead) return '';
-  const add = canAdminWrite()
+  const add = mayWrite()
     ? '<button class="gs-add" type="button">+ add a honeypot or a canary token</button>' : '';
   return `<div class="gs-setup">
     <div class="gs-setup-bar">

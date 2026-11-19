@@ -237,7 +237,15 @@ def sweep_dropped_files():
                 runs = entry.get("runs")
                 runs = runs if isinstance(runs, list) else []
                 run = {"at": _stamp(mtime), "status": status}
-                runs.append(run)
+                # Two workers can sweep the same file at once: both read it
+                # before either removes it. The one that records second finds
+                # this very file's run already there and adds nothing
+                # (2026-11-19, the 11-12 audit's Live 10: a turning was
+                # counted twice in the rite's history).
+                already = (entry.get("source") == "file"
+                           and any(isinstance(r, dict) and r.get("at") == run["at"] for r in runs))
+                if not already:
+                    runs.append(run)
                 store["beats"][key] = {
                     "at": _stamp(mtime), "epoch": mtime, "status": status,
                     "note": note, "source": "file", "runs": runs[-KEEP_RUNS:],

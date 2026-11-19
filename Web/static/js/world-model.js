@@ -79,3 +79,23 @@ export function serviceEntries(nodes, id) {
   }
   return entries;
 }
+
+/** What one service touches, by one precedence for the map and for THE PATH
+    (2026-11-19, the 11-12 audit's Map 6 and Map 15): its road out (`path`,
+    the hops in order) when it has one, else what it `connects` to, else its
+    host's whole reach (reaches and routes). An empty list is no answer, so
+    `path: []` falls to `connects`, as the map always did and the card's
+    `link.path || link.connects` did not. Ids `isOff` says are not drawn are
+    dropped from what is lit; THE PATH draws every place and passes none.
+    Returns {chain: hops in order, ids: a Set of everything lit}. */
+export function serviceWeb(node, link, routes, isOff = () => false) {
+  const listed = (v) => (Array.isArray(v) ? v.filter(Boolean) : []);
+  const hops = listed(link?.path);
+  if (hops.length) {
+    const chain = hops.filter((id) => !isOff(id));
+    return { chain, ids: new Set(chain) };
+  }
+  const connects = listed(link?.connects);
+  if (connects.length) return { chain: [], ids: new Set(connects.filter((id) => !isOff(id))) };
+  return { chain: [], ids: reachTargets(node || {}, routes, isOff) };
+}

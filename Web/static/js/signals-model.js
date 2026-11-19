@@ -45,3 +45,15 @@ export function colophonText(dark, caused, firstName) {
   }
   return '';
 }
+
+/** How the colophon looks: its words and its two marks, `alarm` (places are
+    dark) and `silent` (the feed cannot be heard). One answer for both paints
+    (2026-11-19, the 11-12 audit's Map 3): the live paint set `alarm` and never
+    cleared `silent`, so a feed that came back still looked unheard.
+    `silentNote` is given only by the silent paint, `warning` only by the live
+    one; `fallback` is the line at rest. */
+export function colophonLook({ warning = '', silentNote = '', fallback = '' } = {}) {
+  if (silentNote) return { text: silentNote, alarm: false, silent: true };
+  if (warning) return { text: warning, alarm: true, silent: false };
+  return { text: fallback, alarm: false, silent: false };
+}

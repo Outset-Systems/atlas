@@ -25,6 +25,21 @@ const LIFETIME = (d) => (d ? `${d} days` : 'never expires');
 
 let issued = '';       // the plaintext, for as long as this panel stays open
 let issuedKind = '';   // which kind that token is: its lines are shown for that kind only
+let issuedId = '';     // and its id, so revoking THAT token forgets it
+
+/* Forget the plaintext when Settings closes (2026-11-19, the 11-12 audit's
+   Scenes 5): it lived for the life of the tab and was drawn again on every
+   reopen. Within one visit it stays through redraws, so a token not yet
+   copied is not lost; the hidden box is blanked too, since the DOM kept it. */
+function forgetIssued() {
+  issued = ''; issuedKind = ''; issuedId = '';
+  const box = document.getElementById('con-fresh');
+  if (box) { box.hidden = true; box.innerHTML = ''; }
+  // the setup lines carry it too (a config to paste): blanked, and drawn
+  // again without it when the panel next renders
+  for (const code of document.querySelectorAll('#sp-connections .con-code')) code.textContent = '';
+}
+addEventListener('atlas:settings', (e) => { if (!e.detail?.open) forgetIssued(); });
 let kind = 'full';     // a local model first: its answers never leave the network
 let tab = 'local';
 const FIRST_TAB = { full: 'local', cloud: 'claude' };
@@ -269,7 +284,7 @@ export async function renderConnections() {
       box.textContent = j.error || 'Could not change agent access.';
       return;
     }
-    if (!on) { issued = ''; issuedKind = ''; }      // a token shown a moment ago is no use to copy now
+    if (!on) forgetIssued();      // a token shown a moment ago is no use to copy now
     await renderConnections();
   });
   for (const radio of el.querySelectorAll('input[name="con-kind"]')) {
@@ -296,6 +311,7 @@ export async function renderConnections() {
     }
     issued = j.secret;
     issuedKind = kind;
+    issuedId = j.token?.id || '';
     await renderConnections();
   });
   for (const b of el.querySelectorAll('[data-reads]')) {
@@ -328,6 +344,7 @@ export async function renderConnections() {
         box.textContent = j.error || 'Could not revoke that token.';
         return;
       }
+      if (issuedId && b.dataset.revoke === issuedId) forgetIssued();   // the one just shown is gone
       await renderConnections();
     });
   }

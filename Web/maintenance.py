@@ -47,6 +47,12 @@ from jsonstore import JsonStore
 
 log = logging.getLogger("atlas.live.maintenance")
 
+#: Windows already warned about, by (id or reason, start, end): a window is
+#: evaluated on every feed read, and the same incoherent one was warned about
+#: every time (2026-11-19, the 11-12 audit's Live 15). Bounded by how many
+#: distinct broken windows anyone writes.
+_warned = set()
+
 REPEATS = ("none", "daily", "weekly", "monthly")
 
 #: Bounds the walk that settles a repeating window on its current occurrence
@@ -140,8 +146,10 @@ def occurrence(window, now=None):
     if end <= start:
         # Incoherent. Suppressing alarms on the strength of a window nobody can
         # read is the worst possible reading, so it suppresses nothing.
-        log.warning("maintenance window %r ends before it starts — ignoring",
-                    window.get("id") or window.get("reason") or "?")
+        name = window.get("id") or window.get("reason") or "?"
+        if (str(name), start, end) not in _warned:
+            _warned.add((str(name), start, end))
+            log.warning("maintenance window %r ends before it starts — ignoring", name)
         return "invalid", start, end
 
     duration = end - start
