@@ -107,6 +107,30 @@ function readCheck(key) {
   return p;
 }
 
+/** Whether the server keeps an answer for this thing's check: the map gives
+    it a check of its own that Atlas asks (menu-model `checkAsk` is true, as
+    watch.py `targets` would find it), and it is not unmanaged. Only then is
+    its last answer read. Anything else answers "no such check", a 404 the
+    browser logs as an error on every menu it opened (seen through the Hub
+    door, 2026-11-19: a place UniFi watches). */
+function hasCheck(kind, id) {
+  let unmanaged = false;
+  if (kind === 'place') {
+    const row = rowOf(id);
+    if (!row) return false;
+    const own = (Editor.data?.nodes || []).find((x) => x.id === row.id)?.unmanaged === true;
+    unmanaged = own || Boolean(row.unmanaged) || unmanagedVia(row).length > 0;
+  } else if (kind === 'service') {
+    const svc = serviceOf(id);
+    if (!svc) return false;
+    unmanaged = linkOf(svc)?.unmanaged === true || holding(svc.id).some((c) => c.unmanaged === true)
+      || Boolean(rowOf(svc.place)?.unmanaged);
+  } else {
+    return false;
+  }
+  return M.checkAsk(kind, A.DATA, id, { unmanaged }) === true;
+}
+
 /** A save changed a check's fields: its kept answer is read again next time. */
 export function forgetCheck(key) { checkReads.delete(key); }
 
@@ -320,10 +344,11 @@ export async function openMenu(kind, id, back = null) {
   el.menu.querySelector(PRESSABLE)?.focus({ preventScroll: true });
   // its maintenance mode line reads the repairs (an admin's route), and a
   // place's or a service's last answer its check (2026-11-17): each read
-  // once, then the menu drawn again
+  // once, then the menu drawn again; a thing with no check of its own is not
+  // asked (2026-11-19: its answer is always a 404)
   const reads = [];
   if (!Editor.repairs && mayWrite()) reads.push(ensureRepairs());
-  if (kind !== 'collection' && !freshRead(id)) reads.push(readCheck(id));
+  if (hasCheck(kind, id) && !freshRead(id)) reads.push(readCheck(id));
   if (reads.length) {
     await Promise.all(reads);
     if (menuOn(kind, id)) { const at = focusKeyOfMenu(); drawMenu(); refocusMenu(at); }

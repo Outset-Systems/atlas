@@ -13,21 +13,21 @@
    The MFA stage's JetBrains Mono and the Fell flavor line are deliberately NOT
    preloaded: they are a stage away, and four blocking font fetches to fix a
    reflow in two of them is a worse trade. `crossorigin` is required on font
-   preloads even same-origin — without it the file is fetched TWICE. #}
+   preloads even same-origin — without it the file is fetched TWICE.
+   The faces come from static/fonts.css, as the map's own do (2026-11-19).
+   They were @font-face rules in the <style> below with `url('/static/…')`,
+   and behind the Hub (which serves Atlas under /atlas/ and rewrites only
+   src/href/action ATTRIBUTES) those asked the Hub's own /static/: two of the
+   four answered 404 on every sign-in page. A `<link href>` is rewritten, and
+   fonts.css names its files relative to itself, so both doors find them. The
+   preloads carry no `?v`, the URL fonts.css asks, so each file is fetched
+   once. #}
+<link rel="stylesheet" href="{{ url_for('static', filename='fonts.css') }}?v={{ v }}">
 <link rel="preload" as="font" type="font/woff2" crossorigin
-      href="/static/fonts/Cinzel-600.woff2?v={{ v }}">
+      href="{{ url_for('static', filename='fonts/Cinzel-600.woff2') }}">
 <link rel="preload" as="font" type="font/woff2" crossorigin
-      href="/static/fonts/AlegreyaSans-400.woff2?v={{ v }}">
+      href="{{ url_for('static', filename='fonts/AlegreyaSans-400.woff2') }}">
 <style>
-  @font-face { font-family: 'Cinzel'; font-weight: 600; font-display: swap;
-    src: url('/static/fonts/Cinzel-600.woff2?v={{ v }}') format('woff2'); }
-  @font-face { font-family: 'Alegreya Sans'; font-weight: 400; font-display: swap;
-    src: url('/static/fonts/AlegreyaSans-400.woff2?v={{ v }}') format('woff2'); }
-  @font-face { font-family: 'IM Fell English'; font-style: italic; font-weight: 400; font-display: swap;
-    src: url('/static/fonts/IMFellEnglish-400i.woff2?v={{ v }}') format('woff2'); }
-  @font-face { font-family: 'JetBrains Mono'; font-weight: 400; font-display: swap;
-    src: url('/static/fonts/JetBrainsMono-400.woff2?v={{ v }}') format('woff2'); }
-
   :root {
     --abyss:#0D0B07; --surface:#16120D; --surface-2:#1E1912;
     --ink-line:#3A342A; --ink-soft:#57503F;
