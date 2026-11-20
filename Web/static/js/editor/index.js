@@ -50,8 +50,11 @@ function addHeaderButtons() {
   }
 }
 
+/* The Desk's door. It stood at the top of Settings › THE MAP until 2026-11-20;
+   it is the last section of the map editor's panel now (#map-drawer), below
+   the quick controls it is the long way round for. */
 function addSettingsEntry() {
-  const panel = document.querySelector('#settings-panel [data-group="map"]');
+  const panel = document.querySelector('#map-editor-body [data-group="map"]');
   if (!panel) return;
   // A real foldable section since 2026-08-16 (the owner: "ALL the sections should
   // be collapsable") — the same .sp-sec/.sp-sub/.sp-sec-body shape as every
@@ -60,7 +63,7 @@ function addSettingsEntry() {
   const block = document.createElement('div');
   block.className = 'sp-editor sp-sec';
   block.dataset.sec = 'desk';
-  block.innerHTML = '<button class="sp-sub" type="button">EDIT THE MAP <span class="sp-sub-plain">· everything on it</span></button>';
+  block.innerHTML = '<button class="sp-sub" type="button">EVERY RECORD <span class="sp-sub-plain">· everything on the map</span></button>';
   const body = document.createElement('div');
   body.className = 'sp-sec-body';
   body.innerHTML =
@@ -69,7 +72,7 @@ function addSettingsEntry() {
     'can be undone.</div>';
   const open = document.createElement('button');
   open.className = 'sp-btn sp-btn-go';
-  open.textContent = 'Open the map editor (E)';
+  open.textContent = 'Edit the records (E)';
   open.addEventListener('click', (e) => { e.stopPropagation(); openDesk(); });
   const first = document.createElement('button');
   first.className = 'sp-btn';
@@ -81,7 +84,7 @@ function addSettingsEntry() {
   row.append(open, first);
   body.append(row);
   block.append(body);
-  panel.querySelector('.sp-group-name').after(block);   // above MOVE PLACES
+  panel.append(block);        // last: below ZOOM MAPS
   A.applySettingsFolds?.();   // pick up this section's stored/default fold
 }
 

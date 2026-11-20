@@ -656,6 +656,10 @@
                   "type": "boolean",
                   "description": "On the map this region sits on, draw only its places that have a route to somewhere outside it. The rest are drawn once you open the region."
                 },
+                "hidden": {
+                  "type": "boolean",
+                  "description": "Not drawn until a viewer shows it (ATLAS, MAP EDITOR, Zoom maps): no frame, no opening by zoom, and no folding. A viewer's own choice is kept in their browser."
+                },
                 "places": {
                   "description": "`{\"place-id\": {\"x\": 40, \"y\": 62}}` — where a place sits on THIS map. Leave blank when the detailed map is a true enlargement: places are then mapped through the rectangle. Drag them in edit mode to pin."
                 }
@@ -916,6 +920,14 @@
                       "require_group": {
                         "type": "string",
                         "description": "Hide this service from anyone whose Hub groups don't include it."
+                      },
+                      "favourite": {
+                        "type": "string",
+                        "examples": [
+                          "internal",
+                          "external"
+                        ],
+                        "description": "Lists this service on OVERVIEW: `internal` for what is used inside the network, `external` for what is reached from outside. Blank: not listed. It needs a URL to be listed."
                       },
                       "unmanaged": {
                         "type": "boolean",
@@ -2650,6 +2662,97 @@
                         "null"
                       ],
                       "description": "When it last answered, UTC."
+                    },
+                    "url": {
+                      "type": "string",
+                      "description": "Where the source's own console opens. Sent only for a source that has one and whose address is set."
+                    },
+                    "open_in": {
+                      "type": "string",
+                      "examples": [
+                        "auto",
+                        "here",
+                        "tab"
+                      ],
+                      "description": "How `url` opens. `tab` unless the map charts that address."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "favourites": {
+            "type": "object",
+            "description": "The reader's services marked as a favourite (`links[].favourite`), in the map's order. An address charted on two places is listed once.",
+            "properties": {
+              "internal": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string"
+                    },
+                    "url": {
+                      "type": "string"
+                    },
+                    "open_in": {
+                      "type": "string",
+                      "examples": [
+                        "auto",
+                        "here",
+                        "tab"
+                      ]
+                    },
+                    "place": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "external": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string"
+                    },
+                    "url": {
+                      "type": "string"
+                    },
+                    "open_in": {
+                      "type": "string",
+                      "examples": [
+                        "auto",
+                        "here",
+                        "tab"
+                      ]
+                    },
+                    "place": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      }
                     }
                   }
                 }

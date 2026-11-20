@@ -29,8 +29,11 @@ The answer:
      "review": {"unchecked", "stale", "items": [{"id", "name", "reviewed_at"}]},
      "changes": {"items": [{"at", "by", "summary"}]} (an admin)
                 | {"count_7d"} (anyone else),
-     "sources": {"all_ok", "silent", "items": [{"name", "ok", "last_ok"}]
+     "sources": {"all_ok", "silent", "items": [{"name", "ok", "last_ok"} and,
+                 for a source with a console of its own, {"url", "open_in"}]
                  (an admin; empty for anyone else)},
+     "favourites": {"internal": [{"label", "url", "open_in", "place": {"id",
+                    "name"}}], "external": [the same]},
      "drift": {"count", "items"} (an admin only; absent otherwise)}
 """
 
@@ -38,6 +41,7 @@ import logging
 
 from flask import jsonify, make_response
 
+import integrations
 import overview
 from context import atlas
 from security import is_admin
@@ -77,5 +81,6 @@ def realm_overview():
     else:
         feed = _redact_feed(ctx, feed, groups, data=raw)
     body = overview.build(data, feed, admin, hidden=None if admin else hidden_words(raw, groups),
-                          journal=journal)
+                          journal=journal,
+                          doors=overview.source_doors(data, integrations.get) if admin else None)
     return no_store(make_response(jsonify(body)))

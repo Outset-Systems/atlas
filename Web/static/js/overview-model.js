@@ -3,11 +3,12 @@
    OVERVIEW is one page of what only Atlas holds: places by state, what is
    down and what depends on it, events nobody has acknowledged, maintenance
    this week, certificates lapsing within 30 days, places nobody has checked,
-   recent changes, whether each source answers, the map against its sources
-   (an admin's), and the fullest address ranges. The server builds and
-   redacts the facts (`GET api/v2/overview`); the ranges are worked out here
-   from the dataset already in the browser, with the Addresses scene's own
-   maths (ipam.js), so there is one way of counting an address.
+   recent changes, whether each source answers, and the services someone
+   marked as a favourite, the internal ones and the external ones apart. The
+   server builds and redacts the facts (`GET api/v2/overview`). (The map
+   against its sources and the fullest address ranges were tiles here until
+   2026-11-20, when the owner took them out for the two favourites tiles; the
+   ranges are THE ADDRESSES scene's, and the drift is the note on the map.)
 
    This file decides the order of the tiles, what each one says, and what it
    says when there is nothing to say: a tile never vanishes (the layout must
@@ -16,8 +17,6 @@
    key with its plain fallback in OVERVIEW_TEXT, filled by a `t` the caller
    passes (overview.js passes one that reads the theme first).
    Unit-tested by tests/test_overview_model.mjs under plain node. */
-
-import { chartedAddresses, countLabel, occupancy, prefixesOf } from './ipam.js';
 
 /** Every visible string, by theme key, with its plain fallback. */
 export const OVERVIEW_TEXT = {
@@ -38,8 +37,8 @@ export const OVERVIEW_TEXT = {
   ov_t_review: 'Not checked',
   ov_t_changes: 'Recent changes',
   ov_t_sources: 'Sources',
-  ov_t_drift: 'Map against the sources',
-  ov_t_ranges: 'Fullest address ranges',
+  ov_t_favin: 'Favourites · internal',
+  ov_t_favout: 'Favourites · external',
 
   ov_state_healthy: 'Up',
   ov_state_degraded: 'Degraded',
@@ -101,13 +100,8 @@ export const OVERVIEW_TEXT = {
   ov_source_last: 'last answered {when}',
   ov_source_never: 'has not answered',
 
-  ov_drift_none: 'The map agrees with its sources.',
-  ov_drift_one: '1 place differs from its sources.',
-  ov_drift: '{n} places differ from their sources.',
-
-  ov_ranges_loading: 'Reading the map…',
-  ov_ranges_none: 'No address ranges are described yet.',
-  ov_ranges_used: '{used} of {size}',
+  ov_fav_none: 'No favourites yet.',
+  ov_fav_how: 'Mark a service as a favourite in the map editor, under its place.',
 };
 
 /** Fill `{name}` in a phrase from `vars`; an unknown name is left as written. */
@@ -118,18 +112,20 @@ export function fill(text, vars = {}) {
 /** The plain words, for a caller (and the tests) with no theme. */
 export const plainT = (key, vars) => fill(OVERVIEW_TEXT[key] ?? key, vars);
 
-/** The tiles, in the page's order. `drift` is an admin's and the server only
-    sends it to one, so it is the one tile that may be absent. */
+/** The tiles, in the page's order. */
 export const TILES = ['states', 'down', 'unacked', 'maintenance', 'certs', 'review',
-  'changes', 'sources', 'drift', 'ranges'];
+  'changes', 'sources', 'favin', 'favout'];
 
-/** The tiles this answer draws, in order. Every tile but drift is always
-    drawn, saying so when it has nothing to report, so the page never jumps. */
-export function tileOrder(body) {
-  const hasDrift = Boolean(body && typeof body === 'object'
-    && Object.prototype.hasOwnProperty.call(body, 'drift') && body.drift);
-  return TILES.filter((k) => k !== 'drift' || hasDrift);
+/** The tiles this answer draws, in order: every one, always, each saying so
+    when it has nothing to report, so the page never jumps. (The answer still
+    carries an admin's `drift`; no tile draws it since 2026-11-20.) */
+export function tileOrder() {
+  return TILES.slice();
 }
+
+/** How many favourites a tile lists before "+N more": more than a tile of
+    facts (overview.js CAP), since these are doors and each is one line. */
+export const FAV_CAP = 8;
 
 /** The states, in the order NODES uses (worst first after up). */
 export const STATES = ['healthy', 'degraded', 'down', 'maintenance', 'slumbering', 'unknown'];
@@ -321,61 +317,31 @@ export function sourcesTile(sources, admin = false, t = plainT, now = Date.now()
       name: x.name, ok: Boolean(x.ok),
       state: x.ok ? t('ov_source_ok') : t('ov_source_silent'),
       when: x.last_ok ? t('ov_source_last', { when: agoPhrase(x.last_ok, now) }) : t('ov_source_never'),
+      // a source with a console of its own (the server sends where it opens)
+      url: webUrl(x.url), openIn: x.open_in || 'auto',
     })).sort((a, b) => (Number(a.ok) - Number(b.ok)) || a.name.localeCompare(b.name)),
   };
 }
 
-/** The map against its sources (an admin's): a count and the names. */
-export function driftTile(drift, t = plainT) {
-  const d = drift || {};
-  const names = list(d.items).map((x) => (typeof x === 'string' ? x : x?.name || x?.id || '')).filter(Boolean);
-  const n = Math.max(num(d.count), names.length);
-  return {
-    tone: n ? 'warn' : '',
-    line: n === 0 ? t('ov_drift_none') : t(n === 1 ? 'ov_drift_one' : 'ov_drift', { n }),
-    items: names,
-    more: Math.max(0, n - names.length),
-  };
+/** An address a page may link to: http or https, else ''. */
+export function webUrl(url) {
+  return typeof url === 'string' && /^https?:\/\//i.test(url.trim()) ? url.trim() : '';
 }
 
-/** The fullest address ranges in the dataset, worked out with the Addresses
-    scene's own maths: every range that holds its own addresses (one split
-    into smaller ranges is counted in them, as `freeV4` does), fullest first,
-    ties to the one with more in use, then by address. `null` data (the map
-    is not read yet) gives null, which the page says as "reading". */
-export function fullestRanges(data, n = 5) {
-  if (!data || typeof data !== 'object') return null;
-  const prefixes = prefixesOf(data);
-  const charted = chartedAddresses(data);
-  const rows = [];
-  for (const p of prefixes) {
-    if (p.children?.length) continue;
-    const o = occupancy(p, charted);
-    if (o.total <= 0n) continue;
-    rows.push({
-      name: p.name || p.description || p.cidr,
-      cidr: p.cidr,
-      used: Number(o.used),
-      size: Number(o.total),
-      sizeLabel: countLabel(o.total),
-      usedLabel: countLabel(o.used),
-      pct: o.percent,
-      order: p.net.network,
-      version: p.net.version,
-    });
-  }
-  rows.sort((a, b) => (b.pct - a.pct) || (b.used - a.used) || (a.version - b.version)
-    || (a.order < b.order ? -1 : a.order > b.order ? 1 : 0));
-  return rows.slice(0, n).map(({ order, version, ...r }) => r);
-}
-
-/** The ranges tile's words. */
-export function rangesTile(ranges, t = plainT) {
-  if (ranges === null || ranges === undefined) return { empty: t('ov_ranges_loading'), items: [], loading: true };
+/** A favourites tile: the services marked `internal` or `external`, in the
+    map's order. Nothing marked is said plainly; how to mark one is told only
+    to someone who can (`admin`). The address under each name is its host. */
+export function favTile(list_, admin = false, t = plainT) {
+  const items = list(list_).filter((x) => x && webUrl(x.url)).map((x) => {
+    let host = '';
+    try { host = new URL(webUrl(x.url)).host; } catch { /* keep it blank */ }
+    return { label: x.label || host || x.url, url: webUrl(x.url), host,
+             openIn: x.open_in || 'auto', place: x.place && x.place.id ? x.place : null };
+  });
   return {
-    empty: ranges.length ? '' : t('ov_ranges_none'),
-    items: ranges.map((r) => ({ ...r, line: t('ov_ranges_used', { used: r.usedLabel ?? r.used, size: r.sizeLabel ?? r.size }),
-                               tone: r.pct >= 90 ? 'down' : r.pct >= 75 ? 'warn' : '' })),
+    empty: items.length ? '' : t('ov_fav_none'),
+    how: items.length || !admin ? '' : t('ov_fav_how'),
+    items,
   };
 }
 

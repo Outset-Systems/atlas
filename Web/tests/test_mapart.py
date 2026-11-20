@@ -386,6 +386,34 @@ def test_a_style_names_itself_and_brings_its_regions(art, tmp_path):
                                  "auto": True, "places": {"x": {"x": 1, "y": 2}}}]
 
 
+def test_a_style_s_region_may_start_hidden(art, tmp_path):
+    """`hidden` is carried only when it is true, so a sidecar written before
+    2026-11-20 reads exactly as it did."""
+    for said, want in ((', "hidden": true', True), (', "hidden": false', None),
+                       (', "hidden": "yes"', None), ("", None)):
+        _style_files(art, tmp_path, COVE.replace(', "auto": true', ', "auto": true' + said))
+        region = art.style("isle.png")["regions"][0]
+        assert region.get("hidden") is want, said
+        assert ("hidden" in region) is bool(want), said
+
+
+def test_the_demo_s_cold_bit_starts_hidden():
+    """The hosted demo's style ships the default (owner, 2026-11-20): the demo
+    is read-only and its maps are mounted read-only, so no one can set it there."""
+    import json
+    import os
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "hosted",
+                        "demo-maps", "Seven-Squabbling-Kingdoms.style.json")
+    if not os.path.isfile(path):
+        pytest.skip("the hosted demo's maps are not in this tree")
+    with open(path, encoding="utf-8") as fh:
+        regions = {r["id"]: r for r in json.load(fh)["regions"]}
+    assert regions["cold-bit"].get("hidden") is True
+    assert "hidden" not in regions["big-island"], "the island it sits on is drawn"
+    assert not [r for r in regions.values() if r.get("parent") == "cold-bit"], (
+        "a region inside the cold bit would be hidden with it")
+
+
 def test_region_art_and_sidecars_are_not_offered_as_backdrops(art, tmp_path):
     _style_files(art, tmp_path, COVE)
     names = {image["name"] for image in art.available()}

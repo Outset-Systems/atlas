@@ -51,9 +51,17 @@ ZONES = [
 ]
 
 
+#: The services OVERVIEW lists as favourites, by label (`links[].favourite`).
+FAVOURITES = {"Proxmox": "internal", "TrueNAS": "internal", "Forgejo": "internal",
+              "Wiki": "internal", "Atlas": "internal", "Uptime Kuma": "internal",
+              "Jellyfin": "external", "Nextcloud": "external", "Photos": "external"}
+
+
 def link(label, url, desc, hue="#8ec07c", kuma=None, path=None, container=None,
          require_group=None, connects=None):
     out = {"label": label, "url": url, "desc": desc, "hue": hue}
+    if label in FAVOURITES:
+        out["favourite"] = FAVOURITES[label]
     if kuma:
         out["kuma"] = kuma
     if path:

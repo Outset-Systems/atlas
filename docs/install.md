@@ -104,7 +104,7 @@ sign-in page that loops. For anything lasting, use a
    hand), confirm the networks, then the devices. After that, every change to
    the map is recorded and the last 50 can be undone. Moved markers and
    rearranged racks are saved apart, with no undo.
-5. To add a place later: **Settings → Edit the map → Open the map editor**
+5. To add a place later: **ATLAS ▾ → MAP EDITOR → Every record → Edit the records**
    (or press `E`), then **+ new place**. Id, name, kind, realm, position and
    role are required; the rest can wait.
 

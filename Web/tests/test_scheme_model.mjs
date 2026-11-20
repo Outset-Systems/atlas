@@ -6,7 +6,8 @@
 import assert from 'node:assert/strict';
 import {
   RESET_KEY, RESET_MARK, SCHEME_KEY, barScheme, isToggleKey, migrateOnce, nextChoice,
-  otherScheme, parsePick, parseStored, pickAttr, readStored, resolveScheme, whereFrom, writeStored,
+  otherScheme, panelScheme, parsePick, parseStored, pickAttr, readStored, resolveScheme, whereFrom,
+  writeStored,
 } from '../static/js/scheme-model.js';
 
 let passed = 0;
@@ -81,13 +82,53 @@ test('where the camera is, from body classes', () => {
   assert.equal(whereFrom(classes()), 'table');
   assert.equal(whereFrom(classes('in-sky')), 'sky');
   assert.equal(whereFrom(classes('depths')), 'depths');
-  for (const c of ['scene-open', 'deck', 'phone']) {
+  for (const c of ['deck', 'phone']) {
     assert.equal(whereFrom(classes(c)), 'other', c);
     assert.equal(whereFrom(classes(c, 'in-sky')), 'other', `${c} in the sky`);
     assert.equal(whereFrom(classes(c, 'depths')), 'other', `${c} in the depths`);
+    assert.equal(whereFrom(classes(c, 'in-sky', 'scene-open')), 'other', `${c}, a scene, in the sky`);
   }
+  // a scene is where it was opened (2026-11-20): only over the table is it 'other'
+  assert.equal(whereFrom(classes('scene-open')), 'other');
+  assert.equal(whereFrom(classes('scene-open', 'in-sky')), 'sky');
+  assert.equal(whereFrom(classes('scene-open', 'depths')), 'depths');
   assert.equal(whereFrom(null), 'table');
   assert.equal(whereFrom({ contains() { throw new Error('no'); } }), 'table');
+});
+
+test('the panels: a scene over the Sky is light and over the Depths dark, under Light/Dark only', () => {
+  for (const os of [true, false]) {
+    const osScheme = os ? 'light' : 'dark';
+    // no scene: the OS, wherever the camera is
+    for (const c of [[], ['in-sky'], ['depths'], ['deck'], ['phone']]) {
+      assert.equal(panelScheme(null, os, classes(...c)), osScheme, `${os} ${c}`);
+    }
+    assert.equal(panelScheme(null, os, classes('scene-open', 'in-sky')), 'light');
+    assert.equal(panelScheme(null, os, classes('scene-open', 'depths')), 'dark');
+    assert.equal(panelScheme(null, os, classes('scene-open')), osScheme);
+    // the Deck and a phone follow the OS under a scene too
+    assert.equal(panelScheme(null, os, classes('scene-open', 'in-sky', 'deck')), osScheme);
+    assert.equal(panelScheme(null, os, classes('scene-open', 'depths', 'phone')), osScheme);
+    // a pick holds everywhere
+    for (const pick of ['light', 'dark']) {
+      for (const c of [[], ['scene-open', 'in-sky'], ['scene-open', 'depths']]) {
+        assert.equal(panelScheme(pick, os, classes(...c)), pick, `${pick} ${os} ${c}`);
+      }
+    }
+    // the panel and the bar agree under a scene, in every place
+    for (const c of [['in-sky'], ['depths'], [], ['deck'], ['phone', 'in-sky']]) {
+      const cl = classes('scene-open', ...c);
+      assert.equal(panelScheme(null, os, cl), barScheme(null, os, whereFrom(cl)), `${os} ${c}`);
+    }
+  }
+  assert.equal(panelScheme(null, false, null), 'dark');
+  assert.equal(panelScheme(null, true, { contains() { throw new Error('no'); } }), 'light');
+});
+
+test('T under a scene over the Sky pins the scheme the scene is not showing', () => {
+  const sky = classes('scene-open', 'in-sky');
+  assert.equal(nextChoice(null, false, whereFrom(sky)), 'dark');
+  assert.equal(nextChoice(null, true, whereFrom(classes('scene-open', 'depths'))), 'light');
 });
 
 test('from Light/Dark a press pins the scheme the bar is not showing, in every place', () => {

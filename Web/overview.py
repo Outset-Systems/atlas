@@ -15,6 +15,7 @@ fetches nothing: every tile is something the Atlas already holds.
 """
 
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlsplit
 
 import certs
 import dependencies
@@ -26,6 +27,7 @@ import tripwires
 from engines.base import NODE_STATES, monitor_map
 from engines.places import service_key
 from jsonio import iso_utc
+from redaction import bare_url
 
 #: How far ahead the maintenance tile looks, and the other tiles' edges.
 MAINTENANCE_DAYS = 7
@@ -37,6 +39,14 @@ UNACKED_SHOWN = 8
 REVIEW_SHOWN = 8
 CHANGES_SHOWN = 8
 DRIFT_SHOWN = 12
+#: The two favourites tiles, in the page's order (`links[].favourite`).
+FAVOURITE_KINDS = ("internal", "external")
+#: The sources with a console of their own to open, and the setting that holds
+#: each one's address (engines/registry.py `needs`). The decoy feed is an API
+#: with nothing to look at; Atlas's own checks, a relay and a file have no
+#: address at all.
+SOURCE_CONSOLES = {"kuma": "ATLAS_KUMA_URL", "prometheus": "ATLAS_PROM_URL",
+                   "unifi": "ATLAS_UNIFI_URL"}
 
 STATES = ("healthy", "degraded", "down", "slumbering", "maintenance")
 #: The places that make the "down now" tile, worst first.
@@ -265,15 +275,86 @@ def changes(data, admin, journal, now):
     return {"count_7d": count}
 
 
-def sources(feed, admin):
+def _origin(url):
+    """`(scheme, host, port)` of a URL, lower-cased with the scheme's own port
+    filled in; None when it is not an http(s) address."""
+    try:
+        parts = urlsplit(url.strip())
+        port = parts.port
+    except (AttributeError, ValueError):
+        return None
+    if parts.scheme not in ("http", "https") or not parts.hostname:
+        return None
+    return parts.scheme, parts.hostname.lower(), port or (443 if parts.scheme == "https" else 80)
+
+
+def source_doors(data, setting):
+    """Where each source's own console opens, for an admin: `{name: {"url",
+    "open_in"}}`. `setting` reads a connection setting by name
+    (`integrations.get`).
+
+    The page frames an address only when the map charts it (the frame list and
+    the framing verdict are both built from the map's links), so a source whose
+    address is a charted service's is sent as that service's own URL, spelt as
+    the map spells it, and opens the way that service says. Any other address
+    is sent bare (no sign-in, query or fragment) and opens in a tab."""
+    charted = {}
+    for node in _places(data):
+        for link in node.get("links") or []:
+            if not isinstance(link, dict) or not isinstance(link.get("url"), str):
+                continue
+            origin = _origin(link["url"])
+            if origin:
+                charted.setdefault(origin, link)
+    doors = {}
+    for name, key in SOURCE_CONSOLES.items():
+        base = setting(key)
+        origin = _origin(base) if isinstance(base, str) else None
+        if not origin:
+            continue
+        link = charted.get(origin)
+        if link:
+            doors[name] = {"url": link["url"], "open_in": link.get("open_in") or "auto"}
+        else:
+            doors[name] = {"url": bare_url(base.strip()), "open_in": "tab"}
+    return doors
+
+
+def sources(feed, admin, doors=None):
     """Whether every source answered on the last build. An admin is told which,
-    and when each last answered in this worker; anyone else only how many."""
+    when each last answered in this worker and, for a source with a console of
+    its own, where that opens (`source_doors`); anyone else only how many."""
     told = feed.get("sources") or {}
     at = feed.get("sources_at") or {}
     silent = sum(1 for v in told.values() if v != "ok")
-    items = ([{"name": k, "ok": v == "ok", "last_ok": at.get(k)} for k, v in told.items()]
-             if admin else [])
+    items = []
+    for name, said in (told.items() if admin else ()):
+        item = {"name": name, "ok": said == "ok", "last_ok": at.get(name)}
+        item.update((doors or {}).get(name) or {})
+        items.append(item)
     return {"all_ok": silent == 0, "silent": silent, "items": items}
+
+
+def favourites(data):
+    """The services marked as a favourite, the internal ones and the external
+    ones apart, in the map's own order. From a dataset that is already this
+    reader's, so a service they may not see is not here. One address charted
+    on two places (a public door and the proxy behind it) is listed once."""
+    out = {kind: [] for kind in FAVOURITE_KINDS}
+    seen = {kind: set() for kind in FAVOURITE_KINDS}
+    for node in _places(data):
+        for link in node.get("links") or []:
+            if not isinstance(link, dict):
+                continue
+            kind, url = link.get("favourite"), link.get("url")
+            if kind not in out or not isinstance(url, str) or not url.strip():
+                continue
+            if url.strip() in seen[kind]:
+                continue
+            seen[kind].add(url.strip())
+            out[kind].append({"label": link.get("label") or url, "url": url,
+                              "open_in": link.get("open_in") or "auto", "place": _ref(node)})
+    return out
 
 
 def drift(feed):
@@ -283,10 +364,11 @@ def drift(feed):
     return {"count": len(names), "items": names[:DRIFT_SHOWN]}
 
 
-def build(data, feed, admin, *, hidden=None, journal=None, now=None):
+def build(data, feed, admin, *, hidden=None, journal=None, now=None, doors=None):
     """The OVERVIEW answer from a dataset and a feed that are already this
     reader's. `hidden` is `redaction.hidden_words` for a reader who does not see
-    everything; `journal` the change log, read only for an admin."""
+    everything; `journal` the change log, read only for an admin; `doors` is
+    `source_doors`, an admin's too."""
     now = now or datetime.now(timezone.utc)
     out = {"generated_at": iso_utc(now.timestamp()), "admin": bool(admin),
            "states": states(data, feed),
@@ -296,7 +378,8 @@ def build(data, feed, admin, *, hidden=None, journal=None, now=None):
            "certs": lapsing_certs(data, now),
            "review": review(data, now),
            "changes": changes(data, admin, journal, now),
-           "sources": sources(feed, admin)}
+           "sources": sources(feed, admin, doors),
+           "favourites": favourites(data)}
     if admin:
         out["drift"] = drift(feed)
     return out

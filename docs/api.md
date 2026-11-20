@@ -107,7 +107,7 @@ admin. Atlas refuses tokens in that mode, so that nobody opens the port for one.
 | `GET /api/v2/rites` | Every scheduled job and whether it ran |
 | `GET /api/v2/events` | The history of state changes, newest first |
 | `GET /api/v2/places/roster` | Every place, one row each: live state, network, addresses, review, repairs, nearest certificate, collections |
-| `GET /api/v2/overview` | The realm at a glance: places by state, what is down and what depends on it, unacknowledged events, repairs this week, lapsing certificates, review, changes, sources |
+| `GET /api/v2/overview` | The realm at a glance: places by state, what is down and what depends on it, unacknowledged events, repairs this week, lapsing certificates, review, changes, sources, favourites |
 | `GET /api/v2/maps` | The pictures the map can be drawn on |
 | `GET /api/v2/openapi.json` | The reference for this list |
 | `POST /api/v2/mcp` | The MCP endpoint, for AI tools |
@@ -243,8 +243,13 @@ nothing and asks no source anything new.
   ones, never-reviewed first. When, never who.
 - `changes`: for a token, `count_7d`, how many of its places changed in seven
   days. It names nobody. An admin in the browser gets the change log instead.
-- `sources`: `all_ok` and how many are `silent`. Which one is silent, and
-  when each last answered, is for admins: a token gets an empty `items`.
+- `sources`: `all_ok` and how many are `silent`. Which one is silent, when
+  each last answered and where its own console opens (`url`, `open_in`) are
+  for admins: a token gets an empty `items`.
+- `favourites`: the services marked as a favourite on the map
+  (`links[].favourite`), as `internal` and `external` lists of `{label, url,
+  open_in, place}`, in the map's order. Only services the reader may see, and
+  an address charted on two places is listed once.
 
 `generated_at` says when it was made. `admin` is always false for a token, and
 the map's drift from its sources, which an admin also sees here, is not sent.

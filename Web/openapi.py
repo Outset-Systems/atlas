@@ -299,7 +299,19 @@ def _overview_schema():
             "items": {"type": "array", "description": "Each source, for an admin. Empty for anyone else.",
                       "items": {"type": "object", "properties": {
                           "name": {"type": "string"}, "ok": {"type": "boolean"},
-                          "last_ok": {**text, "description": "When it last answered, UTC."}}}}}},
+                          "last_ok": {**text, "description": "When it last answered, UTC."},
+                          "url": {"type": "string", "description": (
+                              "Where the source's own console opens. Sent only for a source that "
+                              "has one and whose address is set.")},
+                          "open_in": {"type": "string", "examples": ["auto", "here", "tab"],
+                                      "description": "How `url` opens. `tab` unless the map charts that address."}}}}}},
+        "favourites": {"type": "object", "description": (
+            "The reader's services marked as a favourite (`links[].favourite`), in the map's "
+            "order. An address charted on two places is listed once."),
+            "properties": {kind: {"type": "array", "items": {"type": "object", "properties": {
+                "label": {"type": "string"}, "url": {"type": "string"},
+                "open_in": {"type": "string", "examples": ["auto", "here", "tab"]},
+                "place": ref}}} for kind in ("internal", "external")}},
         "drift": {"type": "object", "description": "Monitors the map has not charted. Sent to an admin only.",
                   "properties": {"count": count, "items": {"type": "array", "items": {"type": "string"}}}},
     }}

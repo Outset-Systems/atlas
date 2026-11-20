@@ -193,6 +193,7 @@
           "url": "https://10.77.33.5:8006",
           "desc": "Guests, storage, snapshots and the backup jobs.",
           "hue": "#8ec07c",
+          "favourite": "internal",
           "kuma": "Hypervisor"
         }
       ],
@@ -246,6 +247,7 @@
           "url": "https://10.77.33.10",
           "desc": "Pools, shares and snapshots.",
           "hue": "#8ec07c",
+          "favourite": "internal",
           "kuma": "NAS"
         }
       ],
@@ -317,6 +319,7 @@
           "url": "http://10.77.30.10:3001",
           "desc": "Up/down for every service on this map.",
           "hue": "#8ec07c",
+          "favourite": "internal",
           "kuma": "Uptime Kuma",
           "container": "uptime-kuma"
         },
@@ -412,6 +415,7 @@
           "url": "https://git.home.example",
           "desc": "Every repository, including this map's.",
           "hue": "#8ec07c",
+          "favourite": "internal",
           "kuma": "Forgejo",
           "container": "forgejo"
         },
@@ -420,6 +424,7 @@
           "url": "https://wiki.home.example",
           "desc": "Runbooks: how each service is rebuilt.",
           "hue": "#8ec07c",
+          "favourite": "internal",
           "kuma": "Wiki",
           "container": "wiki"
         },
@@ -428,6 +433,7 @@
           "url": "https://atlas.home.example",
           "desc": "This map.",
           "hue": "#8ec07c",
+          "favourite": "internal",
           "container": "atlas",
           "require_group": "atlas-admins"
         }
@@ -457,6 +463,7 @@
           "url": "https://media.home.example",
           "desc": "The library.",
           "hue": "#8ec07c",
+          "favourite": "external",
           "kuma": "Jellyfin",
           "path": [
             "edge",
@@ -541,6 +548,7 @@
           "url": "https://cloud.home.example",
           "desc": "Files and calendars, from anywhere.",
           "hue": "#8ec07c",
+          "favourite": "external",
           "kuma": "Nextcloud",
           "path": [
             "edge",
@@ -554,6 +562,7 @@
           "url": "https://photos.home.example",
           "desc": "The family album.",
           "hue": "#8ec07c",
+          "favourite": "external",
           "kuma": "Photos",
           "path": [
             "edge",

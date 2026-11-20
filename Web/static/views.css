@@ -646,10 +646,7 @@ body.phone .nv-count { margin-left: 0; flex-basis: 100%; }
 }
 .ov-row:first-child { border-top: none; padding-top: 0; }
 .ov-row-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; }
-.ov-row-head .ov-days, .ov-row-head .ov-pct { margin-left: auto; }
-.ov-row-head .ov-pct { min-width: 3.2em; text-align: right; }
-/* a range's address and fill stay on its name's line, cut short before the % wraps */
-.ov-range-at { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ov-row-head .ov-days { margin-left: auto; }
 .ov-cert-name { color: var(--text); overflow-wrap: anywhere; }
 .ov-takes { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
 .ov-more { padding-top: 6px; font-family: 'Alegreya Sans', sans-serif; font-size: 0.95rem; color: var(--text-dim); }
@@ -684,15 +681,24 @@ body.phone .nv-count { margin-left: 0; flex-basis: 100%; }
   text-transform: uppercase; color: var(--gilt);
 }
 
-/* the fullest ranges: a thin bar, gilt, warn from 75%, down from 90% */
-.ov-bar {
-  height: 6px; border-radius: 3px; overflow: hidden;
-  background: rgba(var(--shade-rgb), calc(0.35 * var(--shade-k)));
-  border: 1px solid color-mix(in srgb, var(--ink-line) 70%, transparent);
+/* a way out (2026-11-20): a favourite, and a source with a console of its
+   own. An anchor the viewing glass takes (glass.js), so it frames the service
+   when that is allowed and leaves for a tab when it is not. A favourite is
+   its name in the Index's caps with its host after it in mono; a source keeps
+   the row it always had and the whole row is the link. */
+.ov-fav, .ov-source {
+  display: flex; border-radius: 4px; padding: 2px 4px; margin-left: -4px;
+  color: var(--text); text-decoration: none; transition: color 150ms;
 }
-.ov-bar > span { display: block; height: 100%; background: var(--gilt); }
-.ov-bar > span.ov-warn { background: var(--sem-warn); }
-.ov-bar > span.ov-down { background: var(--sem-down); }
+.ov-fav { flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
+.ov-source { flex-direction: column; gap: 3px; }
+.ov-fav-name {
+  font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.82rem; letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.ov-fav-at { margin-left: auto; overflow-wrap: anywhere; }
+.ov-fav:is(:hover, :focus-visible) .ov-fav-name,
+.ov-source:is(:hover, :focus-visible) .ov-row-head .ov-mono { color: var(--gilt); }
 
 /* ── on a phone, and any narrow window: one column ── */
 @media (max-width: 760px) {
@@ -711,12 +717,12 @@ body.phone .ov-stamp { margin: 0; flex-basis: 100%; }
 body.phone .ov-title { padding-right: 96px; }
 
 /* THE HOVER GLOW (the design notes 2026-11-02), for the controls this view adds */
-:is(.ov-place, .ov-event, .ov-go):is(:hover, :focus-visible) {
+:is(.ov-place, .ov-event, .ov-go, .ov-fav, .ov-source):is(:hover, :focus-visible) {
   box-shadow: 0 0 14px rgba(var(--gilt-rgb), var(--hover-glow-a));
 }
 
 @media (prefers-reduced-motion: reduce) {
-  :is(.ov-place, .ov-event) { transition: none; }
+  :is(.ov-place, .ov-event, .ov-fav, .ov-source) { transition: none; }
 }
 
 /* ── THE ALERTS' PIECES (2026-11-13; since 2026-11-14 in two places) ─────

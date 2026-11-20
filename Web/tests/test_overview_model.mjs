@@ -1,7 +1,7 @@
 /* OVERVIEW's rules, in plain node (2026-11-13, the views' stage 3): the tile
    order, every empty state, the 30- and 7-day certificate edges, the summary
-   sentence, the "nothing is declared" wording, and the fullest address
-   ranges worked out with the Addresses scene's own maths.
+   sentence, the "nothing is declared" wording, the favourites and the
+   sources that open.
 
    Run:  node tests/test_overview_model.mjs        (from Web/) */
 
@@ -17,13 +17,22 @@ function test(name, fn) {
 const NOW = Date.parse('2026-11-13T12:00:00Z');
 const daysAgo = (n) => new Date(NOW - n * 86400000).toISOString();
 
-test('the tiles keep one order; drift only when the server sends it', () => {
+test('the tiles keep one order, for every reader', () => {
   assert.deepEqual(M.TILES, ['states', 'down', 'unacked', 'maintenance', 'certs', 'review',
-    'changes', 'sources', 'drift', 'ranges']);
-  assert.deepEqual(M.tileOrder({ admin: false }), M.TILES.filter((k) => k !== 'drift'));
-  assert.deepEqual(M.tileOrder({ admin: true, drift: { count: 0, items: [] } }), M.TILES);
-  // nothing read yet: every tile but drift is still drawn, so the page never jumps
-  assert.deepEqual(M.tileOrder(null), M.TILES.filter((k) => k !== 'drift'));
+    'changes', 'sources', 'favin', 'favout']);
+  assert.deepEqual(M.tileOrder({ admin: false }), M.TILES);
+  // an admin's answer still carries the drift; no tile draws it (2026-11-20)
+  assert.deepEqual(M.tileOrder({ admin: true, drift: { count: 2, items: ['a', 'b'] } }), M.TILES);
+  // nothing read yet: every tile is still drawn, so the page never jumps
+  assert.deepEqual(M.tileOrder(null), M.TILES);
+  assert.notEqual(M.tileOrder(), M.TILES, 'a copy: a caller may not reorder the page');
+  // the ranges and the drift left with their words
+  for (const gone of ['drift', 'ranges']) {
+    assert.ok(!M.TILES.includes(gone), gone);
+    assert.ok(!Object.keys(M.OVERVIEW_TEXT).some((k) => k.includes(gone)), gone);
+  }
+  assert.equal(M.fullestRanges, undefined);
+  assert.equal(M.driftTile, undefined);
 });
 
 test('every phrase has a plain fallback, and fill leaves unknown names alone', () => {
@@ -186,65 +195,48 @@ test('sources: everyone gets the sentence, an admin the names', () => {
   assert.equal(s.tone, 'warn');
   assert.deepEqual(s.items.map((x) => [x.name, x.state, x.when]),
     [['unifi', 'silent', 'has not answered'], ['kuma', 'answering', 'last answered just now']]);
+  // neither has a console the server named: no link is drawn
+  assert.deepEqual(s.items.map((x) => x.url), ['', '']);
 });
 
-test('drift: agreement said plainly, else the count and names', () => {
-  assert.equal(M.driftTile({ count: 0, items: [] }).line, 'The map agrees with its sources.');
-  const d = M.driftTile({ count: 3, items: ['a', 'b'] });
-  assert.equal(d.line, '3 places differ from their sources.');
-  assert.equal(d.more, 1);
-  assert.equal(M.driftTile({ count: 1, items: ['a'] }).line, '1 place differs from its sources.');
+test('sources: one with a console of its own carries where it opens', () => {
+  const s = M.sourcesTile({ all_ok: true, silent: 0, items: [
+    { name: 'prometheus', ok: true, last_ok: daysAgo(0), url: 'http://10.0.0.5:9090', open_in: 'auto' },
+    { name: 'unifi', ok: true, last_ok: daysAgo(0), url: 'https://10.0.0.1', open_in: 'tab' },
+    { name: 'checks', ok: true, last_ok: daysAgo(0) },
+    { name: 'odd', ok: true, last_ok: daysAgo(0), url: 'javascript:alert(1)' },
+  ] }, true, M.plainT, NOW);
+  const by = Object.fromEntries(s.items.map((x) => [x.name, [x.url, x.openIn]]));
+  assert.deepEqual(by.prometheus, ['http://10.0.0.5:9090', 'auto']);
+  assert.deepEqual(by.unifi, ['https://10.0.0.1', 'tab']);
+  assert.deepEqual(by.checks, ['', 'auto']);
+  assert.deepEqual(by.odd, ['', 'auto'], 'only an http(s) address is ever a link');
+  assert.equal(M.webUrl(' https://a.example/x '), 'https://a.example/x');
+  for (const bad of ['', null, undefined, 'ftp://a', '//a', 'data:text/html,x', 7]) assert.equal(M.webUrl(bad), '');
 });
 
-/* a small realm: three /24s and one /30, one of them split in two */
-const FIXTURE = {
-  zones: [
-    { id: 'core', name: 'Core', subnet: '10.0.1.0/24' },
-    { id: 'edge', name: 'Edge', subnet: '10.0.2.0/30' },
-    { id: 'quiet', name: 'Quiet', subnet: '10.0.3.0/24' },
-  ],
-  prefixes: [
-    { id: 'lab', cidr: '10.0.8.0/24', name: 'Lab', role: 'container' },
-    { id: 'lab-a', cidr: '10.0.8.0/25', name: 'Lab A' },
-    { id: 'lab-b', cidr: '10.0.8.128/25', name: 'Lab B' },
-  ],
-  nodes: [
-    { id: 'a', ip: '10.0.1.10', kind: 'vm' },
-    { id: 'b', ip: '10.0.1.11', kind: 'vm' },
-    { id: 'c', ip: '10.0.2.1', kind: 'physical' },
-    { id: 'd', ip: '10.0.2.2', kind: 'physical' },
-    { id: 'e', ip: '10.0.8.5', kind: 'vm' },
-    { id: 'f', ip: '—' },
-  ],
-};
-
-test('the fullest ranges use the Addresses maths: leaves only, fullest first', () => {
-  const r = M.fullestRanges(FIXTURE, 5);
-  assert.deepEqual(r.map((x) => x.cidr), ['10.0.2.0/30', '10.0.8.0/25', '10.0.1.0/24', '10.0.3.0/24', '10.0.8.128/25']);
-  assert.deepEqual(r[0], { name: 'Edge', cidr: '10.0.2.0/30', used: 2, size: 2, sizeLabel: '2', usedLabel: '2', pct: 100 });
-  // 1 of 126 is fuller than 2 of 254
-  assert.equal(r[1].used, 1);
-  assert.equal(r[1].size, 126);
-  assert.equal(r[2].used, 2);
-  assert.equal(r[2].size, 254);
-  assert.equal(r[2].pct, 0.78);
-  // two empty ranges tie at 0%: the lower address first
-  assert.equal(r[3].cidr, '10.0.3.0/24');
-  // the container split into halves is counted in its halves, not twice
-  assert.ok(!r.some((x) => x.cidr === '10.0.8.0/24'));
-  assert.equal(M.fullestRanges(FIXTURE, 2).length, 2);
-});
-
-test('the ranges tile: reading, none described, and the tones', () => {
-  assert.equal(M.fullestRanges(null), null);
-  assert.equal(M.rangesTile(null).empty, 'Reading the map…');
-  assert.deepEqual(M.fullestRanges({ nodes: [] }), []);
-  assert.equal(M.rangesTile([]).empty, 'No address ranges are described yet.');
-  const t = M.rangesTile(M.fullestRanges(FIXTURE));
-  assert.equal(t.items[0].tone, 'down');
-  assert.equal(t.items[0].line, '2 of 2');
-  assert.equal(t.items[1].tone, '');
-  assert.equal(M.rangesTile([{ name: 'x', cidr: 'c', used: 80, size: 100, pct: 80 }]).items[0].tone, 'warn');
+test('favourites: the marked services, said plainly when there are none', () => {
+  const f = M.favTile([
+    { label: 'Jellyfin', url: 'https://media.home.example/web/', open_in: 'tab', place: { id: 'media', name: 'MEDIA' } },
+    { label: '', url: 'http://10.0.0.9:8989' },
+    { label: 'No address', url: '' },
+    { label: 'Script', url: 'javascript:alert(1)' },
+    null,
+  ]);
+  assert.deepEqual(f.items, [
+    { label: 'Jellyfin', url: 'https://media.home.example/web/', host: 'media.home.example', openIn: 'tab',
+      place: { id: 'media', name: 'MEDIA' } },
+    { label: '10.0.0.9:8989', url: 'http://10.0.0.9:8989', host: '10.0.0.9:8989', openIn: 'auto', place: null },
+  ]);
+  assert.equal(f.empty, '');
+  assert.equal(f.how, '');
+  // none: everyone is told so; only someone who can mark one is told how
+  for (const none of [[], undefined, null, [{ label: 'x' }]]) {
+    assert.equal(M.favTile(none).empty, 'No favourites yet.');
+    assert.equal(M.favTile(none, false).how, '');
+    assert.match(M.favTile(none, true).how, /map editor/);
+  }
+  assert.ok(M.FAV_CAP > 6, 'six favourites fit a tile without "+N more"');
 });
 
 test('a list on a wall is cut short with how many more', () => {

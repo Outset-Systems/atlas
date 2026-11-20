@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+import overview
 import viewers
 
 ATLAS_TEST_ENV = {"ATLAS_AUTH_MODE": "accounts"}
@@ -66,7 +67,20 @@ def _data():
     alpha.update(provenance=_mark(1, changed_days_ago=2))   # changed this week, reviewed since
     beta.update(depends_on=["alpha", "gamma"], provenance=_mark(200))
     secret.update(depends_on=["alpha"], provenance=_mark(imported=True, changed_days_ago=1),
-                  links=[{"label": "Vault UI", "url": "http://192.0.2.99/", "kuma": "Secret Mon"}])
+                  links=[{"label": "Vault UI", "url": "http://192.0.2.99/", "kuma": "Secret Mon",
+                          "favourite": "internal"}])
+    # favourites: two of alpha's; beta charts the public one again (one address
+    # on two places is listed once), one with no address and one with a mark
+    # the schema does not know
+    alpha["links"] = list(alpha.get("links") or []) + [
+        {"label": "Alpha UI", "url": "https://alpha.example/ui/", "favourite": "internal"},
+        {"label": "Alpha door", "url": "https://door.example/", "favourite": "external",
+         "open_in": "tab"},
+        {"label": "Alpha plain", "url": "https://alpha.example/plain/"}]
+    beta["links"] = list(beta.get("links") or []) + [
+        {"label": "Door again", "url": "https://door.example/", "favourite": "external"},
+        {"label": "No address", "favourite": "internal"},
+        {"label": "Odd mark", "url": "https://odd.example/", "favourite": "sometimes"}]
     data["nodes"] += [
         viewers.place("gamma", "Gamma", depends_on=["beta"], provenance=_mark(imported=True)),
         viewers.place("delta", "Delta", depends_on=["secret-place"]),
@@ -154,7 +168,7 @@ def _body(realm, who):
 
 
 KEYS = {"generated_at", "admin", "states", "down", "unacked", "maintenance", "certs", "review",
-        "changes", "sources"}
+        "changes", "sources", "favourites"}
 
 
 # ── who reads it ─────────────────────────────────────────────────────────────
@@ -369,7 +383,7 @@ def test_atlas_overview_keeps_its_shape(realm):
     told = _tool(realm, viewers.issue(realm), "atlas_overview")
     assert set(told) == MCP_KEYS
     assert told["title"] == "Test Realm" and told["zones"] == ["Core"]
-    assert (told["places"], told["services"], told["roads"]) == (5, 0, 0)
+    assert (told["places"], told["services"], told["roads"]) == (5, 6, 0)
     assert set(told["health"]) == {"places", "services"}
     assert told["health"]["places"] == {"down": 3, "degraded": 1, "maintenance": 1}
     # still {name: "ok" | "silent"}, and the decoy is not named to a token
@@ -398,3 +412,75 @@ def test_a_certificate_whose_place_is_not_one_id_is_listed_with_no_place():
     assert [(c["name"], c["place"]) for c in out] == [
         ("listed.example", None), ("boxed.example", None),
         ("alpha.example", {"id": "alpha", "name": "Alpha"})]
+
+
+# ── favourites, and the sources that open (2026-11-20) ───────────────────────
+
+FAVOURITES = {
+    "internal": [{"label": "Alpha UI", "url": "https://alpha.example/ui/", "open_in": "auto",
+                  "place": {"id": "alpha", "name": "Alpha"}}],
+    "external": [{"label": "Alpha door", "url": "https://door.example/", "open_in": "tab",
+                  "place": {"id": "alpha", "name": "Alpha"}}],
+}
+
+
+@pytest.mark.parametrize("who", ["alice", "token"])
+def test_favourites_are_the_marked_services_a_reader_may_see(realm, who):
+    # the hidden place's favourite is not listed, one address is listed once,
+    # and a mark with no address or an unknown mark lists nothing
+    assert _body(realm, who)["favourites"] == FAVOURITES
+
+
+def test_an_admin_also_gets_the_favourite_on_the_hidden_place(realm):
+    favourites = _body(realm, "ops")["favourites"]
+    assert favourites["external"] == FAVOURITES["external"]
+    assert [f["label"] for f in favourites["internal"]] == ["Alpha UI", "Vault UI"]
+
+
+def test_favourite_is_a_declared_link_field():
+    """An undeclared link key is stripped below admin, so the mark must be in
+    the catalogue; a select is a safe type and needs no hiding rule."""
+    import schema
+    field = next(f for f in schema.LINK_FIELDS if f["name"] == "favourite")
+    assert field["type"] == "select" and field["options"] == ["", "internal", "external"]
+    assert tuple(schema.FAVOURITES[1:]) == overview.FAVOURITE_KINDS
+
+
+def _map(*links):
+    return {"nodes": [{"id": "watch", "name": "Watch", "links": list(links)}]}
+
+
+def test_a_source_opens_at_the_charted_service_when_the_map_has_its_address():
+    data = _map({"label": "Prometheus", "url": "http://10.0.0.5:9090/graph", "open_in": "here"},
+                {"label": "Kuma", "url": "HTTP://10.0.0.5:3001"},
+                {"label": "No address"})
+    settings = {"ATLAS_PROM_URL": "http://10.0.0.5:9090", "ATLAS_KUMA_URL": "http://10.0.0.5:3001/",
+                "ATLAS_UNIFI_URL": "https://user:secret@10.0.0.1/?token=abc#x",
+                "ATLAS_DECOYS_URL": "https://decoys.example/feed"}
+    doors = overview.source_doors(data, lambda name: settings.get(name, ""))
+    # the charted link's own spelling, opened the way that service says
+    assert doors["prometheus"] == {"url": "http://10.0.0.5:9090/graph", "open_in": "here"}
+    assert doors["kuma"] == {"url": "HTTP://10.0.0.5:3001", "open_in": "auto"}
+    # not on the map: bare (no sign-in, query or fragment), and a tab
+    assert doors["unifi"] == {"url": "https://10.0.0.1/", "open_in": "tab"}
+    # the decoy feed is an API: it has no door
+    assert set(doors) == {"prometheus", "kuma", "unifi"}
+
+
+def test_a_source_with_no_address_or_a_strange_one_has_no_door():
+    for value in ("", "   ", "ftp://10.0.0.5", "not a url", "http://", None):
+        assert overview.source_doors(_map(), lambda name: value) == {}, value
+    # the default port is the scheme's: https://h and https://h:443 are one address
+    data = _map({"label": "Console", "url": "https://console.example:443/x"})
+    doors = overview.source_doors(data, lambda name: "https://console.example" if name == "ATLAS_UNIFI_URL" else "")
+    assert doors == {"unifi": {"url": "https://console.example:443/x", "open_in": "auto"}}
+
+
+def test_sources_carry_a_door_only_for_an_admin():
+    feed = {"sources": {"prometheus": "ok", "checks": "ok"}, "sources_at": {}}
+    doors = {"prometheus": {"url": "http://10.0.0.5:9090", "open_in": "tab"}}
+    told = overview.sources(feed, True, doors)["items"]
+    assert told == [{"name": "prometheus", "ok": True, "last_ok": None,
+                     "url": "http://10.0.0.5:9090", "open_in": "tab"},
+                    {"name": "checks", "ok": True, "last_ok": None}]
+    assert overview.sources(feed, False, doors)["items"] == []

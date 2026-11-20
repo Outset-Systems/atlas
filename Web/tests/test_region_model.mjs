@@ -592,5 +592,84 @@ test('exitsFor: a far place folded away on a map above gets no line', () => {
   assert.deepEqual(exitsFor(folded, 'isle', here, spots, names, undefined), []);
 });
 
+/* ── shown and hidden (2026-11-20) ──────────────────────────────────────── */
+{
+  const {
+    SHOWN_KEY, choiceKey, parseChoices, shownByChoice, shownRegions, withChoice, zoomMapRows,
+  } = await import('../static/js/region-model.js');
+  const MAPS = [
+    { id: 'isle', name: 'The Isle', x: 1, y: 1, w: 50, h: 50 },
+    { id: 'cold', name: 'The Cold Bit', parent: 'isle', hidden: true, x: 1, y: 1, w: 50, h: 50 },
+    { id: 'keep', name: 'The Keep', parent: 'cold', x: 1, y: 1, w: 50, h: 50 },
+    { id: 'port', name: 'The Port', x: 60, y: 1, w: 20, h: 20 },
+  ];
+  const ids = (list) => list.map((r) => r.id);
+
+  test('the key is in the app\'s own storage space, and a choice is per picture', () => {
+    assert.ok(SHOWN_KEY.startsWith('atlas-'), 'the demo visit clears every atlas- key');
+    assert.equal(choiceKey('', 'cold'), '|cold');
+    assert.equal(choiceKey('Seven.webp', 'cold'), 'Seven.webp|cold');
+  });
+
+  test('a region the map hides is not drawn, nor anything inside it', () => {
+    assert.deepEqual(ids(shownRegions(MAPS)), ['isle', 'port']);
+    // nothing hidden: the same array back, so a per-frame caller allocates nothing
+    const plain = MAPS.filter((r) => r.id === 'isle' || r.id === 'port');
+    assert.equal(shownRegions(plain), plain);
+    assert.deepEqual(shownRegions(null), []);
+  });
+
+  test('the viewer\'s own choice wins, each way, on its own picture only', () => {
+    assert.deepEqual(ids(shownRegions(MAPS, { '|cold': true })), ['isle', 'cold', 'keep', 'port']);
+    assert.deepEqual(ids(shownRegions(MAPS, { '|isle': false })), ['port']);
+    // hiding the island hides the cold bit even when the viewer asked to see it
+    assert.deepEqual(ids(shownRegions(MAPS, { '|isle': false, '|cold': true })), ['port']);
+    // a choice made on another picture is not this one's
+    assert.deepEqual(ids(shownRegions(MAPS, { 'other.webp|cold': true })), ['isle', 'port']);
+    assert.deepEqual(ids(shownRegions(MAPS, { 'other.webp|cold': true }, 'other.webp')),
+      ['isle', 'cold', 'keep', 'port']);
+    assert.equal(shownByChoice(MAPS[1]), false);
+    assert.equal(shownByChoice(MAPS[1], { '|cold': true }), true);
+    assert.equal(shownByChoice(MAPS[0], { '|isle': false }), false);
+  });
+
+  test('a loop or a missing parent hides rather than hangs', () => {
+    const loop = [{ id: 'a', parent: 'b' }, { id: 'b', parent: 'a' }, { id: 'c', parent: 'gone' }, { id: 'd' }];
+    assert.deepEqual(ids(shownRegions(loop)), ['d']);
+  });
+
+  test('the editor\'s list: outermost first, children after their parent', () => {
+    const rows = zoomMapRows(MAPS);
+    assert.deepEqual(rows.map((r) => [r.id, r.depth, r.on, r.byDefault, r.reachable]), [
+      ['isle', 0, true, true, true],
+      ['cold', 1, false, false, true],
+      ['keep', 2, true, true, false],     // shown by its own word, but its parent is hidden
+      ['port', 0, true, true, true],
+    ]);
+    assert.equal(rows[1].name, 'The Cold Bit');
+    const shown = zoomMapRows(MAPS, { '|cold': true });
+    assert.deepEqual(shown.map((r) => [r.id, r.on, r.reachable]),
+      [['isle', true, true], ['cold', true, true], ['keep', true, true], ['port', true, true]]);
+    assert.deepEqual(zoomMapRows([]), []);
+    assert.deepEqual(zoomMapRows(null), []);
+  });
+
+  test('a choice equal to the map\'s own is forgotten, so a later default is followed', () => {
+    const cold = MAPS[1], isle = MAPS[0];
+    assert.deepEqual(withChoice({}, cold, true), { '|cold': true });
+    assert.deepEqual(withChoice({ '|cold': true }, cold, false), {});
+    assert.deepEqual(withChoice({}, isle, false), { '|isle': false });
+    assert.deepEqual(withChoice({ '|isle': false }, isle, true), {});
+    assert.deepEqual(withChoice({ 'x.webp|a': true }, cold, true, 'x.webp'), { 'x.webp|a': true, 'x.webp|cold': true });
+  });
+
+  test('what is stored is read back as choices, and junk is no choice', () => {
+    assert.deepEqual(parseChoices('{"|cold": true, "|isle": false, "|odd": "yes", "|n": 1}'),
+      { '|cold': true, '|isle': false });
+    for (const junk of ['', 'nope', '[]', 'null', '7', null, undefined, [], 7]) assert.deepEqual(parseChoices(junk), {});
+    assert.deepEqual(parseChoices({ '|cold': true }), { '|cold': true });
+  });
+}
+
 console.log(`\nregion-model: ${passed} passed`);
 if (process.exitCode) console.log('SOME TESTS FAILED');

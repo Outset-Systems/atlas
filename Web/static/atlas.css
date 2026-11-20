@@ -146,26 +146,30 @@
    The bar is 10-20's list: the band and THE ATLAS, every `.chrome` circle (the
    column under ATLAS among them), the region crumbs, locator and hint; since
    2026-11-13 also the views' menu, ATLAS's ▾ and the phone's strip of view
-   names. (The watchings' pop-ups and carousel arrows left it for their
+   names, and since 2026-11-20 the map editor's panel, which wears the Index's
+   glass. (The watchings' pop-ups and carousel arrows left it for their
    section's ground, and the enlarged dashboard for the panels: Q14, owner,
    2026-11-19.) It takes the same light values as the panels, but on its own
    condition, spelt once here:
      Light            light everywhere;
-     Light/Dark       light in the Sky, dark in the Depths, and the OS on the
-                      table, under a scene, in the Deck and on a phone;
+     Light/Dark       light in the Sky, dark in the Depths (a scene open over
+                      either keeps it, 2026-11-20), and the OS on the table,
+                      in the Deck and on a phone;
      Dark             nowhere, so the night tokens on :root stand.
    `data-scheme-pick` is written by scheme.js at boot and on a pick only, and
    `in-sky` / `depths` already flip only at a crossing, so a camera move writes
-   nothing new. No other rule may key a bar element on `data-scheme`: it would
-   follow the OS while the bar follows the camera (tests/test_scheme_css.py). */
+   nothing new. (`data-scheme` is also written when a scene opens or closes:
+   the panels of a scene over the Sky are light, over the Depths dark.) No
+   other rule may key a bar element on `data-scheme`: it would follow the OS
+   while the bar follows the camera (tests/test_scheme_css.py). */
 :root[data-scheme-pick="light"] :is(#scenes-list, .scene-home, .chrome, .rl-crumbs, .rl-locator, .rl-hint,
-                                    #view-menu, .view-strip, .scene-more, #index-drawer),
-:root[data-scheme-pick="auto"] body.in-sky:not(.scene-open, .deck, .phone) :is(#scenes-list, .scene-home, .chrome, .rl-crumbs, .rl-locator, .rl-hint,
-                                    #view-menu, .view-strip, .scene-more, #index-drawer),
+                                    #view-menu, .view-strip, .scene-more, #index-drawer, #map-drawer),
+:root[data-scheme-pick="auto"] body.in-sky:not(.deck, .phone) :is(#scenes-list, .scene-home, .chrome, .rl-crumbs, .rl-locator, .rl-hint,
+                                    #view-menu, .view-strip, .scene-more, #index-drawer, #map-drawer),
 :root[data-scheme-pick="auto"][data-scheme="light"] body:not(.in-sky, .depths) :is(#scenes-list, .scene-home, .chrome, .rl-crumbs, .rl-locator, .rl-hint,
-                                    #view-menu, .view-strip, .scene-more, #index-drawer),
-:root[data-scheme-pick="auto"][data-scheme="light"] body:is(.scene-open, .deck, .phone) :is(#scenes-list, .scene-home, .chrome, .rl-crumbs, .rl-locator, .rl-hint,
-                                    #view-menu, .view-strip, .scene-more, #index-drawer) {
+                                    #view-menu, .view-strip, .scene-more, #index-drawer, #map-drawer),
+:root[data-scheme-pick="auto"][data-scheme="light"] body:is(.deck, .phone) :is(#scenes-list, .scene-home, .chrome, .rl-crumbs, .rl-locator, .rl-hint,
+                                    #view-menu, .view-strip, .scene-more, #index-drawer, #map-drawer) {
   --hue-on-ground: 40%;   /* a dataset hue as text on a light bar: mixed toward ink (.idx-zone) */
   --abyss: #d6dae0;
   --surface: #c5cad2;
@@ -2086,6 +2090,62 @@ body.constellation #overlay .territory-tag { opacity: 0.12; }
    the band at 988 and ⚙ at 987. Only under `scene-open` — at its resting 970
    the ivory card (975) still rightly covers it. */
 body.scene-open #index-drawer { z-index: 986; }
+
+/* ── The map editor's panel (2026-11-20) ────────────────
+   The Index's panel, mirrored (owner: "have it roll out and look kind of like
+   index does"): it hangs under THE ATLAS on the band's own 18px inset at the
+   LEFT end, on the same glass (the bar block names it, so it follows the bar
+   as the Index does), with the same clipped unfurl, width and corners. Two
+   differences, both because it is a panel of controls and not a list: shut,
+   it is `visibility: hidden` as well as clipped, so the keyboard cannot walk
+   into switches nobody can see; and nothing fades or rolls it up when the
+   mouse leaves (map-editor.js says why). A scene and any view but MAP close
+   it, so it needs no place above a scene's dim. */
+#map-drawer {
+  position: fixed; top: calc(var(--crown-b) + 4px); left: 18px; bottom: 12px;
+  width: 320px; z-index: 970;
+  background: var(--bar-glass-firm);
+  border: 1px solid rgba(var(--gilt-rgb), 0.18);
+  -webkit-backdrop-filter: blur(12px) saturate(1.1);
+  backdrop-filter: blur(12px) saturate(1.1);
+  border-radius: 4px 4px 14px 14px;
+  box-shadow: var(--bar-shadow-firm);
+  color: var(--text);
+  clip-path: inset(0 0 100% 0);
+  transform: translateY(-10px);
+  visibility: hidden;
+  transition: clip-path 400ms var(--glide), transform 400ms var(--glide), opacity 300ms,
+              visibility 0s linear 400ms;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+#map-drawer.open { clip-path: inset(0); transform: none; visibility: visible; transition-delay: 0s; }
+body.phone #map-drawer { display: none; }   /* a phone has no map, and no menu that opens this */
+.med-body {
+  flex: 1; min-height: 0; overflow-y: auto; padding: 6px 18px 20px;
+  font-family: 'Alegreya Sans', sans-serif; color: var(--text);
+  scrollbar-width: thin; scrollbar-color: var(--ink-line) transparent;
+}
+/* Reset wears the panel's own warning ink here, from the tokens: the panels'
+   pair of rules keys on `data-scheme`, which follows the OS, while this panel
+   follows the bar (light in the Sky on a dark OS). */
+#map-drawer .sp-btn-warn { color: var(--sem-down); border-color: rgba(var(--down-rgb), 0.45); }
+#map-drawer .sp-btn-warn:hover { background: rgba(var(--down-rgb), 0.18); }
+/* ZOOM MAPS: one switch a region, a region drawn inside another set in under it */
+.med-zoom { display: flex; flex-direction: column; gap: 8px; }
+.med-zoom-row { padding-left: calc(var(--med-depth, 0) * 14px); gap: 10px; }
+.med-zoom-name { min-width: 0; overflow-wrap: anywhere; }
+.med-zoom-tag { margin-left: 4px; font-size: 0.72rem; color: var(--text-soft); white-space: nowrap; }
+.med-zoom-off .med-zoom-name { color: var(--text-dim); }
+/* What stands at the band's left end stands clear of the open panel: the zoom
+   column, a region's crumbs and locator, and a left-hand card. `--editor-clear`
+   is the panel's width and the gap after it; MUST TRACK #map-drawer. */
+body.editor-open { --editor-clear: calc(320px + 12px); }
+body.editor-open .zoom-stack { transform: translateX(var(--editor-clear)); }
+body.editor-open .rl-crumbs { left: calc(76px + var(--editor-clear)); max-width: calc(100vw - 120px - var(--editor-clear)); }
+body.editor-open .rl-locator { left: calc(24px + var(--editor-clear)); }
+@media (min-width: 721px) {
+  body.editor-open #card.card-left { right: calc(100vw - (var(--card-w) + var(--card-edge) + var(--editor-clear))); }
+}
 /* The head is the title and nothing else since 2026-08-15 — ⚙ and » both left
    it (Link). The panel hangs from ☰, so ☰ closes it; Esc and a click on the
    map still do too, and settings is a scene of its own — the ⚙ in the band
@@ -3165,6 +3225,10 @@ body.pre #scenes-list { opacity: 0; pointer-events: none; }
      focusAnchor never sets it at this width, but it does not clear it either. */
   #card, #card.card-left { --card-in: translateY(34px) scale(0.985); }
   #index-drawer { width: 86vw; }
+  /* the map editor's panel takes the same width; what it would push aside is
+     under it at this size, so nothing is pushed */
+  #map-drawer { width: 86vw; }
+  body.editor-open { --editor-clear: 0px; }
   /* The band tightens BEFORE it scrolls — it can no longer wrap at all, so
      this is what keeps the whole row reachable without dragging it. */
   .scene { padding: 6px 7px 5px; letter-spacing: 0.14em; font-size: 0.6rem; }
@@ -3181,6 +3245,7 @@ body.pre #scenes-list { opacity: 0; pointer-events: none; }
   /* the Index unfurls out of the band (2026-08-15) — reduced motion gets the
      same geometry, arrived at instantly */
   #index-drawer { transition: none; }
+  #map-drawer { transition: none; }
   #sky-island { transform: translate(-50%, -50%) translateY(-40px); }
   .veil-title { animation-duration: 0.01s; animation-delay: 0s; }
   .veil-rule path { animation: none; stroke-dashoffset: 0; }
@@ -4763,7 +4828,7 @@ button.rl-crumb:focus-visible { outline: 2px solid var(--gilt-bright); outline-o
    cue, and on some controls nothing showed). Mouse clicks draw nothing
    (:focus-visible). The two search fields keep their borderless inputs and
    light their frame instead. */
-:is(#index-drawer, .ldg-panel, .trb-panel, .rel-panel, .pth-panel, .pal-panel, .gl-panel,
+:is(#index-drawer, #map-drawer, .ldg-panel, .trb-panel, .rel-panel, .pth-panel, .pal-panel, .gl-panel,
     .dsk-panel, .wiz-panel) :is(button, a, summary, [role="button"], [tabindex]):focus-visible {
   outline: 2px solid var(--gilt); outline-offset: 2px;
 }

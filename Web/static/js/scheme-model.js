@@ -10,6 +10,12 @@
    the same table as a function, for the button and the tests. Unit-tested by
    tests/test_scheme_model.mjs under plain node.
 
+   A SCENE TAKES ITS PLACE'S SCHEME (owner, 2026-11-20). Under no pick a
+   scene opened over the Sky is light and one opened over the Depths is dark,
+   bar and panel both: the bar was light up there and a scene pressed in it
+   came up dark. On the table a scene still follows the OS, and the Deck and a
+   phone follow it everywhere. panelScheme() is that rule for `data-scheme`.
+
    THREE PICKS (stage 1, 2026-11-13): Light, Dark, and Light/Dark, the default
    (nothing stored). The button is still a plain two-way switch (owner,
    2026-11-01). From Light/Dark a press pins the scheme the bar is not showing
@@ -42,9 +48,10 @@ export const otherScheme = (s) => (s === 'light' ? 'dark' : 'light');
 /** `data-scheme-pick` on <html>: 'auto' is Light/Dark. */
 export const pickAttr = (pick) => parsePick(pick) || 'auto';
 
-/** The bar's scheme. `where` is 'sky', 'depths', 'table' or 'other' (a scene
-    open, the Deck, or a phone). A pick holds everywhere; under Light/Dark the
-    Sky is light, the Depths dark, and the table and 'other' follow the OS. */
+/** The bar's scheme. `where` is 'sky', 'depths', 'table' or 'other' (the
+    Deck, a phone, or a scene open over the table). A pick holds everywhere;
+    under Light/Dark the Sky is light, the Depths dark, and the table and
+    'other' follow the OS. */
 export function barScheme(pick, prefersLight, where) {
   const p = parsePick(pick);
   if (p) return p;
@@ -53,15 +60,26 @@ export function barScheme(pick, prefersLight, where) {
   return prefersLight === true ? 'light' : 'dark';
 }
 
+const hasClass = (classList, c) => { try { return Boolean(classList?.contains?.(c)); } catch { return false; } };
+
 /** Where the camera is, from body's classes (a read; anything with
-    `.contains`). Scene, Deck and phone outrank the Sky and the Depths, as the
-    CSS's `:not(.scene-open, .deck, .phone)` does. */
+    `.contains`). The Deck and a phone outrank the Sky and the Depths, as the
+    CSS's `:not(.deck, .phone)` does; a scene does not (2026-11-20): one open
+    over the Sky is still in the Sky. Over the table a scene is 'other'. */
 export function whereFrom(classList) {
-  const has = (c) => { try { return Boolean(classList?.contains?.(c)); } catch { return false; } };
-  if (has('scene-open') || has('deck') || has('phone')) return 'other';
+  const has = (c) => hasClass(classList, c);
+  if (has('deck') || has('phone')) return 'other';
   if (has('in-sky')) return 'sky';
   if (has('depths')) return 'depths';
-  return 'table';
+  return has('scene-open') ? 'other' : 'table';
+}
+
+/** The scheme the panels draw (`data-scheme`), with body's classes: a pick,
+    else the bar's own scheme while a scene is open (light over the Sky, dark
+    over the Depths), else the OS as resolveScheme has it. */
+export function panelScheme(pick, prefersLight, classList) {
+  if (parsePick(pick) || !hasClass(classList, 'scene-open')) return resolveScheme(pick, prefersLight);
+  return barScheme(null, prefersLight, whereFrom(classList));
 }
 
 /** The pick a press of the button makes: the scheme the bar is NOT showing

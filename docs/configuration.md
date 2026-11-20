@@ -499,8 +499,8 @@ that proxy's login cannot be answered with a token.
 ## Map styles with their own zoom
 
 A region is a rectangle on one picture, so regions follow the art. The regions in your dataset
-belong to the map's own default image. When a viewer picks another style from Settings, the map
-shows that style's regions instead, or none.
+belong to the map's own default image. When a viewer picks another style (under **ATLAS**, **MAP
+EDITOR**, MAP STYLE), the map shows that style's regions instead, or none.
 
 A style brings its regions in a file beside the image, written by you and never uploaded. For
 `island.webp`, that is `island.style.json`:
@@ -518,7 +518,10 @@ A style brings its regions in a file beside the image, written by you and never 
 ```
 
 `x`, `y`, `w` and `h` are percent of the parent map, the same units the map editor uses. `label` is
-the name in the style list, and the map takes that name while the style is chosen. `auto` opens the region when you zoom into it. An image a region names
+the name in the style list, and the map takes that name while the style is chosen. `auto` opens the region when you zoom into it.
+`"hidden": true` starts a region hidden: it has no frame and does not open until a viewer shows it
+under **ATLAS**, **MAP EDITOR**, ZOOM MAPS, which keeps their choice in their own browser. A region
+in your dataset takes the same key. An image a region names
 is left out of the style list, because you reach it by zooming in. A file that cannot be read costs
 the style its zoom, never the map.
 
@@ -537,16 +540,16 @@ in percent of the region's own picture, for where a place sits once you zoom in:
 This changes the picture only, never your data. A place the file does not name stays where it is.
 
 You do not have to write the spots by hand. Choose the style, turn on **Drag places on the map**
-under MOVE PLACES in settings, and drag the places and the network names; open a region to place
+under MOVE PLACES in the map editor's panel (**ATLAS**, **MAP EDITOR**), and drag the places and the network names; open a region to place
 them on its own picture. **Save to map** writes the spots into the style's `.style.json` and leaves
-the rest of the file as it was. An admin can save; a read-only Atlas cannot, so a shared or demo
-map keeps the layout it was given. A style built into the image cannot be saved this way: copy its
+the rest of the file as it was. An admin can save; a read-only Atlas cannot (the button is drawn
+off there, and says so), so a shared or demo map keeps the layout it was given. A style built into the image cannot be saved this way: copy its
 picture into `ATLAS_MAPS` under another name.
 
 A style can bring its own words too. `words` maps a word the Atlas uses to the one this picture
 uses, in the case it finds it: `{"realm": "kingdom", "realms": "kingdoms", "tripwires": "little birds"}`.
 Plain words only, up to 40 of them, and they change the Atlas's own labels, never a name in your
-data. A viewer who turns on **Use standard words** under THE MAP in settings gets standard words on
+data. A viewer who turns on **Use standard words** in the map editor's panel (in Settings, on a phone) gets standard words on
 every map instead. `"tripwire": "eye"` swaps the bird that marks a tripwire for an eye.
 
 A style can give a place a sigil. `logos` maps a place id to an icon the Atlas ships in

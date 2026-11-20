@@ -32,6 +32,7 @@ import './whois.js';
 import './decoys.js';
 import './regions.js';   // REGIONS (v1.49.0): after world.js — it wraps buildWorld + onCameraMove
 import { applyOverrides } from './places.js';
+import './map-editor.js';   // THE MAP EDITOR's panel (2026-11-20): after regions.js, whose zoom maps it lists
 import './nodes.js';     // NODES (2026-11-13): the table view; reads A.VIEW on load and hears `atlas:view`
 import './overview.js';  // OVERVIEW (2026-11-13): the facts above the Deck's charts; reads A.VIEW on load too
 import './topology.js';  // WIRING (2026-11-17, the view `topology`): the device cards and cables on one canvas; TOPOLOGY, the tier scene in the band, is path.js

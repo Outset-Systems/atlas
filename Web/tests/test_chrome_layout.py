@@ -1033,3 +1033,145 @@ def test_a_phone_name_in_the_light_scheme_is_whole_and_apart_from_its_neighbour(
 
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-q"]))
+
+
+
+# ── THE MAP EDITOR's panel (2026-11-20) ──────────────────────────────────────
+# Owner: "on the atlas drop down, lets change map to 'map editor', and take all
+# the map editing settings and put it there. have it roll out and look kind of
+# like index does".
+
+MAP_EDITOR = WEB / "static" / "js" / "map-editor.js"
+
+
+def _strip_comments(css):
+    return re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+
+
+def _map_drawer():
+    html = _read(INDEX)
+    block = re.search(r'<aside id="map-drawer".*?</aside>', html, re.S)
+    assert block, "the map editor's panel is not in the page"
+    return html, re.sub(r"<!--.*?-->", "", block.group(0), flags=re.S)
+
+
+def test_the_menus_first_item_is_the_map_editor():
+    html = _read(INDEX)
+    menu = _view_menu(html)
+    # still the view `map`, first, so a stored pick and the menu's arrows hold
+    assert re.findall(r'data-view="(\w+)"', menu)[0] == "map"
+    item = re.search(r'<button type="button" role="menuitem" data-view="map"[^>]*>(.*?)</button>', menu).group(1)
+    assert item == "{{ theme.text.view_map_editor }}"
+    plain = json.loads((WEB / "themes" / "plain.json").read_text(encoding="utf-8"))["text"]
+    assert plain["view_map_editor"] == "MAP EDITOR"
+    assert "view_map" not in plain, "the old word has no reader left"
+    assert "theme.text.view_map }}" not in html
+
+
+def test_the_map_editors_panel_is_the_index_mirrored():
+    html, drawer = _map_drawer()
+    # after the Index, never between the views' menu and it (that stretch is read as the menu)
+    assert html.index('<aside id="index-drawer"') < html.index('<aside id="map-drawer"')
+    assert 'id="map-drawer"' not in _view_menu(html)
+    assert 'class="drawer-head"' in drawer and 'class="drawer-title"' in drawer
+    assert 'id="med-close"' in drawer and 'aria-hidden="true"' in drawer
+    css = _strip_comments(_read(CSS))
+    rule = re.search(r"^#map-drawer \{(.*?)^\}", css, re.S | re.M).group(1)
+    index = re.search(r"^#index-drawer \{(.*?)^\}", css, re.S | re.M).group(1)
+    # the same glass, unfurl, width and corners; the left end of the band, not the right
+    for same in ("top: calc(var(--crown-b) + 4px)", "bottom: 12px", "width: 320px", "z-index: 970",
+                 "background: var(--bar-glass-firm)", "border-radius: 4px 4px 14px 14px",
+                 "clip-path: inset(0 0 100% 0)", "transform: translateY(-10px)",
+                 "clip-path 400ms var(--glide)"):
+        assert same in rule and same in index, same
+    assert "left: 18px" in rule and "right:" not in rule
+    # shut, the keyboard cannot walk into it
+    assert "visibility: hidden" in rule
+    assert "#map-drawer.open { clip-path: inset(0); transform: none; visibility: visible; transition-delay: 0s; }" in css
+    assert "body.phone #map-drawer { display: none; }" in css
+    assert "#map-drawer { transition: none; }" in css
+    # it never fades or rolls up when the mouse leaves: Save to map must survive a drag
+    assert "#map-drawer.open.idle" not in css
+    assert "idleRollup($('map-drawer')" not in _read(UI) and "idleRollup(" not in _read(MAP_EDITOR)
+
+
+def test_the_map_settings_moved_whole_and_kept_their_names():
+    """table.js, words.js and ui.js find these by id, and the stored folds by key."""
+    html, drawer = _map_drawer()
+    for control in ("sp-maps", "sp-tilt", "sp-words", "sp-editmode", "sp-edit-hint", "sp-save",
+                    "sp-copy", "sp-reset", "med-zoom", "med-zoom-add"):
+        assert f'id="{control}"' in drawer, control
+        assert html.count(f'id="{control}"') == 1, control
+    assert re.findall(r'data-sec="(\w+)"', drawer) == ["table", "words", "survey", "zoom"]
+    settings = html[html.index('id="settings-panel"'):html.index("Toast for unbuilt scenes")]
+    settings = re.sub(r"<!--.*?-->", "", settings, flags=re.S)
+    assert 'data-group="map"' not in settings and "the map, its connections" not in settings
+    # the Desk's door follows them, last in the panel
+    editor = _read(WEB / "static" / "js" / "editor" / "index.js")
+    assert "document.querySelector('#map-editor-body [data-group=\"map\"]')" in editor
+    assert "#settings-panel [data-group" not in editor
+    assert "panel.append(block);" in editor
+
+
+def test_the_panel_opens_from_the_menu_and_closes_with_the_map():
+    ui = _read(UI)
+    # asked by event: map-editor.js loads after regions.js, long after ui.js
+    assert "dispatchEvent(new CustomEvent('atlas:map-editor', { detail: { open } }));" in ui
+    assert "if (item.dataset.view === 'map') mapEditor(wasAway ? true : undefined);" in ui
+    # THE ATLAS (the plain map) and a scene both put it away
+    home = ui[ui.index("if (btn.dataset.scene === 'atlas') {"):ui.index("A.home(true);")]
+    assert "mapEditor(false);" in home
+    assert ui.count("mapEditor(false);") == 2
+    js = _read(MAP_EDITOR)
+    assert "addEventListener('atlas:map-editor', (e) => toggleMapEditor(e.detail?.open));" in js
+    assert "if (will && (A.PHONE || A.VIEW !== 'map')) will = false;" in js
+    assert "addEventListener('atlas:view', (e) => { if (e.detail?.view !== 'map') toggleMapEditor(false); });" in js
+    assert "if (e.key !== 'Escape' || !mapEditorOpen()) return;" in js
+    assert "document.body.classList.toggle('editor-open', will);" in js
+    # no new name on the shared context: it is asked by event and reads by import
+    assert not re.search(r"^\s*A\.\w+ = ", js, re.M)
+    atlas = _read(WEB / "static" / "js" / "atlas.js")
+    assert atlas.index("import './regions.js';") < atlas.index("import './map-editor.js';")
+
+
+def test_the_panel_follows_the_bar_and_what_it_covers_stands_clear():
+    css = _strip_comments(_read(CSS))
+    block = css[css.index(':root[data-scheme-pick="light"] :is(#scenes-list'):]
+    block = block[:block.index("{")]
+    assert block.count("#map-drawer") == 4, "one for each clause of the bar's condition"
+    assert "body.editor-open .zoom-stack { transform: translateX(var(--editor-clear)); }" in css
+    assert "body.editor-open { --editor-clear: calc(320px + 12px); }" in css
+    for moved in ("body.editor-open .rl-crumbs {", "body.editor-open .rl-locator {",
+                  "body.editor-open #card.card-left {"):
+        assert moved in css, moved
+    # Reset's ink comes from tokens there: the panels' rule keys on data-scheme (the OS)
+    assert "#map-drawer .sp-btn-warn { color: var(--sem-down);" in css
+    assert "fadeTargets = ['card', 'index-drawer', 'map-drawer']" in _read(WEB / "static" / "js" / "world.js")
+
+
+def test_a_write_that_cannot_be_made_is_drawn_off_with_its_reason():
+    """A look-only Atlas showed Save to map live and answered the press with a
+    refusal; the upload row was simply absent (owner: "upload map (dead button
+    in demo)")."""
+    js = _read(MAP_EDITOR)
+    assert "save.disabled = off;" in js and "const off = !canAdminWrite();" in js
+    assert 'id="sp-save-why" hidden' in _map_drawer()[1]
+    table = _read(WEB / "static" / "js" / "table.js")
+    off = table[table.index("function buildProvisioners(holder) {"):table.index("const wrap = document.createElement('div');")]
+    assert "if (!canAdminWrite()) {" in off and 'disabled>Upload a map image…</button>' in off
+    assert "Upload is off here" in off and "return;" in off
+    # add or remove a zoom map: the Desk's REGIONS, and said plainly where that cannot be
+    assert "openDesk('regions');" in js
+    assert "if (!canAdminWrite() || !A.editorReady?.()) reason = WHY;" in js
+    assert "else if (A.onOtherStyle?.()) reason =" in js
+
+
+def test_the_words_follow_a_phone_into_settings():
+    """A phone has no map editor, and the standard words apply to every view."""
+    ui = _read(UI)
+    move = ui[ui.index("if (A.PHONE) {\n  const words ="):ui.index("function applyFolds() {")]
+    assert "#map-editor-body .sp-sec[data-sec=\"words\"]" in move
+    assert "#settings-panel [data-group=\"you\"]" in move and "you.append(words);" in move
+    assert ":is(#settings-panel, #map-editor-body) .sp-sec" in ui
+    # untouched, the editor's sections stand open; Settings' own rule is as it was
+    assert "!(FOLD_DEFAULT_OPEN.has(key) || sec.closest('#map-editor-body'))" in ui

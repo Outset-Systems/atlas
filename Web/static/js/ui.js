@@ -5,6 +5,7 @@ import { A, CFG, $, esc, host, glassAttrs, svcKey, zoneById, canAdminWrite, ago,
 import { say } from './words.js';
 import { chronicleItems, buildChronicle, buildAbyss } from './chronicle.js';
 import { makeScene } from './scene.js';
+import { sceneChanged } from './scheme.js';
 
 const drawer = $('index-drawer');
 const toast = $('toast');
@@ -335,6 +336,7 @@ function setSceneActive(name) {
      so changing scenes meant closing the one you were in first. Same condition
      the ☰ lamp already used; it just needed to be readable from CSS. */
   document.body.classList.toggle('scene-open', name !== 'atlas');
+  sceneChanged(name !== 'atlas');   // a scene over the Sky is light, over the Depths dark (scheme.js)
   /* Read by THE ATLAS's own click handler to decide which of its two jobs is
      on offer. Kept on `A` rather than re-read from the DOM so the answer is
      the same one `setSceneActive` just decided. */
@@ -416,6 +418,7 @@ document.querySelectorAll('[data-scene]').forEach(btn => {
       setSceneActive('atlas');
       A.closeCard?.();
       closeViewMenu(false);
+      mapEditor(false);   // ATLAS is the plain map: the editor's panel goes too
       if (A.PHONE) { A.deckTop?.(); return; }
       if (A.VIEW !== 'map') A.setView('map', { remember: true });
       // inside a region, home is the main map and not the middle of the region
@@ -426,6 +429,7 @@ document.querySelectorAll('[data-scene]').forEach(btn => {
     }
     closeAllScenes();
     if (deselect) { setSceneActive('atlas'); return; }
+    mapEditor(false);   // a scene stands over the map the editor is about
     setSceneActive(btn.dataset.scene);
     scenes[btn.dataset.scene]?.();
   });
@@ -471,6 +475,12 @@ function hoverReveal(anchor, cluster, { delay = 220, onChange = () => {}, refuse
     });
   });
   return { close() { clearTimeout(timer); cluster.classList.remove('peek', 'idle'); onChange(); } };
+}
+
+/** THE MAP EDITOR's panel (map-editor.js, which loads after this file and so
+    is asked by event): true opens it, false closes it, nothing switches it. */
+function mapEditor(open) {
+  dispatchEvent(new CustomEvent('atlas:map-editor', { detail: { open } }));
 }
 
 /* ── THE VIEWS' MENU (2026-11-13) ──────────────────────────────────────────
@@ -560,6 +570,10 @@ viewMenu.addEventListener('click', (e) => {
   if (item.dataset.view === 'map' && wasAway) A.home?.(true);
   closeViewMenu(keyboard);
   if (!keyboard && viewMenu.contains(document.activeElement)) document.activeElement.blur();
+  /* MAP EDITOR (2026-11-20): the map, and its own controls rolled out beside
+     it. From another view it opens; on the map it opens and shuts, as ☰ does
+     the Index. After the menu has closed, so the panel takes the focus. */
+  if (item.dataset.view === 'map') mapEditor(wasAway ? true : undefined);
 });
 [viewMenu, sceneHome].forEach((el) => el.addEventListener('focusout', (e) => {
   if (inViewChrome(e.relatedTarget)) return;
@@ -610,7 +624,8 @@ const settingsScene = makeScene({
     renderSources();
     clearInterval(sourcesTimer);
     sourcesTimer = setInterval(renderSources, 5000);
-    A.buildCartographer?.();   // the render list is a cheap fetch, fresh per open
+    // (the map style list was read here until 2026-11-20; the map editor's
+    // panel holds it now and reads it on each opening, map-editor.js)
     // Settings › Alerts (alert-setup.js) reads while it is up, as the watchers do
     dispatchEvent(new CustomEvent('atlas:settings', { detail: { open: true } }));
   },
@@ -670,18 +685,32 @@ const getFolds = () => { try { return JSON.parse(localStorage.getItem(FOLD_KEY) 
    A fold you HAVE set (either way) is remembered over the default, so this
    changes nothing for a section you already arranged. */
 const FOLD_DEFAULT_OPEN = new Set(['account']);
+/* The map editor's sections (2026-11-20) are the same kind, folded by the
+   same click and remembered under the keys they had in Settings. Untouched,
+   they start OPEN wherever they stand in that panel: it is a short list of
+   tools, opened to use one. */
+const FOLD_PANELS = ['settings-panel', 'map-editor-body'];
+/* A phone has no map and no ATLAS menu, so no map editor; the standard words
+   still apply to every view it has, so their section is seated in Settings ›
+   YOU there. Before the folds are applied, so it is folded as its new
+   neighbours are. */
+if (A.PHONE) {
+  const words = document.querySelector('#map-editor-body .sp-sec[data-sec="words"]');
+  const you = document.querySelector('#settings-panel [data-group="you"]');
+  if (words && you) you.append(words);
+}
 function applyFolds() {
   const folds = getFolds();
-  for (const sec of document.querySelectorAll('#settings-panel .sp-sec')) {
+  for (const sec of document.querySelectorAll(':is(#settings-panel, #map-editor-body) .sp-sec')) {
     if (sec.classList.contains('sp-fixed')) continue;   // always open (COLOURS)
     const key = sec.dataset.sec;
     const closed = Object.hasOwn(folds, key)
       ? Boolean(folds[key])
-      : !FOLD_DEFAULT_OPEN.has(key);
+      : !(FOLD_DEFAULT_OPEN.has(key) || sec.closest('#map-editor-body'));
     sec.classList.toggle('closed', closed);
   }
 }
-$('settings-panel')?.addEventListener('click', (e) => {
+for (const id of FOLD_PANELS) $(id)?.addEventListener('click', (e) => {
   const head = e.target.closest('.sp-sub');
   const sec = head?.closest('.sp-sec');
   if (!sec || !sec.dataset.sec || sec.classList.contains('sp-fixed')) return;

@@ -178,7 +178,17 @@ A.buildCartographer = buildTable;
    block-city into the gallery. Admin-gated on the SERVER — hiding the rows
    here is courtesy, not security. */
 function buildProvisioners(holder) {
-  if (!canAdminWrite()) return;
+  if (!canAdminWrite()) {
+    // drawn and off, saying why (2026-11-20): the look-only demo shows what
+    // an admin has here without offering a press that would be refused
+    const off = document.createElement('div');
+    off.className = 'spm-new';
+    off.innerHTML =
+      `<div class="sp-actions"><button class="sp-btn" type="button" disabled>Upload a map image…</button></div>` +
+      `<div class="sp-hint">Upload is off here: it needs an admin, on an Atlas that takes changes.</div>`;
+    holder.append(off);
+    return;
+  }
   const wrap = document.createElement('div');
   wrap.className = 'spm-new';
   wrap.innerHTML =

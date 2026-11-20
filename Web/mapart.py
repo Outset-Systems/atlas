@@ -242,6 +242,8 @@ def _style_region(raw):
         region["parent"] = str(raw["parent"])
     if raw.get("fold") is True:
         region["fold"] = True          # on its parent's map, only the places that speak outside it
+    if raw.get("hidden") is True:
+        region["hidden"] = True        # not drawn until a viewer shows it (the map editor)
     pins = _style_points(raw.get("places"))
     if pins:
         region["places"] = pins

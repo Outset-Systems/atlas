@@ -48,15 +48,63 @@ const onOtherStyle = () => {
   return Boolean(art) && art !== realmArt;
 };
 A.onOtherStyle = onOtherStyle;   // places.js: a drag here belongs to the style's sidecar
+/* Shown and hidden (2026-11-20). The map says which regions start hidden
+   (`hidden` on the record) and the viewer may show or hide any of them in
+   this browser (the map editor's ZOOM MAPS list). A hidden region is simply
+   not in `regions()`, the one list every part of this file reads, so it has
+   no frame, never opens by zoom or by link, and folds nothing. */
+let store = null;
+try { store = localStorage; } catch { /* blocked: the map's own defaults stand */ }
+let choices = {};
+try { choices = M.parseChoices(store?.getItem(M.SHOWN_KEY)); } catch { /* the defaults */ }
+/** The picture the regions in force are drawn on ('' = the realm's own map). */
+const regionArt = () => (onOtherStyle() ? chosenStyle() : '');
+/** Every region of the picture in force, hidden ones too. */
+const everyRegion = () => (onOtherStyle() ? styleRegions.get(chosenStyle()) || [] : datasetRegions());
+let shownFrom = null, shownArt = null, shownList = [];
+/** The ones that are drawn. Kept while the list and the choices stand: this
+    is asked on every camera frame. */
+function shownOf(list) {
+  const art = regionArt();
+  if (list !== shownFrom || art !== shownArt) {
+    shownFrom = list;
+    shownArt = art;
+    shownList = M.shownRegions(list, choices, art);
+  }
+  return shownList;
+}
 /* A style's regions wear this browser's unsaved pins too (places.js A.styleDraft). */
 const regions = () => {
-  if (!onOtherStyle()) return datasetRegions();
+  if (!onOtherStyle()) return shownOf(datasetRegions());
   const drafted = A.styleDraft?.().regions || {};
-  const list = styleRegions.get(chosenStyle()) || [];
+  const list = shownOf(styleRegions.get(chosenStyle()) || []);
   if (!Object.keys(drafted).length) return list;   // asked on every camera frame
   return list.map((r) =>
     (drafted[r.id] ? { ...r, places: { ...(r.places || {}), ...drafted[r.id] } } : r));
 };
+
+/** The map editor's ZOOM MAPS list: every region of the picture in force. */
+export function zoomMaps() {
+  return M.zoomMapRows(everyRegion(), choices, regionArt());
+}
+
+/** Show or hide one region in this browser, and draw the map again. A region
+    that is open, or holds the one that is, is left first: the way back out
+    of a region that is no longer there would lead nowhere. */
+export function setZoomMapShown(id, on) {
+  const r = everyRegion().find((x) => x.id === id);
+  if (!r) return false;
+  choices = M.withChoice(choices, r, on, regionArt());
+  try {
+    if (Object.keys(choices).length) store?.setItem(M.SHOWN_KEY, JSON.stringify(choices));
+    else store?.removeItem(M.SHOWN_KEY);
+  } catch { /* not remembered: it still holds for this visit */ }
+  shownFrom = null;
+  if (level && !regionById(level.id)) closeLens();
+  else A.buildWorld();
+  dispatchEvent(new CustomEvent('atlas:zoom-maps'));
+  return true;
+}
 const regionById = (id) => regions().find((r) => r.id === id);
 const nodes = () => A.DATA?.nodes || [];
 const baseTitle = () => styleName() || String(A.DATA?.meta?.title || 'The map').replace(/ Atlas$/, '');
@@ -85,7 +133,7 @@ async function loadMaps() {
     if (useMaps(maps)) {
       A.onStyleChange();
       followHash();              // a link may have asked before this answered
-    }
+    } else dispatchEvent(new CustomEvent('atlas:zoom-maps'));
   } catch { /* the bundled guess still works */ }
 }
 
@@ -101,7 +149,11 @@ function useMaps(maps) {
   refreshStyle(maps.find((m) => m.name === chosenStyle()));
   return true;
 }
-A.useMaps = (maps) => { if (useMaps(maps)) A.buildWorld(); };
+A.useMaps = (maps) => {
+  const drawn = useMaps(maps);
+  if (drawn) A.buildWorld();
+  dispatchEvent(new CustomEvent('atlas:zoom-maps'));   // the editor's list reads the new picture's
+};
 
 /* ── frames on the main map ─────────────────────────────────────────────── */
 function frameEl(r) {
@@ -731,6 +783,7 @@ A.onStyleChange = () => {
   // drawn again; without one the frames are all that changed
   if (regions().some((r) => r.fold === true)) A.buildWorld();
   else buildFrames();
+  dispatchEvent(new CustomEvent('atlas:zoom-maps'));   // another picture, another list
 };
 
 loadMaps();

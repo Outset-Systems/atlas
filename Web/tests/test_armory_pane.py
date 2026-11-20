@@ -174,10 +174,17 @@ def test_settings_are_grouped_in_plain_words():
     panel = html[html.index('id="settings-panel"'):html.index("Toast for unbuilt scenes")]
     panel = re.sub(r"<!--.*?-->", "", panel, flags=re.S)   # comments may keep history
     groups = re.findall(r'class="sp-group" data-group="(\w+)"', panel)
-    assert groups == ["you", "map", "connections", "admin"]
+    # THE MAP left for the map editor's panel on 2026-11-20, its keys with it
+    assert groups == ["you", "connections", "admin"]
     for key in ("account", "directory", "integrations", "realm", "deployment", "users",
-                "signins", "survey", "seeking", "table", "watchers"):
+                "signins", "seeking", "watchers"):
         assert f'data-sec="{key}"' in panel, f"the stored fold for {key} would be lost"
+    editor = html[html.index('<aside id="map-drawer"'):]
+    editor = re.sub(r"<!--.*?-->", "", editor[:editor.index("</aside>")], flags=re.S)
+    assert re.findall(r'class="sp-group" data-group="(\w+)"', editor) == ["map"]
+    for key in ("table", "survey"):
+        assert f'data-sec="{key}"' in editor, f"the stored fold for {key} would be lost"
+        assert f'data-sec="{key}"' not in panel, f"{key} is the map editor's now, once"
     for old in ("THE SURVEY<", "THE SEEKING", "CARTOGRAPHER", "THE WATCHERS<"):
         assert old not in panel
     account = (WEB / "static" / "js" / "account.js").read_text(encoding="utf-8")

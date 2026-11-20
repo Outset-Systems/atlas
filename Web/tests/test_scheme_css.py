@@ -48,7 +48,9 @@ BAR = ["#scenes-list", ".scene-home", ".chrome", ".rl-crumbs", ".rl-locator", ".
        # the views' menu, ATLAS's ▾ and the phone's strip (2026-11-13)
        "#view-menu", ".view-strip", ".scene-more",
        # THE INDEX wears the menu's glass, so it follows the bar too (owner, 2026-11-13)
-       "#index-drawer"]
+       "#index-drawer",
+       # the map editor's panel is the Index's, mirrored (2026-11-20)
+       "#map-drawer"]
 #: the bar and what draws inside it: none of these may key on `data-scheme`
 BAR_RE = re.compile(r"#scenes-list|\.scene\b|\.scene-home|\.band-|\.chrome\b|\.ci-|#btn-|"
                     r"\.view-tool|\.vt-lamp|\.menu-tools|\.rl-crumbs?|\.rl-locator|\.rl-hint|\.rl-here|"
@@ -314,14 +316,16 @@ BAR_TABLE = {
     ("dark", "dark", "sky"): "dark",     ("dark", "dark", "depths"): "dark",
     ("dark", "dark", "table"): "dark",   ("dark", "dark", "other"): "dark",
 }
-#: the body classes each place can wear. 'other' is a scene, the Deck or a
-#: phone, with the camera anywhere (the classes are read, never written here)
+#: the body classes each place can wear. 'other' is the Deck or a phone with
+#: the camera anywhere, or a scene over the table; a scene over the Sky or the
+#: Depths is still there (2026-11-20). The classes are read, never written here.
 PLACES = {
-    "sky": [{"in-sky"}],
-    "depths": [{"depths"}],
+    "sky": [{"in-sky"}, {"in-sky", "scene-open"}],
+    "depths": [{"depths"}, {"depths", "scene-open"}],
     "table": [set()],
-    "other": [{"scene-open"}, {"in-sky", "scene-open"}, {"depths", "scene-open"},
-              {"deck"}, {"in-sky", "deck"}, {"depths", "deck"}, {"phone"}, {"in-sky", "phone"}],
+    "other": [{"scene-open"}, {"deck"}, {"in-sky", "deck"}, {"depths", "deck"},
+              {"phone"}, {"in-sky", "phone"}, {"in-sky", "deck", "scene-open"},
+              {"depths", "phone", "scene-open"}],
 }
 
 
@@ -331,9 +335,19 @@ def test_the_bar_condition_gives_bar_schemes_table_in_all_24_cases():
     clauses = _clauses(sel)
     wrong = []
     for (pick, os_scheme, where), want in BAR_TABLE.items():
-        panels = os_scheme if pick == "auto" else pick   # resolveScheme: data-scheme
-        attrs = {"data-scheme-pick": pick, "data-scheme": panels}
         for body in PLACES[where]:
+            # panelScheme: data-scheme is the pick, else the OS, except under a
+            # scene over the Sky (light) or the Depths (dark)
+            panels = os_scheme if pick == "auto" else pick
+            if pick == "auto" and "scene-open" in body and where in ("sky", "depths"):
+                panels = want
+            attrs = {"data-scheme-pick": pick, "data-scheme": panels}
+            # the bar there must not lean on that write: either value, same bar
+            if pick == "auto" and where in ("sky", "depths"):
+                for other in ("light", "dark"):
+                    alt = dict(attrs, **{"data-scheme": other})
+                    assert any(_match_clause(c, alt, body) for c in clauses) == (want == "light"), (
+                        f"{where} {sorted(body)}: the bar there must not depend on data-scheme")
             got = "light" if any(_match_clause(c, attrs, body) for c in clauses) else "dark"
             if got != want:
                 wrong.append(f"pick {pick}, OS {os_scheme}, {where} {sorted(body)}: bar {got}, want {want}")

@@ -8,22 +8,23 @@
 
    The facts come from the server (`api/v2/overview`), built and redacted
    there for this viewer: a hidden place never reaches this file, and who
-   changed what, and the map's drift from its sources, reach an admin only.
-   The fullest address ranges are worked out here from the dataset already
-   in the browser, with the Addresses scene's own maths (overview-model.js
-   over ipam.js). The answer is read each time the view comes up and every
-   30 seconds while it stays up; nothing runs while another view is up.
+   changed what, and which source is which, reach an admin only. The answer
+   is read each time the view comes up and every 30 seconds while it stays
+   up; nothing runs while another view is up.
 
    It is made to be left on a wall: big counts, nothing that needs a pointer
    or a hover to read, a tile that has nothing to report saying so in one
    plain line, and a list cut short with "+N more" rather than scrolled. A
    place's name opens the map's own card; an event nobody has acknowledged
-   opens the ANNALS, where acknowledging stays.
+   opens the ANNALS, where acknowledging stays. A favourite, and a source
+   with a console of its own, is a link: it opens in THE VIEWING GLASS when
+   the service allows framing and in a new tab when it does not (glass.js
+   takes the click on any `a[data-glass]`).
 
    The rules and every phrase are overview-model.js (OVERVIEW_TEXT, through
    the theme). The look is views.css. */
 
-import { A, $, esc, themeText, HEALTH_DOT, getJSON } from './config.js';
+import { A, $, esc, themeText, HEALTH_DOT, getJSON, glassAttrs } from './config.js';
 import * as M from './overview-model.js';
 
 const POLL_MS = 30000;
@@ -40,8 +41,6 @@ const S = {
 
 let root = null;
 let timer = 0;
-let rangesTimer = 0;
-let rangesTries = 0;   // 40 looks (24 s) for the map's data, then the tile says what it has
 let gen = 0;            // bumped on every hide: a late answer from before is dropped
 let inflight = null;
 let firstDrawn = false;
@@ -88,6 +87,24 @@ function rows(items, row, extra = 0) {
   const { shown: list, more: cut } = M.capped(items, CAP);
   if (!list.length && !(cut + extra)) return '';
   return `<ul class="ov-list">${list.map((x) => `<li class="ov-row">${row(x)}</li>`).join('')}${more(cut + extra)}</ul>`;
+}
+
+/** A way out to a service: an anchor glass.js opens over the page when the
+    service allows it, else in a new tab. The address is the link's own. */
+const door = (url, openIn, title, sub, cls, inner) => `<a class="${cls}" href="${esc(url)}" target="_blank"
+    rel="noopener" data-door="${esc(url)}" ${glassAttrs(title, sub, openIn)}>${inner}</a>`;
+
+function favourites(which, b) {
+  const f = M.favTile(b.favourites?.[which], Boolean(b.admin), t);
+  if (f.empty) return { html: line(f.empty, 'ov-calm') + line(f.how, 'ov-quiet') };
+  const { shown: list, more: cut } = M.capped(f.items, M.FAV_CAP);
+  return {
+    count: f.items.length,
+    html: `<ul class="ov-list ov-favs">${list.map((x) => `<li class="ov-row">${
+      door(x.url, x.openIn, x.label, x.place?.name || x.host, 'ov-fav', `
+          <span class="ov-fav-name">${esc(x.label)}</span>
+          <span class="ov-mono ov-quiet ov-fav-at">${esc(x.host)}</span>`)}</li>`).join('')}${more(cut)}</ul>`,
+  };
 }
 
 const TILE = {
@@ -186,39 +203,23 @@ const TILE = {
     return {
       tone: s.tone,
       html: line(s.line, s.tone ? 'ov-say' : 'ov-calm')
-        + rows(s.items, (x) => `
+        + rows(s.items, (x) => {
+          const inner = `
           <div class="ov-row-head">${dot(x.ok ? 'healthy' : 'down')}<span class="ov-mono">${esc(x.name)}</span>
             <span class="ov-quiet">${esc(x.state)}</span></div>
-          <span class="ov-quiet">${esc(x.when)}</span>`),
+          <span class="ov-quiet">${esc(x.when)}</span>`;
+          // a source with a console of its own is the way to it
+          return x.url ? door(x.url, x.openIn, x.name, t('ov_t_sources'), 'ov-source', inner) : inner;
+        }),
     };
   },
-  drift(b) {
-    const d = M.driftTile(b.drift, t);
-    return {
-      tone: d.tone,
-      count: d.items.length || undefined,
-      html: line(d.line, d.tone ? 'ov-say' : 'ov-calm')
-        + rows(d.items, (name) => `<span class="ov-mono">${esc(name)}</span>`, d.more),
-    };
-  },
-  ranges() {
-    const r = M.rangesTile(M.fullestRanges(A.DATA, 5), t);
-    if (r.empty) return { html: line(r.empty, r.loading ? 'ov-quiet' : 'ov-calm') };
-    return {
-      html: `<ul class="ov-list">${r.items.map((x) => `
-          <li class="ov-row">
-            <div class="ov-row-head"><span class="ov-what">${esc(x.name)}</span>
-              <span class="ov-mono ov-quiet ov-range-at">${esc(x.cidr)} · ${esc(x.line)}</span>
-              <span class="ov-mono ov-pct${x.tone ? ` ov-${x.tone}` : ''}">${esc(String(Math.round(x.pct)))}%</span></div>
-            <div class="ov-bar" role="presentation"><span style="width:${Math.min(100, Math.max(0, x.pct))}%"${x.tone ? ` class="ov-${x.tone}"` : ''}></span></div>
-          </li>`).join('')}</ul>`,
-    };
-  },
+  favin: (b) => favourites('internal', b),
+  favout: (b) => favourites('external', b),
 };
 
 function tile(key, b) {
   let out;
-  if (!b && key !== 'ranges') {
+  if (!b) {
     out = { html: line(S.error ? '—' : t('ov_loading'), 'ov-quiet') };
   } else {
     try { out = TILE[key](b || {}); } catch (err) {
@@ -249,7 +250,8 @@ function draw() {
   // note what has focus, and give it back to the same control after
   const had = root.contains(document.activeElement) ? document.activeElement : null;
   const again = had?.dataset.open !== undefined ? `[data-open="${CSS.escape(had.dataset.open)}"]`
-    : had?.dataset.annals !== undefined ? `[data-annals="${CSS.escape(had.dataset.annals)}"]` : '';
+    : had?.dataset.annals !== undefined ? `[data-annals="${CSS.escape(had.dataset.annals)}"]`
+    : had?.dataset.door !== undefined ? `[data-door="${CSS.escape(had.dataset.door)}"]` : '';
   const inTile = had?.closest('[data-tile]')?.dataset.tile;
   root.innerHTML = `
     <header class="ov-head">
@@ -260,14 +262,9 @@ function draw() {
     ${msg ? `<p class="ov-msg" role="status">${esc(msg)}</p>` : ''}
     <div class="ov-grid">${order.map((k) => tile(k, b)).join('')}</div>`;
   if (again) (root.querySelector(`[data-tile="${inTile}"] ${again}`) || root.querySelector(again))?.focus({ preventScroll: true });
-  // the ranges come from the map's own data, which may not be read yet on a
-  // page that opens here: look again shortly, while the view is up
-  clearTimeout(rangesTimer);
-  if (A.DATA) rangesTries = 0;
-  else if (shown() && rangesTries < 40) rangesTimer = setTimeout(() => { rangesTries += 1; if (shown()) draw(); }, 600);
-  // a page that landed on the charts keeps them in place until every tile
-  // has its answer (the facts and the map's own data); later reads never scroll
-  if (b && A.DATA && !firstDrawn) { firstDrawn = true; A.settleCharts?.(); }
+  // a page that landed on the charts keeps them in place until the tiles
+  // have their answer; later reads never scroll
+  if (b && !firstDrawn) { firstDrawn = true; A.settleCharts?.(); }
 }
 
 /* ── what a press does ───────────────────────────────────────────────────── */
@@ -301,7 +298,6 @@ function tick() {
 
 function stop() {
   clearInterval(timer);
-  clearTimeout(rangesTimer);
   timer = 0;
   gen++;
 }

@@ -184,6 +184,9 @@ def _check_fields(on_place):
     ]
 
 
+#: A service's place on OVERVIEW's two favourites tiles (2026-11-20).
+FAVOURITES = ["", "internal", "external"]
+
 # The link sub-object, reused by nodes.
 LINK_FIELDS = [
     f("label", "text", required=True, help="The service name, as shown on the card."),
@@ -219,6 +222,10 @@ LINK_FIELDS = [
            "it — for anything that only works with the whole window."),
     f("require_group", "text", label="Requires group",
       help="Hide this service from anyone whose Hub groups don't include it."),
+    f("favourite", "select", options=FAVOURITES, default="", label="Favourite",
+      help="Lists this service on OVERVIEW: `internal` for what is used inside "
+           "the network, `external` for what is reached from outside. Blank: "
+           "not listed. It needs a URL to be listed."),
     f("unmanaged", "bool", label="Unmanaged",
       help="Not ours to watch: this service takes no state and raises nothing."),
 ]
@@ -330,6 +337,10 @@ SECTIONS = {
             f("fold", "bool", label="Fold on the parent map",
               help="On the map this region sits on, draw only its places that have a route "
                    "to somewhere outside it. The rest are drawn once you open the region."),
+            f("hidden", "bool", label="Hidden to start with",
+              help="Not drawn until a viewer shows it (ATLAS, MAP EDITOR, Zoom maps): no "
+                   "frame, no opening by zoom, and no folding. A viewer's own choice is "
+                   "kept in their browser."),
             f("places", "json", label="Pinned places",
               help="`{\"place-id\": {\"x\": 40, \"y\": 62}}` — where a place sits on THIS "
                    "map. Leave blank when the detailed map is a true enlargement: places "

@@ -314,7 +314,10 @@
 <div class="view-menu" id="view-menu" role="menu" aria-label="{{ theme.text.views }}">
   <!-- (The sky and the depths stood at this menu's top from 2026-11-13; they
        went back to the band on 2026-11-14, where the colour switch was.) -->
-  <button type="button" role="menuitem" data-view="map">{{ theme.text.view_map }}</button>
+  <!-- MAP is MAP EDITOR since 2026-11-20 (owner): it shows the map, as it did,
+       and rolls out the map's own controls beside it (#map-drawer, below).
+       ATLAS itself is still the plain way back to the map. -->
+  <button type="button" role="menuitem" data-view="map" aria-controls="map-drawer">{{ theme.text.view_map_editor }}</button>
   <button type="button" role="menuitem" data-view="overview">{{ theme.text.view_overview }}</button>
   <button type="button" role="menuitem" data-view="nodes">{{ theme.text.view_nodes }}</button>
   <button type="button" role="menuitem" data-view="topology">{{ theme.text.view_topology }}</button>
@@ -356,6 +359,87 @@
   </button>
   <div id="index-list"></div>
   <div id="services-list" hidden></div>
+</aside>
+
+<!-- THE MAP EDITOR (2026-11-20; owner: "on the atlas drop down, lets change map
+     to 'map editor', and take all the map editing settings and put it there.
+     have it roll out and look kind of like index does"). The Index's own
+     panel, mirrored: it hangs under THE ATLAS at the band's left end and
+     unfurls downward, on the bar's glass. What it holds is everything that
+     changes how the map is drawn or where things stand on it: the background
+     and its tilt, the standard words, MOVE PLACES, the zoom maps, and (for an
+     admin, added by editor/index.js) the door to every record. The section
+     keys and control ids are the ones Settings had, so table.js, words.js,
+     places.js and the stored folds read on unchanged. Opened and closed by
+     map-editor.js; it stays up until it is closed (no idle roll-up: Save to
+     map would roll away mid-drag). A control that writes is drawn for
+     everyone and is off, saying why, where this viewer may not write. -->
+<aside id="map-drawer" aria-hidden="true" aria-label="{{ theme.text.view_map_editor|capitalize }}">
+  <div class="drawer-head">
+    <span class="drawer-title">{{ theme.text.view_map_editor }}</span>
+    <button class="ldg-close" id="med-close" type="button" title="Close (Esc)" aria-label="Close">&times;</button>
+  </div>
+  <div class="med-body" id="map-editor-body">
+    <div class="sp-group" data-group="map">
+      <!-- THE CARTOGRAPHER'S TABLE (2026-08-15): the viewer's own backdrop and
+           the theme that rides it, per browser. Rows built by static/js/table.js
+           from /api/v2/maps; an admin's upload and build rows follow them. -->
+      <div class="sp-sec" data-sec="table">
+        <button class="sp-sub" type="button">MAP STYLE <span class="sp-sub-plain">· background and tilt</span></button>
+        <div class="sp-sec-body">
+          <div class="sp-maps" id="sp-maps"></div>
+          <div class="sp-hint">Your choice, in this browser only. The default for everyone is set under Every record.
+            A background with a different shape may need its places moved.</div>
+          <label class="sp-row">
+            <span>Tilt the map</span>
+            <input type="checkbox" id="sp-tilt">
+          </label>
+          <div class="sp-hint">Shows the map at an angle.</div>
+        </div>
+      </div>
+      <div class="sp-sec" data-sec="words">
+        <button class="sp-sub" type="button">WORDS <span class="sp-sub-plain">· the map's own or standard</span></button>
+        <div class="sp-sec-body">
+          <label class="sp-row">
+            <span>Use standard words</span>
+            <input type="checkbox" id="sp-words">
+          </label>
+          <div class="sp-hint">Says job for rite, zone for realm and history for annals, on every map. Off, each map keeps its lore. Saved in this browser.</div>
+        </div>
+      </div>
+      <div class="sp-sec" data-sec="survey">
+        <button class="sp-sub" type="button">MOVE PLACES <span class="sp-sub-plain">· drag them on the map</span></button>
+        <div class="sp-sec-body">
+          <label class="sp-row">
+            <span>Drag places on the map</span>
+            <input type="checkbox" id="sp-editmode">
+          </label>
+          <div class="sp-hint" id="sp-edit-hint" hidden>Drag any place to move it. Moves stay in this browser until you save.</div>
+          <div class="sp-actions">
+            <button class="sp-btn sp-btn-go" id="sp-save">Save to map</button>
+            <button class="sp-btn" id="sp-copy">Copy</button>
+            <button class="sp-btn sp-btn-warn" id="sp-reset">Reset</button>
+          </div>
+          <div class="sp-hint" id="sp-save-why" hidden></div>
+          <div class="sp-hint">Save to map keeps your moves for everyone. Copy puts the positions on your clipboard. Reset discards unsaved moves. On a map style the moves, network names included, belong to that style alone.</div>
+        </div>
+      </div>
+      <!-- ZOOM MAPS (2026-11-20, owner: "have a button to hide/add/remove zoom
+           maps"): the parts of this map that open into a detailed map of their
+           own (regions.js). The list and its buttons are map-editor.js's. -->
+      <div class="sp-sec" data-sec="zoom">
+        <button class="sp-sub" type="button">ZOOM MAPS <span class="sp-sub-plain">· parts that open into their own map</span></button>
+        <div class="sp-sec-body">
+          <div class="med-zoom" id="med-zoom"></div>
+          <div class="sp-hint">Shown or hidden for you, in this browser only. A hidden one has no frame and does not open when you zoom in.</div>
+          <div class="sp-actions">
+            <button class="sp-btn" id="med-zoom-add" type="button">Add or remove…</button>
+          </div>
+          <div class="sp-hint" id="med-zoom-why" hidden></div>
+        </div>
+      </div>
+    </div>
+  </div>
 </aside>
 
 <!-- Ivory detail card -->
@@ -723,15 +807,16 @@
      scene has — the shared .ldg-panel chrome, a ×, the scrim, Escape through
      closeAllScenes, and a button in the band (the ⚙ beside ☰). The panel is
      narrower than its siblings (atlas.css): these are forms, not ledgers.
-     #settings-panel keeps its id — the Desk appends into it (editor/index.js),
-     table.js and account.js draw into its sections, and ui.js folds them:
+     #settings-panel keeps its id: account.js draws into its sections and
+     ui.js folds them (the Desk's door and table.js's rows went to the map
+     editor with THE MAP group, 2026-11-20):
      every .sp-sec wraps a .sp-sub header (a button) over a .sp-sec-body, and
      the fold is remembered per section key. -->
 <div id="settings" aria-hidden="true">
   <div class="ldg-panel" role="dialog" aria-label="Settings">
     <div class="ldg-head">
       <span class="ldg-title">SETTINGS</span>
-      <span class="ldg-sub">your account, the map, its connections and admin</span>
+      <span class="ldg-sub">your account, the connections and admin</span>
       <button class="ldg-close" id="set-close" title="Close (Esc)">&times;</button>
     </div>
     <div id="settings-panel">
@@ -775,47 +860,11 @@
         </div>
       </div>
       </div>
-      <div class="sp-group" data-group="map">
-      <div class="sp-group-name">THE MAP</div>
-      <!-- THE CARTOGRAPHER'S TABLE (2026-08-15): the viewer's own backdrop and
-           the theme that rides it, per browser — the Desk still owns uploads and
-           the realm-wide default. Rows built by static/js/table.js from
-           /api/v2/maps; the tilt is the first arc of the worlds plan. -->
-      <div class="sp-sec" data-sec="table">
-        <button class="sp-sub" type="button">MAP STYLE <span class="sp-sub-plain">· background and tilt</span></button>
-        <div class="sp-sec-body">
-          <div class="sp-maps" id="sp-maps"></div>
-          <div class="sp-hint">Your choice, in this browser only. The default for everyone is set in the map editor.
-            A background with a different shape may need its places moved.</div>
-          <label class="sp-row">
-            <span>Tilt the map</span>
-            <input type="checkbox" id="sp-tilt">
-          </label>
-          <div class="sp-hint">Shows the map at an angle.</div>
-          <label class="sp-row">
-            <span>Use standard words</span>
-            <input type="checkbox" id="sp-words">
-          </label>
-          <div class="sp-hint">Says job for rite, zone for realm and history for annals, on every map. Off, each map keeps its lore. Saved in this browser.</div>
-        </div>
-      </div>
-      <div class="sp-sec" data-sec="survey">
-        <button class="sp-sub" type="button">MOVE PLACES <span class="sp-sub-plain">· drag them on the map</span></button>
-        <div class="sp-sec-body">
-          <label class="sp-row">
-            <span>Drag places on the map</span>
-            <input type="checkbox" id="sp-editmode">
-          </label>
-          <div class="sp-hint" id="sp-edit-hint" hidden>Drag any place to move it. Moves stay in this browser until you save.</div>
-          <div class="sp-actions">
-            <button class="sp-btn sp-btn-go" id="sp-save">Save to map</button>
-            <button class="sp-btn" id="sp-copy">Copy</button>
-            <button class="sp-btn sp-btn-warn" id="sp-reset">Reset</button>
-          </div>
-          <div class="sp-hint">Save to map keeps your moves for everyone. Copy puts the positions on your clipboard. Reset discards unsaved moves. On a map style the moves, network names included, belong to that style alone.</div>
-        </div>
-      </div>
-      </div>
+      <!-- (THE MAP stood here as a group until 2026-11-20: the background and
+           tilt, the standard words and MOVE PLACES, with the Desk's door above
+           them. They are the map editor's now, the panel ATLAS ▾ MAP EDITOR
+           rolls out (#map-drawer). On a phone, which has no map and no such
+           menu, ui.js seats the words' section in YOU, where it still applies.) -->
       <div class="sp-group" data-group="connections">
       <div class="sp-group-name">CONNECTIONS</div>
       <!-- THE SOURCES (v1.37.0): where the Atlas asks for its numbers (Prometheus,

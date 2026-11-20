@@ -2,7 +2,9 @@
    picks, stage 1, 2026-11-13). The band's ☀/☾ button went on 2026-11-14 (the
    owner: the colours live in Settings; the sky and the depths took its place).
 
-   Writes two attributes on <html>, and only on a pick or an OS change:
+   Writes two attributes on <html>, and only on a pick, an OS change, or a
+   scene opening or closing (ui.js calls sceneChanged: under Light/Dark a
+   scene over the Sky is light and one over the Depths dark, 2026-11-20):
    `data-scheme="light|dark"` (the scheme the panels draw) and
    `data-scheme-pick="auto|light|dark"` (the viewer's pick; auto is
    Light/Dark). The bar follows the camera through atlas.css on body's
@@ -11,10 +13,10 @@
    scheme-model.js. Imported FIRST by atlas.js so the attributes are standing
    before any panel can open (they are all closed at boot, behind the veil). */
 
-import { A } from './config.js';
+import { A, REDUCED } from './config.js';
 import {
-  isToggleKey, migrateOnce, nextChoice, parsePick, pickAttr, readStored,
-  resolveScheme, whereFrom, writeStored,
+  isToggleKey, migrateOnce, nextChoice, panelScheme, parsePick, pickAttr, readStored,
+  whereFrom, writeStored,
 } from './scheme-model.js';
 
 const root = document.documentElement;
@@ -27,10 +29,27 @@ try { store = localStorage; } catch { /* blocked site data: Light/Dark each visi
 migrateOnce(store);                      // the 2026-11 reset, before the first read
 let picked = readStored(store);          // null = Light/Dark
 
+/** `data-scheme` alone, written only when it changes. */
+function paintPanels() {
+  const next = panelScheme(picked, media?.matches, document.body?.classList);
+  if (root.dataset.scheme !== next) root.dataset.scheme = next;
+}
+
+/** A scene opened, changed or closed (ui.js, after `body.scene-open` is set).
+    Opening paints at once, so the panel comes up in its scheme. Closing waits
+    out the panel's own fade, so a light scene over the Sky does not turn dark
+    on its way out. */
+let closing = 0;
+export function sceneChanged(open) {
+  clearTimeout(closing);
+  if (open || REDUCED) { paintPanels(); return; }
+  closing = setTimeout(paintPanels, 420);
+}
+
 /** Everything that shows the pick: the two attributes and the Settings
     radios. Never called on a camera move. */
 function paint() {
-  root.dataset.scheme = resolveScheme(picked, media?.matches);
+  paintPanels();
   root.dataset.schemePick = pickAttr(picked);
   const want = pickAttr(picked);
   for (const r of document.querySelectorAll('input[name="sp-scheme"]')) r.checked = r.value === want;
@@ -66,7 +85,7 @@ document.getElementById('settings-panel')?.addEventListener('change', (e) => {
 // Under Light/Dark the panels follow the OS as it changes (an evening switch
 // to dark mode reaches an always-on wall display without a reload). Only
 // data-scheme moves; the pick and the radios do not.
-media?.addEventListener?.('change', (e) => {
+media?.addEventListener?.('change', () => {
   if (picked) return;
-  root.dataset.scheme = resolveScheme(null, e.matches);
+  paintPanels();
 });

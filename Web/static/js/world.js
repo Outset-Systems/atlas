@@ -198,7 +198,7 @@ function updateShades(userMove) {
   // the cost here was only ever the `<body>` write above.
   const fade = 1 - _clamp01(Math.max(skyT, depthT) * 1.8);
   const fadeQ = fade.toFixed(2);
-  if (!fadeTargets) fadeTargets = ['card', 'index-drawer'].map($).filter(Boolean);
+  if (!fadeTargets) fadeTargets = ['card', 'index-drawer', 'map-drawer'].map($).filter(Boolean);
   for (const el of fadeTargets) {
     // The split's card is its control surface, so while THE CONSTELLATION is
     // open it never fades: the ring's own framing parks a south host's

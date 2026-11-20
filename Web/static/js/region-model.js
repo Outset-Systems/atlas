@@ -9,6 +9,84 @@
    region map. A camera is {x, y, k}: the map's top-left corner sits at screen
    (x, y) and one map pixel is k screen pixels. */
 
+/* ── shown and hidden (2026-11-20) ──────────────────────────────────────────
+   A region may be hidden: no frame, no opening by zoom, no folding, no deep
+   link. The map says which start hidden (`hidden: true` on the record), and a
+   viewer may show or hide any of them in their own browser, which is kept as
+   `{ "<art>|<id>": true | false }` under SHOWN_KEY (true = shown). A region
+   inside a hidden one cannot be reached, so it is hidden with it. */
+
+export const SHOWN_KEY = 'atlas-zoom-maps';
+
+/** The key of one region's choice: the picture it is drawn on, and its id. */
+export const choiceKey = (art, id) => `${art || ''}|${id}`;
+
+/** Stored choices as `{key: boolean}`; anything else stored is no choice. */
+export function parseChoices(raw) {
+  let v = raw;
+  if (typeof raw === 'string') { try { v = JSON.parse(raw); } catch { return {}; } }
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return {};
+  return Object.fromEntries(Object.entries(v).filter(([, on]) => typeof on === 'boolean'));
+}
+
+/** Whether this region itself is shown: the viewer's choice when they made
+    one, else the map's (`hidden`). Says nothing of the region it sits in. */
+export function shownByChoice(r, choices = {}, art = '') {
+  const own = choices[choiceKey(art, r.id)];
+  return typeof own === 'boolean' ? own : r.hidden !== true;
+}
+
+/** The regions that are drawn: every one shown by choice whose whole chain
+    of parents is shown too. The same array when nothing is hidden, so a
+    caller that keeps it per frame allocates nothing. */
+export function shownRegions(regions, choices = {}, art = '') {
+  const list = regions || [];
+  const byId = new Map(list.map((r) => [r.id, r]));
+  const memo = new Map();
+  const ok = (r, depth = 0) => {
+    if (memo.has(r.id)) return memo.get(r.id);
+    let on = shownByChoice(r, choices, art);
+    if (on && r.parent) {
+      const up = byId.get(r.parent);
+      on = Boolean(up) && depth < 32 && ok(up, depth + 1);
+    }
+    memo.set(r.id, on);
+    return on;
+  };
+  const out = list.filter((r) => ok(r));
+  return out.length === list.length ? list : out;
+}
+
+/** Every region for the list in the map editor, outermost first with each
+    one's children after it: `{id, name, parent, depth, on, byDefault,
+    reachable}`. `on` is this region's own choice; `reachable` is false when
+    a region it sits in is hidden (it cannot be opened whatever it says). */
+export function zoomMapRows(regions, choices = {}, art = '') {
+  const list = regions || [];
+  const rows = [];
+  const walk = (parentId, depth, reachable) => {
+    for (const r of childrenOf(list, parentId)) {
+      if (rows.some((row) => row.id === r.id) || depth > 32) continue;
+      const on = shownByChoice(r, choices, art);
+      rows.push({ id: r.id, name: r.name || r.id, parent: r.parent || '', depth, on,
+                  byDefault: r.hidden !== true, reachable });
+      walk(r.id, depth + 1, reachable && on);
+    }
+  };
+  walk(null, 0, true);
+  return rows;
+}
+
+/** The choices after one is made. Choosing what the map already says clears
+    the entry, so a map whose default changes later is followed again. */
+export function withChoice(choices, r, on, art = '') {
+  const next = { ...parseChoices(choices) };
+  const key = choiceKey(art, r.id);
+  if (Boolean(on) === (r.hidden !== true)) delete next[key];
+  else next[key] = Boolean(on);
+  return next;
+}
+
 /** The regions drawn directly on a map: parent null/'' = the main map. */
 export function childrenOf(regions, parentId) {
   const want = parentId || '';
