@@ -161,5 +161,90 @@ test('one location, or everywhere', () => {
   });
 }
 
+/* One step finer than a location, and what a scene has to offer (2026-11-20). */
+{
+  const { awayFrom, holdsHardware, holdsPlaces, locationOfRack, offered, placesFor, rackById }
+    = await import('../static/js/locations-model.js');
+
+  test('which rack a machine sits in; a guest is in its host\'s', () => {
+    const w = whereabouts(HOUSE, 'Home lab');
+    const of = (id) => w.rackOf.get(id);
+    assert.deepEqual(['hyper', 'switch', 'old', 'backup', 'ups'].map(of), ['a', 'a', 'a', 'g', 'g']);
+    assert.deepEqual(['web', 'db', 'nested'].map(of), ['a', 'g', 'g']);
+    // on a shelf, an idea, a guest whose host is nowhere: in no rack
+    for (const id of ['pi', 'desk', 'ap', 'internet', 'lost']) assert.equal(of(id), undefined, id);
+  });
+
+  test('how much sits in each rack, on the map or not, and a slot called empty is nothing', () => {
+    const w = whereabouts(HOUSE, 'Home lab');
+    // a: three in front and the PDU behind; b: a patch panel; g: a box and its UPS
+    assert.deepEqual([...w.fitted], [['a', 4], ['b', 1], ['g', 2]]);
+    const bare = whereabouts({ racks: [{ id: 'x', name: 'X' }], rack: [{ u: 'U1', name: 'Empty' }, { u: 'U2', name: '(empty)' }] });
+    assert.deepEqual([...bare.fitted], [['x', 0]]);
+  });
+
+  test('a rack by its id, and the location it stands at', () => {
+    const w = whereabouts(HOUSE, 'Home lab');
+    assert.equal(rackById(w, 'b').name, 'Rack B');
+    assert.equal(locationOfRack(w, 'b').key, 'home office');
+    assert.equal(locationOfRack(w, 'g').key, 'garage');
+    for (const none of [null, undefined, 'the moon']) {
+      assert.equal(rackById(w, none), null);
+      assert.equal(locationOfRack(w, none), null);
+    }
+    // a map that charts no racks has one, and its id is the empty string: a real id
+    const plain = whereabouts({ rack: [{ u: 'U1', name: 'Box', node: 'n' }], nodes: [node('n')] }, 'Home lab');
+    assert.equal(rackById(plain, '').name, 'Rack A');
+    assert.equal(locationOfRack(plain, '').key, 'home lab');
+    assert.equal(plain.rackOf.get('n'), '');
+  });
+
+  /* a house with a rack that stands empty in the basement, and a rack of
+     nothing but a patch panel in the attic */
+  const SPARE = {
+    racks: [{ id: 'a', name: 'Rack A', location: 'Office' }, { id: 'z', name: 'Spare', location: 'Basement' },
+            { id: 'p', name: 'Patch', location: 'Attic' }, { id: 'o', name: 'Other', location: 'Office' }],
+    rack: [{ rack: 'a', u: 'U1', name: 'Box', node: 'box' }, { rack: 'z', u: 'U1', name: 'Empty' },
+           { rack: 'p', u: 'U1', name: 'Patch panel' }],
+    nodes: [node('box'), node('pi', 'physical', { location: 'Shed' })],
+  };
+  const keys = (offer) => offer.map((o) => [o.loc.key, ids(o.racks)]);
+
+  test('HARDWARE offers a location only when something stands there, and a rack only when something is in it', () => {
+    const w = whereabouts(SPARE, 'Home lab');
+    assert.deepEqual(ids(w.list.map((l) => ({ id: l.key }))), ['office', 'basement', 'attic', 'shed']);
+    // the basement's rack is empty; the office's second rack is too
+    assert.deepEqual(keys(offered(w, holdsHardware(w))), [['office', ['a']], ['attic', ['p']], ['shed', []]]);
+    // what is on show stays offered whatever it holds
+    assert.deepEqual(keys(offered(w, holdsHardware(w), 'basement')),
+      [['office', ['a']], ['basement', []], ['attic', ['p']], ['shed', []]]);
+  });
+
+  test('TOPOLOGY offers a location only when a place on the map stands there', () => {
+    const w = whereabouts(SPARE, 'Home lab');
+    // a patch panel is hardware and is not a place: the attic has nothing to draw
+    assert.deepEqual(keys(offered(w, holdsPlaces(w))), [['office', ['a']], ['shed', []]]);
+    const house = whereabouts(HOUSE, 'Home lab');
+    assert.deepEqual(keys(offered(house, holdsPlaces(house))),
+      [['home office', ['a']], ['garage', ['g']], ['living room', []], ['home lab', []]]);
+    assert.deepEqual(offered(whereabouts(null), holdsPlaces(whereabouts(null))), []);
+  });
+
+  test('one rack\'s topology: what is in it, its guests, the placeless, and its routes\' next stops', () => {
+    const w = whereabouts(HOUSE, 'Home lab');
+    const routes = [{ from: 'backup', to: 'switch' }, { from: 'ups', to: 'desk' }, { from: 'pi', to: 'ap' }];
+    const g = rackById(w, 'g');
+    const drawn = placesFor(w, locationOfRack(w, 'g'), HOUSE.nodes, routes, g);
+    assert.deepEqual(ids(drawn), ['switch', 'backup', 'ups', 'desk', 'internet', 'mystery', 'db', 'nested', 'lost']);
+    // the two visitors, each known by the location it stands at
+    assert.deepEqual([...awayFrom(w, locationOfRack(w, 'g'), drawn, g)], [['switch', 'home office'], ['desk', 'home lab']]);
+    // rack a of two in the office: the other rack's room-mates are visitors too, were one drawn
+    const a = rackById(w, 'a');
+    const office = placesFor(w, locationOfRack(w, 'a'), HOUSE.nodes, [], a);
+    assert.deepEqual(ids(office), ['hyper', 'switch', 'old', 'internet', 'mystery', 'web', 'lost']);
+    assert.equal(awayFrom(w, locationOfRack(w, 'a'), office, a).size, 0);
+  });
+}
+
 console.log(`\nlocations-model: ${passed} passed`);
 if (process.exitCode) console.log('SOME TESTS FAILED');

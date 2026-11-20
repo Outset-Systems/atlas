@@ -640,18 +640,36 @@ def test_a_lit_tool_fills_in_the_band():
     assert ".vt-lamp {" in css, "the tripwires' pill still wears the lamp"
 
 
-def test_the_menu_and_the_index_fade_and_roll_up_when_the_mouse_leaves():
+def test_the_index_alone_fades_and_rolls_up_when_the_mouse_leaves():
     """The owner (2026-11-13): partly transparent when not hovered, rolled up
-    after a few seconds. Only a mouse makes them idle, and typing inside one
-    keeps it up."""
+    after a few seconds. Only a mouse makes it idle, and typing inside it
+    keeps it up. From 2026-11-13 the views' menu did the same; the owner on
+    2026-11-20: "all the drop downs go transparent then roll up like index.
+    only index should have the feature"."""
     js, css = _read(UI), _read(CSS)
     assert re.search(r"const ROLLUP_MS = [3-6]000;", js), "the Index rolls up after 3 to 6 seconds"
-    assert "const MENU_ROLLUP_MS = 600;" in js and "after: MENU_ROLLUP_MS," in js, "the menu after 0.6 s"
-    assert ".view-menu:is(.peek, .open).idle, #index-drawer.open.idle { opacity: 0.6; }" in css
+    assert "#index-drawer.open.idle { opacity: 0.6; }" in css
     assert "const mouse = (e) => e.pointerType === 'mouse';" in js
     assert "idleRollup(drawer, [drawer, $('btn-menu')]" in js
-    assert "idleRollup(viewMenu, [sceneHome, viewMenu]" in js
     assert "el.matches('input, textarea, select')" in js, "typing in the Index's search must keep it up"
+    # nothing else fades or waits: one call, one rule
+    assert js.count("idleRollup(") == 2, "its definition and the Index's call"
+    assert "MENU_ROLLUP_MS" not in js
+    assert css.count(".idle") == 1 and ".view-menu:is(.peek, .open).idle" not in css
+
+
+def test_a_menu_closes_when_the_mouse_leaves_it():
+    """With the fade gone something still has to shut a menu the mouse has
+    left: `hoverReveal` does, a beat later so the pointer can cross from the
+    button into the menu. The views' menu's ▾ holds it open by a class of its
+    own, which a mouse leaving shuts too."""
+    js = _read(UI)
+    reveal = js[js.index("function hoverReveal("):js.index("function mapEditor(")]
+    assert "el.addEventListener('pointerleave', (e) => { if (mouse(e)) { over = false; peek(false, 'pointer'); } });" in reveal
+    assert "'idle'" not in reveal
+    # the keyboard working in it keeps it up when a mouse passes; the mouse over it, when a keyboard leaves
+    assert "if (how === 'pointer' ? keyed() : over) return;" in reveal
+    assert "shut: () => viewMenu.classList.remove('open')," in js
 
 
 def test_the_camera_still_says_when_it_is_in_the_sky_or_the_depths():

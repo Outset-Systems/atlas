@@ -148,14 +148,16 @@ try {
   if (LIST_TABS.includes(saved)) lastListTab = saved;
 } catch { /* no storage: the default stands */ }
 
-/* IDLE ROLL-UP (owner, 2026-11-13): THE INDEX and the views menu fade to 60%
-   the moment the MOUSE leaves them (and what opened them), and roll up when it
-   has stayed away `after` ms (the menu 0.6 s, the Index 4 s; owner, 2026-11-13).
-   Coming back cancels both. Only a mouse makes them
-   idle: a touch screen cannot hover, and a keyboard working inside one (or
-   typing in its search) keeps it up — the roll-up waits until focus leaves. */
+/* IDLE ROLL-UP (owner, 2026-11-13): THE INDEX fades to 60% the moment the
+   MOUSE leaves it (and what opened it), and rolls up when it has stayed away
+   `after` ms (4 s). Coming back cancels both. Only a mouse makes it idle: a
+   touch screen cannot hover, and a keyboard working inside it (or typing in
+   its search) keeps it up — the roll-up waits until focus leaves.
+   THE INDEX ALONE since 2026-11-20 (owner: "all the drop downs go transparent
+   then roll up like index. only index should have the feature"): the views'
+   menu and the band's menus had it from 2026-11-13, and now simply close when
+   the mouse leaves them (`hoverReveal`, further down). */
 const ROLLUP_MS = 4000;     // THE INDEX
-const MENU_ROLLUP_MS = 600; // the views menu
 const mouse = (e) => e.pointerType === 'mouse';
 const working = (panel) => {
   const el = document.activeElement;
@@ -456,32 +458,47 @@ $('btn-net').addEventListener('click', () => A.toggleNet());
    what it just opened. Only a MOUSE peeks: a tap on a touch screen also sends
    the pointer "in", and a tap on THE ATLAS means home and nothing else. Only a
    keyboard focus peeks too, for the same reason (a click focuses as well).
-   `refuse` can turn a peek down; `onChange` hears every change.
-   A mouse leaving does not shut it at once: it fades and rolls up
-   MENU_ROLLUP_MS later (idleRollup above, owner 2026-11-13); a keyboard leaving shuts it after
-   `delay`. */
-function hoverReveal(anchor, cluster, { delay = 220, onChange = () => {}, refuse = () => false } = {}) {
+   `refuse` can turn a peek down; `onChange` hears every change; `shut` is
+   told when a mouse leaving has closed it, for an owner that also holds it
+   open by a class of its own (the views' menu and its ▾).
+   A mouse leaving shuts it after `delay`, and so does a keyboard leaving: no
+   fading first and no waiting about (owner, 2026-11-20; from 2026-11-13 until
+   then a mouse leaving faded it and rolled it up later, as THE INDEX still
+   does). While the keyboard is working inside it a mouse passing over and
+   away leaves it up, and while the mouse is over it a keyboard leaving does. */
+function hoverReveal(anchor, cluster, { delay = 220, onChange = () => {}, refuse = () => false, shut = () => {} } = {}) {
   if (!anchor || !cluster) return { close() {} };
   let timer = null;
+  let over = false;
+  const keyed = () => {
+    const el = document.activeElement;
+    return !!el && (anchor.contains(el) || cluster.contains(el)) && el.matches(':focus-visible');
+  };
   const peek = (on, how) => {
     clearTimeout(timer);
     if (on) {
       if (refuse(how)) return;
       cluster.classList.add('peek'); onChange(); return;
     }
-    timer = setTimeout(() => { cluster.classList.remove('peek'); onChange(); }, delay);
+    timer = setTimeout(() => {
+      if (how === 'pointer' ? keyed() : over) return;
+      cluster.classList.remove('peek');
+      if (how === 'pointer') shut();
+      onChange();
+    }, delay);
   };
   [anchor, cluster].forEach(el => {
-    el.addEventListener('pointerenter', (e) => { if (mouse(e)) peek(true, 'pointer'); });
+    el.addEventListener('pointerenter', (e) => { if (mouse(e)) { over = true; peek(true, 'pointer'); } });
+    el.addEventListener('pointerleave', (e) => { if (mouse(e)) { over = false; peek(false, 'pointer'); } });
     el.addEventListener('focusin', (e) => {
       if (e.target.matches?.(':focus-visible')) peek(true, 'focus');
     });
     el.addEventListener('focusout', (e) => {
       if (anchor.contains(e.relatedTarget) || cluster.contains(e.relatedTarget)) return;
-      if (!cluster.classList.contains('idle')) peek(false);
+      peek(false, 'focus');
     });
   });
-  return { close() { clearTimeout(timer); cluster.classList.remove('peek', 'idle'); onChange(); } };
+  return { close() { clearTimeout(timer); cluster.classList.remove('peek'); onChange(); } };
 }
 
 /** THE MAP EDITOR's panel (map-editor.js, which loads after this file and so
@@ -522,12 +539,8 @@ function paintViewMenu() {
 const viewReveal = hoverReveal(sceneHome, viewMenu, {
   onChange: paintViewMenu,
   refuse: (how) => A.PHONE || (how === 'focus' && viewHush),
-});
-const viewShown = () => viewMenu.classList.contains('peek') || viewMenu.classList.contains('open');
-idleRollup(viewMenu, [sceneHome, viewMenu], {
-  isUp: viewShown,
-  after: MENU_ROLLUP_MS,
-  rollUp: () => { viewMenu.classList.remove('open'); viewReveal.close(); },
+  // a mouse leaving shuts the ▾'s `.open` with the hover's `.peek`
+  shut: () => viewMenu.classList.remove('open'),
 });
 function openViewMenu(focusFirst) {
   viewHush = false;
@@ -817,5 +830,5 @@ A.buildUI = function buildUI() {
 };
 
 /* The band's menus of locations (band-menus.js, 2026-11-20) are revealed and
-   rolled up exactly as the views' menu is: the same two helpers, not copies. */
-export { hoverReveal, idleRollup };
+   closed exactly as the views' menu is: the same helper, not a copy. */
+export { hoverReveal };

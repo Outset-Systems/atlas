@@ -6,7 +6,7 @@
    Run:  node tests/test_tribute_model.mjs        (from Web/) */
 
 import assert from 'node:assert/strict';
-import { CAPACITY_FIELDS, gb, hostsAt, hostsOf, legacyCapacity, ownCapacity, totalsOf }
+import { CAPACITY_FIELDS, gb, holdsHosts, hostsAt, hostsIn, hostsOf, legacyCapacity, ownCapacity, totalsOf }
   from '../static/js/tribute-model.js';
 
 let passed = 0;
@@ -163,6 +163,39 @@ test('nothing charted is nothing, not a crash', () => {
   // a guest whose host is not on the map still has a host row, with no place
   const h = hostsOf({ vms: [vm('a', 'ghost', 2, 4, 1)] })[0];
   assert.deepEqual([h.id, h.node, h.location, h.capacity], ['ghost', null, null, null]);
+});
+
+test('one rack: the hosts in it, and a location is the sum of its racks and its shelf', () => {
+  // big and quiet share a rack; small has the other; the pi is on a shelf
+  const IN = new Map([['big', 'a'], ['quiet', 'a'], ['small', '']]);
+  const at = new Map([['big', 'office'], ['quiet', 'office'], ['small', 'office'], ['pi', 'office']]);
+  const hosts = hostsOf(HOUSE, at, IN);
+  assert.deepEqual(hosts.map((h) => [h.id, h.rack]), [['big', 'a'], ['small', ''], ['quiet', 'a'], ['pi', null]]);
+  assert.deepEqual(hostsIn(hosts, 'a').map((h) => h.id), ['big', 'quiet']);
+  // the empty string is a real rack id (the one rack of a map that charts none)
+  assert.deepEqual(hostsIn(hosts, '').map((h) => h.id), ['small']);
+  assert.deepEqual(hostsIn(hosts, 'the moon'), []);
+  const a = totalsOf(hostsIn(hosts, 'a'));
+  // `quiet` is the one silent host, so the old single figure (999) is its own
+  assert.deepEqual([a.total_gb, a.assigned_gb, a.vcpu, a.threads, a.uncounted_gb], [128 + 999, 24, 7, 32 + 999, 0]);
+  const parts = [hostsIn(hosts, 'a'), hostsIn(hosts, ''), hosts.filter((h) => h.rack === null)].map(totalsOf);
+  const office = totalsOf(hostsAt(hosts, 'office'));
+  for (const key of ['total_gb', 'assigned_gb', 'demand_gb', 'threads', 'vcpu', 'machines', 'ram_all']) {
+    assert.equal(office[key], Math.round(parts.reduce((s, p) => s + p[key], 0) * 10) / 10, key);
+  }
+  // with no rack map given, nothing is in a rack
+  assert.ok(hostsOf(HOUSE, AT).every((h) => h.rack === null));
+});
+
+test('RESOURCES offers a location, or a rack, only where a host stands', () => {
+  const hosts = hostsOf(HOUSE, AT, new Map([['big', 'a']]));
+  const holds = holdsHosts(hosts);
+  const loc = (key) => ({ key });
+  assert.deepEqual(['office', 'garage', 'living room', 'attic'].map((k) => holds(loc(k), null)), [true, true, true, false]);
+  assert.equal(holds(loc('office'), { id: 'a' }), true);
+  assert.equal(holds(loc('office'), { id: 'b' }), false);
+  // a rack is asked for by id: one that holds no host is not offered, whatever its location holds
+  assert.equal(holds(loc('garage'), { id: '' }), false);
 });
 
 console.log(`\ntribute-model: ${passed} passed`);

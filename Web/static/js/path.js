@@ -29,13 +29,15 @@ import { A, $, esc, zoneById, FALLBACK_HUE } from './config.js';
 import { say } from './words.js';
 import { chainPairs, edgePath, edgesOf, layout, servicesCrossing } from './path-model.js';
 import { PHONE_MEDIA } from './views-model.js';
-import { awayFrom, locationByKey, placesFor } from './locations-model.js';
-import { drawPlacePicker, markPlace, placeName, whereNow } from './scene-places.js';
+import { awayFrom, locationByKey, locationOfRack, placesFor, rackById } from './locations-model.js';
+import { drawPlacePicker, drawRackPicker, markPlace, offerFor, placeName, whereLine, whereNow } from './scene-places.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 let root, svg, nodesEl, legendEl;
 /** The location drawn; '' is every place. */
 let scenePlace = '';
+/** The one rack drawn at it; null is the whole location ('' is a real rack id). */
+let sceneRack = null;
 
 /* A phone (the views' own rule for one, 2026-11-18): the tiers are drawn as
    columns and the scene scrolls downward. This one flag picks the layout here
@@ -127,22 +129,32 @@ function build() {
   // Filtering here is enough for the roads too: the edge loop below requires
   // both endpoints to have a position, so their routes drop out with them.
   const where = whereNow();
-  const loc = locationByKey(where, scenePlace);
-  if (!loc) scenePlace = '';
-  markPlace('path', scenePlace);
+  // a rack is always drawn inside its own location, whatever was asked with it
+  const rack = rackById(where, sceneRack);
+  if (!rack) sceneRack = null;
+  const loc = rack ? locationOfRack(where, sceneRack) : locationByKey(where, scenePlace);
+  scenePlace = loc ? loc.key : '';
+  markPlace('path', scenePlace, sceneRack);
   const whereEl = $('pth-where');
-  if (whereEl) whereEl.textContent = loc ? placeName(loc) : '';
-  drawPlacePicker($('pth-places'), scenePlace, setScenePlace);
+  if (whereEl) whereEl.textContent = whereLine(loc, rack);
+  drawPlacePicker($('pth-places'), 'path', scenePlace, (key) => setScenePlace(key));
+  drawRackPicker($('pth-racks'), 'path', scenePlace, sceneRack, setSceneRack, loc ? `All of ${placeName(loc)}` : 'All');
   /* A place a zoom map FOLDS away (places.js marks it `off_map` and `_folded`)
      is still drawn here (2026-11-20). The fold is the map saving room for a
      region's insides; this is a diagram of the lab, with room for every
      place, and a location whose machines were all folded drew as the
      internet and nothing else. A place that is really off the map, and one
      outside the region on the stage, stay out as before. */
-  const nodes = placesFor(where, loc, A.DATA.nodes, A.DATA.routes).filter((n) => !n.off_map || n._folded);
-  // a route's next stop that stands at another location: drawn quieter, and named for where it is
-  const away = awayFrom(where, loc, nodes);
-  const awayName = (id) => placeName(where.list.find((l) => l.key === away.get(id)));
+  const nodes = placesFor(where, loc, A.DATA.nodes, A.DATA.routes, rack).filter((n) => !n.off_map || n._folded);
+  /* A route's next stop that stands somewhere else: drawn quieter, and named
+     for where it is. For one rack that is anything outside it: named for its
+     own rack when that stands in the same location, else for the location
+     it stands at. */
+  const away = awayFrom(where, loc, nodes, rack);
+  const awayName = (id) => {
+    const other = rack && away.get(id) === loc.key ? rackById(where, where.rackOf.get(id)) : null;
+    return other ? other.name : placeName(where.list.find((l) => l.key === away.get(id)));
+  };
   const feed = A.signalsFeed?.nodes || {};
   drawn = nodes;
 
@@ -311,17 +323,28 @@ function place() {
   placedWidth = width;
 }
 
-/** Draw one location ('' = every place); at once when the scene is up. A
-    service's reach, if one is lit, is let go: it was asked of the whole map. */
-function setScenePlace(key) {
+/** Draw one location ('' = every place), or one rack at it; at once when the
+    scene is up. A service's reach, if one is lit, is let go: it was asked of
+    the whole map. */
+function setScenePlace(key, rackId = null) {
   scenePlace = key || '';
-  markPlace('path', scenePlace);
+  sceneRack = scenePlace && rackId !== undefined ? rackId : null;
+  markPlace('path', scenePlace, sceneRack);
+  if (root?.classList.contains('open')) open();
+}
+
+/** Draw one rack of the location on show (null = the whole location). On a
+    map of one location the whole of it is every place, and is said so, so
+    that TOPOLOGY pressed once still closes the scene. */
+function setSceneRack(rackId) {
+  sceneRack = rackId ?? null;
+  if (sceneRack === null && offerFor('path', scenePlace).length < 2) scenePlace = '';
   if (root?.classList.contains('open')) open();
 }
 
 function open(focusId, reachIds, serviceLabel) {
   if (!root) return;
-  if (focusId) scenePlace = '';   // a service's reach is shown on the whole map
+  if (focusId) { scenePlace = ''; sceneRack = null; }   // a service's reach is shown on the whole map
   build();   // rebuild each open — cheap, and live states stay current
   tracedEdge = null;                 // build() just threw away the traced edges
   root.classList.add('open');
@@ -376,6 +399,7 @@ function close() {
   lastFocus = null;
   // closed, the scene goes back to every place: TOPOLOGY pressed afresh is all of it
   scenePlace = '';
+  sceneRack = null;
   markPlace('path', '');
   root.classList.remove('open');
   root.setAttribute('aria-hidden', 'true');
@@ -384,7 +408,7 @@ function close() {
 A.openPath = open;
 A.closePath = close;
 // the band's menu of locations, and a press on TOPOLOGY while one is shown
-addEventListener('atlas:scene-place', (e) => { if (e.detail?.scene === 'path') setScenePlace(e.detail.place); });
+addEventListener('atlas:scene-place', (e) => { if (e.detail?.scene === 'path') setScenePlace(e.detail.place, e.detail.rack); });
 
 A.buildPathScene = function buildPathScene() {
   root = $('path');

@@ -446,10 +446,11 @@
 
 <!-- THE BAND'S MENUS OF LOCATIONS (2026-11-20): dropped from HARDWARE, from
      RESOURCES and from TOPOLOGY by hover and by focus, as the views' menu is
-     dropped from THE ATLAS, and filled by band-menus.js with the map's
-     locations when it has more than one (with one there is nothing to choose
-     between, and no menu). A pick shows
-     that location in the scene; the button itself shows everything. Siblings
+     dropped from THE ATLAS, and filled by band-menus.js with the locations
+     the scene has something to draw at, when there is more than one (with one
+     there is nothing to choose between, and no menu), each with its racks
+     under it. A pick shows that location, or that one rack, in the scene; the
+     button itself shows everything. Siblings
      of the band for the views menu's own reason, and placed here, after the
      drawers, so the stretch between the views' menu and the Index stays the
      views' menu alone. Their items carry `data-place`, never `data-scene`. -->
@@ -580,7 +581,7 @@
      By location since 2026-11-20: everything with its total, or one location
      (`#trb-where` names it; `#trb-places` is the picker, on a line of its own
      over the bars, drawn by tribute.js and hidden while the map has one
-     location). -->
+     location), or one rack at it (`#trb-racks`, beside it). -->
 <div id="tribute" aria-hidden="true">
   <div class="trb-panel" role="dialog" aria-label="Resources — memory and processor allocation">
     <div class="trb-head">
@@ -590,7 +591,10 @@
       <button class="trb-close" id="trb-close" title="Close (Esc)">×</button>
     </div>
     <div class="trb-vessel-wrap">
-      <span class="rel-viewtoggle trb-places" id="trb-places" role="group" aria-label="Choose a location" hidden></span>
+      <div class="trb-pickers">
+        <span class="rel-viewtoggle trb-places" id="trb-places" role="group" aria-label="Choose a location" hidden></span>
+        <span class="rel-viewtoggle trb-places" id="trb-racks" role="group" aria-label="Choose a rack" hidden></span>
+      </div>
       <div class="trb-cap">MEMORY</div>
       <div class="trb-vessel" id="trb-vessel"></div>
       <div class="trb-summary" id="trb-summary"></div>
@@ -612,7 +616,10 @@
       <span class="ldg-sub">from the internet to the guests — every route, live</span>
       <button class="ldg-close" id="pth-close" title="Close (Esc)">×</button>
     </div>
-    <div class="rel-placebar"><span class="rel-viewtoggle rel-places" id="pth-places" role="group" aria-label="Choose a location" hidden></span></div>
+    <div class="rel-placebar">
+      <span class="rel-viewtoggle rel-places" id="pth-places" role="group" aria-label="Choose a location" hidden></span>
+      <span class="rel-viewtoggle rel-places" id="pth-racks" role="group" aria-label="Choose a rack" hidden></span>
+    </div>
     <div class="pth-body"><svg id="pth-svg"></svg><div id="pth-nodes"></div></div>
     <div class="pth-legend" id="pth-legend"></div>
   </div>

@@ -52,10 +52,11 @@ export function legacyCapacity(meta) {
 /** Every host with its guests and its sums.
 
     `ofNode` is locations-model's Map(place id → location key); a host it does
-    not hold has `location: null`. Each host:
-      {id, node, location, capacity | null, legacy, guests, on,
+    not hold has `location: null`. `rackOf` is its Map(place id → rack id); a
+    host in no rack has `rack: null` (and '' is a real rack id). Each host:
+      {id, node, location, rack, capacity | null, legacy, guests, on,
        assigned_gb, demand_gb, free_gb | null, vcpu, threads_free | null, over} */
-export function hostsOf(data, ofNode = new Map()) {
+export function hostsOf(data, ofNode = new Map(), rackOf = new Map()) {
   const d = data && typeof data === 'object' ? data : {};
   const nodes = (Array.isArray(d.nodes) ? d.nodes : []).filter((n) => n && typeof n.id === 'string');
   const byId = new Map(nodes.map((n) => [n.id, n]));
@@ -83,7 +84,7 @@ export function hostsOf(data, ofNode = new Map()) {
     const total = capacity ? capacity.total_gb : null;
     const threads = capacity ? capacity.threads : null;
     return {
-      id, node, location: ofNode.get(id) ?? null,
+      id, node, location: ofNode.get(id) ?? null, rack: rackOf.get(id) ?? null,
       capacity, legacy: id === heir && !ownCapacity(node),
       guests, on,
       assigned_gb: assigned,
@@ -100,6 +101,14 @@ export function hostsOf(data, ofNode = new Map()) {
 export function hostsAt(hosts, key) {
   return key === null || key === undefined || key === '' ? hosts : hosts.filter((h) => h.location === key);
 }
+
+/** The hosts in one rack. `''` is a real rack id, so the rack is asked for
+    by id and never by truth. */
+export const hostsIn = (hosts, rackId) => hosts.filter((h) => h.rack === rackId);
+
+/** RESOURCES' answer to "is there anything of mine here" (locations-model
+    `offered`): a host at the location, or in the rack. */
+export const holdsHosts = (hosts) => (l, r) => hosts.some((h) => (r ? h.rack === r.id : h.location === l.key));
 
 /** One line of sums over some hosts.
 

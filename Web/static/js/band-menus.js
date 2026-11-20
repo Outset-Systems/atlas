@@ -3,12 +3,22 @@
    wherever there's compute", and the same for RESOURCES).
 
    HARDWARE, RESOURCES and TOPOLOGY each drop a menu of the map's locations,
-   when the map has more than one, the way THE ATLAS drops the views: a mouse over the button, or the keyboard
-   reaching it, shows it (ui.js `hoverReveal`); it fades when the mouse
-   leaves and rolls up a moment later (`idleRollup`). A pick shows that
+   when the scene has more than one to offer, the way THE ATLAS drops the
+   views: a mouse over the button, or the keyboard reaching it, shows it, and
+   the mouse leaving closes it (ui.js `hoverReveal`; no fade and no waiting
+   about, which are THE INDEX's alone: owner, 2026-11-20). A pick shows that
    location in the scene, opening the scene if it is shut. The button itself
    is still the whole: pressed, it shows everything (ui.js, and each scene's
    own `atlas:scene-place` listener).
+
+   A location is listed only when the scene has something to draw there, and
+   each rack that has stands under its location, a step in: a pick of one
+   shows that rack alone (owner, the same day: "if there isn't any
+   equipment/hardware at a location that location shouldn't be displayed in
+   the drop down", and "you should be able to see the resources of a specific
+   device, (Rack a or rack B) that is associated with a specific location").
+   What is offered is scene-places.js `offerFor`, the list the picker inside
+   the scene reads too.
 
    The menus are siblings of the band, never inside it, for the reason the
    views' menu is (the band's backdrop-filter would position and clip them),
@@ -21,10 +31,8 @@
    locations as a picker of its own (scene-places.js `drawPlacePicker`). */
 
 import { A, $, esc } from './config.js';
-import { hoverReveal, idleRollup } from './ui.js';
-import { askPlace, placeName, whereNow } from './scene-places.js';
-
-const MENU_ROLLUP_MS = 600;   // the views menu's own beat
+import { hoverReveal } from './ui.js';
+import { askPlace, offerFor, placeName } from './scene-places.js';
 
 function bandMenu(scene, menuId) {
   const button = document.querySelector(`.scene[data-scene="${scene}"]`);
@@ -37,17 +45,23 @@ function bandMenu(scene, menuId) {
      menu, as the views' menu is (ui.js `viewHush`). */
   let hush = false;
 
-  /** The locations of the map now in the browser; the one shown is marked.
-      A map with one location has nothing to choose between, so its menu is
-      empty and is never shown (owner, 2026-11-20: "only show the dropdown if
-      there are more than one site/location"). */
+  /** What the scene offers on the map now in the browser: its locations, each
+      with its racks under it; what is on show is marked. With one location
+      there is nothing to choose between, so the menu is empty and is never
+      shown (owner, 2026-11-20: "only show the dropdown if there are more
+      than one site/location"); the racks of a single location are chosen
+      inside the scene. */
   function fill() {
-    const list = A.DATA ? whereNow().list : [];
-    if (list.length < 2) { menu.innerHTML = ''; return; }
     const at = button.dataset.place || '';
-    menu.innerHTML = list.map((l) =>
-      `<button type="button" role="menuitem" data-place="${esc(l.key)}"${l.key === at ? ' aria-current="true"' : ''}>`
-      + `${esc(placeName(l))}</button>`).join('');
+    const offer = A.DATA ? offerFor(scene, at) : [];
+    if (offer.length < 2) { menu.innerHTML = ''; return; }
+    const rack = button.dataset.rack;        // undefined when the whole location is shown
+    const cur = (on) => (on ? ' aria-current="true"' : '');
+    menu.innerHTML = offer.map(({ loc, racks }) =>
+      `<button type="button" role="menuitem" data-place="${esc(loc.key)}"${cur(loc.key === at && rack === undefined)}>`
+      + `${esc(placeName(loc))}</button>`
+      + racks.map((r) => `<button type="button" role="menuitem" class="band-rack" data-place="${esc(loc.key)}"`
+        + ` data-rack="${esc(r.id)}"${cur(loc.key === at && rack === r.id)}>${esc(r.name)}</button>`).join('')).join('');
   }
   function paint() {
     button.setAttribute('aria-expanded', String(shown()));
@@ -73,7 +87,6 @@ function bandMenu(scene, menuId) {
       if (!button.contains(e.relatedTarget) && !menu.contains(e.relatedTarget)) hush = false;
     });
   }
-  idleRollup(menu, [button, menu], { isUp: shown, after: MENU_ROLLUP_MS, rollUp: () => reveal.close() });
 
   // ↓ from the button goes into the menu; inside it the arrows move and never pan the map
   button.addEventListener('keydown', (e) => {
@@ -98,7 +111,8 @@ function bandMenu(scene, menuId) {
     if (!item) return;
     e.stopPropagation();
     const keyboard = e.detail === 0;
-    askPlace(scene, item.dataset.place);          // the scene takes the location…
+    // the scene takes the location, or the one rack at it…
+    askPlace(scene, item.dataset.place, item.dataset.rack === undefined ? null : item.dataset.rack);
     if (!button.classList.contains('active')) button.click();   // …and is opened if it is shut
     if (keyboard) handBack();
     else {

@@ -3113,7 +3113,9 @@ body.constellation .card-split .cs-on { display: inline; }
    has in mono. A machine that runs no guests is one such line and no rows. */
 .trb-where { font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.9rem; letter-spacing: 0.3em; text-transform: uppercase; color: var(--text); }
 .trb-where:empty { display: none; }
-.trb-places { display: flex; width: fit-content; max-width: 100%; flex-wrap: wrap; margin-bottom: 18px; }
+.trb-pickers { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-bottom: 18px; }
+.trb-pickers:not(:has(> :not([hidden]))) { display: none; }
+.trb-places { display: flex; width: fit-content; max-width: 100%; flex-wrap: wrap; }
 .trb-places[hidden] { display: none; }
 .trb-note {
   display: flex; flex-direction: column; gap: 4px; margin-top: 14px;
@@ -5103,7 +5105,10 @@ body:is([data-view="overview"], [data-view="nodes"], [data-view="topology"]) #co
   backdrop-filter: blur(12px) saturate(1.1);
   box-shadow: var(--bar-shadow-firm);
   visibility: hidden; opacity: 0; transform: translateY(-6px); pointer-events: none;
-  transition: opacity 300ms, transform 180ms, visibility 0s linear 300ms,
+  /* shut in one short step (2026-11-20; the design notes's "short", 200ms): a menu
+     that lingers half-seen reads as the Index's fade, which the menus no
+     longer have */
+  transition: opacity 200ms, transform 200ms, visibility 0s linear 200ms,
               background-color 400ms, color 400ms, border-color 400ms;
 }
 .view-menu:is(.peek, .open) {
@@ -5118,8 +5123,11 @@ body:is([data-view="overview"], [data-view="nodes"], [data-view="topology"]) #co
 }
 .view-menu > button:is(:hover, :focus-visible), .view-strip > button:is(:hover, :focus-visible) { color: var(--gilt); }
 /* The band's menus of locations (2026-11-20) are this same pane under
-   HARDWARE and RESOURCES; a location's name is set in the band's caps. */
+   HARDWARE, RESOURCES and TOPOLOGY; a location's name is set in the band's
+   caps. A rack stands under its location a step in, in the same letters
+   (the design notes has one size of micro-caps, and this pane already wears it). */
 .band-menu > button { text-transform: uppercase; }
+.band-menu > button.band-rack { padding: 6px 12px 5px 28px; }
 .band-menu:empty { display: none; }
 /* the view on screen wears the selected scene's outline */
 .view-menu > button[aria-current="true"], .view-strip > button[aria-current="true"] {
@@ -5137,10 +5145,12 @@ body:is([data-view="overview"], [data-view="nodes"], [data-view="topology"]) #co
 }
 .vt-lamp .ci-glyph { width: 15px; height: 15px; }
 
-/* IDLE (owner, 2026-11-13): the views menu and THE INDEX fade to 60% when the
-   mouse leaves them and roll up after a few seconds (ui.js `idleRollup`). Only
-   a mouse makes them idle; a keyboard or a touch screen never does. */
-.view-menu:is(.peek, .open).idle, #index-drawer.open.idle { opacity: 0.6; }
+/* IDLE (owner, 2026-11-13): THE INDEX fades to 60% when the mouse leaves it
+   and rolls up after a few seconds (ui.js `idleRollup`). Only a mouse makes it
+   idle; a keyboard or a touch screen never does. The Index alone since
+   2026-11-20 (owner: "only index should have the feature"): the menus that
+   drop from the band close when the mouse leaves them, with no fade first. */
+#index-drawer.open.idle { opacity: 0.6; }
 
 /* On a phone there is no ATLAS and no map: the views are a strip of names at
    the top of the column, standing under the band while the column scrolls. */
