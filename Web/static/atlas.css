@@ -163,13 +163,13 @@
    other rule may key a bar element on `data-scheme`: it would follow the OS
    while the bar follows the camera (tests/test_scheme_css.py). */
 :root[data-scheme-pick="light"] :is(#scenes-list, .scene-home, .chrome, .rl-crumbs, .rl-locator, .rl-hint,
-                                    #view-menu, .view-strip, .scene-more, #index-drawer, #map-drawer),
+                                    #view-menu, .band-menu, .view-strip, .scene-more, #index-drawer, #map-drawer),
 :root[data-scheme-pick="auto"] body.in-sky:not(.deck, .phone) :is(#scenes-list, .scene-home, .chrome, .rl-crumbs, .rl-locator, .rl-hint,
-                                    #view-menu, .view-strip, .scene-more, #index-drawer, #map-drawer),
+                                    #view-menu, .band-menu, .view-strip, .scene-more, #index-drawer, #map-drawer),
 :root[data-scheme-pick="auto"][data-scheme="light"] body:not(.in-sky, .depths) :is(#scenes-list, .scene-home, .chrome, .rl-crumbs, .rl-locator, .rl-hint,
-                                    #view-menu, .view-strip, .scene-more, #index-drawer, #map-drawer),
+                                    #view-menu, .band-menu, .view-strip, .scene-more, #index-drawer, #map-drawer),
 :root[data-scheme-pick="auto"][data-scheme="light"] body:is(.deck, .phone) :is(#scenes-list, .scene-home, .chrome, .rl-crumbs, .rl-locator, .rl-hint,
-                                    #view-menu, .view-strip, .scene-more, #index-drawer, #map-drawer) {
+                                    #view-menu, .band-menu, .view-strip, .scene-more, #index-drawer, #map-drawer) {
   --hue-on-ground: 40%;   /* a dataset hue as text on a light bar: mixed toward ink (.idx-zone) */
   --abyss: #d6dae0;
   --surface: #c5cad2;
@@ -3060,6 +3060,7 @@ body.constellation .card-split .cs-on { display: inline; }
   box-shadow: inset 0 0 0 1px rgba(var(--shade-rgb), calc(0.25 * var(--shade-k))), inset 0 8px 10px rgba(255,255,255,0.12);
   opacity: 0.82; transition: opacity 150ms;
 }
+.trb-vessel[hidden] { display: none; }
 .trb-vessel:hover .trb-seg { opacity: 0.55; }
 .trb-vessel .trb-seg:hover { opacity: 1; }
 .trb-seg.reserve { background: repeating-linear-gradient(45deg, #3A342A, #3A342A 4px, #2b271f 4px, #2b271f 8px); box-shadow: none; }
@@ -3103,9 +3104,54 @@ body.constellation .card-split .cs-on { display: inline; }
 .trb-fill { position: absolute; inset: 0 auto 0 0; height: 100%; background: var(--row-hue); opacity: 0.85; }
 .trb-stat { font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; color: var(--text-dim); white-space: nowrap; font-variant-numeric: tabular-nums; }
 
+/* BY LOCATION (2026-11-20). The head names the location shown beside the
+   title, in the title's own caps and the body's ink; the picker (the racks'
+   segmented control) has a line of its own over the bars, where four names
+   do not fight the sub-line for room. Under "everything" the list is the hosts
+   under their locations: a location's name is the Index's caps on a hairline,
+   a press shows only it; a host's name stands over its guests with what it
+   has in mono. A machine that runs no guests is one such line and no rows. */
+.trb-where { font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.9rem; letter-spacing: 0.3em; text-transform: uppercase; color: var(--text); }
+.trb-where:empty { display: none; }
+.trb-places { display: flex; width: fit-content; max-width: 100%; flex-wrap: wrap; margin-bottom: 18px; }
+.trb-places[hidden] { display: none; }
+.trb-note {
+  display: flex; flex-direction: column; gap: 4px; margin-top: 14px;
+  font-family: 'Alegreya Sans', sans-serif; font-size: 0.82rem; color: var(--text-dim);
+}
+.trb-note[hidden] { display: none; }
+.trb-place-head, .trb-host {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 0 10px;
+}
+.trb-place-head { margin-top: 18px; padding-bottom: 6px; border-bottom: 1px solid var(--ink-line); }
+.trb-place-head:first-child { margin-top: 4px; }
+.trb-place {
+  background: none; border: none; padding: 0; text-align: left;
+  font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.7rem; letter-spacing: 0.26em;
+  text-transform: uppercase; color: var(--gilt);
+}
+button.trb-place { cursor: pointer; transition: color 150ms; }
+button.trb-place:hover { color: var(--gilt-bright); }
+.trb-host { margin-top: 12px; padding-bottom: 2px; }
+.trb-host-name {
+  background: none; border: none; padding: 0; cursor: pointer; text-align: left;
+  font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.74rem; letter-spacing: 0.16em;
+  text-transform: uppercase; color: var(--text); transition: color 150ms;
+}
+.trb-host-name:hover { color: var(--gilt); }
+.trb-host-bare .trb-host-name { color: var(--text-dim); }
+.trb-empty { padding: 10px; font-family: 'Alegreya Sans', sans-serif; font-size: 0.9rem; color: var(--text-dim); }
+
 @media (max-width: 720px) {
   .trb-row { grid-template-columns: 110px 1fr; }
   .trb-stat { grid-column: 2; }
+  .trb-place-head, .trb-host { flex-wrap: wrap; gap: 2px 12px; }
+  /* the head holds a location's name beside the title now: on a narrow screen
+     the name and the sub-line each take a row of their own under the title,
+     and × keeps its corner */
+  .trb-head { flex-wrap: wrap; row-gap: 4px; }
+  .trb-head .trb-where { order: 2; flex-basis: 100%; }
+  .trb-head .trb-sub { order: 3; flex-basis: 100%; }
 }
 
 /* ── THE RELIQUARY — rack elevation (NetBox-style) ── */
@@ -3886,6 +3932,50 @@ body:not(.drawer-open) #path.pth-narrow .pth-panel { left: 2vw; right: 2vw; }
 .fp-btn { fill: rgba(0,0,0,0.5); stroke: rgba(var(--gilt-rgb), 0.5); stroke-width: 0.8; }
 .fp-badge { fill: rgba(0,0,0,0.30); stroke: rgba(var(--gilt-rgb), 0.25); stroke-width: 0.6; }
 .fp-led { fill: #57503f; }
+
+/* BY LOCATION (2026-11-20). The picker of locations and the picker of the
+   racks there have a line of their own under the head (the rack picker stood
+   in the head until its names grew a location in front of them), and the
+   line is not there at all while neither has anything to pick from. A
+   location with no rack shows its shelf alone: the rack's own furniture (the
+   power rail, the elevation, the 3D stage and its legend) steps out. */
+.rel-placebar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 14px 22px 0; }
+.rel-placebar:not(:has(> :not([hidden]))) { display: none; }
+.rel-places { display: flex; max-width: 100%; flex-wrap: wrap; }
+.rel-places[hidden] { display: none; }
+.rel-placebar > .rel-racks { margin-left: 0; }
+#reliquary.no-rack :is(.rel-power, #rel-elevation, #rel-3d, #rel-3d-legend) { display: none; }
+.rel-viewtoggle[hidden] { display: none; }
+
+/* ADD AND REMOVE (2026-11-20). The add box is one line of fields under the
+   head, in the panel's own inputs; a vessel's ✕ shows only in Rearrange, at
+   its top right corner, and its second face ("Take out?") is the warn ink.
+   The line that says why a viewer may not write is the panel's quiet text. */
+.rel-addbox {
+  display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 12px; padding: 14px 22px 0;
+  font-family: 'Alegreya Sans', sans-serif; font-size: 0.86rem; color: var(--text);
+}
+.rel-addbox[hidden], .rel-why[hidden] { display: none; }
+.rel-add-head { flex-basis: 100%; color: var(--text-dim); }
+.rel-add-head b { font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--gilt); }
+.rel-add-field { display: flex; flex-direction: column; gap: 3px; flex: 1 1 200px; min-width: 0; }
+.rel-add-field[hidden] { display: none; }
+.rel-add-field > span { font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.56rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--text-dim); }
+.rel-add-size { flex: 0 0 84px; }
+.rel-add-msg { flex-basis: 100%; min-height: 1.2em; color: var(--sem-warn); }
+.rel-add-msg:empty { display: none; }
+.rel-why { padding: 12px 22px 0; font-family: 'Alegreya Sans', sans-serif; font-size: 0.82rem; color: var(--text-dim); }
+.rel-tool:disabled { opacity: 0.45; cursor: not-allowed; }
+.rel-remove {
+  display: none; position: absolute; top: 4px; right: 26px; z-index: 3;
+  min-width: 22px; height: 22px; padding: 0 6px; border-radius: 3px; cursor: pointer;
+  background: var(--surface); border: 1px solid rgba(var(--down-rgb), 0.55); color: var(--sem-down);
+  font-family: 'Alegreya Sans', sans-serif; font-size: 0.74rem; line-height: 1;
+}
+.rel-remove.armed { background: var(--sem-down); color: var(--surface); }
+#reliquary.editing .rel-remove { display: block; }
+.rel-rear-seat { position: relative; display: flex; min-width: 0; max-width: 100%; }
+.rel-rear-seat > .rel-remove { top: -8px; right: -8px; }
 
 /* header rearrange controls */
 .rel-head .rel-close { margin-left: 12px; }
@@ -5025,6 +5115,10 @@ body:is([data-view="overview"], [data-view="nodes"], [data-view="topology"]) #co
   transition: color 200ms, background 200ms, border-color 250ms;
 }
 .view-menu > button:is(:hover, :focus-visible), .view-strip > button:is(:hover, :focus-visible) { color: var(--gilt); }
+/* The band's menus of locations (2026-11-20) are this same pane under
+   HARDWARE and RESOURCES; a location's name is set in the band's caps. */
+.band-menu > button { text-transform: uppercase; }
+.band-menu:empty { display: none; }
 /* the view on screen wears the selected scene's outline */
 .view-menu > button[aria-current="true"], .view-strip > button[aria-current="true"] {
   color: var(--gilt); background: var(--scene-active-bg); border-color: var(--gilt);

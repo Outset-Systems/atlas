@@ -261,7 +261,7 @@
     <button class="scene-more" id="view-more" type="button" aria-haspopup="menu" aria-expanded="false"
             aria-controls="view-menu" title="{{ theme.text.views }}" aria-label="{{ theme.text.views }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 10l5 5 5-5"/></svg></button>
   </span>
-  <button class="scene" data-scene="rack">RACKS</button>
+  <button class="scene" data-scene="rack">HARDWARE</button>
   <button class="scene" data-scene="tribute">RESOURCES</button>
   <button class="scene" data-scene="ledger">ADDRESSES</button>
   <button class="scene" data-scene="path">TOPOLOGY</button>
@@ -442,6 +442,16 @@
   </div>
 </aside>
 
+<!-- THE BAND'S MENUS OF LOCATIONS (2026-11-20): dropped from HARDWARE and from
+     RESOURCES by hover and by focus, as the views' menu is dropped from THE
+     ATLAS, and filled by band-menus.js with the map's locations. A pick shows
+     that location in the scene; the button itself shows everything. Siblings
+     of the band for the views menu's own reason, and placed here, after the
+     drawers, so the stretch between the views' menu and the Index stays the
+     views' menu alone. Their items carry `data-place`, never `data-scene`. -->
+<div class="view-menu band-menu" id="hardware-menu" role="menu" aria-label="Hardware, by location"></div>
+<div class="view-menu band-menu" id="resources-menu" role="menu" aria-label="Resources, by location"></div>
+
 <!-- Ivory detail card -->
 <article id="card" class="card-left" aria-hidden="true">
   <!-- THE PULL-TAB CARD (2026-11-11): one sheet of parchment with the place's
@@ -488,24 +498,48 @@
   <div class="card-tabs" id="card-tabs" role="tablist" aria-label="Card sections"></div>
 </article>
 
-<!-- RACKS — each physical rack as an illuminated hardware elevation -->
+<!-- HARDWARE (RACKS until 2026-11-20; the ids kept their names): each physical
+     rack as an illuminated elevation, and the machines that stand outside a
+     rack on a shelf under it, by location. `#rel-places` is the picker of
+     locations and `#rel-racks` the picker of the racks there, on a line of
+     their own under the head; reliquary.js draws each and hides it while
+     there is one to pick from. -->
 <div id="reliquary" aria-hidden="true">
-  <div class="rel-panel" role="dialog" aria-label="Racks — the rack elevation">
+  <div class="rel-panel" role="dialog" aria-label="Hardware — the racks and what stands outside them">
     <div class="rel-head">
-      <span class="rel-title" id="rel-title">RACKS</span>
-      <span class="rel-sub">every rack, unit by unit</span>
-      <span class="rel-viewtoggle rel-racks" id="rel-racks" role="group" aria-label="Choose a rack" hidden></span>
+      <span class="rel-title" id="rel-title">HARDWARE</span>
+      <span class="rel-sub">every machine, where it stands</span>
       <span class="rel-tools">
-        <span class="rel-viewtoggle" role="group" aria-label="View the rack in 2D or 3D">
+        <span class="rel-viewtoggle" id="rel-view" role="group" aria-label="View the rack in 2D or 3D">
           <button class="rel-seg is-on" id="rel-2d" aria-pressed="true">2D</button>
           <button class="rel-seg" id="rel-3d-btn" aria-pressed="false">3D</button>
         </span>
-        <button class="rel-tool" id="rel-edit" title="Drag vessels to new slots">⇅ Rearrange</button>
+        <button class="rel-tool" id="rel-add" title="Put a device in this rack">+ Add</button>
+        <button class="rel-tool" id="rel-edit" title="Drag vessels to new slots, or take one out">⇅ Rearrange</button>
         <button class="rel-tool" id="rel-save" hidden>Save</button>
         <button class="rel-tool" id="rel-reset" hidden>Reset</button>
       </span>
       <button class="rel-close" id="rel-close" title="Close (Esc)">×</button>
     </div>
+    <div class="rel-placebar">
+      <span class="rel-viewtoggle rel-places" id="rel-places" role="group" aria-label="Choose a location" hidden></span>
+      <span class="rel-viewtoggle rel-racks" id="rel-racks" role="group" aria-label="Choose a rack" hidden></span>
+    </div>
+    <!-- ADD (2026-11-20): pick a place that is not in a rack yet, or name
+         something that is not on the map, and it goes into the rack on screen
+         at the highest free seat (reliquary.js addVessel). -->
+    <div class="rel-addbox" id="rel-addbox" hidden>
+      <span class="rel-add-head">Add to <b id="rel-add-to"></b></span>
+      <label class="rel-add-field"><span>Device</span><select id="rel-add-what" class="dir-input"></select></label>
+      <label class="rel-add-field" id="rel-add-name-wrap" hidden><span>Its name</span>
+        <input id="rel-add-name" class="dir-input" type="text" maxlength="60" autocomplete="off" spellcheck="false" placeholder="Patch panel"></label>
+      <label class="rel-add-field rel-add-size"><span>Height</span>
+        <select id="rel-add-size" class="dir-input"><option value="1">1U</option><option value="2">2U</option><option value="3">3U</option><option value="4">4U</option><option value="6">6U</option><option value="8">8U</option></select></label>
+      <button class="rel-tool on" id="rel-add-go" type="button">Add</button>
+      <button class="rel-tool" id="rel-add-cancel" type="button">Cancel</button>
+      <span class="rel-add-msg" id="rel-add-msg" role="status"></span>
+    </div>
+    <div class="rel-why" id="rel-why" hidden></div>
     <div class="rel-body">
       <div class="rel-rack">
         <div class="rel-power" aria-hidden="true"><span>{{ theme.text.relay_power }}</span></div>
@@ -537,21 +571,28 @@
   </div>
 </div>
 
-<!-- RESOURCES — the hypervisor's 64 GB divided among its vassals -->
+<!-- RESOURCES: each machine's memory and processors divided among its guests.
+     By location since 2026-11-20: everything with its total, or one location
+     (`#trb-where` names it; `#trb-places` is the picker, on a line of its own
+     over the bars, drawn by tribute.js and hidden while the map has one
+     location). -->
 <div id="tribute" aria-hidden="true">
   <div class="trb-panel" role="dialog" aria-label="Resources — memory and processor allocation">
     <div class="trb-head">
       <span class="trb-title">RESOURCES</span>
+      <span class="trb-where" id="trb-where"></span>
       <span class="trb-sub">{{ theme.text.tribute_sub }}</span>
       <button class="trb-close" id="trb-close" title="Close (Esc)">×</button>
     </div>
     <div class="trb-vessel-wrap">
+      <span class="rel-viewtoggle trb-places" id="trb-places" role="group" aria-label="Choose a location" hidden></span>
       <div class="trb-cap">MEMORY</div>
       <div class="trb-vessel" id="trb-vessel"></div>
       <div class="trb-summary" id="trb-summary"></div>
       <div class="trb-cap trb-cap-2">PROCESSORS</div>
       <div class="trb-vessel" id="trb-vessel-cpu"></div>
       <div class="trb-summary" id="trb-summary-cpu"></div>
+      <div class="trb-note" id="trb-note" hidden></div>
     </div>
     <div class="trb-list" id="trb-list"></div>
   </div>

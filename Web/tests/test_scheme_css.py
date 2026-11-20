@@ -47,6 +47,8 @@ PANELS = [".ldg-panel", ".trb-panel", ".rel-panel", ".pth-panel",
 BAR = ["#scenes-list", ".scene-home", ".chrome", ".rl-crumbs", ".rl-locator", ".rl-hint",
        # the views' menu, ATLAS's ▾ and the phone's strip (2026-11-13)
        "#view-menu", ".view-strip", ".scene-more",
+       # the menus of locations under HARDWARE and RESOURCES (2026-11-20)
+       ".band-menu",
        # THE INDEX wears the menu's glass, so it follows the bar too (owner, 2026-11-13)
        "#index-drawer",
        # the map editor's panel is the Index's, mirrored (2026-11-20)

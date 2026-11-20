@@ -106,6 +106,7 @@ NODES = [
      "role": "Hypervisor · eight guests",
      "lore": "The one machine that runs the rest. Patch it last and reboot it carefully.",
      "hw": "Proxmox VE 9 · Ryzen 9 7950X · 16 cores · 128 GB · 2× 2 TB NVMe",
+     "ram_gb": 128, "ram_reserve_gb": 8, "cpu_cores": 16, "cpu_threads": 32,
      "children": GUESTS,
      "links": [link("Proxmox", f"https://{net(33, 5)}:8006",
                     "Guests, storage, snapshots and the backup jobs.", kuma="Hypervisor")],
@@ -119,6 +120,7 @@ NODES = [
      "role": "Storage · 48 TB",
      "lore": "Every byte the house cannot afford to lose, snapshotted hourly and copied off-site nightly.",
      "hw": "TrueNAS SCALE · Xeon E-2334 · 4 cores · 64 GB ECC · 4× 12 TB RAIDZ1",
+     "ram_gb": 64, "cpu_cores": 4, "cpu_threads": 8,
      "links": [link("TrueNAS", f"https://{net(33, 10)}", "Pools, shares and snapshots.", kuma="NAS")],
      "reaches": ["gateway", "the-wild"],
      "accounts": [acct("admin", sudo="password", groups=["builtin_administrators"], note="Web UI admin."),
@@ -204,6 +206,7 @@ NODES = [
      "role": "Local AI models",
      "lore": "One graphics card, several language models, and the house's power bill.",
      "hw": "Ryzen 7 7700 · 8 cores · RTX 4070 · 64 GB · Ollama",
+     "ram_gb": 64, "cpu_cores": 8, "cpu_threads": 16,
      "links": [link("Ollama", f"http://{net(10, 40)}:11434", "Local models for the apps that ask.",
                     kuma="GPU Box")],
      "reaches": ["gateway"]},
@@ -212,6 +215,7 @@ NODES = [
      "role": "Admin workstation",
      "lore": "Where the map is edited from. The only client allowed onto the management VLAN.",
      "hw": "Windows 11 · Ryzen 7 5800X · 8 cores · 32 GB",
+     "location": "Home office", "ram_gb": 32, "cpu_cores": 8, "cpu_threads": 16,
      "links": [],
      "reaches": ["gateway", "core-switch"]},
     {"id": "camera-hub", "name": "CAMERA HUB", "kind": "physical", "zone": "lookout", "spark": True,
@@ -219,6 +223,7 @@ NODES = [
      "role": "Home automation + cameras",
      "lore": "Every sensor, camera and switch in the house, walled off from everything else.",
      "hw": "Raspberry Pi 5 · 4 cores · 8 GB · Home Assistant OS",
+     "location": "Living room", "ram_gb": 8, "cpu_cores": 4, "cpu_threads": 4,
      "links": [link("Home Assistant", f"http://{net(66, 5)}:8123", "Sensors, cameras and automations.",
                     kuma="Home Assistant")],
      "reaches": ["gateway"]},
@@ -319,7 +324,7 @@ VMS = [
 
 RACKS = [
     {"id": "rack-a", "name": "Rack A", "location": "Home office"},
-    {"id": "rack-b", "name": "Rack B", "location": "Home office"},
+    {"id": "rack-b", "name": "Rack B", "location": "Garage"},
 ]
 RACK = [
     {"u": "U12", "size": 1, "name": "Patch Panel", "node": "", "desc": "24-port keystone panel, every drop labelled."},

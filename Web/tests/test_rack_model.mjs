@@ -277,4 +277,30 @@ test('the compute and forge faceplates wear their kind\'s hue', () => {
   assert.ok(!faceplate({ kind: 'compute', size: 2 }, '').includes('#C0714E'));
 });
 
+/* ── a new vessel's seat (2026-11-20, HARDWARE's Add) ───────────────────── */
+{
+  const { freeTop } = await import('../static/js/rack-model.js');
+  const dev = (key, top, size = 1) => ({ key, top, size });
+
+  test('a new vessel takes the highest free seat it fits', () => {
+    // U6 and U3-4 taken in a 6U rack: 1U fits at U5, 2U only at U1-2
+    const devices = [dev('a', 6), dev('b', 4, 2)];
+    assert.equal(freeTop(devices, 6, 1), 5);
+    assert.equal(freeTop(devices, 6, 2), 2);
+    assert.equal(freeTop([], 12, 1), 12);
+    assert.equal(freeTop([], 12, 4), 12);
+  });
+
+  test('a full rack takes it on top and grows by it', () => {
+    const full = [dev('a', 4, 2), dev('b', 2, 2)];
+    assert.equal(freeTop(full, 4, 1), 5);
+    assert.equal(freeTop(full, 4, 2), 6);
+    // room, but not for something this tall
+    assert.equal(freeTop([dev('a', 3)], 4, 3), 7);
+    // and where it lands, it fits a rack grown to hold it
+    const top = freeTop(full, 4, 2);
+    assert.ok(fits(full, top, dev('new', top, 2), top));
+  });
+}
+
 console.log(`rack-model: ${passed} passed`);

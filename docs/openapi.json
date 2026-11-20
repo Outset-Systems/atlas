@@ -547,7 +547,7 @@
                     "description": "Logical processors — what a vCPU is actually assigned against. This is the denominator of the vCPU score, so a wrong number here reads as false headroom."
                   }
                 },
-                "description": "The numbers RESOURCES divides among the vassals."
+                "description": "One machine's numbers, from before a place could carry its own (Memory, Cores and Threads on the place). They still stand for a map with one host that declares none: set them on the place instead, and leave these."
               }
             },
             "description": "The atlas settings."
@@ -718,6 +718,26 @@
                 "hw": {
                   "type": "string",
                   "description": "The mono data line: OS · RAM · disks."
+                },
+                "location": {
+                  "type": "string",
+                  "description": "Where it physically stands, e.g. `Home office`, for a machine that is not in a rack: a single-board computer, an access point, a desk machine. What sits in a rack is where the rack is, whatever this says. HARDWARE and RESOURCES list by location; blank is the map's default one."
+                },
+                "ram_gb": {
+                  "type": "number",
+                  "description": "How much memory the machine has. With the three fields below it is what RESOURCES divides among the machine's guests, and what it counts as compute when the machine runs none."
+                },
+                "ram_reserve_gb": {
+                  "type": "number",
+                  "description": "Kept for the machine itself; free headroom is what is left after it."
+                },
+                "cpu_cores": {
+                  "type": "number",
+                  "description": "Physical cores. Shown as the iron behind the thread count."
+                },
+                "cpu_threads": {
+                  "type": "number",
+                  "description": "Logical processors: what a vCPU is assigned against, so this is the denominator of the vCPU count."
                 },
                 "mac": {
                   "type": "string",
@@ -1263,7 +1283,7 @@
                 },
                 "location": {
                   "type": "string",
-                  "description": "Where it stands, e.g. `Server room`. Blank uses the theme's default."
+                  "description": "Where it stands, e.g. `Home office`. Everything in the rack is there. Blank uses the map's default location."
                 }
               }
             },
@@ -1297,7 +1317,7 @@
                 },
                 "desc": {
                   "type": "string",
-                  "description": "What this slot holds, in your words. Shown in the RACKS pane for every vessel; for an uncharted one it also stands in for the role."
+                  "description": "What this slot holds, in your words. Shown in the HARDWARE pane for every vessel; for an uncharted one it also stands in for the role."
                 },
                 "kind": {
                   "type": "string",

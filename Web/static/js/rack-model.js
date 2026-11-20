@@ -153,6 +153,16 @@ export function fits(devices, rackU, d, top) {
   return true;
 }
 
+/* Where a new vessel of `size` U goes (2026-11-20): the highest free seat it
+   fits, so it lands at the top of the open space and is dragged down from
+   there. A rack has no height of its own (it is as tall as its highest
+   slot), so a full rack takes the newcomer on top and grows by it. */
+export function freeTop(devices, rackU, size = 1) {
+  const probe = { key: Symbol('new'), size };
+  for (let top = rackU; top >= size; top--) if (fits(devices, rackU, probe, top)) return top;
+  return rackU + size;
+}
+
 /* ── faceplate art: pure SVG-string builders, class-styled by atlas.css ──────
    Shared so the 3D view can rasterise the very same faceplate to a texture. */
 

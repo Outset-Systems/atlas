@@ -427,6 +427,13 @@ document.querySelectorAll('[data-scene]').forEach(btn => {
       A.home(true);
       return;
     }
+    /* A scene that is showing ONE location (HARDWARE and RESOURCES, 2026-11-20:
+       the scene writes `data-place` on its own button, scene-places.js) shows
+       everything when its button is pressed; only the next press closes it. */
+    if (deselect && btn.dataset.place) {
+      dispatchEvent(new CustomEvent('atlas:scene-place', { detail: { scene: btn.dataset.scene, place: '' } }));
+      return;
+    }
     closeAllScenes();
     if (deselect) { setSceneActive('atlas'); return; }
     mapEditor(false);   // a scene stands over the map the editor is about
@@ -808,3 +815,7 @@ A.buildUI = function buildUI() {
   buildAbyss();
   nameRegionHeads();
 };
+
+/* The band's menus of locations (band-menus.js, 2026-11-20) are revealed and
+   rolled up exactly as the views' menu is: the same two helpers, not copies. */
+export { hoverReveal, idleRollup };

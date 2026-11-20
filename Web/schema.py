@@ -369,6 +369,23 @@ SECTIONS = {
               help="Its address, or `—` for none. A whole prefix is allowed for a "
                    "place that *is* a network (Tailscale's 100.64.0.0/10)."),
             f("hw", "text", label="Hardware", help="The mono data line: OS · RAM · disks."),
+            f("location", "text", label="Location",
+              help="Where it physically stands, e.g. `Home office`, for a machine that is "
+                   "not in a rack: a single-board computer, an access point, a desk "
+                   "machine. What sits in a rack is where the rack is, whatever this "
+                   "says. HARDWARE and RESOURCES list by location; blank is the map's "
+                   "default one."),
+            f("ram_gb", "number", label="Memory (GB)", min=0,
+              help="How much memory the machine has. With the three fields below it is "
+                   "what RESOURCES divides among the machine's guests, and what it "
+                   "counts as compute when the machine runs none."),
+            f("ram_reserve_gb", "number", label="Memory held back (GB)", min=0,
+              help="Kept for the machine itself; free headroom is what is left after it."),
+            f("cpu_cores", "number", label="Cores", min=0,
+              help="Physical cores. Shown as the iron behind the thread count."),
+            f("cpu_threads", "number", label="Threads", min=0,
+              help="Logical processors: what a vCPU is assigned against, so this is "
+                   "the denominator of the vCPU count."),
             f("mac", "text", label="MAC",
               help="Its hardware address, e.g. `00:11:32:aa:bb:cc`. A connection import "
                    "fills it in; a later review knows the place by it even after its "
@@ -536,19 +553,20 @@ SECTIONS = {
     "racks": section(
         "racks", "rack", "racks", noun="rack",
         lore="where the iron stands",
-        subtitle="Each rack and where it stands. RACKS shows them as `Location — Name`.",
+        subtitle="Each rack and where it stands. HARDWARE shows them as `Location — Name`.",
         fields=[
             f("id", "slug", required=True, help="Short unique key, e.g. `rack-a`."),
             f("name", "text", required=True, help="The rack's own name, e.g. `Rack A`."),
             f("location", "text",
-              help="Where it stands, e.g. `Server room`. Blank uses the theme's default."),
+              help="Where it stands, e.g. `Home office`. Everything in the rack is there. "
+                   "Blank uses the map's default location."),
         ]),
 
     "rack": section(
         "rack", "vessel", "vessels", noun="rack slot",
         id_field=None, title_field="name",
         lore="the iron in its niches — the front elevation",
-        subtitle="Rack slots, front of rack. RACKS draws these.",
+        subtitle="Rack slots, front of rack. HARDWARE draws these.",
         fields=[
             f("rack", "ref", ref="racks", label="Rack",
               help="Which rack it sits in. Blank means the first rack."),
@@ -559,7 +577,7 @@ SECTIONS = {
             f("node", "ref", ref="nodes",
               help="The place this vessel is, if it's charted on the map."),
             f("desc", "text", label="Description",
-              help="What this slot holds, in your words. Shown in the RACKS pane "
+              help="What this slot holds, in your words. Shown in the HARDWARE pane "
                    "for every vessel; for an uncharted one it also stands in for the role."),
             f("kind", "select", options=RACK_KINDS, default="auto",
               help="Which faceplate it wears. `auto` reads the name and Description."),
@@ -873,7 +891,10 @@ SECTIONS = {
                   help="Logical processors — what a vCPU is actually assigned "
                        "against. This is the denominator of the vCPU score, so a "
                        "wrong number here reads as false headroom."),
-              ], help="The numbers RESOURCES divides among the vassals."),
+              ], help="One machine's numbers, from before a place could carry its own "
+                      "(Memory, Cores and Threads on the place). They still stand for "
+                      "a map with one host that declares none: set them on the place "
+                      "instead, and leave these."),
         ]),
 }
 
@@ -934,7 +955,8 @@ HIDING = {
     "nodes": {
         # a place's own id and name are what makes it visible: given with it
         "id": "safe", "name": "safe", "zone": "safe", "role": "words", "lore": "words",
-        "hw": "words", "mac": "safe", "scroll": "safe", "require_group": "safe",
+        "hw": "words", "location": "words", "mac": "safe", "scroll": "safe",
+        "require_group": "safe",
         "check_host": "words", "check_expect": "safe", "monitors": "words",
         "origin": "words", "accounts": "admin",
         "links": {"label": "words", "url": "url", "desc": "words", "kuma": "words",

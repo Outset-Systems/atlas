@@ -150,8 +150,10 @@ def test_two_racks_keep_their_own_slots_and_heights():
 def test_the_old_names_are_gone_from_the_scene_band():
     """Plain words on the band and the flyout (2026-10-31)."""
     html = (WEB / "templates" / "index.html").read_text(encoding="utf-8")
-    for word in ("RACKS", "RESOURCES", "ADDRESSES", "TOPOLOGY"):
+    # RACKS is HARDWARE since 2026-11-20: it holds what stands outside a rack too
+    for word in ("HARDWARE", "RESOURCES", "ADDRESSES", "TOPOLOGY"):
         assert f">{word}</button>" in html
+    assert ">RACKS</button>" not in html
     # WIRING, the canvas (2026-11-17), is a view: the theme's word, in the menu
     assert '<button type="button" role="menuitem" data-view="topology">{{ theme.text.view_topology }}</button>' in html
     for word in ("ARMORY", "TRIBUTE", "LEDGER", "PATH"):

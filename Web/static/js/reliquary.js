@@ -1,18 +1,42 @@
-/* Atlas — RACKS (was THE ARMORY, THE RELIQUARY): each physical rack as an
+/* Atlas — HARDWARE (was RACKS, THE ARMORY, THE RELIQUARY): each physical rack as an
    illuminated front-elevation with hardware-accurate engraved faceplates. Every
    vessel sits in a true U-slot; in Rearrange mode you can drag one to a free slot
    and Save the layout (persisted server-side via api/v2/rack, exactly like the map's
    moved dots). Rebuilt 2026-07-20. Titled by place since 2026-10-31:
    `Server room — Rack A`, with a picker when the lab charts more than one.
    The rack model + faceplate art moved to rack-model.js 2026-08-23 so the 3D
-   deep-dive (armory3d.js) draws the same vessels from the same source (F5). */
+   deep-dive (armory3d.js) draws the same vessels from the same source (F5).
 
-import { A, CFG, $, esc, glassAttrs, nodeById, FALLBACK_HUE, DRAG_END, postJSON } from './config.js';
+   HARDWARE, BY LOCATION (2026-11-20; owner: "adjust 'Racks' to say 'Hardware'
+   and include any kind of compute iOT raspberry pi, etc.", "it should show a
+   drop down of locations"). The scene shows every location or one. Its racks
+   are the racks that stand there, and under them is a shelf, NOT IN A RACK:
+   the machines that stand outside one (a single-board computer, an access
+   point, a desk machine), which no elevation could ever show. A location may
+   have a shelf and no rack at all. What a location is, and what counts as
+   hardware outside a rack, is locations-model.js.
+
+   ADD AND REMOVE (2026-11-20; owner: "add an add button next to arrange that
+   will let you pick from a device, then you can drag it up and down in the
+   rack", "the ability to add remove any of the things that are in there
+   now"). Add puts a place from the map, or something that is not on it (a
+   panel, a shelf), into the rack on screen at the highest free seat, and
+   turns Rearrange on so it can be dragged from there. In Rearrange every
+   vessel, front or rear, has a ✕ that takes it out of the rack; the place it
+   stood for stays on the map and moves to the shelf. Both are changes to the
+   map itself, written through the editor's own store (editor/store.js), so
+   each is in the change log and can be undone there; a drag is still the
+   rack's saved layout (Save). Where the viewer may not write, Add, ✕ and
+   Save are drawn off and say why. */
+
+import { A, CFG, $, esc, glassAttrs, nodeById, FALLBACK_HUE, DRAG_END, postJSON, canAdminWrite } from './config.js';
 import { makeScene } from './scene.js';
+import { locationByKey, looseAt, rackable, racksAt } from './locations-model.js';
+import { drawPlacePicker, markPlace, placeName, whereNow } from './scene-places.js';
 import {
   UH, KIND_HUE, ledColor, uLabel, setRackTheme,
   buildDevices as modelBuildDevices, buildRear, fits as modelFits, faceplate as modelFaceplate,
-  rackList, rackTitle, inRack, crownOf, peerNode,
+  rackList, rackTitle, inRack, crownOf, peerNode, kindOf, freeTop, slotKey,
 } from './rack-model.js';
 setRackTheme(CFG.THEME);   // THE THEME (v1.48.0): which lab names are the gateway / the forge
 
@@ -22,7 +46,14 @@ const RACK_KEY = 'atlas-rack-current';    // which rack this browser last looked
 let root, elevEl, detailEl, titleEl, rackEl;
 let editing = false;
 let devices = [], rackU = 12;
-let racks = [], rackId = null;
+/* `allRacks` is every rack on the map, in the map's order (an unset or unknown
+   `rack` on a slot means the first of THESE); `racks` is the ones at the
+   location shown, which is all the picker offers. `rackId` is null where the
+   location shown has no rack at all, only a shelf. */
+let racks = [], allRacks = [], rackId = null;
+/** The location shown; '' is every location. */
+let place = '';
+let where = null, loc = null;
 
 const ledFor = (node) => ledColor(node ? A.signalsFeed?.nodes?.[node.id]?.state : '');
 
@@ -32,13 +63,19 @@ const writeOvr = (o) => { try { localStorage.setItem(OVR_KEY, JSON.stringify(o))
 // These thin wrappers keep this module's `devices`/`rackU` state and bind the
 // live LED feed; the pure model + SVG art are in rack-model.js.
 function buildDevices() {
-  racks = rackList(A.DATA.racks, CFG.THEME?.text?.rack_location);
+  where = whereNow();
+  loc = locationByKey(where, place);
+  if (!loc) place = '';
+  markPlace('rack', place);
+  allRacks = rackList(A.DATA.racks, CFG.THEME?.text?.rack_location);
+  racks = racksAt(where, loc);
+  if (!racks.length) { rackId = null; devices = []; rackU = 1; return; }
   if (!racks.some((r) => r.id === rackId)) {
     let saved = null;
     try { saved = localStorage.getItem(RACK_KEY); } catch { /* private mode */ }
     rackId = racks.some((r) => r.id === saved) ? saved : racks[0].id;
   }
-  const built = modelBuildDevices(inRack(A.DATA.rack, racks, rackId), nodeById, readOvr());
+  const built = modelBuildDevices(inRack(A.DATA.rack, allRacks, rackId), nodeById, readOvr());
   devices = built.devices;
   rackU = built.rackU;
 }
@@ -46,9 +83,11 @@ const fits = (d, top) => modelFits(devices, rackU, d, top);
 const faceplate = (d) => modelFaceplate(d, ledFor(d.node));
 
 
-const rearHereBuilt = () => buildRear(inRack(A.DATA.rack_rear, racks, rackId), nodeById);
+const rearHereBuilt = () => (rackId === null ? []
+  : buildRear(inRack(A.DATA.rack_rear, allRacks, rackId), nodeById));
 
 function pickRack(id) {
+  openAddBox(false);
   rackId = id;
   try { localStorage.setItem(RACK_KEY, id); } catch { /* private mode */ }
   const was3d = view3d;
@@ -61,7 +100,13 @@ function pickRack(id) {
    rack, and spells the place out only when the racks stand in different ones. */
 function renderRackNav() {
   const here = racks.find((r) => r.id === rackId);
-  if (titleEl) titleEl.textContent = rackTitle(here);
+  // a location with a shelf and no rack is titled by the location alone
+  if (titleEl) titleEl.textContent = here ? rackTitle(here) : placeName(loc);
+  drawPlacePicker($('rel-places'), place, setPlace);
+  // what only a rack has: the two views of it, and rearranging it
+  for (const id of ['rel-view', 'rel-edit', 'rel-add']) $(id)?.toggleAttribute('hidden', !here || (id !== 'rel-view' && view3d));
+  if (!here) openAddBox(false);
+  paintWrites();
   const nav = $('rel-racks');
   if (!nav) return;
   nav.hidden = racks.length < 2;
@@ -82,6 +127,16 @@ function renderRackNav() {
 function render() {
   buildDevices();
   renderRackNav();
+  const shelved = renderShelf();
+  root.classList.toggle('no-rack', rackId === null);
+  if (rackId === null) {
+    // nothing stands in a rack here: the shelf is the whole of it
+    elevEl.innerHTML = '';
+    rackEl.querySelector('.rel-rear:not(.rel-shelf)')?.remove();
+    if (shelved.length) showDetail(shelved[0]);
+    else detailEl.innerHTML = '<p class="rel-detail-lore">No hardware is charted here.</p>';
+    return;
+  }
   elevEl.style.height = (rackU * UH) + 'px';
   elevEl.innerHTML = '';
   const occ = new Set();
@@ -117,6 +172,7 @@ function render() {
       select(d, el);
     });
     attachDrag(el, d);
+    if (mayWrite()) el.appendChild(removeButton(d));   // shown in Rearrange (atlas.css)
     elevEl.appendChild(el);
   }
   const crown = crownOf(devices);
@@ -153,8 +209,10 @@ function showDetail(d) {
      beside the place's own hardware — and an uncharted one, which already
      wears it as the epigraph, does not repeat it. */
   const desc = n ? (d.desc || '') : '';
-  // rear vessels have no U — they hang behind the elevation (v1.34.0, §20a)
-  const seat = d.rear ? 'rear of rack' : `${uLabel(d.top, d.size)} · ${d.size}U`;
+  // rear vessels have no U — they hang behind the elevation (v1.34.0, §20a);
+  // neither has a machine that stands outside a rack (2026-11-20)
+  const seat = d.loose ? `not in a rack · ${d.where}`
+    : d.rear ? 'rear of rack' : `${uLabel(d.top, d.size)} · ${d.size}U`;
   const data = [`<span>${esc(seat)}</span>`];
   if (ip) data.push(`<span>${esc(ip)}</span>`);
   if (desc && desc !== hw) data.push(`<span class="rel-detail-desc">${esc(desc)}</span>`);
@@ -189,7 +247,7 @@ function showDetail(d) {
         : '');
 
   detailEl.innerHTML =
-    `<div class="rel-detail-epi">${esc(d.rear ? 'rear' : uLabel(d.top, d.size))} · ${esc((role.split('·')[0] || '').trim())}</div>` +
+    `<div class="rel-detail-epi">${esc(d.loose ? d.where : d.rear ? 'rear' : uLabel(d.top, d.size))} · ${esc((role.split('·')[0] || '').trim())}</div>` +
     `<h3 class="rel-detail-name">${esc(d.name)}</h3>` +
     (lore ? `<p class="rel-detail-lore">${esc(lore)}</p>` : '') +
     `<div class="rel-detail-data">${data.join('')}</div>` +
@@ -237,16 +295,17 @@ function showDetail(d) {
 
 function renderRear() {
   const rear = rearHereBuilt();
-  let rearEl = rackEl.querySelector('.rel-rear');
+  let rearEl = rackEl.querySelector('.rel-rear:not(.rel-shelf)');   // the shelf wears the class too
   if (rearEl) rearEl.remove();
   if (!rear.length) return;
   rearEl = document.createElement('div');
   rearEl.className = 'rel-rear';
   rearEl.innerHTML = '<span class="rel-rear-label">rear of rack</span>' +
-    rear.map((r, idx) => `<button class="rel-rear-item" data-rear="${idx}">` +
+    rear.map((r, idx) => `<span class="rel-rear-seat"><button class="rel-rear-item" data-rear="${idx}">` +
       `<span class="rel-rear-name">${esc(r.name)}</span>` +
-      `<span class="rel-rear-desc">${esc(r.desc || '')}</span></button>`).join('');
-  rackEl.appendChild(rearEl);
+      `<span class="rel-rear-desc">${esc(r.desc || '')}</span></button></span>`).join('');
+  rackEl.insertBefore(rearEl, rackEl.querySelector('.rel-shelf'));   // the shelf stays last
+  if (mayWrite()) rearEl.querySelectorAll('.rel-rear-seat').forEach((seat, idx) => seat.appendChild(removeButton(rear[idx])));
   /* A rear vessel used to fly straight to the map. It opens the SAME detail
      pane as a front vessel now (v1.34.0, §20a) — a rear-mounted switch is
      exactly where the faceplate matters most — and the ✦ button inside the
@@ -261,6 +320,200 @@ function renderRear() {
     b.addEventListener('pointerenter', () => { if (view3d) A.armory3d.hover(rear[Number(b.dataset.rear)]?.key); });
     b.addEventListener('pointerleave', () => { if (view3d) A.armory3d.hover(null); });
   }
+}
+
+/* NOT IN A RACK (2026-11-20): the machines at the location shown that stand
+   outside a rack, as one strip under the rack in the rear strip's own dress.
+   Each opens the same detail pane a vessel does. Returns them as the pane
+   takes them, so a location with no rack can open on the first. */
+function renderShelf() {
+  rackEl.querySelector('.rel-shelf')?.remove();
+  const everywhere = !loc && where.list.length > 1;
+  const loose = looseAt(where, loc).map(({ node, location }) => ({
+    slot: {}, key: `loose:${node.id}`, node, name: node.name, desc: '', loose: true,
+    where: placeName(location), size: 0, top: 0, kind: kindOf({ name: node.name }, node),
+  }));
+  if (!loose.length) return loose;
+  const el = document.createElement('div');
+  el.className = 'rel-rear rel-shelf';
+  el.innerHTML = '<span class="rel-rear-label">not in a rack</span>' +
+    loose.map((d, idx) => `<button class="rel-rear-item" data-loose="${idx}">` +
+      `<span class="rel-rear-name">${esc(d.name)}</span>` +
+      `<span class="rel-rear-desc">${esc([everywhere ? d.where : '', d.node.hw || d.node.role || ''].filter(Boolean).join(' · '))}</span></button>`).join('');
+  rackEl.appendChild(el);
+  for (const b of el.querySelectorAll('[data-loose]')) {
+    b.addEventListener('click', () => {
+      for (const f of elevEl.querySelectorAll('.rel-dev')) f.classList.remove('active');
+      showDetail(loose[Number(b.dataset.loose)]);
+    });
+  }
+  return loose;
+}
+
+/** Show one location ('' = every location); drawn at once when the scene is up. */
+function setPlace(key) {
+  place = key || '';
+  markPlace('rack', place);
+  if (!root?.classList.contains('open')) return;
+  setEditing(false);
+  openAddBox(false);
+  if (view3d) backTo2d();
+  render();
+}
+
+/* ── add and remove ──────────────────────────────────────────────────────── */
+
+const mayWrite = () => canAdminWrite() && document.body.dataset.editable === '1';
+const WRITE_WHY = 'Add, remove and Save are off here: they need an admin, on an Atlas that takes changes.';
+
+/** The editor's store, read fresh: its `data` is the map as it is on disk
+    (what this scene draws is overlaid with the saved layout), and its stamp
+    is what makes a write refuse a map that changed underneath it. */
+async function editorStore() {
+  const { Editor } = await import('./editor/index.js');
+  await Editor.load();
+  return Editor;
+}
+
+/** Which rack a raw slot is in, as the scene reads it (unset or unknown: the first). */
+const rackOf = (slot) => (allRacks.some((r) => r.id === slot.rack) ? slot.rack : allRacks[0].id);
+
+function paintWrites() {
+  const can = mayWrite();
+  const add = $('rel-add'), save = $('rel-save'), why = $('rel-why');
+  if (add) { add.disabled = !can; add.title = can ? 'Put a device in this rack' : WRITE_WHY; }
+  if (save) { save.disabled = !can; save.title = can ? '' : WRITE_WHY; }
+  if (why) { why.textContent = can ? '' : `${WRITE_WHY} A drag still tries a layout out; it stays in this browser.`; why.hidden = can || !editing; }
+}
+
+function openAddBox(on) {
+  const box = $('rel-addbox');
+  if (!box) return;
+  box.hidden = !on;
+  $('rel-add')?.classList.toggle('on', on);
+  if (!on) return;
+  const here = racks.find((r) => r.id === rackId);
+  $('rel-add-to').textContent = here ? rackTitle(here) : '';
+  const option = (n) => {
+    const at = where.ofNode.get(n.id);
+    const said = at !== undefined && where.list.length > 1 ? ` · ${placeName(where.list.find((l) => l.key === at))}` : '';
+    return `<option value="${esc(n.id)}">${esc(n.name)}${esc(said)}</option>`;
+  };
+  // the machines first; a place of another kind may be a box (a switch) or an
+  // idea (the internet), so those stand apart and are the picker's to judge
+  const can = rackable(A.DATA, where);
+  const group = (label, list) => (list.length ? `<optgroup label="${label}">${list.map(option).join('')}</optgroup>` : '');
+  $('rel-add-what').innerHTML = group('Machines', can.filter((n) => n.kind === 'physical'))
+    + group('Other places on the map', can.filter((n) => n.kind !== 'physical'))
+    + '<option value="">Something that is not on the map…</option>';
+  $('rel-add-name').value = '';
+  $('rel-add-msg').textContent = '';
+  paintAddName();
+  $('rel-add-what').focus();
+}
+const paintAddName = () => { $('rel-add-name-wrap').hidden = $('rel-add-what').value !== ''; };
+
+async function addVessel() {
+  const msg = $('rel-add-msg');
+  const say = (text) => { msg.textContent = text; };
+  const node = $('rel-add-what').value ? nodeById($('rel-add-what').value) : null;
+  const name = (node ? node.name : $('rel-add-name').value).trim().replace(/\s+/g, ' ');
+  const size = Math.max(1, Math.min(12, parseInt($('rel-add-size').value, 10) || 1));
+  if (!name) { say('Give it a name.'); $('rel-add-name').focus(); return; }
+  const here = racks.find((r) => r.id === rackId);
+  if (!here) return;
+  // the seat is found on the layout as it is SAVED: with moves waiting, the
+  // one on screen is a draft, and the map would be told a seat the draft freed
+  if (Object.keys(readOvr()).length) { say('Save or Reset the moves you have made first, then add.'); return; }
+  const top = freeTop(devices, rackU, size);
+  const body = { u: uLabel(top, size), name, size };
+  if (rackId) body.rack = rackId;
+  if (node) body.node = node.id;
+  // a vessel is known by its place, else by its name in its rack: two of one
+  // name would be moved, and removed, as one
+  const key = slotKey(body);
+  if ((A.DATA.rack || []).some((s) => slotKey(s) === key)) {
+    say(node ? `${name} is in a rack already.` : `This rack already has a "${name}". Give it another name.`);
+    return;
+  }
+  const go = $('rel-add-go');
+  go.disabled = true;
+  try {
+    const store = await editorStore();
+    await store.apply([{ op: 'insert', section: 'rack', body }], `put ${name} in ${rackTitle(here)} (HARDWARE)`);
+    openAddBox(false);
+    render();
+    setEditing(true);
+    const el = elevEl.querySelector(`.rel-dev[data-key="${CSS.escape(key)}"]`);
+    const d = devices.find((x) => x.key === key);
+    if (el && d) select(d, el);
+    A.showToast?.(`${name} is in at ${uLabel(top, size)}. Drag it to its seat, then Save.`);
+  } catch (err) {
+    say(`Not added: ${err.message || err}`);
+  } finally {
+    go.disabled = false;
+  }
+}
+
+/** Take a vessel out of the rack: a front slot or a rear fitting. The place
+    it stood for stays on the map. Where the map names the rack's location
+    and the place named none, the place is told it, so it is found on that
+    location's shelf; nothing is written where the location is only the
+    default one. */
+async function removeVessel(d) {
+  const here = racks.find((r) => r.id === rackId);
+  try {
+    const store = await editorStore();
+    const section = d.rear ? 'rack_rear' : 'rack';
+    const raw = (store.data[section] || []).map((slot, index) => ({ slot, index }))
+      .filter((x) => x.slot && rackOf(x.slot) === rackId);
+    const hit = d.rear
+      ? raw[Number(d.key.slice('rear:'.length))]
+      : raw.find((x) => slotKey(x.slot) === d.key);
+    if (!hit || hit.slot.name !== d.name) throw new Error('the map has changed; look again and retry');
+    const ops = [{ op: 'delete', section, index: hit.index, ...(d.rear ? {} : { id: d.key }) }];
+    // told where it stands only when the MAP names the rack's location: a rack
+    // that names none is at the default one, and so is a place that names none
+    const node = d.node && (store.data.nodes || []).find((n) => n.id === d.node.id);
+    const written = String((store.data.racks || []).find((r) => r && r.id === rackId)?.location || '').trim();
+    if (node && !String(node.location || '').trim() && written) {
+      ops.push({ op: 'upsert', section: 'nodes', id: node.id, body: { location: written } });
+    }
+    await store.apply(ops, `took ${d.name} out of ${here ? rackTitle(here) : 'the rack'} (HARDWARE)`);
+    const o = readOvr();
+    if (d.key in o) { delete o[d.key]; writeOvr(o); }
+    render();
+    A.showToast?.(d.node ? `${d.name} is out of the rack. It is still on the map.` : `${d.name} is out of the rack.`);
+  } catch (err) {
+    A.showToast?.(`Not removed: ${err.message || err}`);
+    render();
+  }
+}
+
+/** The ✕ a vessel wears in Rearrange. Two presses: the first asks. */
+function removeButton(d) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'rel-remove';
+  b.textContent = '✕';
+  b.title = `Take ${d.name} out of the rack`;
+  b.setAttribute('aria-label', b.title);
+  let armed = 0;
+  // never the start of a drag, and never a pick of the vessel under it
+  b.addEventListener('pointerdown', (e) => e.stopPropagation());
+  b.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!armed) {
+      b.textContent = 'Take out?';
+      b.classList.add('armed');
+      armed = setTimeout(() => { armed = 0; b.textContent = '✕'; b.classList.remove('armed'); }, 4000);
+      return;
+    }
+    clearTimeout(armed);
+    b.disabled = true;
+    removeVessel(d);
+  });
+  return b;
 }
 
 function attachDrag(el, d) {
@@ -303,6 +556,7 @@ function setEditing(on) {
   const save = $('rel-save'), reset = $('rel-reset');
   if (save) save.hidden = !on;
   if (reset) reset.hidden = !on;
+  paintWrites();
   if (on) A.showToast?.('Rearrange the rack — drag any vessel to a free slot, then Save.');
 }
 
@@ -322,7 +576,7 @@ async function saveLayout() {
 
 function resetLayout() { localStorage.removeItem(OVR_KEY); location.reload(); }
 
-// ── 2D ⇄ 3D (the RACKS deep-dive) ───────────────────────────────────────────
+// ── 2D ⇄ 3D (the rack's deep-dive) ──────────────────────────────────────────
 // The 3D view is armory3d.js, lazy-imported on first request so the ~1 MB three
 // vendor only loads when someone asks for it — and so a missing/broken vendor
 // can never take down the 2D elevation (the core app never imports it). The
@@ -370,7 +624,7 @@ function backTo2d() {
   if (rel3dEl) rel3dEl.hidden = true;
   if (legendEl) legendEl.hidden = true;
   if (elevEl) elevEl.hidden = false;
-  $('rel-edit')?.removeAttribute('hidden');
+  if (rackId !== null) for (const id of ['rel-edit', 'rel-add']) $(id)?.removeAttribute('hidden');
   setSeg(false);
 }
 
@@ -385,7 +639,8 @@ async function goto3d() {
   if (!devices.length) buildDevices();
   view3d = true;
   if (elevEl) elevEl.hidden = true;
-  $('rel-edit')?.setAttribute('hidden', '');     // no drag-rearrange in 3D v1
+  for (const id of ['rel-edit', 'rel-add']) $(id)?.setAttribute('hidden', '');   // no rearranging, and no adding, in 3D v1
+  openAddBox(false);
   rel3dEl.hidden = false;                          // must be laid out before enter reads its size
   legendEl.hidden = false;
   renderLegend();
@@ -404,10 +659,13 @@ async function goto3d() {
 }
 
 const scene = makeScene({ id: 'reliquary', closeId: 'rel-close', build: () => render(),
-  onClose: () => { setEditing(false); backTo2d(); } });
+  // closed, the scene goes back to every location: HARDWARE pressed afresh is all of it
+  onClose: () => { setEditing(false); openAddBox(false); backTo2d(); place = ''; markPlace('rack', ''); } });
 const { open, close } = scene;
 A.openReliquary = open;
 A.closeReliquary = close;
+// the band's menu of locations, and a press on HARDWARE while one is shown
+addEventListener('atlas:scene-place', (e) => { if (e.detail?.scene === 'rack') setPlace(e.detail.place); });
 
 A.buildReliquary = function buildReliquary() {
   root = scene.mount();
@@ -419,6 +677,19 @@ A.buildReliquary = function buildReliquary() {
   $('rel-edit')?.addEventListener('click', (e) => { e.stopPropagation(); setEditing(!editing); });
   $('rel-save')?.addEventListener('click', (e) => { e.stopPropagation(); saveLayout(); });
   $('rel-reset')?.addEventListener('click', (e) => { e.stopPropagation(); resetLayout(); });
+  $('rel-add')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!$('rel-add').disabled) openAddBox($('rel-addbox').hidden);
+  });
+  $('rel-add-what')?.addEventListener('change', paintAddName);
+  $('rel-add-go')?.addEventListener('click', (e) => { e.stopPropagation(); addVessel(); });
+  $('rel-add-cancel')?.addEventListener('click', (e) => { e.stopPropagation(); openAddBox(false); });
+  // Enter in the box adds; its keys are not the map's
+  $('rel-addbox')?.addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    if (e.key === 'Enter' && e.target.id !== 'rel-add-cancel') { e.preventDefault(); addVessel(); }
+    else if (e.key === 'Escape') openAddBox(false);
+  });
   rel3dEl = $('rel-3d');
   legendEl = $('rel-3d-legend');
   for (const b of root.querySelectorAll('.rel-cam')) {
