@@ -126,5 +126,40 @@ test('one location, or everywhere', () => {
   });
 }
 
+{
+  const { placesFor } = await import('../static/js/locations-model.js');
+  test('a location\'s topology: what is there, its guests, and what is at no location', () => {
+    const w = whereabouts(HOUSE, 'Home lab');
+    // every place when no location is asked for
+    assert.equal(placesFor(w, null, HOUSE.nodes).length, HOUSE.nodes.length);
+    // the garage: its rack's machines, the guests on them, and the placeless
+    // (the internet, an unknown thing, a guest whose host is not on the map)
+    assert.deepEqual(ids(placesFor(w, locationByKey(w, 'garage'), HOUSE.nodes)),
+      ['backup', 'ups', 'internet', 'mystery', 'db', 'nested', 'lost']);
+    assert.deepEqual(ids(placesFor(w, locationByKey(w, 'living room'), HOUSE.nodes)),
+      ['pi', 'ap', 'internet', 'mystery', 'lost']);
+    // nothing of another location leaks in
+    const office = ids(placesFor(w, locationByKey(w, 'home office'), HOUSE.nodes));
+    for (const other of ['backup', 'ups', 'pi', 'ap', 'desk', 'db']) assert.ok(!office.includes(other), other);
+    assert.deepEqual(placesFor(w, null, null), []);
+  });
+
+  test('a route\'s next stop elsewhere is drawn with the location, and known as a visitor', async () => {
+    const { awayFrom } = await import('../static/js/locations-model.js');
+    const w = whereabouts(HOUSE, 'Home lab');
+    const routes = [{ from: 'pi', to: 'switch' }, { from: 'backup', to: 'ap' }, { from: 'hyper', to: 'old' },
+                    { from: 'internet', to: 'switch' }, null];
+    const room = locationByKey(w, 'living room');
+    const drawn = placesFor(w, room, HOUSE.nodes, routes);
+    // the switch (home office) and the backup box (garage) are each one hop from the room
+    assert.deepEqual(ids(drawn), ['switch', 'backup', 'pi', 'ap', 'internet', 'mystery', 'lost']);
+    assert.deepEqual([...awayFrom(w, room, drawn)], [['switch', 'home office'], ['backup', 'garage']]);
+    // a route wholly inside another location brings nothing in
+    assert.ok(!ids(drawn).includes('hyper') && !ids(drawn).includes('old'));
+    // every place: nobody is a visitor
+    assert.equal(awayFrom(w, null, HOUSE.nodes).size, 0);
+  });
+}
+
 console.log(`\nlocations-model: ${passed} passed`);
 if (process.exitCode) console.log('SOME TESTS FAILED');

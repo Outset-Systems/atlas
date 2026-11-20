@@ -11,15 +11,31 @@
 
    Edges come from routes[] plus parent containment; nodes and edges take live
    health from the signals feed on every open. Click a node → fly to it on the
-   map. Pure SVG + DOM, no libraries. */
+   map. Pure SVG + DOM, no libraries.
+
+   BY LOCATION (2026-11-20; owner: "add a dropdown like hardware and resources
+   for topology"). The scene draws every place, or one location: what stands
+   there, the guests on it, the places that are at no location at all (the
+   world beyond and the ways in, which every site's routes run out through),
+   and the next stop of each of its routes when that stands in another
+   location (drawn quieter, and named for where it is: a room with one machine
+   reaches the gateway in another room). Which places those are is
+   locations-model.js `placesFor`. A place the map folds into a zoom map is
+   drawn here all the same. Arriving from a
+   service's card to see its reach always shows every place: a reach that
+   left the location would be cut short. */
 
 import { A, $, esc, zoneById, FALLBACK_HUE } from './config.js';
 import { say } from './words.js';
 import { chainPairs, edgePath, edgesOf, layout, servicesCrossing } from './path-model.js';
 import { PHONE_MEDIA } from './views-model.js';
+import { awayFrom, locationByKey, placesFor } from './locations-model.js';
+import { drawPlacePicker, markPlace, placeName, whereNow } from './scene-places.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 let root, svg, nodesEl, legendEl;
+/** The location drawn; '' is every place. */
+let scenePlace = '';
 
 /* A phone (the views' own rule for one, 2026-11-18): the tiers are drawn as
    columns and the scene scrolls downward. This one flag picks the layout here
@@ -110,7 +126,23 @@ function build() {
   // off_map places are charted but not drawn — and THE PATH is a drawing.
   // Filtering here is enough for the roads too: the edge loop below requires
   // both endpoints to have a position, so their routes drop out with them.
-  const nodes = A.DATA.nodes.filter((n) => !n.off_map);
+  const where = whereNow();
+  const loc = locationByKey(where, scenePlace);
+  if (!loc) scenePlace = '';
+  markPlace('path', scenePlace);
+  const whereEl = $('pth-where');
+  if (whereEl) whereEl.textContent = loc ? placeName(loc) : '';
+  drawPlacePicker($('pth-places'), scenePlace, setScenePlace);
+  /* A place a zoom map FOLDS away (places.js marks it `off_map` and `_folded`)
+     is still drawn here (2026-11-20). The fold is the map saving room for a
+     region's insides; this is a diagram of the lab, with room for every
+     place, and a location whose machines were all folded drew as the
+     internet and nothing else. A place that is really off the map, and one
+     outside the region on the stage, stay out as before. */
+  const nodes = placesFor(where, loc, A.DATA.nodes, A.DATA.routes).filter((n) => !n.off_map || n._folded);
+  // a route's next stop that stands at another location: drawn quieter, and named for where it is
+  const away = awayFrom(where, loc, nodes);
+  const awayName = (id) => placeName(where.list.find((l) => l.key === away.get(id)));
   const feed = A.signalsFeed?.nodes || {};
   drawn = nodes;
 
@@ -156,11 +188,13 @@ function build() {
   nodesEl.innerHTML = nodes.map((n) => {
     const z = zoneById(n.zone);
     const st = feed[n.id]?.state;
-    return `<button class="pth-node k-${esc(n.kind || 'vm')}${st ? ' st-' + esc(st) : ''}"
+    const under = away.has(n.id) ? `in ${awayName(n.id)}`
+      : (n.ip && n.ip !== '—' ? n.ip : (n.kind === 'network' ? 'beyond' : ''));
+    return `<button class="pth-node k-${esc(n.kind || 'vm')}${st ? ' st-' + esc(st) : ''}${away.has(n.id) ? ' pth-away' : ''}"
       style="--n-hue:${esc(n.hue || z?.hue || FALLBACK_HUE)}" data-id="${esc(n.id)}">
       <span class="pth-dot"><span class="svc-health ${st ? (A.svcHealthClass[st] || '') : ''}"></span></span>
       <span class="pth-name">${esc(n.name)}</span>
-      <span class="pth-ip">${esc(n.ip && n.ip !== '—' ? n.ip : (n.kind === 'network' ? 'beyond' : ''))}</span>
+      <span class="pth-ip">${esc(under)}</span>
     </button>`;
   }).join('');
 
@@ -277,8 +311,17 @@ function place() {
   placedWidth = width;
 }
 
+/** Draw one location ('' = every place); at once when the scene is up. A
+    service's reach, if one is lit, is let go: it was asked of the whole map. */
+function setScenePlace(key) {
+  scenePlace = key || '';
+  markPlace('path', scenePlace);
+  if (root?.classList.contains('open')) open();
+}
+
 function open(focusId, reachIds, serviceLabel) {
   if (!root) return;
+  if (focusId) scenePlace = '';   // a service's reach is shown on the whole map
   build();   // rebuild each open — cheap, and live states stay current
   tracedEdge = null;                 // build() just threw away the traced edges
   root.classList.add('open');
@@ -331,12 +374,17 @@ function close() {
   // the scene switcher would silently restore a service view nobody asked for
   tracedEdge = null;
   lastFocus = null;
+  // closed, the scene goes back to every place: TOPOLOGY pressed afresh is all of it
+  scenePlace = '';
+  markPlace('path', '');
   root.classList.remove('open');
   root.setAttribute('aria-hidden', 'true');
   A.setSceneActive?.('atlas');
 }
 A.openPath = open;
 A.closePath = close;
+// the band's menu of locations, and a press on TOPOLOGY while one is shown
+addEventListener('atlas:scene-place', (e) => { if (e.detail?.scene === 'path') setScenePlace(e.detail.place); });
 
 A.buildPathScene = function buildPathScene() {
   root = $('path');

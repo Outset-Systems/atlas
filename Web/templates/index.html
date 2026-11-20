@@ -263,8 +263,10 @@
   </span>
   <button class="scene" data-scene="rack">HARDWARE</button>
   <button class="scene" data-scene="tribute">RESOURCES</button>
-  <button class="scene" data-scene="ledger">ADDRESSES</button>
+  <!-- TOPOLOGY stands before ADDRESSES since 2026-11-20 (owner): the three
+       scenes that are shown by location stand together -->
   <button class="scene" data-scene="path">TOPOLOGY</button>
+  <button class="scene" data-scene="ledger">ADDRESSES</button>
   <!-- THE RITES and THE FORGE live here since v1.45.0; the title says so for
        anyone who comes looking for either by its old name. -->
   <button class="scene" data-scene="calendar" title="Every scheduled job in the lab on one clock">CALENDAR</button>
@@ -442,15 +444,18 @@
   </div>
 </aside>
 
-<!-- THE BAND'S MENUS OF LOCATIONS (2026-11-20): dropped from HARDWARE and from
-     RESOURCES by hover and by focus, as the views' menu is dropped from THE
-     ATLAS, and filled by band-menus.js with the map's locations. A pick shows
+<!-- THE BAND'S MENUS OF LOCATIONS (2026-11-20): dropped from HARDWARE, from
+     RESOURCES and from TOPOLOGY by hover and by focus, as the views' menu is
+     dropped from THE ATLAS, and filled by band-menus.js with the map's
+     locations when it has more than one (with one there is nothing to choose
+     between, and no menu). A pick shows
      that location in the scene; the button itself shows everything. Siblings
      of the band for the views menu's own reason, and placed here, after the
      drawers, so the stretch between the views' menu and the Index stays the
      views' menu alone. Their items carry `data-place`, never `data-scene`. -->
 <div class="view-menu band-menu" id="hardware-menu" role="menu" aria-label="Hardware, by location"></div>
 <div class="view-menu band-menu" id="resources-menu" role="menu" aria-label="Resources, by location"></div>
+<div class="view-menu band-menu" id="topology-menu" role="menu" aria-label="Topology, by location"></div>
 
 <!-- Ivory detail card -->
 <article id="card" class="card-left" aria-hidden="true">
@@ -603,9 +608,11 @@
   <div class="pth-panel" role="dialog" aria-label="Topology — the network, tier by tier">
     <div class="ldg-head">
       <span class="ldg-title">TOPOLOGY</span>
+      <span class="trb-where" id="pth-where"></span>
       <span class="ldg-sub">from the internet to the guests — every route, live</span>
       <button class="ldg-close" id="pth-close" title="Close (Esc)">×</button>
     </div>
+    <div class="rel-placebar"><span class="rel-viewtoggle rel-places" id="pth-places" role="group" aria-label="Choose a location" hidden></span></div>
     <div class="pth-body"><svg id="pth-svg"></svg><div id="pth-nodes"></div></div>
     <div class="pth-legend" id="pth-legend"></div>
   </div>

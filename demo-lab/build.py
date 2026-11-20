@@ -352,7 +352,9 @@ CHRONICLE = [
     {"title": "LLM calls per app", "chart": "llm.apps", "solo": True, "about": "Who is asking the models."},
     {"title": "Pending upgrades", "chart": "patch.pending", "solo": True, "url": f"https://grafana.{DOMAIN}/d/patch",
      "about": "Packages waiting on each host.", "note": "Patched Sundays."},
-    {"title": "Uptime board", "url": f"http://{net(30, 10)}:3001/status/home", "note": "Uptime Kuma's status page."},
+    # served by the Atlas itself on the demo (Web/demoreports.py): the address a
+    # real lab would name here is its monitor's own status page
+    {"title": "Uptime board", "url": "report/uptime", "note": "Every place and service, up or not."},
 ]
 
 ABYSS = [
@@ -376,7 +378,8 @@ ABYSS = [
      "about": "Requests the bouncer blocked."},
     {"title": "Lines parsed", "chart": "edge.parsed", "solo": True, "pane_group": "the edge count",
      "about": "Log lines CrowdSec read."},
-    {"title": "Security report", "url": f"https://wiki.{DOMAIN}/security/weekly",
+    # `report/security` is the path a real lab's staged report is served at too
+    {"title": "Security report", "url": "report/security",
      "about": "The weekly security write-up.", "note": "Mondays."},
 ]
 

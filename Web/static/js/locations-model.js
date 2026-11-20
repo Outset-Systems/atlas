@@ -126,3 +126,37 @@ export function rackable(data, where) {
     && !where.guests.has(n.id) && !where.racked.has(n.id));
   return [...nodes.filter((n) => n.kind === 'physical'), ...nodes.filter((n) => n.kind !== 'physical')];
 }
+
+/** The places TOPOLOGY draws for a location (every place when it is null):
+    what is at that location, guests with their hosts; whatever is at no
+    location at all; and the next stop of each of its routes when that stop
+    stands somewhere else. The placeless are the world beyond and the ways in
+    (the internet, a tunnel, a DNS provider): they belong to no one site and
+    every site's routes run out through them. The next stops are how a room
+    with one machine is shown to reach anything: its gateway is in another
+    room, and a location drawn without it would be an island with its roads
+    cut off at the shore. `awayFrom` says which of them are those visitors. */
+export function placesFor(where, loc, nodes, routes = []) {
+  const list = (Array.isArray(nodes) ? nodes : []).filter((n) => n && typeof n.id === 'string');
+  if (!loc) return list;
+  const here = new Set(list.filter((n) => where.ofNode.get(n.id) === loc.key).map((n) => n.id));
+  const next = new Set();
+  for (const r of Array.isArray(routes) ? routes : []) {
+    if (!r) continue;
+    if (here.has(r.from) && !here.has(r.to)) next.add(r.to);
+    if (here.has(r.to) && !here.has(r.from)) next.add(r.from);
+  }
+  return list.filter((n) => here.has(n.id) || !where.ofNode.has(n.id) || next.has(n.id));
+}
+
+/** Of some places drawn for a location, the ids that stand at ANOTHER one
+    (a route's next stop): Map(place id → that location's key). */
+export function awayFrom(where, loc, nodes) {
+  const away = new Map();
+  if (!loc) return away;
+  for (const n of nodes || []) {
+    const at = where.ofNode.get(n.id);
+    if (at !== undefined && at !== loc.key) away.set(n.id, at);
+  }
+  return away;
+}

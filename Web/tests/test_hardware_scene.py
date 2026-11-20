@@ -100,11 +100,14 @@ def test_a_scene_showing_one_location_shows_everything_before_it_closes():
         assert f"markPlace('{name}', place);" in js, scene
         # closed, a scene forgets its location: pressed afresh it is everything
         assert f"markPlace('{name}', '')" in js, scene
+    path = _read(JS / "path.js")
+    assert "if (e.detail?.scene === 'path') setScenePlace(e.detail.place);" in path
+    assert "markPlace('path', scenePlace);" in path and "markPlace('path', '');" in path
 
 
 def test_the_bands_menus_of_locations():
     html = _html()
-    for menu in ("hardware-menu", "resources-menu"):
+    for menu in ("hardware-menu", "resources-menu", "topology-menu"):
         assert f'<div class="view-menu band-menu" id="{menu}" role="menu"' in html, menu
     # siblings of the band, after the drawers; never in the stretch read as the views' menu
     assert html.index('<aside id="map-drawer"') < html.index('id="hardware-menu"')
@@ -113,6 +116,9 @@ def test_the_bands_menus_of_locations():
     assert "import { hoverReveal, idleRollup } from './ui.js';" in js
     assert "export { hoverReveal, idleRollup };" in _read(JS / "ui.js")
     assert "bandMenu('rack', 'hardware-menu');" in js and "bandMenu('tribute', 'resources-menu');" in js
+    assert "bandMenu('path', 'topology-menu');" in js
+    # one location is nothing to choose between: no menu at all (owner, 2026-11-20)
+    assert "if (list.length < 2) { menu.innerHTML = ''; return; }" in js
     assert "refuse: (how) => A.PHONE || !menu.childElementCount || (how === 'focus' && hush)," in js
     # focus handed back to the button (Escape, a keyboard pick) must not open it again
     assert "const handBack = () => { hush = true; reveal.close(); button.focus(); };" in js
@@ -238,3 +244,31 @@ def test_the_demo_lab_has_three_locations_and_compute_outside_its_racks():
     assert (host["ram_gb"], host["ram_reserve_gb"], host["cpu_cores"], host["cpu_threads"]) == (128, 8, 16, 32)
     # the old single figure still says the same, for a reader of the old key
     assert data["meta"]["tribute"] == {"total_gb": 128, "host_reserve_gb": 8, "cpu_cores": 16, "cpu_threads": 32}
+
+
+# ── TOPOLOGY by location, and its seat in the band ───────────────────────────
+
+def test_topology_draws_every_place_or_one_location():
+    """Owner, 2026-11-20: "add a dropdown like hardware and resources for
+    topology, if there are more than one site/location"."""
+    js = _read(JS / "path.js")
+    assert "from './locations-model.js';" in js and "from './scene-places.js';" in js
+    # folded places are drawn (a diagram has the room); really-off-map ones are not
+    assert "const nodes = placesFor(where, loc, A.DATA.nodes, A.DATA.routes).filter((n) => !n.off_map || n._folded);" in js
+    assert "const away = awayFrom(where, loc, nodes);" in js and "' pth-away'" in js
+    assert "drawPlacePicker($('pth-places'), scenePlace, setScenePlace);" in js
+    # a service's reach, asked for from its card, is shown on the whole map
+    opened = js[js.index("function open(focusId, reachIds, serviceLabel) {"):js.index("function close() {")]
+    assert "if (focusId) scenePlace = '';" in opened
+    assert opened.index("if (focusId) scenePlace = '';") < opened.index("build();")
+    html = _html()
+    panel = _block(html, '<div id="path"', '<div class="pth-legend" id="pth-legend"></div>')
+    assert 'id="pth-where"' in panel
+    assert 'id="pth-places" role="group" aria-label="Choose a location" hidden' in panel
+
+
+def test_topology_stands_before_addresses_in_the_band():
+    html = _html()
+    band = html[html.index('<nav id="scenes-list"'):html.index("</nav>", html.index('<nav id="scenes-list"'))]
+    order = re.findall(r'<button class="scene[^"]*" data-scene="(\w+)"', band)
+    assert order[:5] == ["atlas", "rack", "tribute", "path", "ledger"], order

@@ -1192,8 +1192,8 @@
     },
     {
       "title": "Uptime board",
-      "url": "http://10.77.30.10:3001/status/home",
-      "note": "Uptime Kuma's status page."
+      "url": "report/uptime",
+      "note": "Every place and service, up or not."
     }
   ],
   "abyss": [
@@ -1289,7 +1289,7 @@
     },
     {
       "title": "Security report",
-      "url": "https://wiki.home.example/security/weekly",
+      "url": "report/security",
       "about": "The weekly security write-up.",
       "note": "Mondays."
     }

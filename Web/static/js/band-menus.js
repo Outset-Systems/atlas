@@ -2,8 +2,8 @@
    hardware, it should show a drop down of locations, like home office or
    wherever there's compute", and the same for RESOURCES).
 
-   HARDWARE and RESOURCES each drop a menu of the map's locations, the way
-   THE ATLAS drops the views: a mouse over the button, or the keyboard
+   HARDWARE, RESOURCES and TOPOLOGY each drop a menu of the map's locations,
+   when the map has more than one, the way THE ATLAS drops the views: a mouse over the button, or the keyboard
    reaching it, shows it (ui.js `hoverReveal`); it fades when the mouse
    leaves and rolls up a moment later (`idleRollup`). A pick shows that
    location in the scene, opening the scene if it is shut. The button itself
@@ -37,11 +37,15 @@ function bandMenu(scene, menuId) {
      menu, as the views' menu is (ui.js `viewHush`). */
   let hush = false;
 
-  /** The locations of the map now in the browser; the one shown is marked. */
+  /** The locations of the map now in the browser; the one shown is marked.
+      A map with one location has nothing to choose between, so its menu is
+      empty and is never shown (owner, 2026-11-20: "only show the dropdown if
+      there are more than one site/location"). */
   function fill() {
-    if (!A.DATA) { menu.innerHTML = ''; return; }
+    const list = A.DATA ? whereNow().list : [];
+    if (list.length < 2) { menu.innerHTML = ''; return; }
     const at = button.dataset.place || '';
-    menu.innerHTML = whereNow().list.map((l) =>
+    menu.innerHTML = list.map((l) =>
       `<button type="button" role="menuitem" data-place="${esc(l.key)}"${l.key === at ? ' aria-current="true"' : ''}>`
       + `${esc(placeName(l))}</button>`).join('');
   }
@@ -106,3 +110,4 @@ function bandMenu(scene, menuId) {
 
 bandMenu('rack', 'hardware-menu');
 bandMenu('tribute', 'resources-menu');
+bandMenu('path', 'topology-menu');

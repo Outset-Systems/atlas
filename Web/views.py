@@ -6,6 +6,7 @@ import os
 
 from flask import Blueprint, jsonify, make_response, render_template
 
+import demoreports
 import mapart
 import reports
 import settings
@@ -128,6 +129,25 @@ def map_art(name):
     return resp
 
 
+def _demo_report(name):
+    """One of the demo's two invented reports. The uptime board is read from
+    this reader's own map and feed, cut the way OVERVIEW's are."""
+    if name != "uptime":
+        return demoreports.security()
+    from api.v2.feeds import _redact_feed, build_feed
+    from redaction import redact_for_groups, sees_everything, viewer_groups
+    ctx = atlas()
+    try:
+        raw, _, _ = ctx.dataset()
+    except (OSError, ValueError):
+        return "_The board could not read the map._"
+    groups = viewer_groups()
+    feed = build_feed(ctx)
+    if not (sees_everything(groups) and is_admin()):
+        feed = _redact_feed(ctx, feed, groups, data=raw)
+    return demoreports.uptime(redact_for_groups(raw)[0], feed)
+
+
 @bp.route("/report/<name>")
 def report(name):
     """Serve a staged markdown report as a dark page the Abyss can iframe.
@@ -138,7 +158,11 @@ def report(name):
     `crowdsec` still serves the insight alone for anyone linking straight to it.
     """
     status = 200
-    if name == "security":
+    if demoreports.enabled() and name in demoreports.NAMES:
+        # the hosted demo has no scribe and no status page of its own: these
+        # two are written for its invented lab, and only for it (demoreports.py)
+        body = _demo_report(name)
+    elif name == "security":
         body = reports._security_scroll()
     elif name in reports.REPORTS:
         body, _ = reports._read_report(name)

@@ -3439,6 +3439,8 @@ body.pre #scenes-list { opacity: 0; pointer-events: none; }
   border-radius: 6px;
 }
 .pth-node:hover { background: rgba(var(--gilt-rgb), 0.08); }
+/* a route's next stop that stands at another location (TOPOLOGY by location, 2026-11-20) */
+.pth-node.pth-away { opacity: 0.6; }
 .pth-dot {
   width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;
   border: 1.5px solid var(--n-hue, var(--gilt)); background: var(--surface-2);
