@@ -85,7 +85,7 @@
   --bar-glass-firm: rgba(13,11,7,0.86);      /* #scenes-list over an open scene */
   --bar-shadow-firm: 0 12px 34px rgba(0,0,0,0.55);
   --chrome-glass: rgba(13,11,7,0.4);         /* every .chrome circle */
-  --chrome-glass-firm: rgba(13,11,7,0.72);   /* the chart arrows and the enlarged dashboard's ‹ › × */
+  --chrome-glass-firm: rgba(13,11,7,0.72);   /* a chart arrow outside any section (inside one, its set's arrow) */
   --crumb-glass: rgba(29, 32, 33, 0.86);     /* .rl-crumbs */
   --crumb-shadow: 0 4px 18px rgba(0, 0, 0, 0.4);
   --hint-glass: rgba(29, 32, 33, 0.9);       /* .rl-hint */
@@ -111,7 +111,7 @@
    by tests/test_scheme_css.py. The bar has its own block, next. */
 :root[data-scheme="light"] :is(.ldg-panel, .trb-panel, .rel-panel, .pth-panel, #topology-sheet,
                                .pal-panel, .gl-panel, .dsk-panel, .wiz-panel, #nodes-sheet,
-                               #overview-tiles) {
+                               #overview-tiles, #embed-max) {
   --abyss: #d6dae0;
   --surface: #c5cad2;
   --surface-2: #cdd2d9;
@@ -144,10 +144,11 @@
 
 /* ── THE BAR FOLLOWS THE MAP (stage 1, 2026-11-13) ──────────────────────────
    The bar is 10-20's list: the band and THE ATLAS, every `.chrome` circle (the
-   column under ATLAS among them), the region crumbs, locator and hint, the
-   watchings' pop-ups and carousel arrows, and the enlarged dashboard's arrows
-   and ×; since 2026-11-13 also the views' menu, ATLAS's ▾ and the phone's
-   strip of view names. It takes the same light values as the panels, but on its own
+   column under ATLAS among them), the region crumbs, locator and hint; since
+   2026-11-13 also the views' menu, ATLAS's ▾ and the phone's strip of view
+   names. (The watchings' pop-ups and carousel arrows left it for their
+   section's ground, and the enlarged dashboard for the panels: Q14, owner,
+   2026-11-19.) It takes the same light values as the panels, but on its own
    condition, spelt once here:
      Light            light everywhere;
      Light/Dark       light in the Sky, dark in the Depths, and the OS on the
@@ -158,16 +159,12 @@
    nothing new. No other rule may key a bar element on `data-scheme`: it would
    follow the OS while the bar follows the camera (tests/test_scheme_css.py). */
 :root[data-scheme-pick="light"] :is(#scenes-list, .scene-home, .chrome, .rl-crumbs, .rl-locator, .rl-hint,
-                                    .chron-fly-pop, .chron-arrow, .embed-max-arrow, #embed-max-close,
                                     #view-menu, .view-strip, .scene-more, #index-drawer),
 :root[data-scheme-pick="auto"] body.in-sky:not(.scene-open, .deck, .phone) :is(#scenes-list, .scene-home, .chrome, .rl-crumbs, .rl-locator, .rl-hint,
-                                    .chron-fly-pop, .chron-arrow, .embed-max-arrow, #embed-max-close,
                                     #view-menu, .view-strip, .scene-more, #index-drawer),
 :root[data-scheme-pick="auto"][data-scheme="light"] body:not(.in-sky, .depths) :is(#scenes-list, .scene-home, .chrome, .rl-crumbs, .rl-locator, .rl-hint,
-                                    .chron-fly-pop, .chron-arrow, .embed-max-arrow, #embed-max-close,
                                     #view-menu, .view-strip, .scene-more, #index-drawer),
 :root[data-scheme-pick="auto"][data-scheme="light"] body:is(.scene-open, .deck, .phone) :is(#scenes-list, .scene-home, .chrome, .rl-crumbs, .rl-locator, .rl-hint,
-                                    .chron-fly-pop, .chron-arrow, .embed-max-arrow, #embed-max-close,
                                     #view-menu, .view-strip, .scene-more, #index-drawer) {
   --hue-on-ground: 40%;   /* a dataset hue as text on a light bar: mixed toward ink (.idx-zone) */
   --abyss: #d6dae0;
@@ -500,6 +497,10 @@ body::after {
   --sec-frame-arrow-border: rgba(var(--gilt-rgb),0.45);
   --sec-frame-arrow-ink: #8a6a1e;
   --sec-frame-arrow-hover: #8a6a1e;
+  --sec-pop-bg: rgba(250,246,230,0.96);
+  --sec-pop-border: rgba(var(--gilt-rgb),0.4);
+  --sec-pop-shadow: 0 14px 40px rgba(90,70,30,0.22);
+  --sec-pop-ink: #4a3f28;
   --sec-deck-ground: linear-gradient(180deg, rgba(248,243,223,0.97), rgba(236,228,206,0.95));
   --sec-deck-border: rgba(var(--gilt-rgb), 0.3);
   --sec-aw-ink: #0b655e;
@@ -538,10 +539,14 @@ body::after {
   --sec-frame-quiet: var(--text-dim);
   --sec-frame-quiet-hot: var(--gilt);
   --sec-frame-pane: #0b0d12;
-  --sec-frame-arrow-bg: initial;
-  --sec-frame-arrow-border: initial;
-  --sec-frame-arrow-ink: initial;
-  --sec-frame-arrow-hover: initial;
+  --sec-frame-arrow-bg: rgba(13,11,7,0.72);
+  --sec-frame-arrow-border: rgba(var(--gilt-rgb),0.35);
+  --sec-frame-arrow-ink: var(--gilt);
+  --sec-frame-arrow-hover: var(--gilt);
+  --sec-pop-bg: color-mix(in srgb, var(--surface-2) 92%, transparent);
+  --sec-pop-border: var(--ink-line);
+  --sec-pop-shadow: 0 14px 40px rgba(0,0,0,0.5);
+  --sec-pop-ink: var(--text-dim);
   --sec-deck-ground: radial-gradient(ellipse 90% 50% at 50% 0%, rgba(var(--depth-rgb), 0.10), transparent 75%), var(--surface);
   --sec-deck-border: rgba(var(--depth-rgb), 0.2);
   --sec-aw-ink: #8FE6D2;
@@ -580,10 +585,14 @@ body::after {
   --sec-frame-quiet: var(--text-dim);
   --sec-frame-quiet-hot: var(--gilt);
   --sec-frame-pane: #0b0d12;
-  --sec-frame-arrow-bg: initial;
-  --sec-frame-arrow-border: initial;
-  --sec-frame-arrow-ink: initial;
-  --sec-frame-arrow-hover: initial;
+  --sec-frame-arrow-bg: rgba(13,11,7,0.72);
+  --sec-frame-arrow-border: rgba(var(--gilt-rgb),0.35);
+  --sec-frame-arrow-ink: var(--gilt);
+  --sec-frame-arrow-hover: var(--gilt);
+  --sec-pop-bg: color-mix(in srgb, var(--surface-2) 92%, transparent);
+  --sec-pop-border: var(--ink-line);
+  --sec-pop-shadow: 0 14px 40px rgba(0,0,0,0.5);
+  --sec-pop-ink: var(--text-dim);
   --sec-deck-ground: radial-gradient(ellipse 90% 50% at 50% 0%, rgba(var(--depth-rgb), 0.10), transparent 75%), var(--surface);
   --sec-deck-border: rgba(var(--depth-rgb), 0.2);
   --sec-aw-ink: #8FE6D2;
@@ -626,6 +635,10 @@ body::after {
   --sec-frame-arrow-border: rgba(var(--gilt-rgb),0.45);
   --sec-frame-arrow-ink: #8a6a1e;
   --sec-frame-arrow-hover: #8a6a1e;
+  --sec-pop-bg: rgba(250,246,230,0.96);
+  --sec-pop-border: rgba(var(--gilt-rgb),0.4);
+  --sec-pop-shadow: 0 14px 40px rgba(90,70,30,0.22);
+  --sec-pop-ink: #4a3f28;
   --sec-deck-ground: linear-gradient(180deg, rgba(248,243,223,0.97), rgba(236,228,206,0.95));
   --sec-deck-border: rgba(var(--gilt-rgb), 0.3);
   --sec-aw-ink: #0b655e;
@@ -782,9 +795,9 @@ body::after {
 @media (prefers-reduced-motion: reduce) { .chron-scrying span { animation: none; opacity: 0.7; } }
 /* The frame follows the ground: on paper a light frame (the Sky's embeds are
    theme=light Grafana), on the dark ground the dark one. A framed dashboard keeps
-   its own theme inside. The section's ‹ › take the paper frame's arrows; on the
-   dark ground the Depths set leaves them `initial`, so they fall back to the bar's
-   own (the arrows go with the bar). */
+   its own theme inside. The section's ‹ › and its watchings' pop-ups take their
+   ground's set too (Q14, owner 2026-11-19): paper arrows and a paper pop-up on
+   the paper ground, dark ones on the dark ground, whatever the bar is doing. */
 :is(#chronicle, #abyss) .chron-viewer { background: var(--sec-frame-bg); border-color: var(--sec-frame-border); box-shadow: var(--sec-frame-shadow); }
 :is(#chronicle, #abyss) .chron-slide-head { background: var(--sec-frame-head-bg); border-bottom-color: var(--sec-frame-head-rule); }
 :is(#chronicle, #abyss) .chron-title { color: var(--sec-frame-title); }
@@ -835,8 +848,8 @@ body::after {
   width: max-content; max-width: 260px; z-index: 8;
   display: flex; flex-direction: column; gap: 8px; text-align: left;
   padding: 12px 14px; border-radius: 4px;
-  background: color-mix(in srgb, var(--surface-2) 92%, transparent);
-  border: 1px solid var(--ink-line); box-shadow: var(--pop-shadow);
+  background: var(--sec-pop-bg, color-mix(in srgb, var(--surface-2) 92%, transparent));
+  border: 1px solid var(--sec-pop-border, var(--ink-line)); box-shadow: var(--sec-pop-shadow, var(--pop-shadow));
   backdrop-filter: blur(6px);
   /* hidden until hover/focus-within, not a JS `hidden` flag — keyboard tabbing
      to the button reveals the same blurb the mouse gets. `visibility` (not
@@ -848,7 +861,7 @@ body::after {
 }
 .chron-btn-wrap:hover .chron-fly-pop,
 .chron-btn-wrap:focus-within .chron-fly-pop { opacity: 1; visibility: visible; }
-.cfp-note { font-family: 'Alegreya Sans', sans-serif; font-size: 0.82rem; color: var(--text-dim); }
+.cfp-note { font-family: 'Alegreya Sans', sans-serif; font-size: 0.82rem; color: var(--sec-pop-ink, var(--text-dim)); }
 
 .chron-foot {
   margin-top: 12px; font-family: 'JetBrains Mono', monospace;
@@ -2680,7 +2693,9 @@ body.constellation .card-split .cs-on { display: inline; }
 #embed-max-close {
   position: absolute; top: 14px; right: 18px; z-index: 2;
   width: 36px; height: 36px; border-radius: 50%;
-  background: var(--chrome-glass-firm); border: 1px solid rgba(var(--gilt-rgb),0.45); color: var(--gilt);
+  /* a panel's control (Q14, 2026-11-19): the panel's ground as glass, so it
+     flips with the scheme as the panels do; the dim behind stays night */
+  background: color-mix(in srgb, var(--abyss) 78%, transparent); border: 1px solid rgba(var(--gilt-rgb),0.45); color: var(--gilt);
   font-size: 1.35rem; line-height: 1; cursor: pointer; backdrop-filter: blur(4px);
   transition: border-color 150ms;
 }
@@ -3243,12 +3258,14 @@ body.pre #scenes-list { opacity: 0; pointer-events: none; }
 #embed-max-title {
   position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
   font-family: 'Cinzel', serif; font-size: 0.82rem; letter-spacing: 0.22em;
-  color: var(--gilt); z-index: 2; pointer-events: none;
+  /* the night gold under every scheme: the title sits on the dim behind the
+     dashboard, which is night always, not on a panel (Q14, 2026-11-19) */
+  color: #d79921; z-index: 2; pointer-events: none;
 }
 .embed-max-arrow {
   position: absolute; top: 50%; transform: translateY(-50%);
   width: 44px; height: 44px; border-radius: 50%;
-  border: 1px solid rgba(var(--gilt-rgb), 0.4); background: var(--chrome-glass-firm);
+  border: 1px solid rgba(var(--gilt-rgb), 0.4); background: color-mix(in srgb, var(--abyss) 78%, transparent);
   color: var(--gilt); font-size: 1.5rem; line-height: 1; cursor: pointer; z-index: 2;
 }
 .embed-max-arrow:hover { border-color: var(--gilt); color: var(--gilt-bright); }

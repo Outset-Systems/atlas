@@ -37,12 +37,14 @@ PANELS = [".ldg-panel", ".trb-panel", ".rel-panel", ".pth-panel",
           # OVERVIEW's tiles (2026-11-13 stage 3): the tiles' sheet, not the whole
           # view, because the Depths' section lifted below them reads `--surface`
           # and `--ink-line` and must keep its dark ground
-          "#overview-tiles"]
+          "#overview-tiles",
+          # the enlarged dashboard: an overlay, like a panel (Q14, owner 2026-11-19)
+          "#embed-max"]
           # (ALERTS' own sheet, `#view-alerts`, left with the view on
           # 2026-11-14: its pieces now sit inside `.ldg-panel` and `#nodes-sheet`)
-#: the bar: 10-20's list; the chart pop-ups and arrows go with it
+#: the bar: 10-20's list (the chart pop-ups and arrows left it for their
+#: section's ground, the enlarged dashboard's ‹ › × for the panels: Q14, 2026-11-19)
 BAR = ["#scenes-list", ".scene-home", ".chrome", ".rl-crumbs", ".rl-locator", ".rl-hint",
-       ".chron-fly-pop", ".chron-arrow", ".embed-max-arrow", "#embed-max-close",
        # the views' menu, ATLAS's ▾ and the phone's strip (2026-11-13)
        "#view-menu", ".view-strip", ".scene-more",
        # THE INDEX wears the menu's glass, so it follows the bar too (owner, 2026-11-13)
@@ -50,7 +52,7 @@ BAR = ["#scenes-list", ".scene-home", ".chrome", ".rl-crumbs", ".rl-locator", ".
 #: the bar and what draws inside it: none of these may key on `data-scheme`
 BAR_RE = re.compile(r"#scenes-list|\.scene\b|\.scene-home|\.band-|\.chrome\b|\.ci-|#btn-|"
                     r"\.view-tool|\.vt-lamp|\.menu-tools|\.rl-crumbs?|\.rl-locator|\.rl-hint|\.rl-here|"
-                    r"\.rl-sep|\.chron-fly-pop|\.chron-arrow|\.embed-max-arrow|#embed-max-close|\.sch-|"
+                    r"\.rl-sep|\.sch-|"
                     r"#view-menu|\.view-menu|\.view-strip|\.scene-more")
 #: the bar's own fills: night on :root, light in the bar block
 BAR_TOKENS = ["--bar-glass", "--bar-glass-firm", "--bar-shadow-firm", "--chrome-glass",
@@ -70,7 +72,7 @@ CONSTANT = ["--parchment", "--parchment-dim", "--card-ink", "--card-ink-soft", "
             "--discover-hover", "--depth", "--depth-rgb"]
 #: the chrome that floats over the map follows the scheme too (2026-10-20:
 #: "themes should also change the colour of all the flyouts")
-CHROME = ["#scenes-list", ".chrome", ".rl-crumbs", ".rl-locator", ".rl-hint", ".chron-fly-pop"]
+CHROME = ["#scenes-list", ".chrome", ".rl-crumbs", ".rl-locator", ".rl-hint"]
 #: map-side containers: never under the light selector
 NIGHT = ["#stage", "#viewport", "#veil", "#card", "#toast",
          "#colophon", "#drift-note", "#region-lens", ".rg-tab", ".mk-sat"]
@@ -521,7 +523,10 @@ def test_each_section_set_is_the_same_in_every_copy():
     assert keys(sky[0][1]) == keys(depths[0][1]), "the two sets must name the same tokens, in the same order"
     for t in ("--sec-ground", "--sec-head", "--sec-head-glow", "--sec-sub", "--sec-plaque-ink",
               "--sec-plaque-bg", "--sec-plaque-border", "--sec-frame-bg", "--sec-frame-pane",
-              "--sec-deck-ground", "--sec-deck-border", "--ch-1", "--ch-text", "--ch-surface"):
+              "--sec-deck-ground", "--sec-deck-border", "--ch-1", "--ch-text", "--ch-surface",
+              # Q14 (2026-11-19): the arrows and the pop-up are the section's, on both grounds
+              "--sec-frame-arrow-bg", "--sec-frame-arrow-ink", "--sec-pop-bg", "--sec-pop-border",
+              "--sec-pop-ink"):
         assert t in keys(sky[0][1]), f"the sets do not carry {t}"
 
 
@@ -589,3 +594,30 @@ def test_the_light_accent_is_blue():
     assert b > r and b > g, "the light scheme's accent is blue, not amber"
     light_rules = [l for l in _read(CSS).splitlines() if 'data-scheme="light"' in l]
     assert not [l for l in light_rules if "251, 241, 199" in l], "a warm ground survived in the light rules"
+
+
+def test_q14_pop_ups_and_arrows_follow_their_section_and_the_dashboard_the_panels():
+    """Q14, answered yes (owner, 2026-11-19). A watching's pop-up and a section's
+    ‹ › take their ground's set, never the bar's: neither set leaves an arrow
+    token `initial` (which fell back to the bar), and the paper pop-up's note
+    reads on its own fill. The enlarged dashboard is a panel: its ‹ › × draw
+    from the panel's ground, and nothing of it is in the bar block."""
+    css = _strip_comments(_read(CSS))
+    for marker in ("THE SKY SET", "THE DEPTHS SET"):
+        decls = dict(d.split(":", 1) for d in _set_copies(marker)[0][1])
+        for k in ("--sec-frame-arrow-bg", "--sec-frame-arrow-border", "--sec-frame-arrow-ink",
+                  "--sec-frame-arrow-hover"):
+            assert decls[k].strip() != "initial", f"{marker}: {k} still falls back to the bar"
+    pop = re.search(r"\.chron-fly-pop \{([^}]*)\}", css).group(1)
+    for token in ("var(--sec-pop-bg", "var(--sec-pop-border", "var(--sec-pop-shadow"):
+        assert token in pop, f"the pop-up must read {token})"
+    assert "var(--sec-pop-ink" in re.search(r"\.cfp-note \{([^}]*)\}", css).group(1)
+    sky = dict((k.strip(), v.strip()) for k, v in (d.split(":", 1) for d in _set_copies("THE SKY SET")[0][1]))
+    r = _ratio(_hex(sky["--sec-pop-ink"]), _over(sky["--sec-pop-bg"], _hex(sky["--sec-ground"])))
+    assert r >= 4.5, f"the paper pop-up's note is {r:.2f}:1 on its fill"
+    head = _block(css, ':root[data-scheme-pick="light"] :is(')[0]
+    for gone in (".chron-fly-pop", ".chron-arrow", ".embed-max-arrow", "#embed-max-close"):
+        assert gone not in head, f"{gone} is still in the bar block"
+    for rule in (r"#embed-max-close \{([^}]*)\}", r"\.embed-max-arrow \{([^}]*)\}"):
+        body = re.search(rule, css).group(1)
+        assert "color-mix(in srgb, var(--abyss) 78%, transparent)" in body, rule
