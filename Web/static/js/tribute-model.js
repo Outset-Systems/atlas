@@ -107,8 +107,12 @@ export function hostsAt(hosts, key) {
 export const hostsIn = (hosts, rackId) => hosts.filter((h) => h.rack === rackId);
 
 /** RESOURCES' answer to "is there anything of mine here" (locations-model
-    `offered`): a host at the location, or in the rack. */
-export const holdsHosts = (hosts) => (l, r) => hosts.some((h) => (r ? h.rack === r.id : h.location === l.key));
+    `offered`): a machine that runs guests, at the location or in the rack.
+    A machine that only declares its compute divides nothing, so it does not
+    make a place to choose (owner, 2026-11-20: "hide them, for example living
+    room should be hidden"); it is still listed, under everything. */
+export const holdsHosts = (hosts) => (l, r) => hosts.some((h) => h.guests.length > 0
+  && (r ? h.rack === r.id : h.location === l.key));
 
 /** One line of sums over some hosts.
 

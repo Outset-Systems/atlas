@@ -11,14 +11,17 @@
    is still the whole: pressed, it shows everything (ui.js, and each scene's
    own `atlas:scene-place` listener).
 
-   A location is listed only when the scene has something to draw there, and
-   each rack that has stands under its location, a step in: a pick of one
-   shows that rack alone (owner, the same day: "if there isn't any
-   equipment/hardware at a location that location shouldn't be displayed in
-   the drop down", and "you should be able to see the resources of a specific
-   device, (Rack a or rack B) that is associated with a specific location").
-   What is offered is scene-places.js `offerFor`, the list the picker inside
-   the scene reads too.
+   A location is listed only when the scene has something to draw there
+   (owner, the same day: "if there isn't any equipment/hardware at a location
+   that location shouldn't be displayed in the drop down"). What is offered
+   is scene-places.js `offerFor`, the list the picker inside the scene reads
+   too. The menu lists locations and nothing else: the racks at one are
+   switched between inside the scene, once that location is on show (owner,
+   later that day: "don't put the machines in the drop down, just the
+   location"). v1.96.0 listed each rack under its location for a few hours.
+
+   One menu at a time: opening one shuts any other at once (ui.js
+   `hoverReveal`), so moving along the band never leaves two up together.
 
    The menus are siblings of the band, never inside it, for the reason the
    views' menu is (the band's backdrop-filter would position and clip them),
@@ -45,23 +48,17 @@ function bandMenu(scene, menuId) {
      menu, as the views' menu is (ui.js `viewHush`). */
   let hush = false;
 
-  /** What the scene offers on the map now in the browser: its locations, each
-      with its racks under it; what is on show is marked. With one location
-      there is nothing to choose between, so the menu is empty and is never
-      shown (owner, 2026-11-20: "only show the dropdown if there are more
-      than one site/location"); the racks of a single location are chosen
-      inside the scene. */
+  /** The locations the scene offers on the map now in the browser; the one on
+      show is marked. With one location there is nothing to choose between,
+      so the menu is empty and is never shown (owner, 2026-11-20: "only show
+      the dropdown if there are more than one site/location"). */
   function fill() {
     const at = button.dataset.place || '';
     const offer = A.DATA ? offerFor(scene, at) : [];
     if (offer.length < 2) { menu.innerHTML = ''; return; }
-    const rack = button.dataset.rack;        // undefined when the whole location is shown
-    const cur = (on) => (on ? ' aria-current="true"' : '');
-    menu.innerHTML = offer.map(({ loc, racks }) =>
-      `<button type="button" role="menuitem" data-place="${esc(loc.key)}"${cur(loc.key === at && rack === undefined)}>`
-      + `${esc(placeName(loc))}</button>`
-      + racks.map((r) => `<button type="button" role="menuitem" class="band-rack" data-place="${esc(loc.key)}"`
-        + ` data-rack="${esc(r.id)}"${cur(loc.key === at && rack === r.id)}>${esc(r.name)}</button>`).join('')).join('');
+    menu.innerHTML = offer.map(({ loc }) =>
+      `<button type="button" role="menuitem" data-place="${esc(loc.key)}"${loc.key === at ? ' aria-current="true"' : ''}>`
+      + `${esc(placeName(loc))}</button>`).join('');
   }
   function paint() {
     button.setAttribute('aria-expanded', String(shown()));
@@ -111,8 +108,7 @@ function bandMenu(scene, menuId) {
     if (!item) return;
     e.stopPropagation();
     const keyboard = e.detail === 0;
-    // the scene takes the location, or the one rack at it…
-    askPlace(scene, item.dataset.place, item.dataset.rack === undefined ? null : item.dataset.rack);
+    askPlace(scene, item.dataset.place);          // the scene takes the location…
     if (!button.classList.contains('active')) button.click();   // …and is opened if it is shut
     if (keyboard) handBack();
     else {

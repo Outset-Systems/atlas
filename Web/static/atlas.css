@@ -5124,10 +5124,8 @@ body:is([data-view="overview"], [data-view="nodes"], [data-view="topology"]) #co
 .view-menu > button:is(:hover, :focus-visible), .view-strip > button:is(:hover, :focus-visible) { color: var(--gilt); }
 /* The band's menus of locations (2026-11-20) are this same pane under
    HARDWARE, RESOURCES and TOPOLOGY; a location's name is set in the band's
-   caps. A rack stands under its location a step in, in the same letters
-   (the design notes has one size of micro-caps, and this pane already wears it). */
+   caps. They list locations and nothing else (2026-11-20). */
 .band-menu > button { text-transform: uppercase; }
-.band-menu > button.band-rack { padding: 6px 12px 5px 28px; }
 .band-menu:empty { display: none; }
 /* the view on screen wears the selected scene's outline */
 .view-menu > button[aria-current="true"], .view-strip > button[aria-current="true"] {

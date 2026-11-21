@@ -31,7 +31,7 @@
 
 import { A, CFG, $, esc, glassAttrs, nodeById, FALLBACK_HUE, DRAG_END, postJSON, canAdminWrite } from './config.js';
 import { makeScene } from './scene.js';
-import { locationByKey, locationOfRack, looseAt, rackable, racksAt } from './locations-model.js';
+import { locationByKey, looseAt, rackable, racksAt } from './locations-model.js';
 import { drawPlacePicker, markPlace, placeName, whereNow } from './scene-places.js';
 import {
   UH, KIND_HUE, ledColor, uLabel, setRackTheme,
@@ -75,8 +75,6 @@ function buildDevices() {
     try { saved = localStorage.getItem(RACK_KEY); } catch { /* private mode */ }
     rackId = racks.some((r) => r.id === saved) ? saved : racks[0].id;
   }
-  // the band's menu marks the rack on show only where the location has a choice of them
-  markPlace('rack', place, racks.length > 1 ? rackId : null);
   const built = modelBuildDevices(inRack(A.DATA.rack, allRacks, rackId), nodeById, readOvr());
   devices = built.devices;
   rackU = built.rackU;
@@ -352,17 +350,10 @@ function renderShelf() {
   return loose;
 }
 
-/** Show one location ('' = every location), and one rack at it when one is
-    asked for (the band's menu lists the racks under their locations); drawn
-    at once when the scene is up. */
-function setPlace(key, askedRack = null) {
+/** Show one location ('' = every location); drawn at once when the scene is
+    up. The racks there are switched between by the scene's own picker. */
+function setPlace(key) {
   place = key || '';
-  const stands = place ? locationOfRack(whereNow(), askedRack) : null;
-  if (stands) {
-    place = stands.key;          // a rack is shown at its own location, whatever came with it
-    rackId = askedRack;
-    try { localStorage.setItem(RACK_KEY, askedRack); } catch { /* private mode */ }
-  }
   markPlace('rack', place);
   if (!root?.classList.contains('open')) return;
   setEditing(false);
@@ -675,7 +666,7 @@ const { open, close } = scene;
 A.openReliquary = open;
 A.closeReliquary = close;
 // the band's menu of locations, and a press on HARDWARE while one is shown
-addEventListener('atlas:scene-place', (e) => { if (e.detail?.scene === 'rack') setPlace(e.detail.place, e.detail.rack); });
+addEventListener('atlas:scene-place', (e) => { if (e.detail?.scene === 'rack') setPlace(e.detail.place); });
 
 A.buildReliquary = function buildReliquary() {
   root = scene.mount();

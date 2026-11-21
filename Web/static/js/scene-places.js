@@ -7,22 +7,25 @@
    locations (and, one step finer, of the racks at one) inside the scene, and
    say on the band's own button what the scene is showing.
 
-   That last one is a `data-place` on the band button, and a `data-rack`
-   beside it when one rack is shown. The band (ui.js) reads `data-place` so
-   that a press on the button of a scene that is showing ONE location shows
-   everything, and only the next press closes it (owner: "selecting 'home
-   office' will display just the resources there, but selecting 'Resources'
-   will display a summary/total of everything"). The hover menu under the
-   button (band-menus.js) and that press both ask by event,
-   `atlas:scene-place` with detail {scene, place, rack}; place '' is
-   everything, and rack null is the whole location.
+   That last one is a `data-place` on the band button. The band (ui.js)
+   reads it so that a press on the button of a scene that is showing ONE
+   location shows everything, and only the next press closes it (owner:
+   "selecting 'home office' will display just the resources there, but
+   selecting 'Resources' will display a summary/total of everything"). The
+   hover menu under the button (band-menus.js) and that press both ask by
+   event, `atlas:scene-place` with detail {scene, place}; '' is everything.
+
+   A RACK is chosen inside the scene and nowhere else (owner, 2026-11-20:
+   "don't put the machines in the drop down, just the location. then when a
+   location is selected, you can switch between machines at that location"):
+   `drawRackPicker`, beside the locations' own.
 
    WHAT IS OFFERED (owner, 2026-11-20: "if there isn't any equipment/hardware
    at a location that location shouldn't be displayed in the drop down"). A
    scene offers a location only when it has something of that scene's to
-   draw there: hardware for HARDWARE, a machine that runs guests or declares
-   compute for RESOURCES, a place on the map for TOPOLOGY. The racks under a
-   location are held to the same rule. The menu and the picker read the one
+   draw there: hardware for HARDWARE, a machine that runs guests for
+   RESOURCES, a place on the map for TOPOLOGY. The racks at a location are
+   held to the same rule. The menu and the picker read the one
    list, so they never disagree. */
 
 import { A, esc, themeText } from './config.js';
@@ -70,34 +73,31 @@ export function whereLine(loc, rack = null) {
   return rack ? `${whole(placeName(loc))}\u00a0· ${whole(rack.name)}` : placeName(loc);
 }
 
-/** Say on a scene's band button what it shows: a location ('' = everything)
-    and, inside it, one rack (null = the whole location). */
-export function markPlace(scene, key, rackId = null) {
+/** Say on a scene's band button which location it shows ('' = everything). */
+export function markPlace(scene, key) {
   const btn = document.querySelector(`.scene[data-scene="${scene}"]`);
   if (!btn) return;
   if (key) btn.dataset.place = key; else delete btn.dataset.place;
-  if (key && rackId !== null && rackId !== undefined) btn.dataset.rack = rackId; else delete btn.dataset.rack;
 }
 
-/** Ask a scene to show a location ('' = everything), or one rack at it. */
-export function askPlace(scene, place, rackId = null) {
-  dispatchEvent(new CustomEvent('atlas:scene-place', {
-    detail: { scene, place: place || '', rack: place && rackId !== undefined ? rackId : null },
-  }));
+/** Ask a scene to show a location ('' = everything). */
+export function askPlace(scene, place) {
+  dispatchEvent(new CustomEvent('atlas:scene-place', { detail: { scene, place: place || '' } }));
 }
 
 const seg = (on, attrs, label) => `<button type="button" class="rel-seg${on ? ' is-on' : ''}" ${attrs}`
   + ` aria-pressed="${on}">${esc(label)}</button>`;
 
 /** The picker inside a scene: ALL, then each location the scene offers, as
-    one segmented control. Hidden while there is a single one (there is
-    nothing to pick). The hover menu needs a mouse; this is the way for a
-    touch screen, a phone and a keyboard. `onPick(key)` gets '' for
-    everything. */
+    one segmented control. Hidden while there is a single one and everything
+    is on show (there is nothing to pick); with a location on show it is
+    drawn whatever the count, since ALL is then the way back. The hover menu
+    needs a mouse; this is the way for a touch screen, a phone and a
+    keyboard. `onPick(key)` gets '' for everything. */
 export function drawPlacePicker(el, scene, key, onPick, allLabel = 'All') {
   if (!el) return;
   const offer = offerFor(scene, key);
-  el.hidden = offer.length < 2;
+  el.hidden = offer.length < 2 && !key;
   el.innerHTML = seg(key === '', 'data-place=""', allLabel)
     + offer.map((o) => seg(o.loc.key === key, `data-place="${esc(o.loc.key)}"`, placeName(o.loc))).join('');
   el.onclick = (e) => {
@@ -108,18 +108,22 @@ export function drawPlacePicker(el, scene, key, onPick, allLabel = 'All') {
   };
 }
 
-/** The racks worth choosing between for what a scene is showing: those at
-    the location on show; with no location chosen, those of a map that has
-    only one. On a map of several locations a chosen one always names its
-    racks, so the step from a location down to a rack can be seen; a map of
-    one location names them only when there are two, since one rack there is
-    The lab itself (the lab this was written for) and a picker of one thing
-    is noise. */
+/** The racks to switch between for what a scene is showing: those at the
+    location on show; with no location chosen, those of a map that has only
+    one location. Two racks are always a choice. One rack is a choice only
+    where the location is more than that rack (something stands outside it,
+    or another rack stands there with nothing of this scene's in it), and
+    only on a map of several locations: on a map of one, the one rack is the
+    lab itself (the lab this was written for) and a switch of one thing is
+    noise. */
 export function racksOffered(scene, key) {
+  const where = whereNow();
   const offer = offerFor(scene, key);
-  const at = key ? offer.find((o) => o.loc.key === key) : (offer.length === 1 ? offer[0] : null);
+  const at = key ? offer.find((o) => o.loc.key === key) : (where.list.length === 1 ? offer[0] : null);
   if (!at) return [];
-  return at.racks.length >= (offer.length > 1 ? 1 : 2) ? at.racks : [];
+  if (at.racks.length >= 2) return at.racks;
+  const more = at.loc.loose.length > 0 || at.loc.racks.filter((r) => (where.fitted.get(r.id) || 0) > 0).length > 1;
+  return at.racks.length === 1 && where.list.length > 1 && more ? at.racks : [];
 }
 
 /** The picker of racks inside a scene, beside the picker of locations: the

@@ -30,7 +30,7 @@ import { say } from './words.js';
 import { chainPairs, edgePath, edgesOf, layout, servicesCrossing } from './path-model.js';
 import { PHONE_MEDIA } from './views-model.js';
 import { awayFrom, locationByKey, locationOfRack, placesFor, rackById } from './locations-model.js';
-import { drawPlacePicker, drawRackPicker, markPlace, offerFor, placeName, whereLine, whereNow } from './scene-places.js';
+import { drawPlacePicker, drawRackPicker, markPlace, placeName, whereLine, whereNow } from './scene-places.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 let root, svg, nodesEl, legendEl;
@@ -134,7 +134,7 @@ function build() {
   if (!rack) sceneRack = null;
   const loc = rack ? locationOfRack(where, sceneRack) : locationByKey(where, scenePlace);
   scenePlace = loc ? loc.key : '';
-  markPlace('path', scenePlace, sceneRack);
+  markPlace('path', scenePlace);
   const whereEl = $('pth-where');
   if (whereEl) whereEl.textContent = whereLine(loc, rack);
   drawPlacePicker($('pth-places'), 'path', scenePlace, (key) => setScenePlace(key));
@@ -323,13 +323,13 @@ function place() {
   placedWidth = width;
 }
 
-/** Draw one location ('' = every place), or one rack at it; at once when the
+/** Draw one location ('' = every place), the whole of it; at once when the
     scene is up. A service's reach, if one is lit, is let go: it was asked of
     the whole map. */
-function setScenePlace(key, rackId = null) {
+function setScenePlace(key) {
   scenePlace = key || '';
-  sceneRack = scenePlace && rackId !== undefined ? rackId : null;
-  markPlace('path', scenePlace, sceneRack);
+  sceneRack = null;
+  markPlace('path', scenePlace);
   if (root?.classList.contains('open')) open();
 }
 
@@ -338,7 +338,7 @@ function setScenePlace(key, rackId = null) {
     that TOPOLOGY pressed once still closes the scene. */
 function setSceneRack(rackId) {
   sceneRack = rackId ?? null;
-  if (sceneRack === null && offerFor('path', scenePlace).length < 2) scenePlace = '';
+  if (sceneRack === null && whereNow().list.length < 2) scenePlace = '';
   if (root?.classList.contains('open')) open();
 }
 
@@ -408,7 +408,7 @@ function close() {
 A.openPath = open;
 A.closePath = close;
 // the band's menu of locations, and a press on TOPOLOGY while one is shown
-addEventListener('atlas:scene-place', (e) => { if (e.detail?.scene === 'path') setScenePlace(e.detail.place, e.detail.rack); });
+addEventListener('atlas:scene-place', (e) => { if (e.detail?.scene === 'path') setScenePlace(e.detail.place); });
 
 A.buildPathScene = function buildPathScene() {
   root = $('path');

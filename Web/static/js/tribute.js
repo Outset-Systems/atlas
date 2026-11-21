@@ -15,8 +15,14 @@
    ONE RACK, the same day (owner: "you should be able to see the resources of
    a specific device, (Rack a or rack B) that is associated with a specific
    location"). A location's hosts stand under its racks, each with its own
-   sum, and one rack can be shown alone: from the band's menu, from the
-   picker beside the locations', or by pressing its name. */
+   sum, and one rack can be shown alone: from the picker beside the
+   locations', or by pressing its name. Never from the band's menu, which
+   lists locations and nothing else.
+
+   A LOCATION IS A CHOICE ONLY WHERE A MACHINE RUNS GUESTS (owner, later that
+   day: "hide them, for example living room should be hidden"). A machine
+   that only declares its compute is still counted and still listed under
+   everything, after the locations, under one plain heading. */
 
 import { A, $, esc, zoneById, nodeById, FALLBACK_HUE } from './config.js';
 import { makeScene } from './scene.js';
@@ -56,7 +62,7 @@ function buildTribute() {
   if (!shownRack) rack = null;
   const loc = shownRack ? locationOfRack(where, rack) : locationByKey(where, place);
   place = loc ? loc.key : '';
-  markPlace('tribute', place, rack);
+  markPlace('tribute', place);
   const every = hostsNow();
   const hosts = shownRack ? hostsIn(every, rack) : hostsAt(every, loc ? loc.key : null);
   const t = totalsOf(hosts);
@@ -169,20 +175,7 @@ function buildTribute() {
     </div>`) + h.guests.map(row).join('');
   // a group is {head, hosts}; `head` is the markup of its name, or null for no heading at all
   const groups = [];
-  const offer = offerFor('tribute');
-  // on a map of one location, everything IS that location, and is divided the same way
-  const scope = loc || (offer.length === 1 ? offer[0].loc : null);
-  if (!loc && offer.length > 1) {
-    for (const l of where.list) {
-      const here = hosts.filter((h) => h.location === l.key);
-      if (here.length) {
-        groups.push({ hosts: here,
-          head: `<button class="trb-place" data-place="${esc(l.key)}" title="Show only ${esc(placeName(l))}">${esc(placeName(l))}</button>` });
-      }
-    }
-    const adrift = hosts.filter((h) => h.location === null);
-    if (adrift.length) groups.push({ hosts: adrift, head: '<span class="trb-place">Not placed</span>' });
-  } else if (scope && !shownRack) {
+  const byRack = (scope) => {
     for (const r of scope.racks) {
       const here = hostsIn(hosts, r.id);
       if (here.length) {
@@ -194,7 +187,32 @@ function buildTribute() {
     if (shelf.length) groups.push({ hosts: shelf, head: '<span class="trb-place">Not in a rack</span>' });
     // one group is no division: the location's own line above already says it
     if (groups.length < 2) groups.splice(0, groups.length, { hosts, head: null });
-  } else groups.push({ hosts, head: null });
+  };
+  if (shownRack) groups.push({ hosts, head: null });
+  else if (loc) byRack(loc);
+  else {
+    /* Everything: the hosts under the locations that are choices, then what
+       stands at no location, then the machines of the places that are not
+       choices (nothing there runs a guest), under one plain heading. */
+    const offer = offerFor('tribute');
+    const chosen = new Set(offer.map((o) => o.loc.key));
+    for (const { loc: l } of offer) {
+      const here = hosts.filter((h) => h.location === l.key);
+      if (here.length) {
+        groups.push({ hosts: here,
+          head: `<button class="trb-place" data-place="${esc(l.key)}" title="Show only ${esc(placeName(l))}">${esc(placeName(l))}</button>` });
+      }
+    }
+    const adrift = hosts.filter((h) => h.location === null);
+    if (adrift.length) groups.push({ hosts: adrift, head: '<span class="trb-place">Not placed</span>' });
+    const idle = hosts.filter((h) => h.location !== null && !chosen.has(h.location));
+    if (idle.length) groups.push({ hosts: idle, head: '<span class="trb-place">Elsewhere, running no guests</span>' });
+    if (groups.length < 2) {
+      // one location and nothing else is that location: divided by its racks, if they divide it
+      groups.length = 0;
+      if (offer.length === 1) byRack(offer[0].loc); else groups.push({ hosts, head: null });
+    }
+  }
   listEl.innerHTML = groups.map((g) => {
     if (g.head === null) return g.hosts.map(hostBlock).join('');
     const s = totalsOf(g.hosts);
@@ -221,12 +239,12 @@ function redraw() {
   if ($('tribute')?.classList.contains('open')) { buildTribute(); built = true; }
 }
 
-/** Show one location ('' = everything), or one rack at it; drawn at once
-    when the scene is up. */
-function setPlace(key, rackId = null) {
+/** Show one location ('' = everything), the whole of it; drawn at once when
+    the scene is up. */
+function setPlace(key) {
   place = key || '';
-  rack = place && rackId !== undefined ? rackId : null;
-  markPlace('tribute', place, rack);
+  rack = null;
+  markPlace('tribute', place);
   redraw();
 }
 
@@ -235,7 +253,7 @@ function setPlace(key, rackId = null) {
     that RESOURCES pressed once still closes the scene. */
 function setRack(rackId) {
   rack = rackId ?? null;
-  if (rack === null && offerFor('tribute', place).length < 2) place = '';
+  if (rack === null && whereNow().list.length < 2) place = '';
   redraw();
 }
 
@@ -252,7 +270,7 @@ addEventListener('atlas:data', () => {
   if ($('tribute')?.classList.contains('open')) { buildTribute(); built = true; }
 });
 // the band's menu of locations, and a press on RESOURCES while one is shown
-addEventListener('atlas:scene-place', (e) => { if (e.detail?.scene === 'tribute') setPlace(e.detail.place, e.detail.rack); });
+addEventListener('atlas:scene-place', (e) => { if (e.detail?.scene === 'tribute') setPlace(e.detail.place); });
 A.openTribute = open;
 A.closeTribute = close;
 

@@ -465,11 +465,32 @@ $('btn-net').addEventListener('click', () => A.toggleNet());
    fading first and no waiting about (owner, 2026-11-20; from 2026-11-13 until
    then a mouse leaving faded it and rolled it up later, as THE INDEX still
    does). While the keyboard is working inside it a mouse passing over and
-   away leaves it up, and while the mouse is over it a keyboard leaving does. */
+   away leaves it up, and while the mouse is over it a keyboard leaving does.
+   ONE AT A TIME (owner, 2026-11-20: "there's still a bit of delay when
+   switching between mouse overs in the nav bar and the new menu that pops up
+   is below the old one"): the one that opens cuts every other one off at
+   once, with no wait and no fading out under the newcomer, and then stands
+   there at once itself, so the band is never bare between the two. */
+const reveals = new Set();
 function hoverReveal(anchor, cluster, { delay = 220, onChange = () => {}, refuse = () => false, shut = () => {} } = {}) {
   if (!anchor || !cluster) return { close() {} };
   let timer = null;
   let over = false;
+  /** A change of state with no transition to pass through. */
+  const atOnce = (change) => {
+    cluster.style.transition = 'none';
+    change();
+    void cluster.offsetWidth;            // the new state is taken before the transition comes back
+    cluster.style.transition = '';
+  };
+  /** Gone this instant: no delay, and nothing to linger through. Says whether it was up. */
+  const cut = () => {
+    clearTimeout(timer);
+    if (!cluster.classList.contains('peek') && !cluster.classList.contains('open')) return false;
+    atOnce(() => { cluster.classList.remove('peek'); shut(); onChange(); });
+    return true;
+  };
+  reveals.add(cut);
   const keyed = () => {
     const el = document.activeElement;
     return !!el && (anchor.contains(el) || cluster.contains(el)) && el.matches(':focus-visible');
@@ -478,7 +499,11 @@ function hoverReveal(anchor, cluster, { delay = 220, onChange = () => {}, refuse
     clearTimeout(timer);
     if (on) {
       if (refuse(how)) return;
-      cluster.classList.add('peek'); onChange(); return;
+      let took = false;                  // it takes the place of one that was up
+      for (const other of reveals) if (other !== cut && other()) took = true;
+      const show = () => { cluster.classList.add('peek'); onChange(); };
+      if (took) atOnce(show); else show();
+      return;
     }
     timer = setTimeout(() => {
       if (how === 'pointer' ? keyed() : over) return;

@@ -187,13 +187,16 @@ test('one rack: the hosts in it, and a location is the sum of its racks and its 
   assert.ok(hostsOf(HOUSE, AT).every((h) => h.rack === null));
 });
 
-test('RESOURCES offers a location, or a rack, only where a host stands', () => {
-  const hosts = hostsOf(HOUSE, AT, new Map([['big', 'a']]));
+test('RESOURCES offers a location, or a rack, only where a machine runs guests', () => {
+  const hosts = hostsOf(HOUSE, AT, new Map([['big', 'a'], ['pi', 'p']]));
   const holds = holdsHosts(hosts);
   const loc = (key) => ({ key });
-  assert.deepEqual(['office', 'garage', 'living room', 'attic'].map((k) => holds(loc(k), null)), [true, true, true, false]);
+  // the living room has a machine, and it declares its compute, but it runs no guests
+  assert.deepEqual(['office', 'garage', 'living room', 'attic'].map((k) => holds(loc(k), null)), [true, true, false, false]);
   assert.equal(holds(loc('office'), { id: 'a' }), true);
   assert.equal(holds(loc('office'), { id: 'b' }), false);
+  // a rack is held to the same rule: the pi's rack holds a machine and no guest
+  assert.equal(holds(loc('living room'), { id: 'p' }), false);
   // a rack is asked for by id: one that holds no host is not offered, whatever its location holds
   assert.equal(holds(loc('garage'), { id: '' }), false);
 });

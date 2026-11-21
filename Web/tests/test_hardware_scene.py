@@ -96,18 +96,20 @@ def test_a_scene_showing_one_location_shows_everything_before_it_closes():
     assert rule.index("return;") < rule.index("closeAllScenes();")
     for scene, name in (("reliquary.js", "rack"), ("tribute.js", "tribute")):
         js = _read(JS / scene)
-        # the menu asks for a location, or for one rack at it
-        assert f"if (e.detail?.scene === '{name}') setPlace(e.detail.place, e.detail.rack);" in js, scene
+        assert f"if (e.detail?.scene === '{name}') setPlace(e.detail.place);" in js, scene
         assert f"markPlace('{name}', place" in js, scene
         # closed, a scene forgets its location: pressed afresh it is everything
         assert f"markPlace('{name}', '')" in js, scene
     path = _read(JS / "path.js")
-    assert "if (e.detail?.scene === 'path') setScenePlace(e.detail.place, e.detail.rack);" in path
-    assert "markPlace('path', scenePlace, sceneRack);" in path and "markPlace('path', '');" in path
+    assert "if (e.detail?.scene === 'path') setScenePlace(e.detail.place);" in path
+    assert "markPlace('path', scenePlace);" in path and "markPlace('path', '');" in path
     # the press that shows everything, and the close, both let the rack go with the location
-    assert "rack = place && rackId !== undefined ? rackId : null;" in _read(JS / "tribute.js")
-    assert "onClose: () => { place = ''; rack = null; built = false; markPlace('tribute', ''); }" in _read(JS / "tribute.js")
-    assert "sceneRack = scenePlace && rackId !== undefined ? rackId : null;" in path
+    trb = _read(JS / "tribute.js")
+    shown = trb[trb.index("function setPlace(key) {"):trb.index("function setRack(")]
+    assert "rack = null;" in shown
+    assert "onClose: () => { place = ''; rack = null; built = false; markPlace('tribute', ''); }" in trb
+    drawn = path[path.index("function setScenePlace(key) {"):path.index("function setSceneRack(")]
+    assert "sceneRack = null;" in drawn
     closed = path[path.index("function close() {"):path.index("A.openPath = open;")]
     assert "scenePlace = '';" in closed and "sceneRack = null;" in closed
 
@@ -130,9 +132,11 @@ def test_the_bands_menus_of_locations():
     # and the count is of what the scene has something to draw at
     assert "const offer = A.DATA ? offerFor(scene, at) : [];" in js
     assert "if (offer.length < 2) { menu.innerHTML = ''; return; }" in js
-    # a rack stands under its location and is asked for with it
-    assert 'class="band-rack" data-place="${esc(loc.key)}"' in js and 'data-rack="${esc(r.id)}"' in js
-    assert "askPlace(scene, item.dataset.place, item.dataset.rack === undefined ? null : item.dataset.rack);" in js
+    # locations and nothing else (owner, 2026-11-20: "don't put the machines in the drop
+    # down, just the location"): v1.96.0's rack rows are gone, and so is their mark
+    assert "data-rack" not in js and "band-rack" not in js
+    assert "askPlace(scene, item.dataset.place);" in js
+    assert "dataset.rack" not in _read(JS / "scene-places.js").split("export function drawRackPicker")[0]
     assert "refuse: (how) => A.PHONE || !menu.childElementCount || (how === 'focus' && hush)," in js
     # focus handed back to the button (Escape, a keyboard pick) must not open it again
     assert "const handBack = () => { hush = true; reveal.close(); button.focus(); };" in js
@@ -148,7 +152,7 @@ def test_the_bands_menus_of_locations():
     block = css[css.index(':root[data-scheme-pick="light"] :is(#scenes-list'):]
     assert block[:block.index("{")].count(".band-menu") == 4, "one for each clause of the bar's condition"
     assert ".band-menu > button { text-transform: uppercase; }" in css
-    assert ".band-menu > button.band-rack {" in css
+    assert ".band-rack" not in css
 
 
 def test_each_scene_has_the_picker_a_touch_screen_needs():
@@ -157,7 +161,8 @@ def test_each_scene_has_the_picker_a_touch_screen_needs():
     assert 'id="trb-places" role="group" aria-label="Choose a location" hidden' in html
     places = _read(JS / "scene-places.js")
     assert "const offer = offerFor(scene, key);" in places
-    assert "el.hidden = offer.length < 2;" in places, "one location: nothing to pick"
+    # one location and everything on show: nothing to pick; a location on show: ALL is the way back
+    assert "el.hidden = offer.length < 2 && !key;" in places
     assert "drawPlacePicker($('rel-places'), 'rack', place, (key) => setPlace(key));" in _read(JS / "reliquary.js")
     assert "drawPlacePicker(placesEl, 'tribute', place, (key) => setPlace(key));" in _read(JS / "tribute.js")
 
@@ -190,23 +195,56 @@ def test_one_rack_can_be_shown_alone_in_resources_and_topology():
     assert 'id="pth-racks" role="group" aria-label="Choose a rack" hidden' in html
     places = _read(JS / "scene-places.js")
     assert "export function drawRackPicker(el, scene, key, rackId, onPick, allLabel = 'All') {" in places
-    # several locations: a chosen one names its racks; one location: only with two racks
-    assert "return at.racks.length >= (offer.length > 1 ? 1 : 2) ? at.racks : [];" in places
+    # two racks are always a choice; one only where the location is more than it, and never on a map of one location
+    assert "if (at.racks.length >= 2) return at.racks;" in places
+    assert "return at.racks.length === 1 && where.list.length > 1 && more ? at.racks : [];" in places
     trb = _read(JS / "tribute.js")
     assert "const hosts = shownRack ? hostsIn(every, rack) : hostsAt(every, loc ? loc.key : null);" in trb
     assert "drawRackPicker(racksEl, 'tribute', place, rack, setRack," in trb
     assert "if (groups.length < 2) groups.splice(0, groups.length, { hosts, head: null });" in trb
     # a map of one location is divided by its racks without one being chosen
-    assert "const scope = loc || (offer.length === 1 ? offer[0].loc : null);" in trb
+    assert "if (offer.length === 1) byRack(offer[0].loc); else groups.push({ hosts, head: null });" in trb
     path = _read(JS / "path.js")
     assert "drawRackPicker($('pth-racks'), 'path', scenePlace, sceneRack, setSceneRack," in path
     assert "const away = awayFrom(where, loc, nodes, rack);" in path
     # '' is a real rack id (the one rack of a map that charts none): asked for by null, never by truth
     model = _read(JS / "locations-model.js")
     assert "if (id === null || id === undefined) return null;" in model
-    # HARDWARE takes the rack from the menu too
+    # HARDWARE switches racks with its own picker, as it always did
     rel = _read(JS / "reliquary.js")
-    assert "const stands = place ? locationOfRack(whereNow(), askedRack) : null;" in rel
+    assert "if (b.dataset.rack !== rackId) pickRack(b.dataset.rack);" in rel
+
+
+def test_resources_offers_a_location_only_where_a_machine_runs_guests():
+    """Owner, 2026-11-20, asked whether RESOURCES should hide a location whose
+    machines run no guests: "hide them, for example living room should be
+    hidden". Hidden as a choice; its machines are still listed under
+    everything, so the count of machines above the list stays true."""
+    model = _read(JS / "tribute-model.js")
+    assert "hosts.some((h) => h.guests.length > 0" in model
+    trb = _read(JS / "tribute.js")
+    assert "const idle = hosts.filter((h) => h.location !== null && !chosen.has(h.location));" in trb
+    assert "Elsewhere, running no guests" in trb
+    # a plain heading: a place that is not a choice is never a button
+    assert '<span class="trb-place">Elsewhere, running no guests</span>' in trb
+
+
+def test_one_menu_at_a_time():
+    """Owner, 2026-11-20: "there's still a bit of delay when switching between
+    mouse overs in the nav bar and the new menu that pops up is below the old
+    one". The menu that opens cuts every other one off at once."""
+    ui = _read(JS / "ui.js")
+    reveal = ui[ui.index("const reveals = new Set();"):ui.index("function mapEditor(")]
+    assert "for (const other of reveals) if (other !== cut && other()) took = true;" in reveal
+    # and it stands there at once itself: the band is never bare between the two
+    assert "if (took) atOnce(show); else show();" in reveal
+    # after `refuse`: a button with no menu to show (one location) cuts nothing
+    assert reveal.index("if (refuse(how)) return;") < reveal.index("for (const other of reveals)")
+    # no wait and no fading out under the newcomer
+    cut = reveal[reveal.index("const cut = () => {"):reveal.index("reveals.add(cut);")]
+    assert "atOnce(() => { cluster.classList.remove('peek'); shut(); onChange(); });" in cut
+    once = reveal[reveal.index("const atOnce = (change) => {"):reveal.index("const cut = () => {")]
+    assert "cluster.style.transition = 'none';" in once and "cluster.style.transition = '';" in once
 
 
 # ── HARDWARE: what stands outside a rack, and add and remove ────────────────
