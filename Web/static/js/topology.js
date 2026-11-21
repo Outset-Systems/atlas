@@ -45,6 +45,7 @@ import { buildPanel, drawPanel } from './topology-panel.js';
 import './topology-draw.js';
 import './topology-export.js';
 import './topology-diagnose.js';
+import './topology-locate.js';
 
 const query = new URLSearchParams(location.search);
 /** A place to open on, from `?view=topology&at=<id>` or A.openTopology. */

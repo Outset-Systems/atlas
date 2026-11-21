@@ -4,8 +4,9 @@
 
    `#map-drawer` is the Index's panel mirrored: it hangs under THE ATLAS at the
    band's left end and unfurls downward (atlas.css). ATLAS ▾ MAP EDITOR shows
-   the map and opens it; the same item, its ×, Escape, THE ATLAS itself, a
-   scene and any other view close it. It does not roll up when the mouse
+   the map and opens it; the same item, Escape, THE ATLAS itself, a scene
+   and any other view close it (its × became the side arrow, 2026-11-20). It
+   does not roll up when the mouse
    leaves, as the Index does: MOVE PLACES is used with the pointer out on the
    map, and Save to map must still be there after the drag.
 
@@ -43,6 +44,7 @@ export function toggleMapEditor(open) {
   if (will) {
     A.buildCartographer?.();   // the map style list: a cheap fetch, fresh per opening (table.js)
     drawZoomMaps();
+    drawNames();
   }
   drawer.classList.toggle('open', will);
   drawer.setAttribute('aria-hidden', String(!will));
@@ -50,6 +52,8 @@ export function toggleMapEditor(open) {
   document.body.classList.toggle('editor-open', will);
   if (will) drawer.querySelector('.sp-sub, input, button')?.focus({ preventScroll: true });
   else if (drawer.contains(document.activeElement)) document.activeElement.blur();
+  // the views' menu marks MAP EDITOR only while this is out (views.js)
+  dispatchEvent(new CustomEvent('atlas:map-editor-state', { detail: { open: will } }));
   return will;
 }
 
@@ -119,7 +123,87 @@ paintWrites();
 /* ── opening and closing ─────────────────────────────────────────────────── */
 
 addEventListener('atlas:map-editor', (e) => toggleMapEditor(e.detail?.open));
-$('med-close')?.addEventListener('click', () => toggleMapEditor(false));
+/* ── which side it hangs on (2026-11-20; owner: "change the X in the top
+   right of the map editor menu to be an arrow, so you can slide it to the left
+   or right side. if on the right side, and index is selected it will go over
+   the top of it"). The arrow points where the panel will go; the side is kept
+   in this browser. On the right it hangs where THE INDEX does, and the Index,
+   opened, lies over it (atlas.css). */
+const SIDE_KEY = 'atlas-editor-side';
+const sideBtn = $('med-side');
+function paintSide(right) {
+  document.body.classList.toggle('editor-right', right);
+  if (!sideBtn) return;
+  const words = right ? 'Move to the left side' : 'Move to the right side';
+  sideBtn.title = words;
+  sideBtn.setAttribute('aria-label', words);
+}
+let sideRight = false;
+try { sideRight = localStorage.getItem(SIDE_KEY) === 'right'; } catch { /* the left, as it was */ }
+paintSide(sideRight);
+sideBtn?.addEventListener('click', () => {
+  sideRight = !sideRight;
+  try { localStorage.setItem(SIDE_KEY, sideRight ? 'right' : 'left'); } catch { /* this visit only */ }
+  paintSide(sideRight);
+});
+
+/* ── the sky's and the depths' names (2026-11-20; owner: "a way to change the
+   name for the sky island/depths") ─────────────────────────────────────────
+   The place above the map and the place below it are the networks `sky` and
+   `depths`: their headings, the map's labels and the Index say those
+   networks' names (ui.js nameRegionHeads). So the two boxes here rename the
+   two networks, with the editing API's own upsert, and everything that says
+   the name follows from the map's refresh. A map with no such network has
+   that box off. */
+const NAMED = [['med-sky', 'sky'], ['med-depths', 'depths']];
+const NAMES_SAY = $('med-names-say')?.textContent || '';
+async function drawNames() {
+  const wrap = $('med-names');
+  if (!wrap) return;
+  const can = canAdminWrite() && Boolean(A.editorReady?.());
+  wrap.hidden = !can;
+  if (!can) return;
+  $('med-names-say').textContent = NAMES_SAY;
+  try {
+    const { Editor } = await import('./editor/index.js');
+    await Editor.load();
+    const zones = Array.isArray(Editor.data?.zones) ? Editor.data.zones : [];
+    for (const [id, zone] of NAMED) {
+      const z = zones.find((x) => x && x.id === zone);
+      $(id).value = z ? String(z.name || '') : '';
+      $(id).disabled = !z;
+      $(id).placeholder = z ? '' : `This map has no network with the id ${zone}`;
+    }
+  } catch { /* the boxes stay as they were; Save says what went wrong */ }
+}
+$('med-names-save')?.addEventListener('click', async () => {
+  const go = $('med-names-save');
+  const say = $('med-names-say');
+  go.disabled = true;
+  try {
+    const { Editor } = await import('./editor/index.js');
+    await Editor.load();
+    const zones = Array.isArray(Editor.data?.zones) ? Editor.data.zones : [];
+    const ops = [];
+    for (const [id, zone] of NAMED) {
+      const z = zones.find((x) => x && x.id === zone);
+      const name = $(id).value.trim().replace(/\s+/g, ' ');
+      if (!z || $(id).disabled) continue;
+      if (!name) { say.textContent = 'A name cannot be blank.'; $(id).focus(); return; }
+      if (name !== z.name) ops.push({ op: 'upsert', section: 'zones', id: zone, body: { name } });
+    }
+    if (!ops.length) { say.textContent = 'Nothing changed.'; return; }
+    await Editor.apply(ops, 'the names of the sky and the depths (MAP EDITOR)');
+    say.textContent = NAMES_SAY;
+    A.showToast?.('The names are saved.');
+    drawNames();
+  } catch (err) {
+    say.textContent = `Not saved: ${err.message || err}`;
+  } finally {
+    go.disabled = false;
+  }
+});
+
 // another view has no map under it
 addEventListener('atlas:view', (e) => { if (e.detail?.view !== 'map') toggleMapEditor(false); });
 /* Escape closes it. Heard here and not in the map's own Escape (camera.js),

@@ -85,7 +85,7 @@
     <!-- The abyss watches: security & cloud/edge reports, far below the Depths -->
     <section id="abyss" aria-label="The abyss watches — security &amp; the outer veil">
       <!-- re-stamped from the depths zone's name by nameRegionHeads() -->
-      <div class="abyss-head">THE DEPTHS</div>
+      <div class="abyss-head">{{ theme.text.depths|upper }}</div>
       <div class="abyss-sub" data-say>security &amp; the outer veil, scried from the deep</div>
       <div class="chron-viewer">
         <div class="chron-stage" id="abyss-stage"></div>
@@ -323,6 +323,11 @@
   <button type="button" role="menuitem" data-view="overview">{{ theme.text.view_overview }}</button>
   <button type="button" role="menuitem" data-view="nodes">{{ theme.text.view_nodes }}</button>
   <button type="button" role="menuitem" data-view="topology">{{ theme.text.view_topology }}</button>
+  <!-- RECORDS (2026-11-20, owner: "take 'edit the records' and add it to the
+       drop down list in atlas as Records"): the Desk, every record on the
+       map. Not a view, so it carries no `data-view`; shown to an admin on an
+       Atlas that takes changes, and opened by editor/index.js. -->
+  <button type="button" role="menuitem" id="view-records" data-act="records" hidden>{{ theme.text.view_records }}</button>
 </div>
 
 
@@ -379,7 +384,11 @@
 <aside id="map-drawer" aria-hidden="true" aria-label="{{ theme.text.view_map_editor|capitalize }}">
   <div class="drawer-head">
     <span class="drawer-title">{{ theme.text.view_map_editor }}</span>
-    <button class="ldg-close" id="med-close" type="button" title="Close (Esc)" aria-label="Close">&times;</button>
+    <!-- The × was here until 2026-11-20 (owner: "change the X in the top right
+         of the map editor menu to be an arrow, so you can slide it to the left
+         or right side"). The arrow points to the side the panel will go to;
+         MAP EDITOR in the menu, ATLAS and Escape still close it. -->
+    <button class="ldg-close med-side" id="med-side" type="button" title="Move to the right side" aria-label="Move to the right side"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
   </div>
   <div class="med-body" id="map-editor-body">
     <div class="sp-group" data-group="map">
@@ -407,6 +416,23 @@
             <input type="checkbox" id="sp-words">
           </label>
           <div class="sp-hint">Says job for rite, zone for realm and history for annals, on every map. Off, each map keeps its lore. Saved in this browser.</div>
+          <!-- THE SKY'S AND THE DEPTHS' NAMES (2026-11-20, owner: "a way to
+               change the name for the sky island/depths"): the two places
+               above and below the map are the networks `sky` and `depths`,
+               and their headings, the map's labels and the Index all say
+               those networks' names (ui.js nameRegionHeads). These two boxes
+               rename them, for everyone. Shown to whoever may write, by
+               map-editor.js; a map without one of them has that box off. -->
+          <div class="med-names" id="med-names" hidden>
+            <label class="rel-add-field"><span>The sky's name</span>
+              <input id="med-sky" class="dir-input" type="text" maxlength="40" autocomplete="off" spellcheck="false"></label>
+            <label class="rel-add-field"><span>The depths' name</span>
+              <input id="med-depths" class="dir-input" type="text" maxlength="40" autocomplete="off" spellcheck="false"></label>
+            <div class="sp-actions">
+              <button class="sp-btn" id="med-names-save" type="button">Save names</button>
+            </div>
+            <div class="sp-hint" id="med-names-say">For everyone who sees this map: the heading, the map's label and the Index all take the name.</div>
+          </div>
         </div>
       </div>
       <div class="sp-sec" data-sec="survey">
@@ -434,10 +460,58 @@
         <div class="sp-sec-body">
           <div class="med-zoom" id="med-zoom"></div>
           <div class="sp-hint">Shown or hidden for you, in this browser only. A hidden one has no frame and does not open when you zoom in.</div>
+          <!-- RESIZE (2026-11-20, owner: "a way to resize existing boxes, maybe
+               a check mark like the drag places on the map"): each zoom map
+               on the map on screen wears its rectangle with four corners to
+               drag; map-resize.js. -->
+          <label class="sp-row">
+            <span>Move and resize the boxes</span>
+            <input type="checkbox" id="med-resize">
+          </label>
+          <div class="sp-hint" id="med-resize-say">Drag a box to move it, or a corner to resize it. Each change is saved for everyone when you let go.</div>
           <div class="sp-actions">
             <button class="sp-btn" id="med-zoom-add" type="button">Add or remove…</button>
           </div>
           <div class="sp-hint" id="med-zoom-why" hidden></div>
+        </div>
+      </div>
+      <!-- DRAW A BOX (2026-11-20, owner: "in map editor a way to draw a box to
+           create a zoom map and/or location"): drag a rectangle on the map,
+           name it, and make it a location (the hardware inside is told where
+           it stands), a zoom map, or both. All of it is map-box.js's. -->
+      <div class="sp-sec" data-sec="box">
+        <button class="sp-sub" type="button">DRAW A BOX <span class="sp-sub-plain">· a location or a zoom map</span></button>
+        <div class="sp-sec-body">
+          <div class="sp-actions">
+            <button class="sp-btn" id="mbx-draw" type="button">Draw a box</button>
+          </div>
+          <div class="sp-hint" id="mbx-why" hidden></div>
+          <div class="sp-hint">Drag a rectangle over the map, then name it. As a location, the hardware inside it is told where it stands. As a zoom map, the box opens into a detailed map of its own.</div>
+          <div class="mbx-form" id="mbx-form" hidden>
+            <div class="mbx-found" id="mbx-found"></div>
+            <label class="rel-add-field"><span>Name</span>
+              <input id="mbx-name" class="dir-input" type="text" maxlength="60" autocomplete="off"
+                     spellcheck="false" list="mbx-known" placeholder="Server room"></label>
+            <datalist id="mbx-known"></datalist>
+            <label class="sp-row">
+              <span>Make it a location</span>
+              <input type="checkbox" id="mbx-loc">
+            </label>
+            <div class="sp-hint" id="mbx-loc-say"></div>
+            <label class="sp-row">
+              <span>Make it a zoom map</span>
+              <input type="checkbox" id="mbx-zoom">
+            </label>
+            <label class="rel-add-field" id="mbx-map-wrap" hidden><span>Detailed map</span>
+              <select id="mbx-map" class="dir-input"></select></label>
+            <div class="sp-hint" id="mbx-zoom-say"></div>
+            <div class="mbx-msg" id="mbx-msg" role="status"></div>
+            <div class="sp-actions">
+              <button class="sp-btn sp-btn-go" id="mbx-save" type="button">Save</button>
+              <button class="sp-btn" id="mbx-again" type="button">Draw again</button>
+              <button class="sp-btn" id="mbx-cancel" type="button">Cancel</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -520,6 +594,8 @@
           <button class="rel-seg is-on" id="rel-2d" aria-pressed="true">2D</button>
           <button class="rel-seg" id="rel-3d-btn" aria-pressed="false">3D</button>
         </span>
+        <button class="rel-tool" id="rel-records" title="Add, remove or re-describe the rack, in the records" hidden>Records</button>
+        <button class="rel-tool" id="rel-loc" title="Say where the machine shown, or this rack, stands">⌖ Location</button>
         <button class="rel-tool" id="rel-add" title="Put a device in this rack">+ Add</button>
         <button class="rel-tool" id="rel-edit" title="Drag vessels to new slots, or take one out">⇅ Rearrange</button>
         <button class="rel-tool" id="rel-save" hidden>Save</button>

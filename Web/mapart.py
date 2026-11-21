@@ -457,4 +457,9 @@ def remove(name):
     if not os.path.isfile(path):
         raise ValueError(f"'{safe}' isn't stored here")
     os.remove(path)
+    # its sidecar goes with it (2026-11-20): a later upload under the same
+    # name would otherwise wear the deleted style's regions and spots
+    sidecar = os.path.join(settings.MAPS_DIR, _sidecar_name(safe))
+    if os.path.isfile(sidecar):
+        os.remove(sidecar)
     log.info("map art %s removed", safe)

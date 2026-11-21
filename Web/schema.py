@@ -872,6 +872,10 @@ SECTIONS = {
                    "address or check, and NODES shows how often the two agree. Kuma's "
                    "answer stays the one on the map. For deciding whether Atlas can "
                    "take over from Kuma."),
+            f("map_art", "json", label="Map names",
+              help="`[{\"name\": \"floor-2.webp\", \"label\": \"Second floor\"}]`: what a map "
+                   "image is called in the list of map styles, in place of its file name. "
+                   "Set from the map editor, under Map style, Rename."),
             f("surveyed", "text", help="When the map was last walked, `YYYY-MM-DD`."),
             f("art", "text", help="Which base render is in use — a note to your future self."),
             f("map_image", "text", label="Base render",
@@ -990,7 +994,7 @@ HIDING = {
     "maintenance": {"id": "slug", "reason": "words", "collections": "safe",
                     "services": "keys", "note": "words"},
     "meta": {"title": "safe", "surveyed": "safe", "art": "safe", "map_image": "safe",
-             "tribute": "safe"},
+             "tribute": "safe", "map_art": "safe"},
 }
 
 #: Sections whose entries are ABOUT the places they name: one whose words name

@@ -54,6 +54,7 @@ import * as M from './menu-model.js';
 import * as AM from './alerts-model.js';
 import * as AlertStore from './alert-store.js';
 import Editor from './editor/store.js';
+import { mayLocate, setLocation } from './location-set.js';
 import { t } from './nodes-text.js';
 import { S, el, phone, mayWrite, menuOn } from './nodes-state.js';
 import { mayAlert, pressBell, stateOf, watcherWords } from './nodes-cells.js';
@@ -210,6 +211,7 @@ function subject({ kind, id }) {
         topology,
         alerts: mayAlert(),
         silent: silentWhy(),
+        locate: mayLocate(),
         edit: typeof A.editPlace === 'function',
         remove: typeof A.removePlace === 'function',
       },
@@ -448,6 +450,8 @@ export function onMenuClick(e) {
     // the WIRING view, centred on the place (a service's: its place)
     case 'topology': closeMenu(false); A.openTopology?.(kind === 'service' ? what.svc.place : id); break;
     case 'alerts': closeMenu(false); pressBell(kind, id); break;
+    // where it stands: the one box every view opens (location-set.js)
+    case 'location': closeMenu(false); focusMore(kind, id); setLocation({ node: id }); break;
     case 'edit': closeMenu(false); A.editPlace?.(id); break;
     // a collection's name box is the rail's
     case 'rename': closeMenu(false); startRename(id); break;

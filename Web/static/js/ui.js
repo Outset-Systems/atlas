@@ -330,7 +330,9 @@ function setSceneActive(name) {
   // button with a glyph instead of a word (2026-09-04), and it wears the
   // same `.active` — the CSS styles it in its own chrome dress.
   document.querySelectorAll('[data-scene]').forEach(b => b.classList.toggle('active', b.dataset.scene === name));
-  $('btn-menu')?.classList.toggle('lit', name !== 'atlas');
+  // (☰ wore a lit ring while a scene was open until 2026-11-20; owner: "when a
+  // scene is open, it does not need to put a circle around the index button".
+  // The scene's own button in the band is the mark.)
   document.querySelector(`.scene[data-scene="${name}"]`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   /* `body.scene-open` lifts the scene band above the overlays and firms up its
      fill (atlas.css) — the switcher is the one control you still want while a
@@ -577,7 +579,9 @@ function closeViewMenu(focusOpener) {
   if (focusOpener) viewHush = true;
   viewMenu.classList.remove('open');
   viewReveal.close();
-  if (focusOpener) viewMore.focus();
+  // ▾ is not drawn where a mouse can hover (2026-11-20): the keyboard goes
+  // back to ATLAS there, which `viewHush` keeps from opening the menu again
+  if (focusOpener) (viewMore.getClientRects().length ? viewMore : sceneHome?.querySelector('[data-scene="atlas"]'))?.focus();
 }
 
 viewMore.addEventListener('click', (e) => {
@@ -588,6 +592,16 @@ viewMore.addEventListener('click', (e) => {
 });
 viewMore.addEventListener('keydown', (e) => {
   if (e.key !== 'ArrowDown') return;
+  e.preventDefault(); e.stopPropagation();
+  openViewMenu(true);
+});
+/* ▾ is not drawn where a mouse can hover (2026-11-20, owner: "in the nav bar
+   lets remove the down arrow by atlas"): there the menu comes out under the
+   pointer and under the keyboard's focus, and ↓ on ATLAS itself opens it and
+   steps into it, as it did on ▾. A screen that cannot hover keeps ▾: it is
+   that screen's only way to the views (atlas.css). */
+sceneHome?.querySelector('[data-scene="atlas"]')?.addEventListener('keydown', (e) => {
+  if (e.key !== 'ArrowDown' || A.PHONE) return;
   e.preventDefault(); e.stopPropagation();
   openViewMenu(true);
 });
@@ -604,6 +618,15 @@ viewMenu.addEventListener('keydown', (e) => {
   else if (e.key === 'Escape') { e.preventDefault(); closeViewMenu(true); }
 });
 viewMenu.addEventListener('click', (e) => {
+  /* RECORDS (2026-11-20) is no view: the menu closes as it does after any
+     pick, and the Desk's own module opens it (editor/index.js hears this). */
+  if (e.target.closest('[data-act="records"]')) {
+    e.stopPropagation();
+    closeViewMenu(false);
+    if (viewMenu.contains(document.activeElement)) document.activeElement.blur();
+    dispatchEvent(new CustomEvent('atlas:records'));
+    return;
+  }
   const item = e.target.closest('[data-view]');
   if (!item) return;
   e.stopPropagation();

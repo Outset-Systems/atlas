@@ -24,10 +24,14 @@ import { buildWizard, close as closeWizard, openWizard } from './wizard.js';
     what `#rites` did the moment THE RITES became THE CALENDAR (v1.45.0).
     `test_calendar_scene.py` pins that every `at` here still resolves. */
 const SCENE_EDITORS = [
-  { at: '#reliquary .rel-tools', section: 'rack', title: 'Add, remove or re-describe the rack' },
+  // HARDWARE's ✎ brings out the scene's own tools (2026-11-20, owner: "when
+  // clicking the pencil it shows those buttons"); Records among them is the Desk
+  { at: '#reliquary .rel-tools', section: 'rack', title: 'Show or hide the editing tools', tools: 'reliquary', records: 'rel-records' },
   { at: '#tribute .trb-head', section: 'vms', title: 'Add or remove guests' },
   { at: '#ledger .ldg-head', section: 'prefixes', title: 'Edit networks, prefixes and addressing' },
-  { at: '#path .ldg-head', section: 'routes', title: 'Add or remove routes' },
+  // TOPOLOGY's ✎ is the WIRING view (owner, the same day: "in topology when
+  // clicking the pencil it opens the wiring section"), where cables are drawn
+  { at: '#path .ldg-head', section: 'routes', title: 'Open WIRING, where the cables are drawn', view: 'topology' },
   { at: '#calendar .ldg-head', section: 'rites', title: 'Add or remove scheduled jobs' },
   { at: '#stones .ldg-head', section: 'stones', title: 'Add a honeypot or a canary token' },
   { at: '#chronicle .chron-head', section: 'chronicle', title: 'Add or remove charts' },
@@ -37,14 +41,32 @@ const SCENE_EDITORS = [
 const editable = () => document.body.dataset.editable === '1';
 
 function addHeaderButtons() {
-  for (const { at, section, title } of SCENE_EDITORS) {
+  for (const { at, section, title, tools, records, view } of SCENE_EDITORS) {
     const host = document.querySelector(at);
     if (!host) continue;
     const btn = document.createElement('button');
     btn.className = 'scene-edit';
     btn.textContent = '✎';
     btn.title = title;
-    btn.addEventListener('click', (e) => { e.stopPropagation(); openDesk(section); });
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (view) { A.closeAllScenes?.(); A.setView?.(view, { remember: true }); return; }
+      if (!tools) { openDesk(section); return; }
+      // the scene's own tools, out or away; the scene hears it and puts down
+      // whatever was half done (reliquary.js)
+      const scene = document.getElementById(tools);
+      const on = !scene.classList.contains('tools-on');
+      scene.classList.toggle('tools-on', on);
+      btn.setAttribute('aria-pressed', String(on));
+      btn.classList.toggle('on', on);
+      dispatchEvent(new CustomEvent('atlas:scene-tools', { detail: { scene: tools, on } }));
+    });
+    if (tools) btn.setAttribute('aria-pressed', 'false');
+    const door = records && document.getElementById(records);
+    if (door) {
+      door.hidden = false;
+      door.addEventListener('click', (e) => { e.stopPropagation(); openDesk(section); });
+    }
     // before the × so the close button stays the rightmost thing in every header
     host.insertBefore(btn, host.querySelector('.ldg-close, .rel-close, .trb-close'));
   }
@@ -68,12 +90,10 @@ function addSettingsEntry() {
   body.className = 'sp-sec-body';
   body.innerHTML =
     '<div class="sp-hint">Add, change or remove anything on the map: places, networks, ' +
-    'prefixes, routes, racks, VMs and schedules. Every change is recorded and ' +
-    'can be undone.</div>';
-  const open = document.createElement('button');
-  open.className = 'sp-btn sp-btn-go';
-  open.textContent = 'Edit the records (E)';
-  open.addEventListener('click', (e) => { e.stopPropagation(); openDesk(); });
+    'prefixes, routes, racks, VMs and schedules: RECORDS, in the ATLAS menu ' +
+    '(or press E). Every change is recorded and can be undone.</div>';
+  // (Edit the records stood here until 2026-11-20; it is RECORDS in the
+  // ATLAS menu now, `addMenuEntry` below, and E still opens it)
   const first = document.createElement('button');
   first.className = 'sp-btn';
   first.textContent = 'Guided setup';
@@ -81,11 +101,22 @@ function addSettingsEntry() {
   first.addEventListener('click', (e) => { e.stopPropagation(); openWizard(); });
   const row = document.createElement('div');
   row.className = 'sp-actions';
-  row.append(open, first);
+  row.append(first);
   body.append(row);
   block.append(body);
   panel.append(block);        // last: below ZOOM MAPS
   A.applySettingsFolds?.();   // pick up this section's stored/default fold
+}
+
+/* RECORDS in the ATLAS menu (2026-11-20): the Desk's door, for whoever may
+   write. The item is in the page for everyone and hidden; ui.js lists only
+   what is drawn, so its arrows step over it until this shows it. */
+function addMenuEntry() {
+  const item = document.getElementById('view-records');
+  if (!item) return;
+  item.hidden = false;
+  // the menu closes itself as it does after any pick, then says so (ui.js)
+  addEventListener('atlas:records', () => openDesk());
 }
 
 /** An unseeded Atlas has nothing to show, so it offers the way in instead.
@@ -131,6 +162,7 @@ function init() {
   if (!editable()) return;
   addHeaderButtons();
   addSettingsEntry();
+  addMenuEntry();
   offerFirstSurvey();
   wireKeys();
 }

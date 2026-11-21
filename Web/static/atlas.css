@@ -111,7 +111,7 @@
    by tests/test_scheme_css.py. The bar has its own block, next. */
 :root[data-scheme="light"] :is(.ldg-panel, .trb-panel, .rel-panel, .pth-panel, #topology-sheet,
                                .pal-panel, .gl-panel, .dsk-panel, .wiz-panel, #nodes-sheet,
-                               #overview-tiles, #embed-max) {
+                               #overview-tiles, #embed-max, .loc-box) {
   --abyss: #d6dae0;
   --surface: #c5cad2;
   --surface-2: #cdd2d9;
@@ -2136,6 +2136,120 @@ body.phone #map-drawer { display: none; }   /* a phone has no map, and no menu t
 .med-zoom-name { min-width: 0; overflow-wrap: anywhere; }
 .med-zoom-tag { margin-left: 4px; font-size: 0.72rem; color: var(--text-soft); white-space: nowrap; }
 .med-zoom-off .med-zoom-name { color: var(--text-dim); }
+/* The panel's side (2026-11-20, map-editor.js): on the right it hangs where
+   THE INDEX does, and the Index, opened, lies over it. Nothing at the band's
+   left end has to stand clear of it there. The arrow turns to point back. */
+body.editor-right #map-drawer { left: auto; right: 18px; }
+body.editor-right.editor-open { --editor-clear: 0px; }
+body.editor-right #index-drawer { z-index: 972; }
+.med-side svg { width: 16px; height: 16px; display: block; transition: transform 200ms; }
+body.editor-right .med-side svg { transform: rotate(180deg); }
+body.editor-right .mbx-say { left: calc(50% - 169px); }
+@media (prefers-reduced-motion: reduce) { .med-side svg { transition: none; } }
+
+/* The sky's and the depths' names (2026-11-20), under WORDS */
+.med-names { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--ink-line); }
+.med-names[hidden] { display: none; }
+.med-names .sp-hint { margin-top: 0; }
+.med-names .rel-add-field { flex: none; }
+
+/* MOVE AND RESIZE THE BOXES (2026-11-20, map-resize.js): each zoom map's
+   rectangle over the map, under the panel; only the rectangles take the
+   pointer. The frame is the drawn box's; a corner is an 8px gilt square. */
+/* cut off at the band's foot, so a box near the map's top is never drawn over the band */
+.mrz-layer { position: fixed; inset: 0; z-index: 964; display: none; pointer-events: none; overflow: hidden;
+  clip-path: inset(calc(var(--crown-b, 52px) + 2px) 0 0 0); }
+.mrz-layer.on { display: block; }
+.mrz-box {
+  position: absolute; box-sizing: border-box; pointer-events: auto; cursor: move; touch-action: none;
+  border: 1px dashed var(--gilt-bright); background: rgba(var(--gilt-rgb), 0.08); border-radius: 2px;
+}
+.mrz-box.dragging { background: rgba(var(--gilt-rgb), 0.16); border-style: solid; }
+.mrz-name {
+  position: absolute; left: 6px; top: 6px; pointer-events: none; white-space: nowrap;
+  font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.72rem; letter-spacing: 0.22em; text-transform: uppercase;
+  color: var(--gilt-bright); text-shadow: 0 1px 2px rgba(13, 11, 7, 0.9);
+}
+.mrz-h { position: absolute; width: 10px; height: 10px; background: var(--gilt-bright); border: 1px solid var(--abyss); border-radius: 2px; }
+.mrz-nw { left: -6px; top: -6px; cursor: nwse-resize; }
+.mrz-se { right: -6px; bottom: -6px; cursor: nwse-resize; }
+.mrz-ne { right: -6px; top: -6px; cursor: nesw-resize; }
+.mrz-sw { left: -6px; bottom: -6px; cursor: nesw-resize; }
+
+/* The map list's ✎ and ✕ (2026-11-20, table.js): a map and its two small
+   buttons on one line; ✕ armed says Delete? in the warning ink. */
+.spm-item { display: flex; align-items: stretch; gap: 6px; }
+.spm-item > .spm-row { flex: 1; min-width: 0; }
+.spm-item > .spm-name { flex: 1; min-width: 0; }
+.spm-item > .sp-btn { flex: none; }
+.spm-acts { display: flex; flex-direction: column; gap: 4px; justify-content: center; }
+.spm-act {
+  min-width: 24px; height: 20px; padding: 0 5px; border-radius: 3px; cursor: pointer;
+  background: rgba(var(--gilt-rgb), 0.08); border: 1px solid rgba(var(--gilt-rgb), 0.35); color: var(--gilt);
+  font-family: 'Alegreya Sans', sans-serif; font-size: 0.74rem; line-height: 1;
+}
+.spm-act:hover { background: rgba(var(--gilt-rgb), 0.16); }
+.spm-act:disabled { opacity: 0.4; cursor: not-allowed; }
+.spm-del { color: var(--sem-down); border-color: rgba(var(--down-rgb), 0.45); }
+.spm-del.armed { background: rgba(var(--down-rgb), 0.18); font-weight: 700; }
+
+/* HARDWARE's editing tools come out with its ✎ (2026-11-20), for whoever has
+   one; a look-only Atlas has no ✎ and keeps Rearrange, which there only tries
+   a layout out. The ✎ is filled while they are out. */
+body[data-editable="1"] #reliquary:not(.tools-on) :is(#rel-records, #rel-loc, #rel-add, #rel-edit, #rel-save, #rel-reset) { display: none; }
+.scene-edit.on { background: var(--gilt); color: var(--on-gilt); border-color: var(--gilt); }
+
+/* ATLAS's ▾ is not drawn where a mouse can hover (2026-11-20): the menu comes
+   out under the pointer, under the keyboard, and on ↓. A screen that cannot
+   hover keeps it. */
+@media (hover: hover) { #view-more { display: none; } }
+
+/* DRAW A BOX (2026-11-20, map-box.js): a sheet over the map, under the panel
+   (970), while a box is drawn or named; the box is the frame a zoom map
+   wears, in gilt. The button is filled while the sheet is up. */
+.mbx-layer { position: fixed; inset: 0; z-index: 965; display: none; cursor: crosshair; touch-action: none; }
+.mbx-layer.on { display: block; }
+.mbx-rect {
+  position: absolute; box-sizing: border-box; pointer-events: none;
+  border: 1px dashed var(--gilt-bright); background: rgba(var(--gilt-rgb), 0.10); border-radius: 2px;
+}
+.mbx-rect[hidden] { display: none; }
+.mbx-say {
+  /* centred on the map that shows beside the open panel (320px + its 18px inset) */
+  position: absolute; left: calc(50% + 169px); bottom: 28px; transform: translateX(-50%); pointer-events: none;
+  padding: 6px 14px; border-radius: 20px; background: var(--surface); border: 1px solid var(--ink-line);
+  font-family: 'Alegreya Sans', sans-serif; font-size: 0.86rem; color: var(--text);
+}
+#mbx-draw.on { background: var(--gilt); color: var(--on-gilt); border-color: var(--gilt); }
+.mbx-form { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--ink-line); }
+.mbx-form[hidden], #mbx-map-wrap[hidden] { display: none; }
+.mbx-form .sp-hint { margin-top: 0; }
+.mbx-form .rel-add-field { flex: none; }
+.mbx-found { font-size: 0.86rem; color: var(--text); }
+.mbx-msg, .loc-msg { min-height: 1.2em; font-size: 0.82rem; color: var(--sem-warn); }
+.mbx-msg:empty, .loc-msg:empty { display: none; }
+
+/* LOCATION (2026-11-20, location-set.js): the one box that asks where a thing
+   stands, a <dialog> over whatever view asked. A panel (8px), on the panels'
+   surface; its title is the micro-caps every pane's head wears. */
+.loc-box {
+  position: fixed; inset: 0; margin: auto;   /* the page's reset takes a dialog's own centring */
+  width: min(420px, calc(100vw - 32px)); padding: 0; border-radius: 8px;
+  background: var(--surface); color: var(--text); border: 1px solid rgba(var(--gilt-rgb), 0.35);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.55);
+  font-family: 'Alegreya Sans', sans-serif;
+}
+.loc-box::backdrop { background: rgba(13, 11, 7, 0.55); }
+.loc-form { display: flex; flex-direction: column; gap: 12px; padding: 20px 22px; }
+.loc-title { font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.72rem; letter-spacing: 0.22em; color: var(--gilt); }
+.loc-what { font-size: 1rem; line-height: 1.4; }
+.loc-what b { font-weight: 700; color: var(--gilt); }
+.loc-note { font-size: 0.86rem; line-height: 1.4; color: var(--sem-warn); }
+.loc-note[hidden] { display: none; }
+.loc-form .sp-hint { margin-top: 0; }
+.loc-form .rel-add-field { flex: none; }
+.loc-acts { display: flex; gap: 8px; justify-content: flex-end; }
+
 /* What stands at the band's left end stands clear of the open panel: the zoom
    column, a region's crumbs and locator, and a left-hand card. `--editor-clear`
    is the panel's width and the gap after it; MUST TRACK #map-drawer. */

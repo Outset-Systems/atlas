@@ -32,6 +32,7 @@
 import { A, CFG, $, esc, glassAttrs, nodeById, FALLBACK_HUE, DRAG_END, postJSON, canAdminWrite } from './config.js';
 import { makeScene } from './scene.js';
 import { locationByKey, looseAt, rackable, racksAt } from './locations-model.js';
+import { setLocation } from './location-set.js';
 import { drawPlacePicker, markPlace, placeName, whereNow } from './scene-places.js';
 import {
   UH, KIND_HUE, ledColor, uLabel, setRackTheme,
@@ -125,6 +126,7 @@ function renderRackNav() {
 }
 
 function render() {
+  shown = null;
   buildDevices();
   renderRackNav();
   const shelved = renderShelf();
@@ -186,6 +188,10 @@ function render() {
   renderRear();
 }
 
+/* The vessel the detail pane is showing: what the Location tool asks about
+   (2026-11-20). None, and it asks about the rack on screen. */
+let shown = null;
+
 function select(d, el) {
   for (const f of elevEl.querySelectorAll('.rel-dev')) f.classList.remove('active');
   el.classList.add('active');
@@ -193,6 +199,7 @@ function select(d, el) {
 }
 
 function showDetail(d) {
+  shown = d;
   const n = d.node, hue = KIND_HUE[d.kind] || FALLBACK_HUE;
   detailEl.style.setProperty('--rel-hue', hue);
   const role = n ? n.role : (d.desc || 'reserved');
@@ -384,6 +391,8 @@ function paintWrites() {
   const add = $('rel-add'), save = $('rel-save'), why = $('rel-why');
   if (add) { add.disabled = !can; add.title = can ? 'Put a device in this rack' : WRITE_WHY; }
   if (save) { save.disabled = !can; save.title = can ? '' : WRITE_WHY; }
+  const locate = $('rel-loc');
+  if (locate) { locate.disabled = !can; locate.title = can ? 'Say where the machine shown, or this rack, stands' : 'Location is off here: it needs an admin, on an Atlas that takes changes.'; }
   if (why) { why.textContent = can ? '' : `${WRITE_WHY} A drag still tries a layout out; it stays in this browser.`; why.hidden = can || !editing; }
 }
 
@@ -454,6 +463,18 @@ async function addVessel() {
   } finally {
     go.disabled = false;
   }
+}
+
+/** LOCATION (2026-11-20; owner: "a button in the node view, or hardware view
+    to set/add location for stuff"): where the machine in the detail pane
+    stands, or, with none shown that is a place on the map, the rack on
+    screen. A racked machine's answer is its rack's, and the box says so
+    (location-set.js). The scene is drawn again from what was saved. */
+async function locate() {
+  if (!mayWrite()) return;
+  const ask = shown?.node ? { node: shown.node.id } : rackId !== null ? { rack: rackId } : null;
+  if (!ask) { A.showToast?.('Pick a machine first, then Location.'); return; }
+  if (await setLocation(ask)) render();
 }
 
 /** Take a vessel out of the rack: a front slot or a rear fitting. The place
@@ -665,6 +686,12 @@ const scene = makeScene({ id: 'reliquary', closeId: 'rel-close', build: () => re
 const { open, close } = scene;
 A.openReliquary = open;
 A.closeReliquary = close;
+// ✎ put the tools away (editor/index.js): whatever was half done goes with them
+addEventListener('atlas:scene-tools', (e) => {
+  if (e.detail?.scene !== 'reliquary' || e.detail.on) return;
+  setEditing(false);
+  openAddBox(false);
+});
 // the band's menu of locations, and a press on HARDWARE while one is shown
 addEventListener('atlas:scene-place', (e) => { if (e.detail?.scene === 'rack') setPlace(e.detail.place); });
 
@@ -682,6 +709,7 @@ A.buildReliquary = function buildReliquary() {
     e.stopPropagation();
     if (!$('rel-add').disabled) openAddBox($('rel-addbox').hidden);
   });
+  $('rel-loc')?.addEventListener('click', (e) => { e.stopPropagation(); locate(); });
   $('rel-add-what')?.addEventListener('change', paintAddName);
   $('rel-add-go')?.addEventListener('click', (e) => { e.stopPropagation(); addVessel(); });
   $('rel-add-cancel')?.addEventListener('click', (e) => { e.stopPropagation(); openAddBox(false); });

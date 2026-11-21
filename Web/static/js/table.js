@@ -25,7 +25,7 @@
    gate rather than reaching the style engine. Clearing the override removes
    the inline tokens and the stylesheet's own :root wins again. */
 
-import { A, CFG, $, esc, canAdminWrite } from './config.js';
+import { A, CFG, $, esc, canAdminWrite, getJSON } from './config.js';
 import { say, setStyleWords } from './words.js';
 
 const WALLPAPER_KEY = 'atlas-wallpaper';
@@ -152,13 +152,38 @@ async function buildTable() {
     return;
   }
   const current = stored();
+  /* RENAME AND DELETE (2026-11-20; owner: "add a way to rename existing maps",
+     "add a way to delete themes with a confirm step"): for whoever may write,
+     each map wears ✎ and ✕ beside it. Which maps are built in (and so cannot
+     be deleted) is the editor's own list; a failure to read it only leaves
+     ✕ off. */
+  const admin = canAdminWrite() && Boolean(A.editorReady?.());
+  let builtIn = null;
+  if (admin) {
+    try {
+      const { Editor } = await import('./editor/index.js');
+      builtIn = new Set(((await Editor.mapArt()).images || []).filter((i) => i.bundled).map((i) => i.name));
+    } catch { /* ✕ stays off */ }
+  }
+  const acts = (m) => {
+    if (!admin) return '';
+    const why = !builtIn ? 'The list of map images could not be read'
+      : builtIn.has(m.name) ? 'Built into the Atlas: it cannot be deleted here'
+        : m.default ? 'This is the map’s own background: choose another under Records first'
+          : m.name === CFG.DEFAULT_STYLE?.name ? 'This Atlas shows this map to everyone to start with (ATLAS_DEFAULT_STYLE)' : '';
+    return '<span class="spm-acts">' +
+      `<button type="button" class="spm-act" data-rename="${esc(m.name)}" title="Rename ${esc(m.label)}" aria-label="Rename ${esc(m.label)}">✎\uFE0E</button>` +
+      `<button type="button" class="spm-act spm-del" data-delete="${esc(m.name)}"${why ? ' disabled' : ''} ` +
+        `title="${esc(why || `Delete ${m.label}`)}" aria-label="Delete ${esc(m.label)}">✕\uFE0E</button></span>`;
+  };
   holder.innerHTML = maps.map((m) =>
+    `<div class="spm-item" data-item="${esc(m.name)}">` +
     `<button class="spm-row${(current ? current.name === m.name : m.default) ? ' on' : ''}" data-name="${esc(m.name)}">` +
       `<img class="spm-thumb" src="${esc(m.url)}" alt="" loading="lazy">` +
       `<span class="spm-label">${esc(m.label)}</span>` +
       (m.default ? `<span class="spm-tag">${say('the realm’s')}</span>` : '') +
       (m.theme ? `<span class="spm-tag spm-tag-theme">theme</span>` : '') +
-    `</button>`
+    `</button>${acts(m)}</div>`
   ).join('');
   for (const row of holder.querySelectorAll('.spm-row')) {
     row.addEventListener('click', () => {
@@ -166,9 +191,103 @@ async function buildTable() {
       if (m) pick(m);
     });
   }
+  for (const b of holder.querySelectorAll('[data-rename]')) {
+    b.addEventListener('click', () => startRename(holder, maps.find((x) => x.name === b.dataset.rename)));
+  }
+  for (const b of holder.querySelectorAll('[data-delete]')) {
+    b.addEventListener('click', () => pressDelete(b, maps.find((x) => x.name === b.dataset.delete)));
+  }
   buildProvisioners(holder);
 }
 A.buildCartographer = buildTable;
+
+/** ✎: the row gives way to a name box. Enter or Save writes the name to the
+    map (`meta.map_art`, the first place a map's name is looked for, so a
+    built-in map can be renamed too); blank gives the map its own name back. */
+function startRename(holder, m) {
+  const item = m && holder.querySelector(`.spm-item[data-item="${CSS.escape(m.name)}"]`);
+  if (!item) return;
+  item.innerHTML =
+    `<input class="dir-input spm-name" type="text" maxlength="60" autocomplete="off" spellcheck="false" value="${esc(m.label)}" aria-label="The map's name">` +
+    '<button type="button" class="sp-btn sp-btn-go spm-save">Save</button>' +
+    '<button type="button" class="sp-btn spm-cancel">Cancel</button>';
+  const input = item.querySelector('.spm-name');
+  const save = async () => {
+    const label = input.value.trim().replace(/\s+/g, ' ');
+    try {
+      const { Editor } = await import('./editor/index.js');
+      await Editor.load();
+      const list = (Array.isArray(Editor.data?.meta?.map_art) ? Editor.data.meta.map_art : [])
+        .filter((e) => e && typeof e === 'object');
+      const had = list.find((e) => e.name === m.name);
+      const entry = { ...(had || { name: m.name }) };
+      if (label) entry.label = label; else delete entry.label;
+      const rest = list.filter((e) => e.name !== m.name);
+      // an entry that says nothing but its name is no entry
+      const next = Object.keys(entry).length > 1 ? [...rest, entry] : rest;
+      await Editor.apply([{ op: 'upsert', section: 'meta', body: { map_art: next.length ? next : null } }],
+        label ? `the map ${m.name} is named ${label} (MAP EDITOR)` : `the map ${m.name} has its own name back (MAP EDITOR)`);
+      A.showToast?.(label ? `It is ${label} now.` : 'It has its own name back.');
+      await buildTable();
+      // this browser's own copy of the style it wears takes the new name
+      try {
+        refreshStyle(((await getJSON('api/v2/maps')).maps || []).find((x) => x.name === m.name));
+      } catch { /* the next opening reads it */ }
+    } catch (err) {
+      A.showToast?.(`Not renamed: ${err.message || err}`);
+    }
+  };
+  item.querySelector('.spm-save').addEventListener('click', save);
+  item.querySelector('.spm-cancel').addEventListener('click', () => buildTable());
+  input.addEventListener('keydown', (e) => {
+    e.stopPropagation();   // the panel's Escape, the map's keys
+    if (e.key === 'Enter') { e.preventDefault(); save(); }
+    else if (e.key === 'Escape') buildTable();
+  });
+  input.focus();
+  input.select();
+}
+
+/** ✕, two presses: the first arms it and says so, the second (within a few
+    seconds) deletes the image for everyone. It cannot be undone. */
+function pressDelete(b, m) {
+  if (!m || b.disabled) return;
+  if (!b.classList.contains('armed')) {
+    b.classList.add('armed');
+    b.textContent = 'Delete?';
+    b.title = `Press again to delete ${m.label} for everyone. This cannot be undone.`;
+    setTimeout(() => { if (b.isConnected) buildTable(); }, 5000);
+    return;
+  }
+  b.disabled = true;
+  (async () => {
+    try {
+      const { Editor } = await import('./editor/index.js');
+      await Editor.deleteMapArt(m.name);
+      A.showToast?.(`${m.label} is deleted.`);
+      // the name it was given goes with it: a later upload of the same file
+      // would otherwise wear it. A failure here leaves a harmless entry.
+      try {
+        await Editor.load();
+        const list = Array.isArray(Editor.data?.meta?.map_art) ? Editor.data.meta.map_art : [];
+        if (list.some((e) => e?.name === m.name)) {
+          const rest = list.filter((e) => e?.name !== m.name);
+          await Editor.apply([{ op: 'upsert', section: 'meta', body: { map_art: rest.length ? rest : null } }],
+            `the deleted map ${m.name} no longer has a name kept (MAP EDITOR)`);
+        }
+      } catch { /* the image is gone either way */ }
+      if (stored()?.name === m.name && !CFG.DEFAULT_STYLE) {
+        // the map this browser wore is gone: back to the realm's own
+        store(null);
+        location.reload();
+        return;
+      }
+    } catch (err) {
+      A.showToast?.(`Not deleted: ${err.message || err}`);
+    }
+    buildTable();
+  })();
+}
 
 /* ── new renders, from a file or from the real world (2026-08-16) ────
    Two admin-only rows under the gallery. UPLOAD posts to the same

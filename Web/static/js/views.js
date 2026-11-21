@@ -213,12 +213,19 @@ A.settleCharts = () => { if (holdCharts) { holdCharts = false; A.toCharts({ smoo
 function paintHome() {
   const home = document.querySelector('[data-scene="atlas"]');
   if (home) home.title = A.PHONE ? 'Back to the top' : 'Back to the whole map';
-  // the menu and the phone's strip mark the view on screen
+  /* The menu and the phone's strip mark the view on screen. MAP EDITOR is the
+     one item that is not a view: it is the map with its panel out, so it is
+     marked only while that panel is (owner, 2026-11-20: "when just on the
+     main atlas map don't have map editor selected in the drop down"). */
+  const editing = Boolean(document.getElementById('map-drawer')?.classList.contains('open'));
   for (const b of document.querySelectorAll('#view-menu [data-view], .view-strip [data-view]')) {
-    if (b.dataset.view === A.VIEW) b.setAttribute('aria-current', 'true');
+    const on = b.dataset.view === A.VIEW && (b.dataset.view !== 'map' || !b.closest('#view-menu') || editing);
+    if (on) b.setAttribute('aria-current', 'true');
     else b.removeAttribute('aria-current');
   }
 }
+// the panel opened or shut (map-editor.js says so after it has)
+addEventListener('atlas:map-editor-state', paintHome);
 
 /** Show one view. `remember` keeps the pick for the next visit, which only a
     wide screen's own pick should do. A phone has no map, so it never shows

@@ -223,6 +223,11 @@ export const TP_TEXT = {
   tp_dx_head: 'Where {name} breaks',
   tp_dx_pick: 'Pick a place first.',
   tp_dx_not_place: 'A stub or a folded group has nothing to ask. Pick a place.',
+  // where the selected place stands (2026-11-20, location-set.js): an admin's
+  tp_loc: 'Location…',
+  tp_loc_title: 'Say where the selected place stands: a location the map has, or a new one',
+  tp_loc_pick: 'Pick a place first, then Location.',
+  tp_loc_not_place: 'A stub or a folded group stands nowhere. Pick a place.',
 };
 
 /** A word, from the theme or the fallback above, with {name} filled in. */

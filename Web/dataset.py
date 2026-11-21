@@ -344,6 +344,11 @@ def _apply_object(data, op, s):
     _refuse_url_credentials(section_key, body)
     merged = dict(data.get(section_key) or {})
     merged.update(body)
+    # an explicit null clears an optional setting, as it does on a list
+    # section's entry (`_apply_upsert`): it used to be stored as a null
+    for key, value in body.items():
+        if value is None:
+            merged.pop(key, None)
     data[section_key] = merged
     return f"updated {s['singular']}"
 

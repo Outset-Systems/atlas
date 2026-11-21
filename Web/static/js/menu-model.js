@@ -106,6 +106,8 @@ export const ACTIONS = [
     act: 'alerts', needs: 'alerts', words: SAME('nodes_menu_alerts'),
     silent: { off: SAME('nodes_menu_alerts_off'), nowhere: SAME('nodes_menu_alerts_nowhere') },
   },
+  // 2026-11-20: where the place stands (location-set.js); a guest's is its host's
+  { act: 'location', needs: 'locate', words: { place: 'nodes_menu_location' } },
   { act: 'edit', needs: 'edit', words: { place: 'nodes_menu_edit' } },
   { act: 'rename', needs: 'edit', words: { collection: 'nodes_rail_rename' } },
   { act: 'remove', needs: 'remove', words: { place: 'nodes_menu_remove', collection: 'nodes_rail_remove' } },

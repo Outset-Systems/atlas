@@ -514,6 +514,9 @@
                 "type": "boolean",
                 "description": "Atlas also asks what a Kuma monitor watches, by the service's own address or check, and NODES shows how often the two agree. Kuma's answer stays the one on the map. For deciding whether Atlas can take over from Kuma."
               },
+              "map_art": {
+                "description": "`[{\"name\": \"floor-2.webp\", \"label\": \"Second floor\"}]`: what a map image is called in the list of map styles, in place of its file name. Set from the map editor, under Map style, Rename."
+              },
               "surveyed": {
                 "type": "string",
                 "description": "When the map was last walked, `YYYY-MM-DD`."

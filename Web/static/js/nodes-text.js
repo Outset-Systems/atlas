@@ -202,6 +202,7 @@ export const NODES_TEXT = {
   nodes_menu_unmanaged_off: 'Watch it again',
   nodes_menu_unmanaged_via: 'Unmanaged through {name}',
   nodes_menu_alerts: 'Alerts',
+  nodes_menu_location: 'Location…',
   nodes_menu_edit: 'Edit',
   nodes_menu_remove: 'Remove…',
   // 2026-11-16: a phone's sheet, its first line ("Down · Watched by Kuma"): the words are other keys'

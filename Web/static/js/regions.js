@@ -758,6 +758,24 @@ A.regionViewFor = (parentId) => {
   };
 };
 
+/* ── the map editor's DRAW A BOX (map-box.js, 2026-11-20) ─────────────────
+   The map on the stage and where each place drawn on it stands, in that
+   map's percent: a box drawn there is in the same figures. `level` is null
+   on the main map. */
+export const boxContext = () => ({
+  level: level ? { id: level.id, name: level.name } : null,
+  spots: level ? { ...(A.levelPlaces || {}) } : mainSpots(),
+});
+
+/* ── the map editor's MOVE AND RESIZE THE BOXES (map-resize.js, 2026-11-20) ──
+   The regions whose rectangles are drawn on the map on the stage: the ones
+   that sit on it, shown ones only. */
+export const frameRegions = () => ({
+  level: level ? { id: level.id, name: level.name } : null,
+  list: regions().filter((r) => (r.parent || null) === (level?.id ?? null)
+    && [r.x, r.y, r.w, r.h].every(Number.isFinite)),
+});
+
 /* ── wiring into the rest of the Atlas ──────────────────────────────────── */
 const prevMove = A.onCameraMove;
 A.onCameraMove = (userMove) => { prevMove?.(userMove); onMainMove(userMove); };

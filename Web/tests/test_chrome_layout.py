@@ -413,7 +413,9 @@ def test_the_views_menu_is_a_sibling_of_the_band():
         "overflow will position it wrongly and then clip it away")
     menu = _view_menu(html)
     assert re.findall(r'data-view="(\w+)"', menu) == ["map", "overview", "nodes", "topology"]
-    assert menu.count('role="menuitem"') == 4, (
+    # four views, and RECORDS (the Desk's door, 2026-11-20), which is no view
+    assert 'id="view-records" data-act="records" hidden' in menu
+    assert menu.count('data-view=') == 4 and menu.count('role="menuitem"') == 5, (
         "the four views (the map's tools went to the band, and ALERTS into NODES, 2026-11-14; "
         "WIRING, the view `topology`, joined them 2026-11-17)")
     css = _read(CSS)
@@ -1092,7 +1094,9 @@ def test_the_map_editors_panel_is_the_index_mirrored():
     assert html.index('<aside id="index-drawer"') < html.index('<aside id="map-drawer"')
     assert 'id="map-drawer"' not in _view_menu(html)
     assert 'class="drawer-head"' in drawer and 'class="drawer-title"' in drawer
-    assert 'id="med-close"' in drawer and 'aria-hidden="true"' in drawer
+    # its × became the arrow that moves it to the other side (2026-11-20)
+    assert 'id="med-side"' in drawer and 'id="med-close"' not in drawer
+    assert 'aria-hidden="true"' in drawer
     css = _strip_comments(_read(CSS))
     rule = re.search(r"^#map-drawer \{(.*?)^\}", css, re.S | re.M).group(1)
     index = re.search(r"^#index-drawer \{(.*?)^\}", css, re.S | re.M).group(1)
@@ -1120,7 +1124,7 @@ def test_the_map_settings_moved_whole_and_kept_their_names():
                     "sp-copy", "sp-reset", "med-zoom", "med-zoom-add"):
         assert f'id="{control}"' in drawer, control
         assert html.count(f'id="{control}"') == 1, control
-    assert re.findall(r'data-sec="(\w+)"', drawer) == ["table", "words", "survey", "zoom"]
+    assert re.findall(r'data-sec="(\w+)"', drawer) == ["table", "words", "survey", "zoom", "box"]
     settings = html[html.index('id="settings-panel"'):html.index("Toast for unbuilt scenes")]
     settings = re.sub(r"<!--.*?-->", "", settings, flags=re.S)
     assert 'data-group="map"' not in settings and "the map, its connections" not in settings
@@ -1193,3 +1197,132 @@ def test_the_words_follow_a_phone_into_settings():
     assert ":is(#settings-panel, #map-editor-body) .sp-sec" in ui
     # untouched, the editor's sections stand open; Settings' own rule is as it was
     assert "!(FOLD_DEFAULT_OPEN.has(key) || sec.closest('#map-editor-body'))" in ui
+
+
+# ── 2026-11-20: where a thing stands, said from the views; a box drawn on the map ──
+# Owner: "when just on the main atlas map don't have map editor selected in the
+# drop down", "add a way to add locations. maybe a button in the node view, or
+# hardware view", "maybe you can also add a location in the wiring section too",
+# "in map editor a way to draw a box to create a zoom map and/or location".
+
+JS = WEB / "static" / "js"
+
+
+def test_map_editor_is_marked_only_while_its_panel_is_out():
+    views = _read(JS / "views.js")
+    assert "b.dataset.view !== 'map' || !b.closest('#view-menu') || editing" in views
+    assert "addEventListener('atlas:map-editor-state', paintHome);" in views
+    # the panel says so after it has opened or shut, whichever way it was asked
+    editor = _read(MAP_EDITOR)
+    toggle = editor[editor.index("export function toggleMapEditor"):editor.index("/* ── ZOOM MAPS")]
+    assert "dispatchEvent(new CustomEvent('atlas:map-editor-state', { detail: { open: will } }));" in toggle
+
+
+def test_one_box_says_where_a_thing_stands_and_three_views_open_it():
+    box = _read(JS / "location-set.js")
+    assert "export async function setLocation(ask)" in box
+    assert "box.showModal();" in box
+    # imported, never hung on A (the ratchet), by each of the three
+    assert "import { mayLocate, setLocation } from './location-set.js';" in _read(JS / "nodes-menu.js")
+    assert "import { setLocation } from './location-set.js';" in _read(JS / "reliquary.js")
+    assert "import { setLocation } from './location-set.js';" in _read(JS / "topology-locate.js")
+    assert "import './topology-locate.js';" in _read(JS / "topology.js")
+    assert "{ act: 'location', needs: 'locate', words: { place: 'nodes_menu_location' } }" in _read(JS / "menu-model.js")
+    html = _read(INDEX)
+    assert 'id="rel-loc"' in html
+    plain = json.loads((WEB / "themes" / "plain.json").read_text(encoding="utf-8"))["text"]
+    for key in ("nodes_menu_location", "tp_loc", "tp_loc_title", "tp_loc_pick", "tp_loc_not_place"):
+        assert plain.get(key), key
+
+
+def test_draw_a_box_is_a_section_of_the_map_editor():
+    _, drawer = _map_drawer()
+    secs = re.findall(r'class="sp-sec" data-sec="(\w+)"', drawer)
+    assert secs.index("box") == secs.index("zoom") + 1
+    for control in ("mbx-draw", "mbx-why", "mbx-form", "mbx-name", "mbx-loc", "mbx-zoom", "mbx-map", "mbx-save", "mbx-again", "mbx-cancel"):
+        assert f'id="{control}"' in drawer, control
+    js = _read(JS / "map-box.js")
+    # the sheet lies under the panel, so the form stays in reach while it is up
+    css = _strip_comments(_read(WEB / "static" / "atlas.css"))
+    assert ".mbx-layer { position: fixed; inset: 0; z-index: 965;" in css
+    # a zoom map is off on a map style, as Add or remove is
+    assert "A.onOtherStyle?.()" in js
+    # the region is written with the rectangle, on the map on the stage
+    assert "...(level ? { parent: level.id } : {})" in js
+    atlas = _read(JS / "atlas.js")
+    assert atlas.index("import './map-editor.js';") < atlas.index("import './map-box.js';")
+
+
+
+# ── 2026-11-20, the second batch ─────────────────────────────────────────────
+# Owner: "when clicking the pencil it shows those buttons. In topology when
+# clicking the pencil it opens the wiring section. in map editor mode, add a
+# way to resize existing boxes ... in the nav bar lets remove the down arrow by
+# atlas. We also need to add a way to rename existing maps. In the map editor
+# lets add a way to delete themes with a confirm step. lets also take 'edit the
+# records' and add it to the drop down list in atlas as Records. lets also add a
+# way to change the name for the sky island/depths ... change the X in the top
+# right of the map editor menu to be an arrow, so you can slide it to the left
+# or right side ... when a scene is open, it does not need to put a circle
+# around the index button."
+
+
+def test_the_pencil_brings_out_hardwares_tools_and_topologys_opens_wiring():
+    editor = _read(JS / "editor" / "index.js")
+    assert "tools: 'reliquary', records: 'rel-records'" in editor
+    assert "view: 'topology'" in editor
+    assert "A.setView?.(view, { remember: true });" in editor
+    assert "dispatchEvent(new CustomEvent('atlas:scene-tools', { detail: { scene: tools, on } }));" in editor
+    css = _strip_comments(_read(WEB / "static" / "atlas.css"))
+    # hidden only where there is a pencil to bring them out
+    assert ('body[data-editable="1"] #reliquary:not(.tools-on) '
+            ':is(#rel-records, #rel-loc, #rel-add, #rel-edit, #rel-save, #rel-reset) { display: none; }') in css
+    assert "addEventListener('atlas:scene-tools'" in _read(JS / "reliquary.js")
+    assert 'id="rel-records"' in _read(INDEX)
+
+
+def test_atlas_has_no_arrow_where_a_mouse_hovers_and_the_index_wears_no_ring():
+    css = _strip_comments(_read(WEB / "static" / "atlas.css"))
+    assert "@media (hover: hover) { #view-more { display: none; } }" in css
+    ui = _read(JS / "ui.js")
+    # the keyboard's way in is on ATLAS itself now
+    assert "sceneHome?.querySelector('[data-scene=\"atlas\"]')?.addEventListener('keydown'" in ui
+    assert "classList.toggle('lit'" not in ui
+
+
+def test_records_is_in_the_menu_and_no_longer_a_button_in_the_panel():
+    editor = _read(JS / "editor" / "index.js")
+    assert "function addMenuEntry()" in editor and "document.getElementById('view-records')" in editor
+    # the menu closes itself as after any pick, then asks for the Desk
+    assert "addEventListener('atlas:records', () => openDesk());" in editor
+    assert "dispatchEvent(new CustomEvent('atlas:records'));" in _read(JS / "ui.js")
+    assert "Edit the records (E)" not in editor
+    plain = json.loads((WEB / "themes" / "plain.json").read_text(encoding="utf-8"))["text"]
+    assert plain["view_records"] == "RECORDS"
+
+
+def test_the_panel_changes_sides_and_the_index_lies_over_it():
+    js = _read(MAP_EDITOR)
+    assert "const SIDE_KEY = 'atlas-editor-side';" in js
+    assert "document.body.classList.toggle('editor-right', right);" in js
+    css = _strip_comments(_read(WEB / "static" / "atlas.css"))
+    assert "body.editor-right #map-drawer { left: auto; right: 18px; }" in css
+    assert "body.editor-right #index-drawer { z-index: 972; }" in css
+    assert "body.editor-right.editor-open { --editor-clear: 0px; }" in css
+
+
+def test_boxes_resize_maps_rename_and_delete_and_the_two_names():
+    _, drawer = _map_drawer()
+    for control in ("med-resize", "med-names", "med-sky", "med-depths", "med-names-save"):
+        assert f'id="{control}"' in drawer, control
+    resize = _read(JS / "map-resize.js")
+    assert "{ op: 'upsert', section: 'regions', id, body: rect }" in resize
+    table = _read(JS / "table.js")
+    assert "data-rename=" in table and "data-delete=" in table
+    # two presses to delete, and a built-in map is not offered
+    assert "b.classList.add('armed');" in table and "Editor.deleteMapArt(m.name)" in table
+    assert "{ op: 'upsert', section: 'meta', body: { map_art: next.length ? next : null } }" in table
+    # the two names are the networks `sky` and `depths`, renamed where they are
+    assert "ops.push({ op: 'upsert', section: 'zones', id: zone, body: { name } });" in _read(MAP_EDITOR)
+    # the depths' head is the theme's word, as the sky's always was
+    assert '<div class="abyss-head">{{ theme.text.depths|upper }}</div>' in _read(INDEX)
