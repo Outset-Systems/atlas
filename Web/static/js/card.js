@@ -372,9 +372,12 @@ function fillServices(n, entries) {
   // what crosses here — a road is known by its traffic. Each row names its true
   // host: the thing lives there, it only *passes* through here (2026-08-03).
   const crossing = entries.filter((en) => en.passing);
-  const row = (attrs, dot, label, meta) =>
-    `<li><button class="cd-row" ${attrs}>${dot}<span class="cd-label">${label}</span>` +
-    `${meta ? `<span class="cd-meta">${meta}</span>` : ''}${ICON.chev}</button></li>`;
+  // a service's row carries its heart beside it, never inside: a button in a
+  // button is split apart by the parser (2026-11-21: the heart was only on the
+  // service's own card, one press away from this list)
+  const row = (attrs, dot, label, meta, heart = '') =>
+    `<li${heart ? ' class="cd-has-fav"' : ''}><button class="cd-row" ${attrs}>${dot}<span class="cd-label">${label}</span>` +
+    `${meta ? `<span class="cd-meta">${meta}</span>` : ''}${ICON.chev}</button>${heart}</li>`;
   /* the row's quiet second word: just the port when the service answers on this
      place itself (by its address or its own name), else the host it answers at */
   const metaFor = (url) => esc(M.serviceMeta(host(url), n));
@@ -390,14 +393,15 @@ function fillServices(n, entries) {
     svcHTML += `<p class="cp-head">Services<span class="n">${links.length}</span></p><ul class="cd-rows">` +
       links.map((l, i) => row(`data-svc="${i}"`,
         `<span class="svc-health" data-kuma="${esc(svcKey(l, n.id))}"></span>`,
-        esc(l.label), metaOf(l))).join('') + '</ul>';
+        esc(l.label), metaOf(l), heartHTML(l, `data-fav-svc="${i}"`, ' cd-fav'))).join('') + '</ul>';
   }
   if (crossing.length) {
     svcHTML += `<p class="cd-sub">what crosses here</p><ul class="cd-rows">` +
       crossing.map((en, i) => row(`data-cross="${i}"`,
         // keyed by the place the service lives on, not the one it crosses
         `<span class="svc-health" data-kuma="${esc(svcKey(en.link, en.host.id))}"></span>`,
-        esc(en.link.label), esc(en.host.name))).join('') + '</ul>';
+        esc(en.link.label), esc(en.host.name),
+        heartHTML(en.link, `data-fav-cross="${i}"`, ' cd-fav'))).join('') + '</ul>';
   }
   const linksEl = $('card-links');
   linksEl.innerHTML = svcHTML;
@@ -422,6 +426,18 @@ function fillServices(n, entries) {
       e.stopPropagation();
       const en = crossing[Number(btn.dataset.cross)];
       if (en) showServiceDetail(en.host, en.link);
+    });
+  }
+  // the hearts: one of its own is written on this place, one that only crosses
+  // here on the place it lives on
+  for (const btn of linksEl.querySelectorAll('[data-fav-svc]')) {
+    btn.addEventListener('click', (e) => { e.stopPropagation(); pressHeart(btn, n, links[Number(btn.dataset.favSvc)]); });
+  }
+  for (const btn of linksEl.querySelectorAll('[data-fav-cross]')) {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const en = crossing[Number(btn.dataset.favCross)];
+      if (en) pressHeart(btn, en.host, en.link);
     });
   }
   A.paintServiceHealth?.(card);   // K4 — colour the new dots from the current feed
@@ -535,12 +551,27 @@ function heartWords(link, tile) {
     ? `A favourite: listed on OVERVIEW (${tile}). Press to take it off`
     : `Add to OVERVIEW's favourites (${tileFor(link.url)})`;
 }
-function heartHTML(link) {
+/* `attrs` names the button: the service's own card has the one `#csv-fav`; a
+   row of the SERVICES list says which row (`data-fav-svc`, `data-fav-cross`). */
+function heartHTML(link, attrs = 'id="csv-fav"', cls = '') {
   if (!mayFavour()) return '';
   const tile = favouriteOf(A.DATA, link.url);
   const words = heartWords(link, tile);
-  return `<button type="button" class="csv-fav${tile ? ' on' : ''}" id="csv-fav" aria-pressed="${Boolean(tile)}"` +
+  return `<button type="button" class="csv-fav${cls}${tile ? ' on' : ''}" ${attrs} data-url="${esc(link.url || '')}" aria-pressed="${Boolean(tile)}"` +
     `${String(link.url || '').trim() ? '' : ' disabled'} title="${esc(words)}" aria-label="${esc(words)}">${HEART}</button>`;
+}
+/* After a press, every heart on the card for that address says the same: the
+   card is not drawn again after a write, so the list's heart and the
+   service's own would otherwise disagree on the way back. */
+function syncHearts(link, now) {
+  const words = heartWords(link, now);
+  for (const b of card.querySelectorAll('.csv-fav')) {
+    if (b.dataset.url !== String(link.url || '')) continue;
+    b.classList.toggle('on', Boolean(now));
+    b.setAttribute('aria-pressed', String(Boolean(now)));
+    b.title = words;
+    b.setAttribute('aria-label', words);
+  }
 }
 async function pressHeart(btn, node, link) {
   if (btn.disabled) return;
@@ -557,11 +588,7 @@ async function pressHeart(btn, node, link) {
         : `${link.label} is a favourite, ${tileFor(link.url)} (the heart on its card)`);
     }
     const now = favouriteOf(Editor.data, link.url);
-    btn.classList.toggle('on', Boolean(now));
-    btn.setAttribute('aria-pressed', String(Boolean(now)));
-    const words = heartWords(link, now);
-    btn.title = words;
-    btn.setAttribute('aria-label', words);
+    syncHearts(link, now);
     A.showToast?.(now ? `${link.label} is on OVERVIEW's ${now} favourites.` : `${link.label} is off the favourites.`);
   } catch (err) {
     A.showToast?.(`Not saved: ${err.message || err}`);

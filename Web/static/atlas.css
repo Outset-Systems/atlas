@@ -2737,6 +2737,12 @@ body.constellation .card-split .cs-on { display: inline; }
 .csv-fav.on svg { fill: currentColor; }
 .csv-fav:disabled { opacity: 0.4; cursor: not-allowed; }
 .csv-fav:focus-visible { outline: 2px solid var(--card-ink); outline-offset: 2px; }
+/* the same heart at the end of a row of the SERVICES list (2026-11-21): beside
+   the row's button, never in it, and sized to the row */
+.cd-rows li.cd-has-fav { display: flex; align-items: center; gap: 4px; }
+.cd-has-fav .cd-row { flex: 1 1 auto; min-width: 0; }
+.csv-fav.cd-fav { margin-left: 0; width: 30px; height: 30px; }
+.csv-fav.cd-fav svg { width: 15px; height: 15px; }
 .csv-state { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .csv-chip {
   height: 26px; padding: 0 10px; display: inline-flex; align-items: center; gap: 7px;

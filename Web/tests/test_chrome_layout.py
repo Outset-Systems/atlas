@@ -1338,7 +1338,7 @@ def test_a_services_card_has_a_heart_for_whoever_may_write():
     assert "import { favouriteOf, favouriteOps, tileFor } from './favourite-model.js';" in card
     # beside the name, and absent for anyone who may not write
     assert '${dot}<span class="csv-name-t">${esc(link.label)}</span>${heartHTML(link)}</h3>' in card
-    heart = card[card.index("function heartHTML(link)"):card.index("async function pressHeart")]
+    heart = card[card.index("function heartHTML("):card.index("async function pressHeart")]
     assert "if (!mayFavour()) return '';" in heart
     assert "const mayFavour = () => canAdminWrite() && document.body.dataset.editable === '1';" in card
     # no address, no listing: the heart is off and says why
@@ -1350,3 +1350,35 @@ def test_a_services_card_has_a_heart_for_whoever_may_write():
     css = _strip_comments(_read(WEB / "static" / "atlas.css"))
     # gilt while it is one: red on this map means down
     assert ".csv-fav.on { color: var(--gilt-deep); border-color: currentColor; }" in css
+
+
+# ── 2026-11-21: the heart on each row of the SERVICES list, too ──
+# v1.101.0 put the heart only on a service's own card (one press into the
+# list), so the SERVICES fly-out, where the owner looked, had none. Each row
+# of its own services and of what crosses here carries one now, for whoever
+# may write, beside the row's button and never inside it.
+
+def test_each_row_of_the_services_list_has_a_heart_for_whoever_may_write():
+    card = _read(JS / "card.js")
+    fill = card[card.index("function fillServices(n, entries)"):card.index("function fillDetails(")]
+    # the row puts the heart after its button closes: a button in a button is
+    # split apart by the parser
+    assert "${ICON.chev}</button>${heart}</li>" in fill
+    # one for each of its own services, and one for each that only crosses here
+    assert "esc(l.label), metaOf(l), heartHTML(l, `data-fav-svc=\"${i}\"`, ' cd-fav')" in fill
+    assert "heartHTML(en.link, `data-fav-cross=\"${i}\"`, ' cd-fav')" in fill
+    # pressed, it writes on the place the service lives on, not the crossing
+    assert "pressHeart(btn, n, links[Number(btn.dataset.favSvc)])" in fill
+    assert "if (en) pressHeart(btn, en.host, en.link);" in fill
+    # the same gate as the service's own card: none for anyone who may not write
+    heart = card[card.index("function heartHTML("):card.index("function syncHearts(")]
+    assert "if (!mayFavour()) return '';" in heart
+    # the service's own card keeps its one #csv-fav
+    assert "function heartHTML(link, attrs = 'id=\"csv-fav\"', cls = '')" in heart
+    # a press in the list or on the card turns every heart for that address
+    press = card[card.index("async function pressHeart"):card.index("function showServiceDetail")]
+    assert "syncHearts(link, now);" in press
+    sync = card[card.index("function syncHearts("):card.index("async function pressHeart")]
+    assert "card.querySelectorAll('.csv-fav')" in sync
+    css = _strip_comments(_read(WEB / "static" / "atlas.css"))
+    assert ".cd-rows li.cd-has-fav { display: flex; align-items: center; gap: 4px; }" in css
