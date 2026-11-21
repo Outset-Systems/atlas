@@ -32,7 +32,7 @@ import { say } from './words.js';
 import { makeScene } from './scene.js';
 import {
   DAY_MIN, layoutDay, layoutForge, nextTurning, fmtClock, dayName,
-  every, clockPhrase, isSilent, nextParts,
+  every, clockPhrase, isSilent, nextParts, foldDay, weekOf, tally,
 } from './calendar-model.js';
 
 const pct = (min) => `${(min / DAY_MIN * 100).toFixed(3)}%`;
@@ -107,7 +107,9 @@ function rowHTML(lane, { nowMin, today }) {
   const v = VERDICT[r.verdict] || VERDICT.unwatched;
   const last = r.last;
   const took = last && last.duration_s != null ? ` · took ${last.duration_s}s` : '';
-  const title = last ? `last beat ${last.at}${last.source ? ` via ${last.source}` : ''}` : '';
+  // the whole sentence rides the tooltip too: two lines can still cut a long note
+  const title = [told(r), last ? `last beat ${last.at}${last.source ? ` via ${last.source}` : ''}` : '']
+    .filter(Boolean).join(' · ');
   // the last few turnings as a sparkline of ticks — three reds in a row is a
   // different story from one, and the count is what tells them apart
   const runs = (r.runs || []).slice(-8).map((run) =>
@@ -191,15 +193,44 @@ function groupHTML(group, ctx) {
     }
   }
 
+  /* The rows the day does not draw fold into one line (v1.101.0): on most days
+     half the page was full-width strips with nothing on them, each saying "not
+     on this day". They keep their rows — a weekly rite must still be findable
+     on the six days it rests — one click away, and the line says what turns
+     next among them so the fold hides no answer. */
+  const { shown, folded } = foldDay(group);
+  const open = opened.has(group.key);
+  const rows = open ? group.lanes : shown;
+
   return `<div class="cal-grp k-${group.kind}">
     <div class="cal-ghead">
       <span class="cal-gname">${esc(place ? `${say('THE FORGE')} · ${place}` : say(group.title))}</span>
       <span class="cal-gsub">${esc(say(group.sub))}</span>
       <span class="cal-gcount">${count}</span>
     </div>
-    ${group.lanes.map((l) => rowHTML(l, ctx)).join('')}
+    ${rows.map((l) => rowHTML(l, ctx)).join('')}
+    ${folded.length ? foldHTML(group, folded, open, ctx) : ''}
     ${foot.length ? `<div class="cal-gfoot">${foot.join('')}</div>` : ''}
   </div>`;
+}
+
+/** The one line a group's folded rows become, and the button that opens them. */
+function foldHTML(group, folded, open, ctx) {
+  const n = folded.length;
+  let what;
+  if (group.kind === 'listed') {
+    const names = folded.slice(0, 3).map((l) => `<b>${esc(l.name)}</b>`).join(', ');
+    what = `<span>${names}${n > 3 ? ` and ${n - 3} more` : ''}</span>`;
+  } else {
+    what = `<span>${n} ${say(n === 1 ? 'rite' : 'rites')} not on this day</span>`;
+    const next = nextTurning(folded, ctx.now);
+    if (next) {
+      const { clock, day, wait } = nextParts(next, ctx.now);
+      what += `<span>next · <b>${esc(next.lane.name)}</b> ${esc(day || 'today')} ${esc(clock)}Z · in ${esc(wait)}</span>`;
+    }
+  }
+  return `<button class="cal-fold" data-fold="${esc(group.key)}" aria-expanded="${open}">
+    ${what}<span class="cal-fold-do">${open ? 'FOLD ‹' : 'SHOW ›'}</span></button>`;
 }
 
 /* ── the card's pointer ───────────────────────────────────────────────────── */
@@ -226,6 +257,45 @@ export function calendarPointerHTML(node, rites, { now = new Date() } = {}) {
 /* ── the scene ────────────────────────────────────────────────────────────── */
 
 let listEl, headEl, RITES = null, offset = 0;
+/* the groups whose folded rows are open — kept across a step of the day */
+const opened = new Set();
+
+/** The head's verdict, said only as far as the reports go (v1.101.0). Green
+    was "every timed rite is turning" whenever nothing was silent — so a realm
+    where nothing had reported yet, or where the rites could not be fetched at
+    all, was told it was healthy. Green is now earned by rites that reported. */
+function verdictHTML(t) {
+  const quiet = (s) => `<span class="cal-quiet">${s}</span>`;
+  const late = t.late ? ` · <span class="cal-warnish">${t.late} late</span>` : '';
+  const waiting = t.awaited ? quiet(` · ${t.awaited} not yet reporting`) : '';
+  if (t.silent) {
+    return `<span class="cal-alarm">${t.silent} ${say(`${t.silent > 1 ? 'rites have' : 'rite has'} stopped turning`)}</span>${late}${waiting}`;
+  }
+  if (!t.kept && !t.late) {
+    return t.awaited
+      ? quiet(`${say('no rite has reported yet')} · ${t.awaited} awaited`)
+      : quiet(say('the rites could not be asked — this is the chart, not what ran'));
+  }
+  if (!t.late && !t.awaited) return `<span class="cal-calm">${say('every timed rite is turning')}</span>`;
+  return `<span class="cal-calm">${t.kept} turning</span>${late}${waiting}`;
+}
+
+/** The week strip: seven days, each with how many rites fall on it, so the
+    weekly rites the day folds away still have somewhere to be seen. */
+function weekHTML(day) {
+  const drawnIso = day.toISOString().slice(0, 10);
+  const todayIso = new Date().toISOString().slice(0, 10);
+  return `<nav class="cal-week" aria-label="The week">${weekOf(RITES, day).map((w) => {
+    const on = w.iso === drawnIso;
+    const cls = ['cal-wday', on ? 'on' : '', w.iso === todayIso ? 'today' : '', w.hits ? 'meets' : ''].filter(Boolean).join(' ');
+    const tip = `${dayName(w.dow)} ${w.iso} · ${w.drawn} ${say(w.drawn === 1 ? 'rite' : 'rites')}` +
+      (w.hits ? ` · ${w.hits} meeting${w.hits === 1 ? '' : 's'} at ${say('the forge')}` : '') +
+      (w.iso === todayIso ? ' · today' : '');
+    return `<button class="${cls}" data-day="${w.iso}" aria-pressed="${on}" title="${esc(tip)}">
+      <b>${dayName(w.dow).toUpperCase()}</b><span>${w.date.getUTCDate()}</span>
+      <i><em>${w.drawn}</em><s> ${say(w.drawn === 1 ? 'rite' : 'rites')}</s>${w.hits ? '<u> · meets</u>' : ''}</i></button>`;
+  }).join('')}</nav>`;
+}
 
 const drawnDate = () => {
   const d = new Date();
@@ -241,26 +311,32 @@ function paint() {
   const ctx = { now, today, nowMin: now.getUTCHours() * 60 + now.getUTCMinutes() };
 
   if (headEl) {
-    const bad = RITES.filter((r) => isSilent(r.verdict)).length;
-    const waiting = RITES.filter((r) => r.verdict === 'awaited').length;
-    const verdict = bad
-      ? `<span class="cal-alarm">${bad} ${say(`${bad > 1 ? 'rites have' : 'rite has'} stopped turning`)}</span>`
-      : `<span class="cal-calm">${say('every timed rite is turning')}</span>${
-        waiting ? `<span class="cal-quiet"> · ${waiting} not yet reporting</span>` : ''}`;
+    // "no two at once" is the forge group's to say, and it does; the head
+    // speaks of meetings only when there is one
     const meetings = view.hits.length
-      ? `<span class="cal-alarm">${view.hits.length} meeting${view.hits.length === 1 ? '' : 's'} at ${say('the forge')}</span>`
-      : '<span class="cal-quiet">no two want one model at once</span>';
-    headEl.innerHTML = `<span class="cal-verdict">${verdict}</span>
-      <span class="cal-count">${view.drawn.length} of ${view.lanes.length} ${say('rites')} fall on this day · ${meetings}</span>
+      ? ` · <span class="cal-alarm">${view.hits.length} meeting${view.hits.length === 1 ? '' : 's'} at ${say('the forge')}</span>`
+      : '';
+    headEl.innerHTML = `<span class="cal-verdict">${verdictHTML(tally(RITES))}</span>
+      <span class="cal-count">${view.drawn.length} of ${view.lanes.length} ${say('rites')} fall on this day${meetings}</span>
       <span class="cal-step">
-        <button class="cal-arrow" id="cal-prev" title="The day before">‹</button>
+        <button class="cal-arrow" id="cal-prev" title="The day before" aria-label="The day before">‹</button>
         <b id="cal-when">${esc(`${dayName(day.getUTCDay()).toUpperCase()} ${day.toISOString().slice(0, 10)}`)}</b>
-        <button class="cal-arrow" id="cal-next" title="The day after">›</button>
+        <button class="cal-arrow" id="cal-next" title="The day after" aria-label="The day after">›</button>
         <button class="cal-today" id="cal-today" ${today ? 'disabled' : ''}>TODAY</button>
-      </span>`;
+      </span>
+      ${weekHTML(day)}`;
     $('cal-prev').onclick = () => { offset -= 1; paint(); };
     $('cal-next').onclick = () => { offset += 1; paint(); };
     $('cal-today').onclick = () => { offset = 0; paint(); };
+    headEl.querySelectorAll('.cal-wday').forEach((b) => {
+      b.onclick = () => {
+        const todayUtc = Date.parse(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`);
+        offset = Math.round((Date.parse(`${b.dataset.day}T00:00:00Z`) - todayUtc) / 86400000);
+        paint();
+        // the head is redrawn, so the pressed button is new: keep the keyboard on it
+        headEl.querySelector(`.cal-wday[data-day="${b.dataset.day}"]`)?.focus();
+      };
+    });
   }
 
   listEl.innerHTML = view.groups.length
@@ -323,4 +399,14 @@ A.buildCalendarScene = function buildCalendarScene() {
   if (!scene.mount()) return;
   listEl = $('cal-list');
   headEl = $('cal-head');
+  // one listener for every group's fold line — the list is redrawn on each
+  // step of the day, so the buttons are new each time and the list is not
+  listEl.addEventListener('click', (e) => {
+    const b = e.target.closest('.cal-fold');
+    if (!b) return;
+    const key = b.dataset.fold;
+    if (opened.has(key)) opened.delete(key); else opened.add(key);
+    paint();
+    listEl.querySelector(`.cal-fold[data-fold="${CSS.escape(key)}"]`)?.focus();
+  });
 };

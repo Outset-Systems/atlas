@@ -398,6 +398,56 @@ export function inWords(min) {
 /** A verdict that means the rite has stopped turning. */
 export const isSilent = (verdict) => ['missed', 'failed'].includes(verdict);
 
+/** A lane with an hour that does not fall on the drawn day. It keeps its row
+    (see `layoutDay`), but an empty strip that says so is half the page on most
+    days — so the renderer folds these into one line per group, opened on ask. */
+export const offDay = (lane) => Boolean(lane.blocks.length && !lane.today.length && !lane.every);
+
+/** A group split into the rows the day draws and the rows it folds. NOT ON THE
+    CLOCK folds whole: its strips are empty on every day, and the names are the
+    whole of what it has to say. Order within each half is the group's own.
+    A rite that has stopped or is running late NEVER folds: the group head
+    counts it as silent, and a count pointing at a row you cannot see is the
+    alarm hidden behind a button. */
+export function foldDay(group) {
+  const loud = (l) => isSilent(l.rite?.verdict) || l.rite?.verdict === 'late';
+  const folds = group.kind === 'listed' ? (l) => !loud(l) : (l) => offDay(l) && !loud(l);
+  return {
+    shown: group.lanes.filter((l) => !folds(l)),
+    folded: group.lanes.filter(folds),
+  };
+}
+
+/** The week holding `date`, Monday first: each day's UTC date, its weekday, how
+    many rites fall on it and how many meetings it holds. The strip above the
+    day is drawn from this, so a weekly rite has somewhere to be seen. */
+export function weekOf(rites, date) {
+  const sinceMonday = (date.getUTCDay() + 6) % 7;
+  const out = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() - sinceMonday + i));
+    const view = layoutDay(rites, { dow: d.getUTCDay() });
+    out.push({ date: d, iso: d.toISOString().slice(0, 10), dow: d.getUTCDay(),
+               drawn: view.drawn.length, hits: view.hits.length });
+  }
+  return out;
+}
+
+/** How the realm's rites answered, counted by verdict. `unwatched` is a rite
+    with nothing to watch, or every rite when the truth could not be fetched. */
+export function tally(rites) {
+  const t = { total: 0, kept: 0, late: 0, silent: 0, awaited: 0, unwatched: 0 };
+  for (const r of rites || []) {
+    t.total++;
+    if (isSilent(r.verdict)) t.silent++;
+    else if (r.verdict === 'kept') t.kept++;
+    else if (r.verdict === 'late') t.late++;
+    else if (r.verdict === 'awaited') t.awaited++;
+    else t.unwatched++;
+  }
+  return t;
+}
+
 /** What `nextTurning` found, in the three parts a sentence about it needs:
     its clock, the weekday when that is not today (else ''), and how long
     until then. Plain text — the caller escapes and joins. */

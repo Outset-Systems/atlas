@@ -19,6 +19,7 @@ import { calendarPointerHTML } from './calendar.js';
 import * as M from './card-model.js';
 import { serviceWeb } from './world-model.js';
 import { checkWhere } from './watch-model.js';
+import { favouriteOf, favouriteOps, tileFor } from './favourite-model.js';
 
 const card = $('card');
 
@@ -519,6 +520,56 @@ A.openCard = function openCard(n) {
     its route and the outward jump. Back returns to the host. (When THE
     CONSTELLATION is open, highlightService finds the service's own scattered
     dot itself — the card never carries map geometry.) */
+/* THE HEART (2026-11-21; owner: "add a heart to each services' card that will
+   let you add it to the favorites list in overview"). Beside a service's name,
+   for whoever may write: pressed, the service is listed on one of OVERVIEW's
+   two favourites tiles (which one is read from its address, favourite-model.js
+   tileFor); pressed again, it is taken off. It is filled while the service is
+   a favourite. A service with no address cannot be listed, and the heart says
+   so. The write is the place's own `links`, through the editing API. */
+const HEART = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.3 4.6 12.9a4.9 4.9 0 0 1 6.9-6.9l.5.5.5-.5a4.9 4.9 0 0 1 6.9 6.9z"/></svg>';
+const mayFavour = () => canAdminWrite() && document.body.dataset.editable === '1';
+function heartWords(link, tile) {
+  if (!String(link.url || '').trim()) return 'It has no address, so OVERVIEW cannot list it as a favourite';
+  return tile
+    ? `A favourite: listed on OVERVIEW (${tile}). Press to take it off`
+    : `Add to OVERVIEW's favourites (${tileFor(link.url)})`;
+}
+function heartHTML(link) {
+  if (!mayFavour()) return '';
+  const tile = favouriteOf(A.DATA, link.url);
+  const words = heartWords(link, tile);
+  return `<button type="button" class="csv-fav${tile ? ' on' : ''}" id="csv-fav" aria-pressed="${Boolean(tile)}"` +
+    `${String(link.url || '').trim() ? '' : ' disabled'} title="${esc(words)}" aria-label="${esc(words)}">${HEART}</button>`;
+}
+async function pressHeart(btn, node, link) {
+  if (btn.disabled) return;
+  btn.disabled = true;
+  try {
+    const { Editor } = await import('./editor/index.js');
+    await Editor.load();
+    const was = favouriteOf(Editor.data, link.url);
+    const ops = favouriteOps(Editor.data, node.id, link, !was);
+    if (!ops.length && !was) throw new Error('the map has changed; open the service again and retry');
+    if (ops.length) {
+      await Editor.apply(ops, was
+        ? `${link.label} is no longer a favourite (the heart on its card)`
+        : `${link.label} is a favourite, ${tileFor(link.url)} (the heart on its card)`);
+    }
+    const now = favouriteOf(Editor.data, link.url);
+    btn.classList.toggle('on', Boolean(now));
+    btn.setAttribute('aria-pressed', String(Boolean(now)));
+    const words = heartWords(link, now);
+    btn.title = words;
+    btn.setAttribute('aria-label', words);
+    A.showToast?.(now ? `${link.label} is on OVERVIEW's ${now} favourites.` : `${link.label} is off the favourites.`);
+  } catch (err) {
+    A.showToast?.(`Not saved: ${err.message || err}`);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 function showServiceDetail(node, link) {
   if (!link) return;
   const svc = $('card-svc');
@@ -566,7 +617,7 @@ function showServiceDetail(node, link) {
   svc.innerHTML =
     `<button class="csv-back" id="csv-back" title="Back to ${esc(node.name)}">${ICON.back}Back to <b>${esc(node.name)}</b></button>` +
     `<div><p class="csv-epi">A service of ${esc(node.name)}${zone ? ' · ' + esc(zone.name) : ''}</p>` +
-    `<h3 class="csv-name">${dot}${esc(link.label)}</h3></div>` +
+    `<h3 class="csv-name">${dot}<span class="csv-name-t">${esc(link.label)}</span>${heartHTML(link)}</h3></div>` +
     `<div class="csv-state">${badge}${updates}${group}</div>` +
     `<p class="csv-desc">${desc
       ? esc(desc)
@@ -592,6 +643,7 @@ function showServiceDetail(node, link) {
       // twin, the full width as Open is, so the twin keeps its pair
       `<button class="csv-metrics" id="csv-wiring" title="Show its place in WIRING, lit from the head down">${ICON.wire}Wiring</button>` +
       `</div>`;
+  svc.querySelector('#csv-fav')?.addEventListener('click', (e) => { e.stopPropagation(); pressHeart(e.currentTarget, node, link); });
   svc.querySelector('#csv-back').addEventListener('click', (e) => {
     e.stopPropagation();
     svc.hidden = true;

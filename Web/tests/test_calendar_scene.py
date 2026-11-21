@@ -250,6 +250,63 @@ def test_the_day_spends_colour_once():
         assert dead not in css, f"{dead} is dead dress from a scene that no longer exists"
 
 
+def test_the_head_is_green_only_on_reports():
+    """v1.101.0 (the 11-21 design review). The head said "every timed rite is
+    turning" whenever nothing was silent — over a realm where nothing had
+    reported, and over a refused fetch that left every rite `unwatched`. Green
+    is now earned by rites that reported, and the refused case says it is the
+    chart and not what ran."""
+    scene_js = _read(SCENE_JS)
+    assert "verdictHTML(tally(RITES))" in scene_js, "the head no longer counts the verdicts through tally()"
+    assert "no rite has reported yet" in scene_js
+    assert "this is the chart, not what ran" in scene_js, "a refused fetch would read as healthy again"
+    calm = scene_js.split("function verdictHTML")[1].split("\n}\n")[0]
+    assert "if (!t.late && !t.awaited) return `<span class=\"cal-calm\">" in calm, (
+        "'every timed rite is turning' must wait for every report")
+    assert "no two want one model at once</span>'" not in scene_js.split("function paint")[1], (
+        "the head repeats the forge group's own 'no two at once'")
+
+
+def test_off_day_rows_fold_and_the_week_holds_them():
+    """v1.101.0: a group's rows that do not fall on the drawn day fold into one
+    line (NOT ON THE CLOCK folds whole), and the week strip under the head is
+    where a weekly rite is still seen on the six days it rests."""
+    scene_js, css = _read(SCENE_JS), _read(CSS)
+    assert "foldDay(group)" in scene_js and "class=\"cal-fold\"" in scene_js
+    assert 'aria-expanded="${open}"' in scene_js, "the fold does not say whether it is open"
+    assert "weekHTML(day)" in scene_js and 'aria-pressed="${on}"' in scene_js
+    assert "weekOf(RITES, day)" in scene_js, "the strip must count from the same model as the day"
+    for sel in (".cal-fold {", ".cal-week {", ".cal-wday {", ".cal-wday.on {", ".cal-wday.today::after {",
+                ".cal-wday.meets {"):
+        assert sel in css, f"{sel} has no dress"
+
+
+def test_the_calendar_reads_at_the_design_scale():
+    """the design notes: data 0.82rem, micro-caps 0.72rem. Before v1.101.0 the hours,
+    counts and status lines ran 0.56–0.64rem (9–10px). Nothing in THE CALENDAR's
+    own rules may go under the micro size again, and its buttons are 32px, 44px
+    under a coarse pointer."""
+    css = _read(CSS)
+    # the scene's own rules: from its section head to the card's pointer, which
+    # is the parchment card's dress and keeps the card's scale
+    block = css.split("── THE CALENDAR (v1.45.0)")[1].split("── the card's pointer ──")[0]
+    sizes = [float(x) for x in re.findall(r"font-size:\s*([0-9.]+)rem", block)]
+    assert sizes and min(sizes) >= 0.72, f"a calendar rule sets type under 0.72rem: {sorted(sizes)[:3]}"
+    assert re.search(r"\.cal-arrow, \.cal-today \{[^}]*min-height: 32px", css)
+    assert re.search(r"@media \(pointer: coarse\) \{ \.cal-arrow, \.cal-today \{ min-width: 44px; min-height: 44px; \} \}", css)
+
+
+def test_the_phone_gives_the_day_its_own_line():
+    """At 353px the four columns left the strip a 10px sliver and ran the clock
+    off the panel. Under 700px a row is two lines on the same columns: what and
+    when, then the day at full width — the ruler's hours in the same area."""
+    css = _read(CSS)
+    phone = css.split("@media (max-width: 700px) {", 1)[1].split("\n}\n")[0]
+    assert 'grid-template-areas: "mark name meta" ". day day"' in phone
+    assert ".cal-ruler > .cal-hours, .cal-row > .cal-track { grid-area: day; }" in phone, (
+        "the ruler and the strips must share the day's area, or an hour drifts off its axis")
+
+
 if __name__ == "__main__":
     import pytest
     sys.exit(pytest.main([__file__, "-q"]))

@@ -16,7 +16,7 @@ import {
   DAY_MIN, parseClock, parseDays, parseWindow, inWindow, toneOf, laneOf,
   clockOf, daysOf, everyOf, meetings, layoutForge, layoutDay,
   nextTurning, fmtClock, dayName,
-  every, clockPhrase, inWords, isSilent, nextParts,
+  every, clockPhrase, inWords, isSilent, nextParts, offDay, foldDay, weekOf, tally,
 } from '../static/js/calendar-model.js';
 
 let passed = 0;
@@ -326,6 +326,66 @@ test('the next turning, in the parts a sentence needs', () => {
   assert.equal(nextParts(next, satNight).day, 'Sun');
   // a week out wraps round to the same weekday's name
   assert.equal(nextParts({ start: 0, dayOffset: 7, inMin: 10080 }, satNight).day, 'Sat');
+});
+
+test('the day folds what does not fall on it, and the clockless whole (v1.101.0)', () => {
+  const wed = layoutDay(REALM, { dow: 3 });
+  const weekly = wed.groups.find((g) => g.key === 'weekly');
+  const { shown, folded } = foldDay(weekly);
+  assert.ok(folded.some((l) => l.name === 'Export'), 'a Sunday rite folds on a Wednesday');
+  assert.ok(folded.every(offDay) && !shown.some(offDay), 'the halves are exactly the off-day test');
+  assert.equal(shown.length + folded.length, weekly.lanes.length, 'nothing is dropped, only folded');
+  const sun = layoutDay(REALM, { dow: 0 });
+  assert.ok(!foldDay(sun.groups.find((g) => g.key === 'weekly')).folded.some((l) => l.name === 'Export'),
+    'and it is a row again on its own day');
+  assert.equal(foldDay(wed.groups.find((g) => g.key === 'continuous')).folded.length, 0,
+    'a rhythm turns every day, so it never folds');
+  const listed = wed.groups.at(-1);
+  assert.equal(listed.kind, 'listed');
+  assert.deepEqual(foldDay(listed), { shown: [], folded: listed.lanes },
+    'NOT ON THE CLOCK folds whole — its strips are empty on every day');
+});
+
+test('a silent or late rite never folds, wherever it sits', () => {
+  const loud = REALM.map((r) => (r.name === 'Export' ? { ...r, verdict: 'missed' }
+    : r.name === 'Scribes' ? { ...r, verdict: 'late' } : r));
+  const wed = layoutDay(loud, { dow: 3 });
+  const weekly = foldDay(wed.groups.find((g) => g.key === 'weekly'));
+  assert.ok(weekly.shown.some((l) => l.name === 'Export'), 'a missed rite stays a row on its off day');
+  assert.ok(!weekly.folded.some((l) => l.name === 'Export'));
+  const listed = foldDay(wed.groups.at(-1));
+  assert.deepEqual(listed.shown.map((l) => l.name), ['Scribes'], 'and a late one stays out of the clockless fold');
+  const failed = layoutDay(REALM.map((r) => (r.name === 'Export' ? { ...r, verdict: 'failed' } : r)), { dow: 3 });
+  assert.ok(foldDay(failed.groups.find((g) => g.key === 'weekly')).shown.some((l) => l.name === 'Export'));
+});
+
+test('the week runs Monday to Sunday round the drawn day, counted as the day counts', () => {
+  const thu = new Date(Date.UTC(2026, 10, 19, 9, 0));
+  const week = weekOf(REALM, thu);
+  assert.deepEqual(week.map((w) => w.iso),
+    ['2026-11-16', '2026-11-17', '2026-11-18', '2026-11-19', '2026-11-20', '2026-11-21', '2026-11-22']);
+  assert.deepEqual(week.map((w) => w.dow), [1, 2, 3, 4, 5, 6, 0]);
+  for (const w of week) {
+    const view = layoutDay(REALM, { dow: w.dow });
+    assert.equal(w.drawn, view.drawn.length, `${w.iso}: the strip and the day disagree`);
+    assert.equal(w.hits, view.hits.length);
+  }
+  // a Sunday is the END of its week, not the start of the next
+  assert.equal(weekOf(REALM, new Date(Date.UTC(2026, 10, 22)))[0].iso, '2026-11-16');
+  // and a week across a month's end is still seven consecutive days
+  assert.deepEqual(weekOf(REALM, new Date(Date.UTC(2026, 11, 1))).map((w) => w.iso.slice(5)),
+    ['11-30', '12-01', '12-02', '12-03', '12-04', '12-05', '12-06']);
+  const clash = [{ name: 'A', asks: 'gpu-box', at: '13:00', hold: 60 },
+                 { name: 'B', asks: 'gpu-box', at: '13:20', hold: 10, days: 'Sun' }];
+  assert.deepEqual(weekOf(clash, thu).map((w) => w.hits), [0, 0, 0, 0, 0, 0, 1],
+    'the meeting is on the day it happens, and only there');
+});
+
+test('the tally counts each verdict once, and an unknown one as unwatched', () => {
+  const t = tally([{ verdict: 'kept' }, { verdict: 'kept' }, { verdict: 'late' }, { verdict: 'missed' },
+                   { verdict: 'failed' }, { verdict: 'awaited' }, { verdict: 'unwatched' }, {}]);
+  assert.deepEqual(t, { total: 8, kept: 2, late: 1, silent: 2, awaited: 1, unwatched: 2 });
+  assert.deepEqual(tally(null), { total: 0, kept: 0, late: 0, silent: 0, awaited: 0, unwatched: 0 });
 });
 
 console.log(`\n${passed} passed`);

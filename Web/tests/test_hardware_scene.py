@@ -107,7 +107,7 @@ def test_a_scene_showing_one_location_shows_everything_before_it_closes():
     trb = _read(JS / "tribute.js")
     shown = trb[trb.index("function setPlace(key) {"):trb.index("function setRack(")]
     assert "rack = null;" in shown
-    assert "onClose: () => { place = ''; rack = null; built = false; markPlace('tribute', ''); }" in trb
+    assert "onClose: () => { place = ''; rack = null; by = 'guests'; built = false; markPlace('tribute', ''); }" in trb
     drawn = path[path.index("function setScenePlace(key) {"):path.index("function setSceneRack(")]
     assert "sceneRack = null;" in drawn
     closed = path[path.index("function close() {"):path.index("A.openPath = open;")]
@@ -393,3 +393,25 @@ def test_add_asks_for_the_device_and_the_seat():
     import schema
     assert schema.HIDING["rack_rear"]["side"] == "safe"
     assert schema.REAR_SIDES == ["rear", "inside"]
+
+
+
+# ── 2026-11-21: RESOURCES lists the available compute by location or by hardware ──
+# Owner: "in resources, can we add buttons for like location and hardware so we
+# can see the available compute by rack or site".
+
+def test_resources_lists_what_is_free_by_site_and_by_rack():
+    html = (WEB / "templates" / "index.html").read_text(encoding="utf-8")
+    pickers = html[html.index('class="trb-pickers"'):html.index('<div class="trb-cap">MEMORY</div>')]
+    # always drawn: no `hidden`, and its three choices in this order
+    switch = pickers[pickers.index('id="trb-by"'):]
+    assert "hidden" not in switch.split(">", 1)[0]
+    assert re.findall(r'data-by="(\w+)"', switch) == ["guests", "site", "rack"]
+    js = (WEB / "static" / "js" / "tribute.js").read_text(encoding="utf-8")
+    assert "if (by !== 'guests') { drawAvailable(where, every, loc); return; }" in js
+    # by hardware keeps to the location on show; by location is every one
+    assert "availableBy(every, where, by, by === 'rack' && loc ? loc.key : '')" in js
+    # closed, the scene is the guests again
+    assert "onClose: () => { place = ''; rack = null; by = 'guests'; built = false; markPlace('tribute', ''); }" in js
+    model = (WEB / "static" / "js" / "tribute-model.js").read_text(encoding="utf-8")
+    assert "export function availableOf(hosts)" in model and "export function availableBy(hosts, where, by, locKey = '')" in model

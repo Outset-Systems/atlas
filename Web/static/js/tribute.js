@@ -26,15 +26,17 @@
 
 import { A, $, esc, zoneById, nodeById, FALLBACK_HUE } from './config.js';
 import { makeScene } from './scene.js';
-import { hostsAt, hostsIn, totalsOf, gb } from './tribute-model.js';
+import { availableBy, hostsAt, hostsIn, totalsOf, gb } from './tribute-model.js';
 import { locationByKey, locationOfRack, rackById } from './locations-model.js';
 import { drawPlacePicker, drawRackPicker, hostsNow, markPlace, offerFor, placeName, whereLine, whereNow } from './scene-places.js';
 
-let vesselEl, sumEl, listEl, cpuVesselEl, cpuSumEl, whereEl, placesEl, racksEl, noteEl, built = false;
+let vesselEl, sumEl, listEl, cpuVesselEl, cpuSumEl, whereEl, placesEl, racksEl, noteEl, byEl, built = false;
 /** The location shown; '' is everything. */
 let place = '';
 /** The one rack shown at it; null is the whole location ('' is a real rack id). */
 let rack = null;
+/** What the list shows: the guests, or what is free 'site' by site or 'rack' by rack. */
+let by = 'guests';
 
 const nameOf = (id) => { const n = nodeById(id); return n ? n.name : id.toUpperCase(); };
 
@@ -146,6 +148,14 @@ function buildTribute() {
     noteEl.hidden = !notes.length;
   }
 
+  // what the list shows: the guests, or the compute free at each site or in each rack
+  for (const b of byEl?.querySelectorAll('[data-by]') || []) {
+    const on = b.dataset.by === by;
+    b.classList.toggle('is-on', on);
+    b.setAttribute('aria-pressed', String(on));
+  }
+  if (by !== 'guests') { drawAvailable(where, every, loc); return; }
+
   // per-guest allocation rows (bars scaled to the largest so they compare)
   const maxRam = Math.max(...hosts.flatMap((h) => h.guests.map((v) => +v.ram_gb || 0)), 1);
   const row = (v) => {
@@ -234,6 +244,54 @@ function buildTribute() {
   }
 }
 
+/* AVAILABLE COMPUTE (2026-11-21; owner: "add buttons for like location and
+   hardware so we can see the available compute by rack or site"). One row a
+   location, or one a rack (and one for what stands in no rack), with what is
+   free there: memory not assigned to a running guest nor held back for the
+   host, and threads no vCPU is assigned against. Every machine that says
+   what it has is counted, guests or none (tribute-model.js availableBy). By
+   hardware keeps to the location on show; by location is always all of them.
+   A press on a row shows that site's, or that rack's, guests. */
+function drawAvailable(where, every, loc) {
+  const rows = availableBy(every, where, by, by === 'rack' && loc ? loc.key : '');
+  const said = (s) => {
+    const parts = [];
+    if (s.total_gb > 0) parts.push(`<b>${gb(s.free_gb)} GB free</b> of ${gb(s.total_gb)}`);
+    if (s.threads > 0) {
+      parts.push(s.over ? `${s.over} vCPU over ${s.threads} threads` : `<b>${s.threads_free} threads free</b> of ${s.threads}`);
+    }
+    if (!parts.length) parts.push('capacity not charted');
+    parts.push(plural(s.machines, 'machine'), `${plural(s.guests_on, 'guest')} on`);
+    if (s.uncharted && (s.total_gb > 0 || s.threads > 0)) parts.push(`${s.uncharted} not charted`);
+    return parts.join(' · ');
+  };
+  const row = (r) => {
+    const s = r.sum;
+    // the bar is what is spoken for: assigned and held back, of what there is
+    const used = s.total_gb > 0 ? Math.min(100, ((s.total_gb - s.free_gb) / s.total_gb) * 100) : 0;
+    const attrs = r.kind === 'place' ? `data-place="${esc(r.key)}"` : r.kind === 'rack' ? `data-rack="${esc(r.id)}" data-at="${esc(r.key)}"` : '';
+    const tag = attrs ? 'button' : 'div';
+    const names = r.hosts.map((h) => nameOf(h.id)).join(', ');
+    return `<${tag} class="trb-row trb-avail" ${attrs}${attrs ? ` title="Show the guests ${r.kind === 'rack' ? 'in' : 'at'} ${esc(r.name)}"` : ''}>
+      <span class="trb-name">${esc(r.name)}<small>${esc([by === 'rack' ? r.at : '', names].filter(Boolean).join(' · '))}</small></span>
+      <span class="trb-bar"><span class="trb-track" style="width:100%"><span class="trb-fill" style="width:${used.toFixed(1)}%"></span></span></span>
+      <span class="trb-stat">${said(s)}</span>
+    </${tag}>`;
+  };
+  const head = by === 'rack'
+    ? `Available compute, by hardware${loc ? ` at ${esc(placeName(loc))}` : ''}`
+    : 'Available compute, by location';
+  listEl.innerHTML = rows.length
+    ? `<div class="trb-place-head"><span class="trb-place">${head}</span></div>` + rows.map(row).join('')
+    : '<div class="trb-empty">No machine here says what compute it has.</div>';
+  for (const el of listEl.querySelectorAll('[data-place]')) {
+    el.addEventListener('click', () => { by = 'guests'; setPlace(el.dataset.place); });
+  }
+  for (const el of listEl.querySelectorAll('[data-rack]')) {
+    el.addEventListener('click', () => { by = 'guests'; place = el.dataset.at || place; setRack(el.dataset.rack); });
+  }
+}
+
 function redraw() {
   built = false;
   if ($('tribute')?.classList.contains('open')) { buildTribute(); built = true; }
@@ -259,7 +317,7 @@ function setRack(rackId) {
 
 const scene = makeScene({ id: 'tribute', closeId: 'trb-close', build: () => { if (!built) { buildTribute(); built = true; } },
   // closed, the scene goes back to everything: RESOURCES pressed afresh is the total
-  onClose: () => { place = ''; rack = null; built = false; markPlace('tribute', ''); } });
+  onClose: () => { place = ''; rack = null; by = 'guests'; built = false; markPlace('tribute', ''); } });
 const { open, close } = scene;
 
 /* New map data: built once is no longer built (2026-11-19, the 11-12 audit's
@@ -285,4 +343,12 @@ A.buildTributeScene = function buildTributeScene() {
   placesEl = $('trb-places');
   racksEl = $('trb-racks');
   noteEl = $('trb-note');
+  byEl = $('trb-by');
+  byEl?.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-by]');
+    if (!b || b.dataset.by === by) return;
+    e.stopPropagation();
+    by = b.dataset.by;
+    redraw();
+  });
 };

@@ -150,5 +150,73 @@ export function totalsOf(hosts) {
   };
 }
 
+/* ── AVAILABLE COMPUTE, BY SITE OR BY RACK (2026-11-21) ──────────────────────
+   Owner: "in resources, can we add buttons for like location and hardware so
+   we can see the available compute by rack or site".
+
+   `totalsOf` is the scene's bars: it counts only the machines that divide
+   their memory among guests. What is AVAILABLE is a different question: a
+   machine that runs no guests has all of its memory and every thread free,
+   and that is exactly the compute someone asking "where can this go" wants
+   counted. So `availableOf` sums every machine that says what it has. */
+
+/** What some machines have and what of it is unspoken for.
+      {machines, uncharted, guests_on, total_gb, reserve_gb, assigned_gb,
+       free_gb, cores, threads, vcpu, threads_free, over}
+    `uncharted` machines say nothing of their capacity and are in none of the
+    sums; a machine that charts its threads and not its memory is in the
+    processor sums only. */
+export function availableOf(hosts) {
+  const list = Array.isArray(hosts) ? hosts : [];
+  const charted = list.filter((h) => h.capacity);
+  const mem = charted.filter((h) => h.capacity.total_gb !== null);
+  const cpu = charted.filter((h) => h.capacity.threads !== null);
+  return {
+    machines: list.length,
+    uncharted: list.length - charted.length,
+    guests_on: sum(list, (h) => h.on.length),
+    total_gb: tenth(sum(mem, (h) => h.capacity.total_gb)),
+    reserve_gb: tenth(sum(mem, (h) => h.capacity.reserve_gb)),
+    assigned_gb: tenth(sum(mem, (h) => h.assigned_gb)),
+    free_gb: tenth(sum(mem, (h) => h.free_gb)),
+    cores: sum(cpu, (h) => h.capacity.cores),
+    threads: sum(cpu, (h) => h.capacity.threads),
+    vcpu: sum(cpu, (h) => h.vcpu),
+    threads_free: sum(cpu, (h) => h.threads_free),
+    over: sum(cpu, (h) => h.over),
+  };
+}
+
+/** The rows of that question, one per site or one per rack.
+
+    `where` is locations-model's whereabouts; `by` is 'site' or 'rack';
+    `locKey` narrows 'rack' to one location's racks ('' or null: every
+    location's). Each row is {kind, key | id, name, at, hosts, sum}:
+      kind 'place'  a location (key);
+           'rack'   a rack (id; `at` is its location's name, `key` its key);
+           'shelf'  a location's machines that are in no rack (key);
+           'adrift' the machines that stand at no location at all.
+    A group with no machine in it is not a row: nothing is available there. */
+export function availableBy(hosts, where, by, locKey = '') {
+  const list = Array.isArray(hosts) ? hosts : [];
+  const places = (where && Array.isArray(where.list)) ? where.list : [];
+  const rows = [];
+  const push = (row, mine) => { if (mine.length) rows.push({ ...row, hosts: mine, sum: availableOf(mine) }); };
+  if (by === 'rack') {
+    for (const l of places) {
+      if (locKey && l.key !== locKey) continue;
+      for (const r of l.racks || []) {
+        push({ kind: 'rack', id: r.id, key: l.key, name: r.name, at: l.name }, list.filter((h) => h.rack === r.id));
+      }
+      push({ kind: 'shelf', key: l.key, name: 'Not in a rack', at: l.name },
+        list.filter((h) => h.location === l.key && h.rack === null));
+    }
+  } else {
+    for (const l of places) push({ kind: 'place', key: l.key, name: l.name, at: '' }, list.filter((h) => h.location === l.key));
+  }
+  if (!locKey || by !== 'rack') push({ kind: 'adrift', name: 'Not placed', at: '' }, list.filter((h) => h.location === null));
+  return rows;
+}
+
 /** A figure as the scene writes it: one decimal, and none when it is whole. */
 export const gb = (n) => (+n).toFixed(1).replace(/\.0$/, '');

@@ -2721,6 +2721,22 @@ body.constellation .card-split .cs-on { display: inline; }
   display: flex; align-items: center; gap: 10px; color: var(--card-ink);
 }
 .csv-name .svc-health { width: 11px; height: 11px; margin: 0; }   /* the live state, beside the name */
+/* THE HEART (2026-11-21): at the name's far end, an outline in the card's soft
+   ink; filled, in the card's own accent, while the service is a favourite. */
+.csv-name-t { min-width: 0; overflow-wrap: anywhere; }
+.csv-fav {
+  margin-left: auto; flex: none; width: 34px; height: 34px; padding: 0; border-radius: 50%; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: none; border: 1px solid var(--c-hair); color: var(--card-ink-soft);
+  transition: color 150ms, border-color 150ms, background 150ms;
+}
+.csv-fav svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; }
+.csv-fav:hover { border-color: var(--card-ink-soft); color: var(--card-ink); }
+/* gilt, not red: red on this map means down */
+.csv-fav.on { color: var(--gilt-deep); border-color: currentColor; }
+.csv-fav.on svg { fill: currentColor; }
+.csv-fav:disabled { opacity: 0.4; cursor: not-allowed; }
+.csv-fav:focus-visible { outline: 2px solid var(--card-ink); outline-offset: 2px; }
 .csv-state { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .csv-chip {
   height: 26px; padding: 0 10px; display: inline-flex; align-items: center; gap: 7px;
@@ -3231,6 +3247,16 @@ body.constellation .card-split .cs-on { display: inline; }
 .trb-pickers:not(:has(> :not([hidden]))) { display: none; }
 .trb-places { display: flex; width: fit-content; max-width: 100%; flex-wrap: wrap; }
 .trb-places[hidden] { display: none; }
+/* AVAILABLE COMPUTE (2026-11-21): a row a site or a rack, in the guests' own
+   row: its name, a bar of what is spoken for, and what is free in mono. */
+.trb-avail { --row-hue: var(--gilt); grid-template-columns: 190px 1fr minmax(0, 46%); }
+.trb-avail .trb-name { white-space: normal; overflow-wrap: anywhere; }
+.trb-avail .trb-name small { display: block; font-family: 'Alegreya Sans', sans-serif; font-weight: 400; font-size: 0.78rem; letter-spacing: 0; color: var(--text-dim); text-transform: none; }
+.trb-avail .trb-stat { white-space: normal; text-align: right; }
+.trb-avail .trb-stat b { font-weight: 600; color: var(--sem-up); }
+div.trb-avail { cursor: default; }
+div.trb-avail:hover { background: none; }
+@media (max-width: 760px) { .trb-avail { grid-template-columns: 1fr; gap: 6px; } .trb-avail .trb-stat { text-align: left; } }
 .trb-note {
   display: flex; flex-direction: column; gap: 4px; margin-top: 14px;
   font-family: 'Alegreya Sans', sans-serif; font-size: 0.82rem; color: var(--text-dim);
@@ -3789,7 +3815,7 @@ body:not(.drawer-open) #path.pth-narrow .pth-panel { left: 2vw; right: 2vw; }
 /* the day is one column of rows, not the wrapping ledger of blocks .ldg-list
    draws elsewhere — a row that wrapped would leave the clock behind */
 #calendar .ldg-list, #cal-list { flex-direction: column; flex-wrap: nowrap; gap: 26px; }
-#calendar .ldg-list { padding: 18px 22px 24px; --cal-gut: 18px; --cal-name: 236px; --cal-meta: 176px; --cal-gap: 14px; }
+#calendar .ldg-list { padding: 18px 22px 24px; --cal-gut: 18px; --cal-name: 250px; --cal-meta: 230px; --cal-gap: 14px; }
 #cal-list { display: flex; }
 
 .cal-ruler, .cal-row {
@@ -3809,12 +3835,12 @@ body:not(.drawer-open) #path.pth-narrow .pth-panel { left: 2vw; right: 2vw; }
   border-bottom: 1px solid var(--ink-line);
 }
 .cal-hours {
-  position: relative; height: 12px;
-  font-family: 'JetBrains Mono', monospace; font-size: 0.56rem;
+  position: relative; height: 15px;
+  font-family: 'JetBrains Mono', monospace; font-size: 0.72rem;
   letter-spacing: 0.08em; color: var(--text-dim);
 }
 .cal-hours span { position: absolute; top: 0; transform: translateX(-50%); }
-.cal-ruler .cal-name b { font-family: 'Cinzel', serif; letter-spacing: 0.16em; font-size: 0.6rem; color: var(--text-dim); }
+.cal-ruler .cal-name b { font-family: 'Cinzel', serif; letter-spacing: 0.16em; font-size: 0.72rem; color: var(--text-dim); }
 
 /* ── a group: forge, turning, or listed ── */
 .cal-grp { display: flex; flex-direction: column; }
@@ -3822,29 +3848,29 @@ body:not(.drawer-open) #path.pth-narrow .pth-panel { left: 2vw; right: 2vw; }
   display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px;
   padding: 0 0 8px; margin-bottom: 4px; border-bottom: 1px solid var(--ink-line);
 }
-.cal-gname { font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.72rem; letter-spacing: 0.2em; color: var(--text); }
+.cal-gname { font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.8rem; letter-spacing: 0.2em; color: var(--text); }
 .cal-grp.k-forge .cal-gname { color: var(--gilt); }
 .cal-grp.k-listed .cal-gname { color: var(--text-dim); }
 .cal-gsub { font-family: 'IM Fell English', serif; font-style: italic; font-size: 0.82rem; color: var(--text-dim); }
-.cal-gcount { margin-left: auto; font-family: 'JetBrains Mono', monospace; font-size: 0.6rem; letter-spacing: 0.06em; color: var(--text-dim); }
+.cal-gcount { margin-left: auto; font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; letter-spacing: 0.06em; color: var(--text-dim); }
 .cal-gfoot {
   display: flex; flex-wrap: wrap; gap: 3px 18px; padding-top: 7px;
   margin-left: calc(var(--cal-gut) + var(--cal-name) + var(--cal-gap));
-  font-family: 'JetBrains Mono', monospace; font-size: 0.62rem; color: var(--text-dim);
+  font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: var(--text-dim);
 }
 .cal-gfoot b { color: var(--text); font-weight: 600; }
 
 /* ── a row ── */
-.cal-row { min-height: 34px; border-bottom: 1px solid color-mix(in srgb, var(--ink-line) 55%, transparent); }
+.cal-row { min-height: 42px; border-bottom: 1px solid color-mix(in srgb, var(--ink-line) 55%, transparent); }
 .cal-row:last-of-type { border-bottom: none; }
 .cal-mark { text-align: center; font-size: 0.86rem; line-height: 1; color: color-mix(in srgb, var(--text-dim) 65%, transparent); }
 .cal-name { min-width: 0; overflow: hidden; display: flex; flex-direction: column; line-height: 1.2; padding-right: 4px; }
 .cal-name b {
-  font-family: 'Alegreya Sans', sans-serif; font-weight: 700; font-size: 0.86rem; color: var(--text);
+  font-family: 'Alegreya Sans', sans-serif; font-weight: 700; font-size: 0.95rem; color: var(--text);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .cal-name i {
-  font-style: normal; font-family: 'JetBrains Mono', monospace; font-size: 0.6rem; color: var(--text-dim);
+  font-style: normal; font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: var(--text-dim);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .cal-meta { min-width: 0; overflow: hidden; display: flex; flex-direction: column; line-height: 1.25; text-align: right; }
@@ -3852,13 +3878,18 @@ body:not(.drawer-open) #path.pth-narrow .pth-panel { left: 2vw; right: 2vw; }
   font-style: normal; font-family: 'JetBrains Mono', monospace;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.cal-meta em { font-size: 0.64rem; color: var(--text); }
-.cal-truth { font-size: 0.6rem; color: var(--text-dim); }
+.cal-meta em { font-size: 0.82rem; color: var(--text); }
+/* the status may take a second line: "FAILED 1h ago — disk full on the target
+   share" cut at the dash hid the one part a person at 2am came for */
+.cal-meta i.cal-truth {
+  font-size: 0.72rem; color: var(--text-dim); white-space: normal;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2;
+}
 
 /* the day itself — an hour hairline per hour is the track's own ground, so the
    ruler above it carries numbers and nothing else */
 .cal-track {
-  position: relative; height: 16px; border-radius: 2px;
+  position: relative; height: 20px; border-radius: 2px;
   background:
     repeating-linear-gradient(90deg, transparent 0 calc(100%/8 - 1px),
       color-mix(in srgb, var(--ink-line) 80%, transparent) calc(100%/8 - 1px) calc(100%/8)),
@@ -3866,15 +3897,15 @@ body:not(.drawer-open) #path.pth-narrow .pth-panel { left: 2vw; right: 2vw; }
   border: 1px solid color-mix(in srgb, var(--ink-line) 70%, transparent); overflow: hidden;
 }
 .cal-blk {
-  position: absolute; top: 2px; bottom: 2px; min-width: 2px; border-radius: 1px;
-  background: var(--text-dim); opacity: 0.72;
+  position: absolute; top: 3px; bottom: 3px; min-width: 5px; border-radius: 1px;
+  background: var(--text-dim);
 }
 /* the gilt is the forge's — a rite that asks a model for its work */
-.cal-row.tone-warm .cal-blk { background: var(--gilt); opacity: 0.9; }
+.cal-row.tone-warm .cal-blk { background: var(--gilt); }
 .cal-row.tone-heavy .cal-blk { background: var(--sem-warn); }
 /* the hour is charted; the DAY is the rite's own (a monthly rite's date is not
    a thing this page models) — so it is drawn hollow, never as an instance */
-.cal-blk.ghost { background: none; border: 1px solid var(--text-dim); opacity: 1; top: 3px; bottom: 3px; }
+.cal-blk.ghost { background: none; border: 1.5px solid var(--text-dim); top: 4px; bottom: 4px; }
 .cal-row.tone-warm .cal-blk.ghost { border-color: var(--gilt); }
 /* the only alarm on the page */
 .cal-blk.hit { outline: 1px dashed var(--sem-down); outline-offset: 1px; opacity: 1; }
@@ -3893,14 +3924,16 @@ body:not(.drawer-open) #path.pth-narrow .pth-panel { left: 2vw; right: 2vw; }
 }
 .cal-idle {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-  font-family: 'JetBrains Mono', monospace; font-size: 0.56rem; letter-spacing: 0.08em;
-  color: var(--ink-soft); font-style: normal;
+  font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; letter-spacing: 0.08em;
+  color: var(--text-dim); font-style: normal;
   /* the ground must not read through the words that explain its emptiness */
   background: linear-gradient(90deg, transparent, rgba(var(--shade-rgb), calc(0.55 * var(--shade-k))) 22%, rgba(var(--shade-rgb), calc(0.55 * var(--shade-k))) 78%, transparent);
 }
 .cal-now {
-  position: absolute; top: -1px; bottom: -1px; width: 1px; z-index: 1;
-  background: var(--sem-info); box-shadow: 0 0 4px color-mix(in srgb, var(--sem-info) 70%, transparent);
+  /* a hairline and no glow: now is where the day is measured from, and must
+     not be louder than what it measures (v1.101.0) */
+  position: absolute; top: 0; bottom: 0; width: 1px; z-index: 1;
+  background: color-mix(in srgb, var(--sem-info) 80%, transparent);
 }
 
 /* ── the verdicts ── the wall of kept rites stays quiet; a silent one is the
@@ -3926,7 +3959,7 @@ body:not(.drawer-open) #path.pth-narrow .pth-panel { left: 2vw; right: 2vw; }
 .cal-head {
   display: flex; align-items: center; flex-wrap: wrap; gap: 6px 16px;
   padding: 7px 22px 9px; border-bottom: 1px solid var(--ink-line);
-  font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; letter-spacing: 0.04em;
+  font-family: 'JetBrains Mono', monospace; font-size: 0.82rem; letter-spacing: 0.02em;
 }
 .cal-alarm { color: var(--sem-down); font-weight: 700; }
 .cal-calm { color: var(--sem-up); }
@@ -3936,14 +3969,63 @@ body:not(.drawer-open) #path.pth-narrow .pth-panel { left: 2vw; right: 2vw; }
 .cal-hits { color: var(--sem-down); }
 .cal-next { color: var(--text-dim); }
 .cal-step { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; }
-.cal-step b { font-size: 0.68rem; letter-spacing: 0.1em; color: var(--gilt); min-width: 128px; text-align: center; }
+.cal-step b { font-size: 0.82rem; letter-spacing: 0.1em; color: var(--gilt); min-width: 150px; text-align: center; }
 .cal-arrow, .cal-today {
   background: none; border: 1px solid var(--ink-line); border-radius: 3px; cursor: pointer;
-  color: var(--text-dim); font-family: 'Cinzel', serif; font-size: 0.62rem; letter-spacing: 0.12em;
-  padding: 2px 7px; line-height: 1.4; transition: color 150ms, border-color 150ms;
+  color: var(--text-dim); font-family: 'Cinzel', serif; font-size: 0.72rem; letter-spacing: 0.12em;
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 32px; min-height: 32px; padding: 0 10px; line-height: 1; transition: color 150ms, border-color 150ms;
 }
+.cal-arrow { font-size: 1rem; padding: 0; }
 .cal-arrow:hover:not(:disabled), .cal-today:hover:not(:disabled) { color: var(--gilt); border-color: var(--gilt); }
 .cal-today:disabled { opacity: 0.35; cursor: default; }
+.cal-arrow:focus-visible, .cal-today:focus-visible, .cal-wday:focus-visible, .cal-fold:focus-visible {
+  outline: 1px solid var(--gilt); outline-offset: 2px;
+}
+@media (pointer: coarse) { .cal-arrow, .cal-today { min-width: 44px; min-height: 44px; } }
+
+/* THE WEEK STRIP (v1.101.0): the seven days holding the drawn one, Monday
+   first, each with how many rites fall on it. A weekly rite folds away on the
+   six days it rests; the strip is where it is still seen, and a day with a
+   meeting at the forge says so before you step to it. The drawn day takes the
+   stepper's gilt (the same chrome), today takes now's info hairline. */
+.cal-week {
+  flex: 1 0 100%; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px;
+  margin-top: 2px;
+}
+.cal-wday {
+  position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 1px; min-height: 52px; padding: 5px 2px 6px; cursor: pointer;
+  background: rgba(var(--shade-rgb), calc(0.18 * var(--shade-k)));
+  border: 1px solid color-mix(in srgb, var(--ink-line) 70%, transparent); border-radius: 4px;
+  color: var(--text-dim); transition: color 150ms, border-color 150ms;
+}
+.cal-wday b { font-family: 'Cinzel', serif; font-weight: 600; font-size: 0.72rem; letter-spacing: 0.14em; }
+.cal-wday > span { font-family: 'JetBrains Mono', monospace; font-size: 0.82rem; color: var(--text); }
+.cal-wday i { font-style: normal; font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; white-space: nowrap; }
+.cal-wday i em { font-style: normal; color: var(--text); }
+.cal-wday i s { text-decoration: none; }
+.cal-wday i u { text-decoration: none; color: var(--sem-down); }
+.cal-wday:hover { color: var(--gilt); border-color: color-mix(in srgb, var(--gilt) 60%, transparent); }
+.cal-wday.on { color: var(--gilt); border-color: var(--gilt); background: color-mix(in srgb, var(--gilt) 9%, transparent); }
+.cal-wday.on > span { color: var(--gilt); }
+.cal-wday.today::after {
+  content: ''; position: absolute; left: 32%; right: 32%; bottom: 2px; height: 2px; border-radius: 1px;
+  background: var(--sem-info);
+}
+.cal-wday.meets { border-color: color-mix(in srgb, var(--sem-down) 55%, transparent); }
+
+/* the fold: a group's off-day rows, one line, opened on ask (v1.101.0) */
+.cal-fold {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 3px 16px; width: 100%; min-height: 38px;
+  padding: 6px 0 6px calc(var(--cal-gut) + var(--cal-gap)); margin: 0;
+  background: none; border: none; border-top: 1px dashed color-mix(in srgb, var(--ink-line) 70%, transparent);
+  color: var(--text-dim); font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; text-align: left; cursor: pointer;
+}
+.cal-fold b { color: var(--text); font-weight: 600; }
+.cal-fold-do { margin-left: auto; font-family: 'Cinzel', serif; letter-spacing: 0.14em; }
+.cal-fold:hover .cal-fold-do, .cal-fold:focus-visible .cal-fold-do { color: var(--gilt); }
+.cal-grp.k-listed .cal-ghead { margin-bottom: 0; }
 
 /* THE FLEET'S DAY rides the shared component, which brings its own dress
    (static/outset-calendar.css, loaded BEFORE this file so what follows wins).
@@ -3963,8 +4045,16 @@ body:not(.drawer-open) #path.pth-narrow .pth-panel { left: 2vw; right: 2vw; }
   --oc-font-body: 'Alegreya Sans', sans-serif;
   /* the fleet's day sits inside the scene panel, not on a full page: its name
      and meta columns match THE CALENDAR's above it so the two read as one */
-  --oc-name-w: 250px; --oc-meta-w: 208px; --oc-gut: 18px; --oc-gap: 12px;
+  --oc-name-w: 250px; --oc-meta-w: 230px; --oc-gut: 18px; --oc-gap: 14px;
 }
+/* ...and its type at THE CALENDAR's scale (v1.101.0), from here and only
+   inside this scene: the component's own sheet is shared with the Hub's
+   full-page calendar and is the framework's to change. */
+.cal-grp.k-fleet .calendar-host :is(.oc-ticks, .oc-name i, .oc-meta i, .oc-legend, .oc-hours .oc-name b) { font-size: 0.72rem; }
+.cal-grp.k-fleet .calendar-host .oc-ticks { height: 15px; }
+.cal-grp.k-fleet .calendar-host .oc-meta em { font-size: 0.82rem; }
+.cal-grp.k-fleet .calendar-host .oc-group .oc-name b { font-size: 0.8rem; }
+.cal-grp.k-fleet .calendar-host .oc-row .oc-name b { font-size: 0.95rem; }
 
 /* ── the card's pointer ── the day moved to its own scene in v1.42.0 and to
    THE CALENDAR in v1.45.0, so the card keeps one line — what turns next, in
@@ -3978,8 +4068,47 @@ body:not(.drawer-open) #path.pth-narrow .pth-panel { left: 2vw; right: 2vw; }
 .card-forge .card-forge-link { width: 100%; justify-content: center; }
 
 @media (max-width: 980px) {
-  #calendar .ldg-list { --cal-name: 170px; --cal-meta: 130px; }
+  #calendar .ldg-list { --cal-name: 190px; --cal-meta: 150px; }
   .cal-gsub { display: none; }
+}
+
+/* THE PHONE (v1.101.0). Four columns at 353px left the day a 10px sliver and
+   ran the clock off the panel's edge. Here a row is two lines on the same
+   columns: the glyph, what, and when on the first, and the day under them at
+   full width — so the hour axis is still one axis, the ruler's hours sitting
+   exactly over every strip. */
+@media (max-width: 700px) {
+  #calendar .ldg-list { padding: 12px 12px 18px; --cal-gut: 14px; --cal-gap: 8px; gap: 20px; }
+  .cal-ruler, .cal-row {
+    grid-template-columns: var(--cal-gut) minmax(0, 1fr) auto;
+    grid-template-areas: "mark name meta" ". day day"; row-gap: 5px;
+  }
+  .cal-row { padding: 7px 0 8px; }
+  .cal-ruler > .cal-mark, .cal-row > .cal-mark { grid-area: mark; }
+  .cal-ruler > .cal-name, .cal-row > .cal-name { grid-area: name; }
+  .cal-ruler > .cal-meta, .cal-row > .cal-meta { grid-area: meta; max-width: 48vw; }
+  .cal-ruler > .cal-hours, .cal-row > .cal-track { grid-area: day; }
+  .cal-ruler { top: -12px; }
+  .cal-gfoot { margin-left: calc(var(--cal-gut) + var(--cal-gap)); }
+  .cal-head { padding: 8px 12px 10px; }
+  .cal-step { margin-left: 0; }
+  .cal-week { gap: 4px; }
+  /* the count alone; a meeting is the cell's red edge (and its title) */
+  .cal-wday i :is(s, u) { display: none; }
+  .cal-wday b { letter-spacing: 0.06em; }
+  /* THE FLEET'S DAY had the same sliver here (its own narrow rule left the
+     strip 2px between 160px and 120px columns), so inside this scene it takes
+     the same two lines. Every component row is the same four children —
+     mark, name, day, meta — whatever kind of row it is. */
+  .cal-grp.k-fleet .calendar-host { padding: 0.1rem 0.5rem 0.6rem; }
+  .cal-grp.k-fleet :is(.oc-hours, .oc-group, .oc-row) {
+    grid-template-columns: var(--cal-gut) minmax(0, 1fr) auto;
+    grid-template-areas: "mark name meta" ". day day"; row-gap: 4px;
+  }
+  .cal-grp.k-fleet :is(.oc-hours, .oc-group, .oc-row) > :nth-child(1) { grid-area: mark; }
+  .cal-grp.k-fleet :is(.oc-hours, .oc-group, .oc-row) > :nth-child(2) { grid-area: name; }
+  .cal-grp.k-fleet :is(.oc-hours, .oc-group, .oc-row) > :nth-child(3) { grid-area: day; }
+  .cal-grp.k-fleet :is(.oc-hours, .oc-group, .oc-row) > :nth-child(4) { grid-area: meta; }
 }
 
 /* ── THE ARMORY — hardware faceplates + drag-to-rearrange (2026-07-20) ── */

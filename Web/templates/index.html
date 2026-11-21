@@ -676,6 +676,15 @@
       <div class="trb-pickers">
         <span class="rel-viewtoggle trb-places" id="trb-places" role="group" aria-label="Choose a location" hidden></span>
         <span class="rel-viewtoggle trb-places" id="trb-racks" role="group" aria-label="Choose a rack" hidden></span>
+        <!-- WHAT THE LIST SHOWS (2026-11-21, owner: "add buttons for like
+             location and hardware so we can see the available compute by rack
+             or site"): the guests, as always, or what is free at each
+             location, or in each rack. Always drawn; tribute.js. -->
+        <span class="rel-viewtoggle trb-places" id="trb-by" role="group" aria-label="What the list shows">
+          <button type="button" class="rel-seg is-on" data-by="guests" aria-pressed="true">Guests</button>
+          <button type="button" class="rel-seg" data-by="site" aria-pressed="false">By location</button>
+          <button type="button" class="rel-seg" data-by="rack" aria-pressed="false">By hardware</button>
+        </span>
       </div>
       <div class="trb-cap">MEMORY</div>
       <div class="trb-vessel" id="trb-vessel"></div>

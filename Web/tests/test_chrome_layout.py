@@ -1326,3 +1326,27 @@ def test_boxes_resize_maps_rename_and_delete_and_the_two_names():
     assert "ops.push({ op: 'upsert', section: 'zones', id: zone, body: { name } });" in _read(MAP_EDITOR)
     # the depths' head is the theme's word, as the sky's always was
     assert '<div class="abyss-head">{{ theme.text.depths|upper }}</div>' in _read(INDEX)
+
+
+
+# ── 2026-11-21: a heart on a service's card makes it a favourite on OVERVIEW ──
+# Owner: "add a heart to each services' card that will let you add it to the
+# favorites list in overview".
+
+def test_a_services_card_has_a_heart_for_whoever_may_write():
+    card = _read(JS / "card.js")
+    assert "import { favouriteOf, favouriteOps, tileFor } from './favourite-model.js';" in card
+    # beside the name, and absent for anyone who may not write
+    assert '${dot}<span class="csv-name-t">${esc(link.label)}</span>${heartHTML(link)}</h3>' in card
+    heart = card[card.index("function heartHTML(link)"):card.index("async function pressHeart")]
+    assert "if (!mayFavour()) return '';" in heart
+    assert "const mayFavour = () => canAdminWrite() && document.body.dataset.editable === '1';" in card
+    # no address, no listing: the heart is off and says why
+    assert "${String(link.url || '').trim() ? '' : ' disabled'}" in heart
+    # the write is checked against the map as it is on file
+    press = card[card.index("async function pressHeart"):card.index("function showServiceDetail")]
+    assert "const was = favouriteOf(Editor.data, link.url);" in press
+    assert "favouriteOps(Editor.data, node.id, link, !was)" in press
+    css = _strip_comments(_read(WEB / "static" / "atlas.css"))
+    # gilt while it is one: red on this map means down
+    assert ".csv-fav.on { color: var(--gilt-deep); border-color: currentColor; }" in css
