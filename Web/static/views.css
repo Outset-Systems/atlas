@@ -583,7 +583,7 @@ body.phone .nv-count { margin-left: 0; flex-basis: 100%; }
   font-size: 0.95rem; color: var(--text-dim);
 }
 .ov-stamp {
-  margin-left: auto; margin-right: 128px;   /* room for `Charts ↓` beside it */ font-family: 'JetBrains Mono', monospace; font-size: 0.8rem;
+  margin-left: 14px; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem;
   color: var(--text-dim); font-variant-numeric: tabular-nums;
 }
 .ov-msg {
@@ -592,43 +592,106 @@ body.phone .nv-count { margin-left: 0; flex-basis: 100%; }
   font-family: 'Alegreya Sans', sans-serif; font-size: 1rem; color: var(--text);
 }
 
-/* the tiles: as many columns as fit at 340px, the state counts across two */
-.ov-grid {
-  display: grid; gap: 12px; margin-top: 14px;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+/* ONE SCREEN, TWO FACES (owner, 2026-11-20). The sheet is as tall as the
+   screen under the band, less the two edges ("↑ the sky" above it, "the
+   depths ↓" below), and nothing in it scrolls: overview.js cuts each list to
+   the height it has. The page still scrolls, to the Sky and to the Depths,
+   and comes to rest on the sheet when it stops near it. */
+#view-overview { scroll-snap-type: y proximity; scroll-padding-top: var(--view-top); }
+#view-overview > :is(.view-edge-up, .view-band) { scroll-snap-align: start; }
+#view-overview > .ov-sheet {
+  height: calc(100dvh - var(--view-top) - 76px); min-height: 340px; margin-bottom: 10px;
+  display: flex; flex-direction: column; overflow: hidden;
 }
-.ov-tile {
-  display: flex; flex-direction: column; gap: 8px; min-width: 0;
-  padding: 12px 16px 14px;
-  background: rgba(var(--shade-rgb), calc(0.2 * var(--shade-k)));
-  border: 1px solid var(--ink-line); border-left-width: 3px; border-radius: 4px;
-}
-.ov-tile[data-tile="states"] { grid-column: span 2; }
-.ov-tone-down { border-left-color: var(--sem-down); }
-.ov-tone-warn { border-left-color: var(--sem-warn); }
-.ov-tile-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 2.2rem; }
-.ov-tile-title {
-  margin: 0; font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.78rem;
-  letter-spacing: 0.22em; text-transform: uppercase; color: var(--text-dim);
-}
-/* a tile's count and the state counts: read from across the room */
-.ov-count, .ov-big {
-  font-family: 'Cinzel', serif; font-weight: 700; line-height: 1;
-  font-variant-numeric: tabular-nums; color: var(--text);
-}
-.ov-count { font-size: clamp(1.9rem, 2vw, 2.6rem); }
-.ov-big { font-size: clamp(2.4rem, 2.8vw, 3.6rem); }
-.ov-tile-body { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+#overview-body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 14px; }
 
-.ov-states { display: flex; flex-wrap: wrap; gap: 14px 34px; }
-.ov-state { display: flex; flex-direction: column; gap: 6px; }
+/* the two faces' names, at the head's far end: the scene's chips */
+.ov-tabs { display: flex; gap: 4px; margin-left: auto; }
+.ov-tab {
+  min-height: 32px; padding: 5px 12px; cursor: pointer;
+  background: none; border: 1px solid transparent; border-radius: 20px;
+  font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.7rem; letter-spacing: 0.2em;
+  text-transform: uppercase; color: var(--text-dim); transition: color 150ms, border-color 150ms;
+}
+.ov-tab[aria-selected="true"] { color: var(--text); border-color: var(--ink-line); }
+
+/* how the realm is, in one sentence read from across the room, then the
+   counts by state */
+.ov-top { display: flex; flex-direction: column; gap: 8px; }
+.ov-verdict {
+  margin: 0; font-family: 'Cinzel', serif; font-weight: 700; line-height: 1.2;
+  font-size: clamp(1.3rem, 2.2vw, 2.4rem); letter-spacing: 0.04em; color: var(--text);
+  text-wrap: balance;
+}
+.ov-verdict-down { color: var(--sem-down); }
+.ov-states { display: flex; flex-wrap: wrap; gap: 6px 22px; }
 .ov-state-name {
   display: inline-flex; align-items: center; gap: 7px;
   font-family: 'Alegreya Sans', sans-serif; font-size: 1rem; color: var(--text-dim);
 }
+.ov-state-name b { color: var(--text); font-variant-numeric: tabular-nums; }
 .ov-state-name .svc-health, .ov-row-head .svc-health { margin-left: 0; }
-.ov-state-down .ov-big { color: var(--sem-down); }
-.ov-state-degraded .ov-big { color: var(--sem-warn); }
+
+/* a face: the watch list beside the doors, or the map beside the watch list */
+.ov-faces { flex: 1; min-height: 0; touch-action: pan-y; }
+.ov-face {
+  height: 100%; display: grid; gap: 0 28px; overflow: hidden;
+  grid-template-columns: minmax(0, 2.1fr) minmax(0, 1fr);
+}
+.ov-face-chart { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); }
+.ov-face > * { min-width: 0; min-height: 0; overflow: hidden; }
+@keyframes ov-from-right { from { opacity: 0; transform: translateX(34px); } }
+@keyframes ov-from-left { from { opacity: 0; transform: translateX(-34px); } }
+.ov-from-right { animation: ov-from-right 200ms ease-out; }
+.ov-from-left { animation: ov-from-left 200ms ease-out; }
+
+.ov-tile-title {
+  margin: 0; font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.78rem;
+  letter-spacing: 0.22em; text-transform: uppercase; color: var(--text-dim);
+}
+/* the watch list: a row a thumb can press, its state in the dot, its word in
+   ink at the row's end (the tone is never carried by small coloured text) */
+.ov-watch-list > .ov-row { min-height: 44px; justify-content: center; padding: 7px 0; }
+.ov-w-name {
+  font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.82rem; letter-spacing: 0.16em;
+  text-transform: uppercase; color: var(--text);
+}
+.ov-w-word { margin-left: auto; font-weight: 600; color: var(--text); white-space: nowrap; }
+.ov-w .ov-takes { padding-left: 14px; }
+.ov-watch { padding-left: 6px; }   /* room for a dot's glow inside the cut edge */
+
+/* the doors: the favourites, and a source's own console */
+.ov-doors {
+  display: flex; flex-direction: column; gap: 14px;
+  padding-left: 24px; border-left: 1px solid var(--ink-line);
+}
+.ov-door-group { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ov-favs > .ov-row { padding: 0; }
+.ov-favs .ov-fav { min-height: 40px; align-items: center; }
+
+/* everything with nothing to report, in one line at the sheet's foot */
+.ov-calmline {
+  margin: 0; padding-top: 10px; border-top: 1px solid var(--ink-line);
+  font-family: 'IM Fell English', 'Alegreya Sans', serif; font-style: italic; font-size: 1rem;
+  color: var(--text-dim);
+}
+.ov-calmline b { font-weight: 400; color: var(--text); }
+
+/* the chart table: the map's own picture, sized by overview.js to its cell,
+   and a lamp for each place; one the watch list names is larger and ringed */
+.ov-chart { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; }
+.ov-chart-in {
+  position: relative; flex: none; overflow: hidden;
+  border: 1px solid var(--ink-line); border-radius: 4px; background: var(--abyss);
+}
+.ov-chart-art { display: block; width: 100%; height: 100%; object-fit: cover; user-select: none; }
+.ov-lamp {
+  position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px; padding: 0;
+  border: 1px solid rgba(0, 0, 0, 0.7); cursor: pointer; background: var(--text-dim);
+}
+.ov-lamp::after { content: ''; position: absolute; inset: -12px; }
+.ov-lamp-named { width: 16px; height: 16px; margin: -8px 0 0 -8px; outline: 2px solid var(--parchment); outline-offset: 1px; }
+.ov-chart-off { margin: 0; }
 
 .ov-line { margin: 0; font-family: 'Alegreya Sans', sans-serif; font-size: 1.05rem; line-height: 1.4; }
 .ov-say { color: var(--text); }
@@ -662,19 +725,8 @@ body.phone .nv-count { margin-left: 0; flex-basis: 100%; }
 }
 .ov-place:hover, .ov-place:focus-visible { color: var(--gilt); }
 
-/* an event nobody has acknowledged: the whole row opens the ANNALS */
-.ov-event {
-  display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; width: 100%;
-  background: none; border: none; border-radius: 4px; padding: 2px 4px; margin-left: -4px;
-  cursor: pointer; text-align: left; color: var(--text); font: inherit;
-  transition: color 150ms;
-}
-.ov-event-name {
-  font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.82rem; letter-spacing: 0.16em;
-  text-transform: uppercase;
-}
-.ov-event .ov-quiet { margin-left: auto; }
-.ov-event:hover .ov-event-name, .ov-event:focus-visible .ov-event-name { color: var(--gilt); }
+/* the line under a cut list, when it is a way to the rest (NODES) */
+.ov-more span { display: block; }
 .ov-go {
   align-self: flex-start; background: none; border: none; cursor: pointer; padding: 4px; margin-left: -4px;
   border-radius: 4px; font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.7rem; letter-spacing: 0.2em;
@@ -702,12 +754,28 @@ body.phone .nv-count { margin-left: 0; flex-basis: 100%; }
 
 /* ── on a phone, and any narrow window: one column ── */
 @media (max-width: 760px) {
-  .ov-grid { grid-template-columns: 1fr; }
-  .ov-tile[data-tile="states"] { grid-column: auto; }
+  .ov-face { display: flex; flex-direction: column; gap: 12px; }
+  .ov-face > * { flex: none; overflow: visible; }
+  .ov-face > .ov-chart { flex: 0 0 38%; overflow: hidden; }
+  .ov-doors { padding: 10px 0 0; border-left: none; border-top: 1px solid var(--ink-line); gap: 8px; }
+  .ov-tabs { margin-left: 0; }
+  .ov-tab { padding: 5px 9px; letter-spacing: 0.12em; white-space: nowrap; }
+  #overview-body[data-face="list"] .ov-calmline { display: none; }
+  .ov-verdict { font-size: 1.2rem; }
+  .ov-sub { display: none; }
 }
-body.phone .ov-grid { grid-template-columns: 1fr; }
-body.phone .ov-tile[data-tile="states"] { grid-column: auto; }
-body.phone .ov-sheet { margin: 0 12px 16px; padding: 14px 12px 16px; }
+body.phone .ov-face { display: flex; flex-direction: column; gap: 12px; }
+body.phone .ov-face > * { flex: none; overflow: visible; }
+body.phone .ov-face > .ov-chart { flex: 0 0 38%; overflow: hidden; }
+body.phone .ov-doors { padding: 10px 0 0; border-left: none; border-top: 1px solid var(--ink-line); gap: 8px; }
+body.phone .ov-tabs { margin-left: 0; }
+body.phone .ov-tab { padding: 5px 9px; letter-spacing: 0.12em; white-space: nowrap; }
+/* stacked, the first face is the favourites' (owner, 2026-11-20): the line of
+   everything quiet waits on the chart table, with the rest of the watch list */
+body.phone #overview-body[data-face="list"] .ov-calmline { display: none; }
+body.phone .ov-verdict { font-size: 1.2rem; }
+body.phone .ov-sub { display: none; }
+body.phone #view-overview > .ov-sheet { margin: 0 12px 10px; padding: 14px 12px 16px; }
 /* a narrow window and a phone: the stamp takes its own line under the name,
    and `Charts ↓` keeps the head's corner */
 @media (max-width: 760px) {
@@ -717,12 +785,13 @@ body.phone .ov-stamp { margin: 0; flex-basis: 100%; }
 body.phone .ov-title { padding-right: 96px; }
 
 /* THE HOVER GLOW (the design notes 2026-11-02), for the controls this view adds */
-:is(.ov-place, .ov-event, .ov-go, .ov-fav, .ov-source):is(:hover, :focus-visible) {
+:is(.ov-place, .ov-go, .ov-fav, .ov-source, .ov-tab, .ov-lamp):is(:hover, :focus-visible) {
   box-shadow: 0 0 14px rgba(var(--gilt-rgb), var(--hover-glow-a));
 }
 
 @media (prefers-reduced-motion: reduce) {
-  :is(.ov-place, .ov-event, .ov-fav, .ov-source) { transition: none; }
+  :is(.ov-place, .ov-fav, .ov-source, .ov-tab) { transition: none; }
+  .ov-from-right, .ov-from-left { animation: none; }
 }
 
 /* ── THE ALERTS' PIECES (2026-11-13; since 2026-11-14 in two places) ─────

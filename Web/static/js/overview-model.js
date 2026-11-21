@@ -100,6 +100,18 @@ export const OVERVIEW_TEXT = {
   ov_source_last: 'last answered {when}',
   ov_source_never: 'has not answered',
 
+  ov_face_list: 'Watch list',
+  ov_face_chart: 'Chart table',
+  ov_faces: 'Two ways to read it',
+  ov_wants_none: 'Nothing wants you.',
+  ov_quiet_lead: 'All quiet:',
+  ov_more_nodes: '+{n} more in NODES ›',
+  ov_more_chart: '+{n} more on the chart table ›',
+  ov_chart_alt: 'The map, each place lit by its state',
+  ov_chart_off_one: '1 place is not drawn on this map.',
+  ov_chart_off: '{n} places are not drawn on this map.',
+  ov_doors: 'Doors',
+
   ov_fav_none: 'No favourites yet.',
   ov_fav_how: 'Mark a service as a favourite in the map editor, under its place.',
 };
@@ -112,15 +124,32 @@ export function fill(text, vars = {}) {
 /** The plain words, for a caller (and the tests) with no theme. */
 export const plainT = (key, vars) => fill(OVERVIEW_TEXT[key] ?? key, vars);
 
-/** The tiles, in the page's order. */
-export const TILES = ['states', 'down', 'unacked', 'maintenance', 'certs', 'review',
-  'changes', 'sources', 'favin', 'favout'];
+/** The two faces of the one sheet, in swipe order. The first is the one a
+    browser that has never chosen opens on. (Until 2026-11-20 the sheet was
+    ten tiles, every one always drawn; the owner chose the watch list and the
+    chart table in their place. The answer still carries an admin's `drift`;
+    nothing draws it.) */
+export const FACES = ['list', 'chart'];
 
-/** The tiles this answer draws, in order: every one, always, each saying so
-    when it has nothing to report, so the page never jumps. (The answer still
-    carries an admin's `drift`; no tile draws it since 2026-11-20.) */
-export function tileOrder() {
-  return TILES.slice();
+/** The face to show: the stored pick when it is one of ours, else the first. */
+export function faceOr(stored) {
+  return FACES.includes(stored) ? stored : FACES[0];
+}
+
+/** The face one step along (`step` 1 is a swipe to the left), held at the ends. */
+export function faceStep(face, step) {
+  const i = Math.max(0, FACES.indexOf(face)) + (step > 0 ? 1 : step < 0 ? -1 : 0);
+  return FACES[Math.min(FACES.length - 1, Math.max(0, i))];
+}
+
+/** Which list gives up rows first when a face is too tall. The favourites
+    are the first face's own (owner, 2026-11-20: "making sure the favorites
+    list is on page a"), and the watch list is on both faces, so where the
+    two are stacked (a narrow screen) the watch list is cut first: the rest
+    of it is one swipe away, beside the map. Side by side, each column is cut
+    by itself and the order does not matter. */
+export function cutOrder(stacked) {
+  return stacked ? ['watch', 'doors'] : ['doors', 'watch'];
 }
 
 /** How many favourites a tile lists before "+N more": more than a tile of
@@ -343,6 +372,137 @@ export function favTile(list_, admin = false, t = plainT) {
     how: items.length || !admin ? '' : t('ov_fav_how'),
     items,
   };
+}
+
+/* ── the watch list (2026-11-20) ─────────────────────────────────────────
+   One list of what wants a reader, worst first, built from the same answer
+   the tiles read: both faces draw these rows, so they cannot disagree. A
+   section with nothing to report is not a row: its calm sentence goes to
+   `quietLine`, so "nothing" is still said, once, and "could not be read" is
+   never calm (a missing answer gives no rows and no calm sentences). */
+
+const RANK = { down: 0, warn: 1, '': 2 };
+
+/** The rows, worst first. Each is {key, tone, state, name, place, word,
+    detail, go}: `place` opens its card, `go` is 'annals' or 'nodes' when the
+    row is a way to one of them, `state` picks the dot. */
+export function watchList(b, t = plainT, now = Date.now()) {
+  if (!b || typeof b !== 'object') return [];
+  const out = [];
+  const d = downTile(b.down, t);
+  for (const x of d.items) {
+    const deps = x.downstream.map((p) => p.name || p.id).join(', ');
+    out.push({
+      key: `place:${x.id}`, tone: x.state === 'down' ? 'down' : 'warn', state: x.state,
+      name: x.name, place: { id: x.id, name: x.name },
+      word: t(`ov_state_${x.state}`),
+      detail: deps ? `${x.takes} ${deps}` : (x.line || d.note || ''),
+    });
+  }
+  for (const c of certRows(b.certs, t)) {
+    out.push({
+      key: `cert:${c.name}`, tone: c.tone, state: c.tone === 'down' ? 'down' : 'degraded',
+      name: c.name, mono: true, place: c.place || null, word: c.phrase,
+      detail: c.place ? (c.place.name || c.place.id) : '',
+    });
+  }
+  const s = sourcesTile(b.sources, Boolean(b.admin), t, now);
+  if (s.tone) {
+    const silent = s.items.filter((x) => !x.ok);
+    for (const x of silent) {
+      out.push({ key: `source:${x.name}`, tone: 'warn', state: 'down', name: x.name, mono: true,
+                 place: null, word: x.state, detail: x.when, url: x.url, openIn: x.openIn });
+    }
+    if (!silent.length) {
+      out.push({ key: 'sources', tone: 'warn', state: 'down', name: t('ov_t_sources'),
+                 place: null, word: '', detail: s.line });
+    }
+  }
+  const u = unackedTile(b.unacked, t, now);
+  if (!u.empty) {
+    const first = u.items[0];
+    out.push({
+      key: 'unacked', tone: 'warn', state: 'degraded', name: t('ov_t_unacked'), place: null,
+      word: String(u.count), go: 'annals',
+      detail: first ? `${u.line} ${[first.name, first.move, first.when].filter(Boolean).join(' ')}` : u.line,
+    });
+  }
+  for (const w of maintenanceTile(b.maintenance, t).items) {
+    out.push({
+      key: `maint:${w.window || w.reason}`, tone: w.now ? 'warn' : '', state: 'maintenance',
+      name: w.reason, plain: true, place: w.places[0] || null, word: w.when,
+      detail: w.places.map((p) => p.name || p.id).join(', '),
+    });
+  }
+  const r = reviewTile(b.review, t, now);
+  if (!r.empty) {
+    out.push({
+      key: 'review', tone: '', state: 'unknown', name: t('ov_t_review'), place: null,
+      word: String(r.count), go: 'nodes',
+      detail: [r.lines.join(' '), r.items.map((x) => x.name).join(', ')].filter(Boolean).join(' '),
+    });
+  }
+  const c = changesTile(b.changes, t, now);
+  const changed = c.admin ? c.items.length : num(b.changes?.count_7d);
+  if (changed) {
+    const first = c.items[0];
+    out.push({
+      key: 'changes', tone: '', state: 'unknown', name: t('ov_t_changes'), place: null,
+      word: String(changed),
+      detail: c.admin ? [first.summary, first.by, first.when].filter(Boolean).join(' · ') : c.line,
+    });
+  }
+  return out.map((x, i) => ({ x, i }))
+    .sort((a, z) => (RANK[a.x.tone] - RANK[z.x.tone]) || (a.i - z.i))
+    .map(({ x }) => x);
+}
+
+/** The calm sentences, one for each section that has nothing to report, in
+    the old tiles' order, each without its full stop. Empty when the answer
+    is missing. */
+export function quietLine(b, t = plainT, now = Date.now()) {
+  if (!b || typeof b !== 'object') return [];
+  const out = [];
+  const push = (text) => { if (text) out.push(String(text).replace(/[.]$/, '')); };
+  push(downTile(b.down, t).empty);
+  push(unackedTile(b.unacked, t, now).empty);
+  push(maintenanceTile(b.maintenance, t).empty);
+  if (!certRows(b.certs, t).length) push(t('ov_certs_none'));
+  push(reviewTile(b.review, t, now).empty);
+  const c = changesTile(b.changes, t, now);
+  if (c.admin) push(c.empty);
+  else if (num(b.changes?.count_7d) === 0) push(c.line);
+  const s = sourcesTile(b.sources, Boolean(b.admin), t, now);
+  if (!s.tone) push(s.line);
+  return out;
+}
+
+/** The worst tone on the list: 'down', 'warn' or ''. */
+export function worstTone(rows) {
+  const all = list(rows);
+  if (all.some((x) => x.tone === 'down')) return 'down';
+  return all.some((x) => x.tone === 'warn') ? 'warn' : '';
+}
+
+/** A lamp for every place drawn on the top-level map: where it stands (map
+    %), its state from the live feed, and whether the watch list names it.
+    `places` is [{id, name, x, y, off}], `states` is {id: state}. `off` counts
+    the places this map does not draw, so the key's totals still add up. */
+export function chartLamps(places, states = {}, rows = []) {
+  const named = new Set(list(rows).map((r) => r.place?.id).filter(Boolean));
+  const lamps = [];
+  let off = 0;
+  for (const p of list(places)) {
+    if (!p || !p.id) continue;
+    const x = Number(p.x), y = Number(p.y);
+    if (p.off || !Number.isFinite(x) || !Number.isFinite(y)) { off++; continue; }
+    lamps.push({ id: p.id, name: p.name || p.id, x: Math.min(100, Math.max(0, x)),
+                 y: Math.min(100, Math.max(0, y)), state: (states || {})[p.id] || 'unknown',
+                 named: named.has(p.id) });
+  }
+  // a named lamp is drawn last, so it is never under a quiet one
+  lamps.sort((a, z) => Number(a.named) - Number(z.named));
+  return { lamps, off };
 }
 
 /** At most `cap` rows on a wall, and how many more there are. */

@@ -17,22 +17,116 @@ function test(name, fn) {
 const NOW = Date.parse('2026-11-13T12:00:00Z');
 const daysAgo = (n) => new Date(NOW - n * 86400000).toISOString();
 
-test('the tiles keep one order, for every reader', () => {
-  assert.deepEqual(M.TILES, ['states', 'down', 'unacked', 'maintenance', 'certs', 'review',
-    'changes', 'sources', 'favin', 'favout']);
-  assert.deepEqual(M.tileOrder({ admin: false }), M.TILES);
-  // an admin's answer still carries the drift; no tile draws it (2026-11-20)
-  assert.deepEqual(M.tileOrder({ admin: true, drift: { count: 2, items: ['a', 'b'] } }), M.TILES);
-  // nothing read yet: every tile is still drawn, so the page never jumps
-  assert.deepEqual(M.tileOrder(null), M.TILES);
-  assert.notEqual(M.tileOrder(), M.TILES, 'a copy: a caller may not reorder the page');
-  // the ranges and the drift left with their words
+const SECTIONS = ['states', 'down', 'unacked', 'maintenance', 'certs', 'review',
+  'changes', 'sources', 'favin', 'favout'];
+
+test('the sheet has two faces, the watch list first; the tiles are gone', () => {
+  assert.deepEqual(M.FACES, ['list', 'chart']);
+  assert.equal(M.faceOr(null), 'list');
+  assert.equal(M.faceOr('chart'), 'chart');
+  assert.equal(M.faceOr('tiles'), 'list', 'a stored name that is not a face opens the first');
+  assert.equal(M.faceStep('list', 1), 'chart');
+  assert.equal(M.faceStep('chart', 1), 'chart', 'held at the end');
+  assert.equal(M.faceStep('chart', -1), 'list');
+  assert.equal(M.faceStep('list', -1), 'list');
+  for (const k of M.FACES) assert.ok(M.OVERVIEW_TEXT[`ov_face_${k}`], k);
+  assert.equal(M.faceOr('doors'), 'list', 'the doors were a face for an hour; a stored pick opens the first');
+  // the favourites are the first face's own: stacked, the watch list (which
+  // the chart table also carries) gives up rows before they do
+  assert.deepEqual(M.cutOrder(true), ['watch', 'doors']);
+  assert.deepEqual(M.cutOrder(false), ['doors', 'watch']);
+  assert.equal(M.OVERVIEW_TEXT.ov_face_doors, undefined);
+  assert.equal(M.TILES, undefined);
+  assert.equal(M.tileOrder, undefined);
+  // the ranges and the drift left with their words (2026-11-20)
   for (const gone of ['drift', 'ranges']) {
-    assert.ok(!M.TILES.includes(gone), gone);
     assert.ok(!Object.keys(M.OVERVIEW_TEXT).some((k) => k.includes(gone)), gone);
   }
   assert.equal(M.fullestRanges, undefined);
   assert.equal(M.driftTile, undefined);
+});
+
+const ANSWER = {
+  admin: false,
+  states: { total: 4, healthy: 2, degraded: 1, down: 1 },
+  down: [
+    { id: 'dl', name: 'Downloads', state: 'degraded', declared: false, downstream: [] },
+    { id: 'gw', name: 'Gateway', state: 'down', declared: true, downstream: [{ id: 'app', name: 'App host' }] },
+  ],
+  unacked: { count: 0, items: [] },
+  maintenance: [],
+  certs: [{ name: 'wild', days: 10, place: { id: 'app', name: 'App host' } }, { name: 'edge', days: -2 }],
+  review: { unchecked: 0, stale: 3, items: [{ id: 'app', name: 'App host', reviewed_at: null }] },
+  changes: { count_7d: 0 },
+  sources: { all_ok: true, silent: 0, items: [] },
+  favourites: { internal: [], external: [] },
+};
+
+test('the watch list: worst first, in the answer\'s order within a tone', () => {
+  const rows = M.watchList(ANSWER, M.plainT, NOW);
+  assert.deepEqual(rows.map((r) => r.key), ['place:gw', 'cert:edge', 'place:dl', 'cert:wild', 'review']);
+  assert.deepEqual(rows.map((r) => r.tone), ['down', 'down', 'warn', 'warn', '']);
+  const gw = rows[0];
+  assert.equal(gw.word, 'Down');
+  assert.equal(gw.detail, 'Depends on it: App host');
+  assert.deepEqual(gw.place, { id: 'gw', name: 'Gateway' });
+  // a degraded place is never called down
+  assert.equal(rows[2].word, 'Degraded');
+  assert.equal(rows[1].word, 'lapsed');
+  assert.equal(rows[3].word, '10 days');
+  assert.deepEqual(rows[3].place, { id: 'app', name: 'App host' });
+  assert.equal(rows[4].go, 'nodes');
+  assert.equal(rows[4].word, '3');
+  assert.equal(M.worstTone(rows), 'down');
+  assert.equal(M.worstTone(rows.slice(2)), 'warn');
+  assert.equal(M.worstTone([]), '');
+});
+
+test('the watch list: events open the ANNALS, a silent source is a row, a missing answer is no rows', () => {
+  const rows = M.watchList({
+    ...ANSWER, admin: true, down: [], certs: [], review: {},
+    unacked: { count: 2, items: [{ id: 7, name: 'Gateway', from: 'healthy', to: 'down', at: daysAgo(1) }] },
+    sources: { silent: 1, items: [{ name: 'kuma', ok: false, url: 'http://kuma.example' }, { name: 'prom', ok: true }] },
+    changes: { items: [{ summary: 'Moved the gateway', by: 'ada', at: daysAgo(2) }] },
+  }, M.plainT, NOW);
+  assert.deepEqual(rows.map((r) => r.key), ['source:kuma', 'unacked', 'changes']);
+  assert.equal(rows[0].url, 'http://kuma.example');
+  assert.equal(rows[1].go, 'annals');
+  assert.equal(rows[1].word, '2');
+  assert.ok(rows[1].detail.startsWith('2 events are waiting.'));
+  assert.equal(rows[2].detail, 'Moved the gateway · ada · 2d ago');
+  assert.deepEqual(M.watchList(null), []);
+  assert.deepEqual(M.quietLine(null), [], 'could not be read is never drawn as calm');
+});
+
+test('the quiet line: one calm sentence for each section with nothing to report', () => {
+  assert.deepEqual(M.quietLine(ANSWER, M.plainT, NOW), [
+    'Every event has been acknowledged', 'No maintenance in the next 7 days',
+    'No place changed this week', 'Every source is answering']);
+  const calm = M.quietLine({ states: {}, changes: { items: [] }, admin: true }, M.plainT, NOW);
+  assert.deepEqual(calm, ['Nothing is down', 'Every event has been acknowledged',
+    'No maintenance in the next 7 days', 'No certificate lapses within 30 days',
+    'Every place has been checked in the last 90 days', 'No changes this week',
+    'No live source is set up; the map is all there is']);
+  // every section is either a row or a calm sentence, never neither
+  assert.equal(M.watchList({ states: {}, changes: { items: [] }, admin: true }).length, 0);
+});
+
+test('the chart table: a lamp for each place drawn, the rest counted', () => {
+  const rows = M.watchList(ANSWER, M.plainT, NOW);
+  const { lamps, off } = M.chartLamps([
+    { id: 'gw', name: 'Gateway', x: 10, y: 20 },
+    { id: 'app', name: 'App host', x: 140, y: -3 },
+    { id: 'cam', name: 'Camera', x: 50, y: 50, off: true },
+    { id: 'nas', x: 'nowhere', y: 5 },
+    { id: 'sw', name: 'Switch', x: 60, y: 60 },
+  ], { gw: 'down', sw: 'healthy' }, rows);
+  assert.equal(off, 2);
+  assert.deepEqual(lamps.map((l) => l.id), ['sw', 'gw', 'app'], 'a named lamp is drawn last');
+  assert.deepEqual(lamps.map((l) => l.named), [false, true, true]);
+  assert.deepEqual(lamps[2], { id: 'app', name: 'App host', x: 100, y: 0, state: 'unknown', named: true });
+  assert.equal(lamps[1].state, 'down');
+  assert.deepEqual(M.chartLamps(null), { lamps: [], off: 0 });
 });
 
 test('every phrase has a plain fallback, and fill leaves unknown names alone', () => {
@@ -41,7 +135,7 @@ test('every phrase has a plain fallback, and fill leaves unknown names alone', (
     assert.equal(typeof v, 'string');
     assert.ok(v.length > 0, k);
   }
-  for (const k of M.TILES) assert.ok(M.OVERVIEW_TEXT[`ov_t_${k}`], `ov_t_${k}`);
+  for (const k of SECTIONS) assert.ok(M.OVERVIEW_TEXT[`ov_t_${k}`], `ov_t_${k}`);
   assert.equal(M.fill('{a} and {b}', { a: 1 }), '1 and {b}');
   assert.equal(M.plainT('ov_days', { n: 4 }), '4 days');
 });
