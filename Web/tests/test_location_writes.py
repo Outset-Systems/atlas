@@ -73,3 +73,15 @@ def test_a_drawn_box_becomes_a_region_alone_or_inside_another():
     out, _ = ds.apply_ops(out, [{"op": "insert", "section": "regions", "body": inner}])
     assert out["regions"][-1]["parent"] == "server-room"
     _clean(out)
+
+
+def test_a_fitting_inside_the_rack_is_taken_and_any_other_side_refused():
+    """HARDWARE's Add, 2026-11-21: behind the rack or inside it."""
+    data = _default()
+    out, _ = ds.apply_ops(data, [
+        {"op": "insert", "section": "rack_rear", "body": {"name": "ZZ tray", "desc": "Mini PC", "side": "inside"}},
+        {"op": "insert", "section": "rack_rear", "body": {"name": "ZZ strip", "desc": "PDU"}}])
+    assert [r.get("side") for r in out["rack_rear"][-2:]] == ["inside", None]
+    _clean(out)
+    out["rack_rear"][-1]["side"] = "underneath"
+    assert any("side" in p for p in validation.validate(out))

@@ -372,3 +372,24 @@ def test_topology_stands_before_addresses_in_the_band():
     band = html[html.index('<nav id="scenes-list"'):html.index("</nav>", html.index('<nav id="scenes-list"'))]
     order = re.findall(r'<button class="scene[^"]*" data-scene="(\w+)"', band)
     assert order[:5] == ["atlas", "rack", "tribute", "path", "ledger"], order
+
+
+
+# ── 2026-11-21: Add says what the device is and where in the rack it goes ────
+# Owner: "in the hardware when you click add, it should also have a drop down
+# for device ... and a location front, back inside."
+
+def test_add_asks_for_the_device_and_the_seat():
+    html = (WEB / "templates" / "index.html").read_text(encoding="utf-8")
+    box = html[html.index('id="rel-addbox"'):html.index('id="rel-add-go"')]
+    assert box.index('id="rel-add-what"') < box.index('id="rel-add-type"') < box.index('id="rel-add-seat"') < box.index('id="rel-add-size"')
+    js = (WEB / "static" / "js" / "reliquary.js").read_text(encoding="utf-8")
+    assert "import { DEVICE_GROUPS, SEATS, addBody, addName, typeById } from './hardware-catalog.js';" in js
+    # behind the rack and inside it there is no U to say
+    assert "$('rel-add-size').closest('.rel-add-field').hidden = $('rel-add-seat').value !== 'front';" in js
+    assert "if (seat !== 'front') { addFitting({ seat, name, node, type, here, say }); return; }" in js
+    # one strip, two halves, each item keeping its place in the map's list
+    assert "half('rear of rack', false) + half('inside the rack', true)" in js
+    import schema
+    assert schema.HIDING["rack_rear"]["side"] == "safe"
+    assert schema.REAR_SIDES == ["rear", "inside"]

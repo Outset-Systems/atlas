@@ -33,6 +33,7 @@ import { A, CFG, $, esc, glassAttrs, nodeById, FALLBACK_HUE, DRAG_END, postJSON,
 import { makeScene } from './scene.js';
 import { locationByKey, looseAt, rackable, racksAt } from './locations-model.js';
 import { setLocation } from './location-set.js';
+import { DEVICE_GROUPS, SEATS, addBody, addName, typeById } from './hardware-catalog.js';
 import { drawPlacePicker, markPlace, placeName, whereNow } from './scene-places.js';
 import {
   UH, KIND_HUE, ledColor, uLabel, setRackTheme,
@@ -219,7 +220,7 @@ function showDetail(d) {
   // rear vessels have no U — they hang behind the elevation (v1.34.0, §20a);
   // neither has a machine that stands outside a rack (2026-11-20)
   const seat = d.loose ? `not in a rack · ${d.where}`
-    : d.rear ? 'rear of rack' : `${uLabel(d.top, d.size)} · ${d.size}U`;
+    : d.rear ? (d.slot?.side === 'inside' ? 'inside the rack' : 'rear of rack') : `${uLabel(d.top, d.size)} · ${d.size}U`;
   const data = [`<span>${esc(seat)}</span>`];
   if (ip) data.push(`<span>${esc(ip)}</span>`);
   if (desc && desc !== hw) data.push(`<span class="rel-detail-desc">${esc(desc)}</span>`);
@@ -307,12 +308,19 @@ function renderRear() {
   if (!rear.length) return;
   rearEl = document.createElement('div');
   rearEl.className = 'rel-rear';
-  rearEl.innerHTML = '<span class="rel-rear-label">rear of rack</span>' +
-    rear.map((r, idx) => `<span class="rel-rear-seat"><button class="rel-rear-item" data-rear="${idx}">` +
-      `<span class="rel-rear-name">${esc(r.name)}</span>` +
-      `<span class="rel-rear-desc">${esc(r.desc || '')}</span></button></span>`).join('');
+  /* Behind the rack, then inside it (2026-11-21): one strip, each half under
+     its own label, and each item keeping its place in the map's list (`idx`),
+     which is how it is picked and removed. */
+  const seat = (r, idx) => `<span class="rel-rear-seat"><button class="rel-rear-item" data-rear="${idx}">` +
+    `<span class="rel-rear-name">${esc(r.name)}</span>` +
+    `<span class="rel-rear-desc">${esc(r.desc || '')}</span></button></span>`;
+  const half = (label, inside) => {
+    const seats = rear.map((r, idx) => ((r.slot?.side === 'inside') === inside ? seat(r, idx) : '')).join('');
+    return seats ? `<span class="rel-rear-label">${label}</span>${seats}` : '';
+  };
+  rearEl.innerHTML = half('rear of rack', false) + half('inside the rack', true);
   rackEl.insertBefore(rearEl, rackEl.querySelector('.rel-shelf'));   // the shelf stays last
-  if (mayWrite()) rearEl.querySelectorAll('.rel-rear-seat').forEach((seat, idx) => seat.appendChild(removeButton(rear[idx])));
+  if (mayWrite()) rearEl.querySelectorAll('.rel-rear-seat').forEach((el) => el.appendChild(removeButton(rear[Number(el.querySelector('[data-rear]').dataset.rear)])));
   /* A rear vessel used to fly straight to the map. It opens the SAME detail
      pane as a front vessel now (v1.34.0, §20a) — a rear-mounted switch is
      exactly where the faceplate matters most — and the ✦ button inside the
@@ -416,29 +424,46 @@ function openAddBox(on) {
   $('rel-add-what').innerHTML = group('Machines', can.filter((n) => n.kind === 'physical'))
     + group('Other places on the map', can.filter((n) => n.kind !== 'physical'))
     + '<option value="">Something that is not on the map…</option>';
+  // what kind of device, and where in the rack (hardware-catalog.js)
+  $('rel-add-type').innerHTML = '<option value="">Not said</option>' + DEVICE_GROUPS.map((g) =>
+    `<optgroup label="${esc(g.label)}">${g.types.map((t) => `<option value="${esc(t.id)}">${esc(t.label)}</option>`).join('')}</optgroup>`).join('');
+  $('rel-add-seat').innerHTML = SEATS.map((s) => `<option value="${s.id}">${s.label}</option>`).join('');
   $('rel-add-name').value = '';
   $('rel-add-msg').textContent = '';
   paintAddName();
+  paintAddSeat();
   $('rel-add-what').focus();
 }
 const paintAddName = () => { $('rel-add-name-wrap').hidden = $('rel-add-what').value !== ''; };
+/** Only the front has U slots: behind the rack and inside it there is no height to say. */
+const paintAddSeat = () => { $('rel-add-size').closest('.rel-add-field').hidden = $('rel-add-seat').value !== 'front'; };
+/** A type chosen: its usual height, and its words as the name's hint. */
+function paintAddType() {
+  const type = typeById($('rel-add-type').value);
+  if (!type) return;
+  const size = $('rel-add-size');
+  if ([...size.options].some((o) => Number(o.value) === type.size)) size.value = String(type.size);
+  $('rel-add-name').placeholder = type.label;
+}
 
 async function addVessel() {
   const msg = $('rel-add-msg');
   const say = (text) => { msg.textContent = text; };
   const node = $('rel-add-what').value ? nodeById($('rel-add-what').value) : null;
-  const name = (node ? node.name : $('rel-add-name').value).trim().replace(/\s+/g, ' ');
+  const type = typeById($('rel-add-type').value);
+  const seat = $('rel-add-seat').value || 'front';
+  // a thing that is not on the map may go by its type's words
+  const name = addName({ node, typed: $('rel-add-name').value, type });
   const size = Math.max(1, Math.min(12, parseInt($('rel-add-size').value, 10) || 1));
-  if (!name) { say('Give it a name.'); $('rel-add-name').focus(); return; }
+  if (!name) { say('Give it a name, or say what device it is.'); $('rel-add-name').focus(); return; }
   const here = racks.find((r) => r.id === rackId);
   if (!here) return;
+  if (seat !== 'front') { addFitting({ seat, name, node, type, here, say }); return; }
   // the seat is found on the layout as it is SAVED: with moves waiting, the
   // one on screen is a draft, and the map would be told a seat the draft freed
   if (Object.keys(readOvr()).length) { say('Save or Reset the moves you have made first, then add.'); return; }
   const top = freeTop(devices, rackU, size);
-  const body = { u: uLabel(top, size), name, size };
-  if (rackId) body.rack = rackId;
-  if (node) body.node = node.id;
+  const { body } = addBody({ seat, name, node, type, size, u: uLabel(top, size), rackId });
   // a vessel is known by its place, else by its name in its rack: two of one
   // name would be moved, and removed, as one
   const key = slotKey(body);
@@ -458,6 +483,36 @@ async function addVessel() {
     const d = devices.find((x) => x.key === key);
     if (el && d) select(d, el);
     A.showToast?.(`${name} is in at ${uLabel(top, size)}. Drag it to its seat, then Save.`);
+  } catch (err) {
+    say(`Not added: ${err.message || err}`);
+  } finally {
+    go.disabled = false;
+  }
+}
+
+/** Add behind the rack or inside it (2026-11-21): a fitting with no U
+    (`rack_rear`, `side: 'inside'` for the cabinet's own space). A place can
+    hang there once; a name can be used once in each rack's fittings. */
+async function addFitting({ seat, name, node, type, here, say }) {
+  const mine = inRack(A.DATA.rack_rear, allRacks, rackId);
+  if (node && [...(A.DATA.rack || []), ...(A.DATA.rack_rear || [])].some((s) => s && s.node === node.id)) {
+    say(`${name} is in a rack already.`);
+    return;
+  }
+  if (mine.some((s) => String(s.name || '').toLowerCase() === name.toLowerCase())) {
+    say(`This rack already has a "${name}" behind or inside it. Give it another name.`);
+    return;
+  }
+  const { section, body } = addBody({ seat, name, node, type, rackId });
+  const go = $('rel-add-go');
+  go.disabled = true;
+  const words = seat === 'inside' ? 'inside' : 'behind';
+  try {
+    const store = await editorStore();
+    await store.apply([{ op: 'insert', section, body }], `put ${name} ${words} ${rackTitle(here)} (HARDWARE)`);
+    openAddBox(false);
+    render();
+    A.showToast?.(`${name} is ${words} ${here.name}.`);
   } catch (err) {
     say(`Not added: ${err.message || err}`);
   } finally {
@@ -711,6 +766,8 @@ A.buildReliquary = function buildReliquary() {
   });
   $('rel-loc')?.addEventListener('click', (e) => { e.stopPropagation(); locate(); });
   $('rel-add-what')?.addEventListener('change', paintAddName);
+  $('rel-add-type')?.addEventListener('change', paintAddType);
+  $('rel-add-seat')?.addEventListener('change', paintAddSeat);
   $('rel-add-go')?.addEventListener('click', (e) => { e.stopPropagation(); addVessel(); });
   $('rel-add-cancel')?.addEventListener('click', (e) => { e.stopPropagation(); openAddBox(false); });
   // Enter in the box adds; its keys are not the map's

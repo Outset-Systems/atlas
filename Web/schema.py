@@ -102,6 +102,8 @@ IFACE_KINDS = ["rj45", "sfp", "sfp+", "console", "power", "virtual"]
 #: The faceplates THE ARMORY can draw; mirrors KIND_HUE in rack-model.js.
 RACK_KINDS = ["auto", "compute", "forge", "gateway", "switch", "storage",
               "power", "enclosure", "patch"]
+#: Where a fitting with no front U is: behind the rack, or inside the cabinet.
+REAR_SIDES = ["rear", "inside"]
 PREFIX_ROLES = ["prefix", "container", "reserved"]
 RANGE_KINDS = ["dhcp", "reserved"]
 #: How a service's button behaves — see LINK_FIELDS["open_in"] and glass.js.
@@ -596,6 +598,9 @@ SECTIONS = {
             f("name", "text", required=True),
             f("desc", "text", label="Description"),
             f("node", "ref", ref="nodes"),
+            f("side", "select", options=REAR_SIDES, default="rear", label="Where",
+              help="`rear` hangs behind the rack. `inside` is in the cabinet and on neither "
+                   "face: a shelf, a mini PC on a tray, a power strip on its floor."),
         ]),
 
     "vms": section(
@@ -978,7 +983,7 @@ HIDING = {
                    "note": "words"},
     "racks": {"id": "safe", "name": "safe", "location": "words"},
     "rack": {"rack": "safe", "u": "safe", "name": "words", "desc": "words"},
-    "rack_rear": {"rack": "safe", "name": "words", "desc": "words"},
+    "rack_rear": {"rack": "safe", "name": "words", "desc": "words", "side": "safe"},
     "vms": {"dynamic": "safe"},
     "certs": {"name": "words", "issuer": "safe", "host": "words", "expires": "safe",
               "renews": "safe", "note": "words"},

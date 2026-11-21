@@ -612,7 +612,13 @@
          at the highest free seat (reliquary.js addVessel). -->
     <div class="rel-addbox" id="rel-addbox" hidden>
       <span class="rel-add-head">Add to <b id="rel-add-to"></b></span>
-      <label class="rel-add-field"><span>Device</span><select id="rel-add-what" class="dir-input"></select></label>
+      <label class="rel-add-field"><span>On the map</span><select id="rel-add-what" class="dir-input"></select></label>
+      <!-- 2026-11-21 (owner: "it should also have a drop down for device. like
+           network: switch 12/24/48, gateway, patch panel, router ... and a
+           location front, back inside"): what kind of device it is
+           (hardware-catalog.js fills the list) and where in the rack it goes. -->
+      <label class="rel-add-field"><span>Device</span><select id="rel-add-type" class="dir-input"></select></label>
+      <label class="rel-add-field rel-add-seat"><span>Where</span><select id="rel-add-seat" class="dir-input"></select></label>
       <label class="rel-add-field" id="rel-add-name-wrap" hidden><span>Its name</span>
         <input id="rel-add-name" class="dir-input" type="text" maxlength="60" autocomplete="off" spellcheck="false" placeholder="Patch panel"></label>
       <label class="rel-add-field rel-add-size"><span>Height</span>

@@ -1364,6 +1364,14 @@
                 "node": {
                   "type": "string",
                   "description": "Names an entry in `nodes`."
+                },
+                "side": {
+                  "type": "string",
+                  "examples": [
+                    "rear",
+                    "inside"
+                  ],
+                  "description": "`rear` hangs behind the rack. `inside` is in the cabinet and on neither face: a shelf, a mini PC on a tray, a power strip on its floor."
                 }
               }
             },

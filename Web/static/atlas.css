@@ -4080,6 +4080,8 @@ body:not(.drawer-open) #path.pth-narrow .pth-panel { left: 2vw; right: 2vw; }
 .rel-add-field[hidden] { display: none; }
 .rel-add-field > span { font-family: 'Cinzel', serif; font-weight: 700; font-size: 0.56rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--text-dim); }
 .rel-add-size { flex: 0 0 84px; }
+.rel-add-size[hidden] { display: none; }
+.rel-add-seat { flex: 0 0 110px; }
 .rel-add-msg { flex-basis: 100%; min-height: 1.2em; color: var(--sem-warn); }
 .rel-add-msg:empty { display: none; }
 .rel-why { padding: 12px 22px 0; font-family: 'Alegreya Sans', sans-serif; font-size: 0.82rem; color: var(--text-dim); }
