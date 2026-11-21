@@ -190,6 +190,24 @@ function chart(list) {
     </div>${off ? `<p class="ov-quiet ov-chart-off">${esc(t(off === 1 ? 'ov_chart_off_one' : 'ov_chart_off', { n: off }))}</p>` : ''}</div>`;
 }
 
+/* The lamps are lit from the map's places and the live feed, and the first
+   drawing comes before either has arrived: without this they read "not known"
+   until the next 30-second read. Look twice a second, for half a minute at
+   most (an Atlas with no live source never gets a feed), and draw again when
+   what was missing is there. */
+let waiting = 0;
+const lit = () => Boolean(A.signalsFeed) && Boolean(A.DATA?.nodes?.length);
+function awaitLamps() {
+  if (waiting || lit()) return;
+  let tries = 60;
+  waiting = setInterval(() => {
+    if (!shown() || tries-- <= 0) { clearInterval(waiting); waiting = 0; return; }
+    if (!lit()) return;
+    clearInterval(waiting); waiting = 0;
+    draw();
+  }, 500);
+}
+
 const clock = (ms) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
 function draw() {
@@ -254,6 +272,7 @@ function draw() {
     if (!img.complete) img.addEventListener('load', fit, { once: true });
   }
   fit();
+  awaitLamps();
   if (again) root.querySelector(`.ov-face:not([hidden]) ${again}, .ov-head ${again}`)?.focus({ preventScroll: true });
   // a page that landed on the charts keeps them in place until the sheet
   // has its answer; later reads never scroll
