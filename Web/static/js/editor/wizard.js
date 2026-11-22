@@ -1,0 +1,385 @@
+
+import { A, $, esc } from '../config.js';
+import Editor from './store.js';
+import { buildForm, makeEl as el } from './form.js';
+import { openDesk } from './panel.js';
+import { reviewCsv, LEASE_HELP } from './survey.js';
+import { suggestNetworks, firstImport } from './wizard-model.js';
+
+let root, bodyEl, stepEl;
+let step = 0;
+
+const STEPS = ['NAME', 'START', 'NETWORKS', 'DEVICES'];
+
+function drawSteps() {
+  stepEl.innerHTML = STEPS.map((label, i) =>
+    `<span class="wiz-step${i === step ? ' on' : ''}${i < step ? ' done' : ''}">` +
+    `<i>${i + 1}</i>${esc(label)}</span>`).join('');
+}
+
+function panel(title, blurb) {
+  bodyEl.innerHTML = '';
+  bodyEl.append(el('h2', 'wiz-h', esc(title)));
+  if (blurb) bodyEl.append(el('p', 'wiz-blurb', blurb));
+  return bodyEl;
+}
+
+function bar(...buttons) {
+  const row = el('div', 'wiz-bar');
+  row.append(...buttons);
+  bodyEl.append(row);
+  return row;
+}
+
+function button(label, kind, onClick) {
+  const btn = el('button', `dsk-btn${kind ? ' dsk-btn-' + kind : ''}`, esc(label));
+  btn.addEventListener('click', onClick);
+  return btn;
+}
+
+function fail(err) {
+  const box = el('div', 'dsk-notice dsk-notice-bad', esc(err.message || String(err)));
+  for (const problem of err.problems || []) {
+    if (problem !== err.message) box.append(el('div', 'dsk-dim', esc(problem)));
+  }
+  bodyEl.prepend(box);
+}
+
+function laterNote(what) {
+  bodyEl.append(el('p', 'wiz-blurb', `${what} — all in the map editor (E), whenever you want them.`));
+}
+
+function stepRealm() {
+  step = 0;
+  drawSteps();
+  panel('Name your atlas',
+    'This is the title on the map and in the Hub. It can change later, like everything ' +
+    'else here.');
+  const form = buildForm('meta', Editor.data?.meta || {}, { only: ['title'] });
+  bodyEl.append(form.el);
+  laterNote('The backdrop, the survey date and the host\'s memory and cores');
+  bar(
+    button('Skip', '', stepStart),
+    button('Next ›', 'go', async () => {
+      try {
+        await Editor.upsert('meta', null, form.read());
+        stepStart();
+      } catch (err) { fail(err); }
+    }));
+}
+
+function stepStart() {
+  step = 1;
+  drawSteps();
+  panel('How do you want to start?',
+    'Bring in what your lab already knows and the Atlas works out your networks from it, ' +
+    'or set them up yourself. You can do the others later.');
+  const choices = el('div', 'wiz-choices');
+  importChoices(choices, stepStart);
+  choices.append(choice('✎', 'Set up networks by hand',
+    'Add each VLAN or subnet yourself, then add its devices. Best when you know the layout.',
+    stepZone));
+  bodyEl.append(choices);
+  bar(button('‹ Back', '', stepRealm), button('I will do this later', '', close));
+}
+
+function importChoices(host, back) {
+  host.append(choice('⌂', 'Read your UniFi controller',
+    'Its networks with their own names, the gateway, switches and access points, and ' +
+    'every machine on a cable, with the port each one is on. Read-only, with a View Only key.',
+    () => fromController(back)));
+  host.append(choice('◈', 'Scan your network',
+    `Run <code>${esc(scanCommand())}</code> on a machine in that network, where you ` +
+    'have the right to, and paste what it prints. The Atlas never probes the network ' +
+    'itself. It reads what you hand it.',
+    () => paste('nmap', back)));
+  host.append(choice('⇄', 'Import from your router',
+    'Paste its DHCP lease file: every device that asked it for an address, with the name ' +
+    'it gave itself. No scan at all, and usually the best names.',
+    () => paste('leases', back)));
+  host.append(choice('☰', 'Import a device list',
+    'Paste a CSV: <code>name,ip,kind,zone,role,url</code>. Checked whole before ' +
+    'anything is written, with the line number of every problem.',
+    () => paste('csv', back)));
+}
+
+const NET_HUES = ['#7FB0C4', '#7A9B6E', '#C49A52', '#C06B62', '#9B8BC4', '#D3869B'];
+
+function stepFound(ips, then) {
+  const found = suggestNetworks(ips, Editor.entries('zones'));
+  if (!found.length) { then(); return; }
+  step = 2;
+  drawSteps();
+  panel(found.length === 1 ? 'We found a network' : `We found ${found.length} networks`,
+    'Your devices sit on these. Name them, add a VLAN if you use one, and untick any you ' +
+    'do not want. This is a best guess from their addresses, and you can change it later.');
+  const rows = found.map((net) => {
+    const row = el('div', 'wiz-net');
+    const on = el('input', 'dsk-check');
+    on.type = 'checkbox';
+    on.checked = true;
+    on.setAttribute('aria-label', `Add ${net.subnet}`);
+    const name = el('input', 'dsk-input');
+    name.value = net.name;
+    name.setAttribute('aria-label', 'Network name');
+    const subnet = el('input', 'dsk-input dsk-mono wiz-net-sub');
+    subnet.value = net.subnet;
+    subnet.setAttribute('aria-label', 'Subnet');
+    const vlan = el('input', 'dsk-input');
+    vlan.placeholder = 'VLAN';
+    vlan.setAttribute('aria-label', 'VLAN, if it has one');
+    row.append(on, name, subnet, vlan,
+      el('div', 'wiz-net-n', `${net.count} device${net.count === 1 ? '' : 's'}`));
+    bodyEl.append(row);
+    return { net, on, name, subnet, vlan };
+  });
+  const noneYet = !Editor.entries('zones').length;
+  bar(
+    button(noneYet ? 'Set up by hand instead' : 'Skip', '', noneYet ? stepZone : then),
+    button('Add them ›', 'go', async () => {
+      const chosen = rows.filter((r) => r.on.checked);
+      if (!chosen.length) { (noneYet ? stepZone : then)(); return; }
+      const ops = chosen.map((r, i) => ({
+        op: 'insert', section: 'zones',
+        body: {
+          id: r.net.id,
+          name: r.name.value.trim() || r.net.name,
+          vlan: /^\d+$/.test(r.vlan.value.trim()) ? Number(r.vlan.value.trim()) : (r.vlan.value.trim() || '—'),
+          subnet: r.subnet.value.trim() || r.net.subnet,
+          hue: NET_HUES[i % NET_HUES.length],
+          lore: 'Newly surveyed ground.',
+          label_x: 20 + (i % 3) * 30,
+          label_y: 20 + Math.floor(i / 3) * 30,
+        },
+      }));
+      try {
+        await Editor.apply(ops, 'networks read from an import');
+        then();
+      } catch (err) { fail(err); }
+    }));
+}
+
+function stepZone() {
+  step = 2;
+  drawSteps();
+  const existing = Editor.entries('zones');
+  panel('Add a network',
+    existing.length
+      ? `You have ${existing.length} already. Add another, or move on.`
+      : 'A VLAN or subnet. Every device belongs to one. ' +
+        'Give it a subnet and ADDRESSES can chart it; give it a colour ' +
+        'and everything on it is recognisable at a glance.');
+
+  const seed = {
+    id: existing.length ? '' : 'main',
+    name: existing.length ? '' : 'Main',
+    vlan: existing.length ? '' : 1,
+    subnet: '', hue: '#C49A52',
+  };
+  const unasked = { lore: 'Newly surveyed ground.', label_x: 50, label_y: 50 };
+  const form = buildForm('zones', seed, { only: ['name', 'id', 'vlan', 'subnet', 'hue'] });
+  bodyEl.append(form.el);
+  laterNote('Its card line, route colour and label position');
+  bar(
+    button('‹ Back', '', stepStart),
+    button(existing.length ? 'Skip' : 'Skip for now', '', stepPlaces),
+    button('Add it ›', 'go', async () => {
+      try {
+        await Editor.insert('zones', { ...unasked, ...form.read() });
+        stepPlaces();
+      } catch (err) { fail(err); }
+    }));
+}
+
+function stepPlaces() {
+  step = 3;
+  drawSteps();
+  panel('Add its devices',
+    'Four ways in. None of them is permanent: anything added can be renamed, ' +
+    'moved or removed in the map editor afterwards.');
+
+  const zones = Editor.entries('zones');
+  if (!zones.length) {
+    bodyEl.append(el('div', 'dsk-notice dsk-notice-warn',
+      'There are no networks yet, so devices have nowhere to live. Go back and add one.'));
+    bar(button('‹ Back', '', stepZone));
+    return;
+  }
+
+  const choices = el('div', 'wiz-choices');
+
+  choices.append(choice('✎', 'One at a time',
+    'Open the map editor and add places by hand. Best when you have a handful and know them well.',
+    () => { close(); openDesk('nodes'); }));
+
+  importChoices(choices, stepPlaces);
+  bodyEl.append(choices);
+  bar(button('‹ Back', '', stepZone), button('I will do this later', '', close));
+}
+
+async function fromController(back) {
+  panel('Read your UniFi controller', 'Asking it what it knows.');
+  bar(button('‹ Back', '', back));
+  let systems = [];
+  try { ({ systems } = await Editor.connections()); } catch (err) { fail(err); return; }
+  const unifi = systems.find((s) => s.key === 'unifi');
+  if (!unifi?.configured) {
+    panel('Read your UniFi controller',
+      'The Atlas needs the controller\'s address and a read-only key first. Add them under ' +
+      'Settings, Connections, UniFi Network, press Test, then come back here.');
+    bar(button('‹ Back', '', back),
+      button('Open Settings ›', 'go', () => { close(); A.openSettings?.(); }));
+    return;
+  }
+  let view;
+  try { view = await Editor.review('unifi'); } catch (err) { fail(err); return; }
+  if (!view.ok) {
+    panel('Read your UniFi controller', 'The controller did not answer the way the Atlas expected.');
+    bodyEl.append(el('div', 'dsk-notice dsk-notice-bad', esc(view.error || 'No answer.')));
+    bar(button('‹ Back', '', back),
+      button('Open Settings ›', '', () => { close(); A.openSettings?.(); }));
+    return;
+  }
+  const found = firstImport(view.rows);
+  const n = (count, one, many) => `${count} ${count === 1 ? one : many}`;
+  panel('What your controller knows',
+    'These land together, each marked as not yet checked by a person. Anything can be ' +
+    'renamed, moved or removed afterwards.');
+  const list = el('div', 'dsk-notice',
+    [n(found.networks, 'network', 'networks'), n(found.gear, 'UniFi device', 'UniFi devices'),
+     n(found.wired, 'machine on a cable', 'machines on a cable')].map(esc).join(' · '));
+  bodyEl.append(list);
+  for (const note of view.notes || []) bodyEl.append(el('div', 'dsk-notice', esc(note)));
+  if (found.wireless) {
+    bodyEl.append(el('div', 'dsk-notice',
+      esc(`${n(found.wireless, 'Wi-Fi client is', 'Wi-Fi clients are')} left out: phones and speakers ` +
+          'would fill the map. Add any you want from Settings, Connections, Review.')));
+  }
+  if (!found.picks.length) {
+    bodyEl.append(el('div', 'dsk-notice', 'Everything the controller lists is already on the map.'));
+    bar(button('‹ Back', '', back), button('Done', 'go', close));
+    return;
+  }
+  bar(button('‹ Back', '', back),
+    button('Add these ›', 'go', async () => {
+      try {
+        await Editor.importPicks('unifi', found.picks, view.stamp);
+        close();
+        A.showToast?.('Charted from UniFi. Check each place in the map editor.');
+        await openDesk('nodes');
+      } catch (err) { fail(err); }
+    }));
+}
+
+function choice(glyph, title, blurb, onClick) {
+  const card = el('button', 'wiz-choice',
+    `<span class="wiz-choice-g">${glyph}</span>` +
+    `<span class="wiz-choice-t">${esc(title)}</span>` +
+    `<span class="wiz-choice-b">${blurb}</span>`);
+  card.addEventListener('click', onClick);
+  return card;
+}
+
+function scanCommand() {
+  const nets = Editor.entries('zones')
+    .map((z) => String(z.subnet || '').trim())
+    .filter((s) => /^[0-9a-f.:]+\/\d{1,3}$/i.test(s));
+  return `nmap -sn -oX - ${nets.length ? [...new Set(nets)].join(' ') : '<your subnet, e.g. 192.168.1.0/24>'}`;
+}
+
+function commandRow(cmd) {
+  const row = el('div', 'wiz-cmd');
+  const box = el('input', 'dsk-input dsk-mono');
+  box.type = 'text';
+  box.readOnly = true;
+  box.value = cmd;
+  box.addEventListener('focus', () => box.select());
+  const copy = button('Copy', '', async () => {
+    try {
+      await navigator.clipboard.writeText(cmd);
+      copy.textContent = 'Copied';
+    } catch {
+      box.focus();
+      box.select();
+      copy.textContent = 'Press Ctrl+C';
+    }
+  });
+  row.append(box, copy);
+  return row;
+}
+
+function paste(kind, back) {
+  const csv = kind === 'csv';
+  const leases = kind === 'leases';
+  panel(csv ? 'Paste your device list' : leases ? 'Paste your router\'s leases' : 'Paste your scan',
+    csv
+      ? 'The first line is the header. Only <code>name</code> is required.'
+      : leases
+        ? LEASE_HELP.replace(/^Or your/, 'Your')
+        : 'Run this on a machine inside the network, then paste everything it prints. ' +
+          'A ping sweep is enough; run it with <code>sudo</code> and nmap also names each ' +
+          'device\'s maker, which helps tell them apart.');
+  if (kind === 'nmap') bodyEl.append(commandRow(scanCommand()));
+  const area = el('textarea', 'dsk-input dsk-area dsk-mono');
+  area.rows = 12;
+  area.placeholder = csv
+    ? 'name,ip,kind,zone,role,url\nGATEWAY,10.0.0.1,network,main,the way in,http://10.0.0.1\n'
+    : leases
+      ? 'lease 10.0.0.20 { … }   or   1792400000 aa:bb:cc:dd:ee:ff 10.0.0.20 nas *'
+      : '<?xml version="1.0"?><nmaprun …>  (paste the whole output here)';
+  bodyEl.append(area);
+  bar(
+    button('‹ Back', '', back),
+    button('Read it ›', 'go', async () => {
+      const text = area.value;
+      if (!text.trim()) return;
+      try {
+        if (csv) {
+          const { nodes } = await Editor.importCsv(text);
+          stepFound(nodes.map((n) => n.ip), async () => {
+            close();
+            await reviewCsv(text);
+          });
+        } else {
+          const res = leases ? await Editor.leases(text) : await Editor.scan(text);
+          const { observed } = await Editor.discovery();
+          stepFound(observed.filter((o) => o.undocumented && !o.ignored).map((o) => o.ip), async () => {
+            close();
+            A.showToast?.(leases
+              ? `${res.seen} devices from ${res.format} leases. Review them in THE SURVEY.`
+              : `${res.seen} devices answered. Review them in THE SURVEY.`);
+            await openDesk('survey');
+          });
+        }
+      } catch (err) { fail(err); }
+    }));
+}
+
+
+export async function openWizard() {
+  if (!root) return;
+  if (!Editor.loaded) {
+    try { await Editor.load(); } catch { return; }
+  }
+  if (!Editor.writable()) {
+    A.showToast?.('This Atlas is read-only — there is nothing to set up here.');
+    return;
+  }
+  root.classList.add('open');
+  root.setAttribute('aria-hidden', 'false');
+  stepRealm();
+}
+
+export function close() {
+  if (!root) return;
+  root.classList.remove('open');
+  root.setAttribute('aria-hidden', 'true');
+}
+
+export function buildWizard() {
+  root = $('wizard');
+  if (!root) return;
+  bodyEl = $('wiz-body');
+  stepEl = $('wiz-steps');
+  $('wiz-close')?.addEventListener('click', close);
+}

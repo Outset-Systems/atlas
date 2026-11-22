@@ -1,0 +1,87 @@
+import copy
+import json
+import logging
+import os
+import re
+
+log = logging.getLogger("atlas.web.theme")
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+THEMES_DIR = os.path.join(HERE, "themes")
+DEFAULT = "plain"
+SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
+
+
+def _read(name):
+    with open(os.path.join(THEMES_DIR, f"{name}.json"), encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def _merge(base, over):
+    out = copy.deepcopy(base)
+    for key, value in (over or {}).items():
+        if key.startswith("_"):
+            continue
+        if isinstance(value, dict) and isinstance(out.get(key), dict):
+            out[key] = _merge(out[key], value)
+        else:
+            out[key] = copy.deepcopy(value)
+    return out
+
+
+def load(name=None):
+    name = (name if name is not None else os.environ.get("ATLAS_THEME", "")).strip().lower() or DEFAULT
+    plain = {k: v for k, v in _read(DEFAULT).items() if not k.startswith("_")}
+    if name == DEFAULT:
+        return DEFAULT, plain
+    if not SLUG_RE.match(name):
+        log.warning("ATLAS_THEME=%r is not a theme name; using plain", name)
+        return DEFAULT, plain
+    try:
+        return name, _merge(plain, _read(name))
+    except (OSError, ValueError):
+        log.warning("theme %r could not be read; using plain", name, exc_info=True)
+        return DEFAULT, plain
+
+
+NAME, T = load()
+
+
+def foreign_maps():
+    own = set(T.get("maps") or []) | set(T.get("guest_maps") or []) | {T.get("map_art")}
+    other = set()
+    try:
+        names = os.listdir(THEMES_DIR)
+    except OSError:
+        return set()
+    for fname in names:
+        if not fname.endswith(".json") or fname[:-5] == NAME:
+            continue
+        try:
+            data = _read(fname[:-5])
+        except (OSError, ValueError):
+            continue
+        other |= set(data.get("maps") or [])
+        if data.get("map_art"):
+            other.add(data["map_art"])
+    return other - own
+
+
+def map_label(name):
+    return (T.get("map_labels") or {}).get(name, "")
+
+
+def client():
+    logos = {str(k): str(v) for k, v in (T.get("node_logos") or {}).items()
+             if SLUG_RE.match(str(v))}
+    return {
+        "name": NAME,
+        "text": dict(T["text"]),
+        "nodeLogos": logos,
+        "sceneryLogos": [str(s) for s in T.get("scenery_logos") or [] if SLUG_RE.match(str(s))],
+        "foldedZones": [str(z) for z in T.get("folded_zones") or []],
+        "forgeNames": [str(n).lower() for n in T.get("forge_names") or []],
+        "gatewayNodes": [str(n) for n in T.get("gateway_nodes") or []],
+        "standardWords": dict(T.get("standard_words") or {}),
+        "tripwire": "eye" if T.get("tripwire_icon") == "eye" else "bird",
+    }

@@ -1,0 +1,325 @@
+
+import { A, $, esc, themeText, canAdminWrite } from './config.js';
+
+const mayWrite = () => canAdminWrite() && document.body.dataset.editable === '1';
+import { makeScene } from './scene.js';
+import { folds, keepFocus } from './fold.js';
+import { opensAtFirst, tripsLoud } from './fold-model.js';
+import {
+  byFamily, expiryNote, legacySources, listening, roster, tripLine, ago,
+} from './tripwire-model.js';
+
+let root, listEl, headEl;
+let setupOpen = false;
+let setupData = null;
+
+const word = {
+  speaking: () => themeText('tw_lit', 'TRIPPED'),
+  stirred: () => themeText('tw_stirred', 'acknowledged'),
+  silent: () => themeText('tw_quiet', 'quiet'),
+  unheard: () => 'no word',
+};
+const plural = () => themeText('stones', 'Tripwires');
+
+let notAdmin = false;
+A.loadTripwires = async function loadTripwires() {
+  if (notAdmin) return null;
+  try {
+    const r = await fetch('api/v2/tripwires', { cache: 'no-store' });
+    if (r.status === 401 || r.status === 403) { notAdmin = true; return null; }
+    if (!r.ok) return A.tripwires || null;
+    A.tripwires = await r.json();
+    return A.tripwires;
+  } catch {
+    return A.tripwires || null;
+  }
+};
+
+function rowHTML(t) {
+  const v = t.voice;
+  const cls = { speaking: 'gs-speaking', stirred: 'gs-stirred', silent: 'gs-silent' }[v] || 'gs-unheard';
+  const guards = t.host ? `guards <span class="gs-host">${esc(t.host)}</span>` : 'unplaced';
+  const planted = t.planted && typeof t.planted === 'string'
+    ? `<span class="gs-meta">planted in ${esc(t.planted)}</span>` : '';
+  const armed = t.planted === false ? '<span class="gs-flag">not planted — cannot trip</span>' : '';
+  const retired = t.retired ? '<span class="gs-flag">retired</span>' : '';
+  const exp = expiryNote(t);
+  const expiry = exp ? `<span class="gs-${exp.level === 'later' ? 'meta' : 'flag'}">${esc(exp.text)}</span>` : '';
+  const trips = Array.isArray(t.trips) ? t.trips : [];
+  const latest = trips[0];
+  const legacy = !Array.isArray(t.trips) && t.last_spoke
+    ? `<span class="gs-spoke" title="${esc(t.last_spoke)}">last spoke ${esc(ago(t.last_spoke) || '')}</span>` : '';
+  const unacked = (t.unacked | 0) > 0
+    ? `<span class="gs-trips">${t.unacked | 0} to acknowledge</span>` : '';
+  const tripRows = trips.slice(0, 3).map((x) => `<div class="gs-trip">
+      <span class="gs-trip-line">${esc(tripLine(x))}</span>
+      ${x.event && !x.ack && mayWrite()
+        ? `<button class="gs-ack" type="button" data-event="${esc(x.event)}">acknowledge</button>` : ''}
+      ${x.ack ? `<span class="gs-meta">seen by ${esc(x.ack.by || 'someone')}</span>` : ''}
+    </div>`).join('');
+
+  return `<div class="gs-row ${cls}">
+    <div class="gs-voice" aria-hidden="true"><span class="gs-dot"></span></div>
+    <div class="gs-body">
+      <div class="gs-line1">
+        <span class="gs-name">${esc(t.name || t.id)}</span>
+        <span class="gs-state">${esc(word[v] ? word[v]() : v)}</span>
+      </div>
+      <div class="gs-line2">
+        <span class="gs-mimics">${esc(t.mimics || t.placement || t.kind || '')}</span>
+      </div>
+      <div class="gs-line3">
+        <span class="gs-meta">${guards}</span>
+        <span class="gs-meta gs-zone">${esc(t.zone || '')}</span>
+        ${planted}${unacked}${legacy}${expiry}${armed}${retired}
+      </div>
+      ${latest ? tripRows : ''}
+    </div>
+  </div>`;
+}
+
+function sourceLine(name, s) {
+  if (!s) return '';
+  const label = name === 'decoys' ? themeText('decoy_source', 'Decoy feed') : 'Webhook';
+  const state = { ok: 'answering', lost: 'CONTACT LOST', waiting: 'on, never heard from' }[s.contact] || 'off';
+  const heard = s.last_heard ? ` · heard ${esc(ago(s.last_heard) || '')}` : '';
+  const trip = s.last_trip ? ` · last trip ${esc(ago(s.last_trip) || '')}` : '';
+  return `<span class="gs-src gs-src-${esc(s.contact || 'off')}"><b>${esc(label)}</b> ${state}${heard}${trip}</span>`;
+}
+
+function headHTML(rows, sources, counts) {
+  const { verdict, lost, waiting } = listening(sources);
+  const lit = rows.filter((r) => r.voice === 'speaking').length;
+  const srcs = `<span class="gs-sources">${sourceLine('decoys', sources.decoys)}${sourceLine('webhook', sources.webhook)}</span>`;
+  if (verdict === 'unset') {
+    return `<div class="gs-head gs-head-dark">
+      <span class="gs-verdict">${esc(themeText('tw_unset', 'NOTHING IS LISTENING'))}</span>
+      <span class="gs-verdict-sub">No source is configured, so the map cannot know whether
+        a tripwire has been touched. The ones below are charted, not listened to —
+        SET UP below says how to connect OpenCanary, Canarytokens or any script.</span>
+      ${srcs}</div>`;
+  }
+  if (verdict === 'waiting') {
+    return `<div class="gs-head gs-head-dark">
+      <span class="gs-verdict">WAITING FOR A FIRST SIGNAL</span>
+      <span class="gs-verdict-sub">The webhook is on, but nothing has reached it yet, so the map
+        cannot know whether a tripwire has been touched. Send the test under ANY SCRIPT in
+        SET UP below: when it lands, this line changes.</span>
+      ${srcs}</div>`;
+  }
+  const extras = [];
+  if (waiting) {
+    extras.push(`<span class="gs-warn">the webhook has not heard from a sender yet</span>`);
+  }
+  if (verdict === 'lost') {
+    extras.push(`<span class="gs-warn">CONTACT LOST with ${lost.map((n) => n === 'decoys'
+      ? esc(themeText('decoy_source', 'the decoy feed')) : 'the webhook').join(' and ')}: silence
+      from it means nothing — a tripwire could be touched right now and this map would not know.</span>`);
+  }
+  if ((counts?.unmatched | 0) > 0) {
+    extras.push(`<span class="gs-warn">${counts.unmatched | 0} trip${counts.unmatched > 1 ? 's' : ''}
+      from a tripwire this map has never charted</span>`);
+  }
+  const line = lit
+    ? `<span class="gs-verdict gs-verdict-loud">${lit} ${esc(plural().toUpperCase())} ${esc(word.speaking())}</span>`
+    : `<span class="gs-verdict gs-verdict-calm">${verdict === 'lost' ? 'PARTLY HEARD' : 'ALL QUIET'}</span>`;
+  return `<div class="gs-head${verdict === 'lost' ? ' gs-head-lost' : ''}">${line}
+    <span class="gs-verdict-sub">${verdict === 'ok'
+      ? `every source is answering${lit || extras.length ? '' : ' — nothing has been touched'}`
+      : 'one source is not answering'}</span>
+    ${extras.join('')}${srcs}</div>`;
+}
+
+const F = folds('tripwires');
+
+function familyHead(key, title, sub, loud, sections, count) {
+  const first = opensAtFirst(loud.tripped + loud.unacked + (loud.dead | 0) + (loud.expiring | 0), sections);
+  const parts = [];
+  if (loud.tripped) parts.push(`<b class="acc-flag">${loud.tripped} ${esc(word.speaking())}</b>`);
+  if (loud.unacked) parts.push(`<span class="rt-warn">${loud.unacked} to acknowledge</span>`);
+  if (loud.dead) parts.push(`<span class="rt-warn">${loud.dead} cannot trip</span>`);
+  if (loud.expiring) parts.push(`<span class="rt-warn">${loud.expiring} expired or expiring</span>`);
+  return {
+    box: `class="gs-family${F.shut(key, first, 'gs-shut')}" data-fold-box data-fold-class="gs-shut"`,
+    head: `<div class="gs-family-head" ${F.head(key, first, title.toLowerCase())}>
+      <span class="ldg-fold" aria-hidden="true">▾</span>${esc(title)}
+      <span class="gs-family-sub">${esc(sub)}</span>
+      <span class="gs-family-n">${count}${parts.length ? ` · ${parts.join(' · ')}` : ''}</span></div>`,
+  };
+}
+
+function unmatchedHTML(list, sections) {
+  if (!Array.isArray(list) || !list.length) return '';
+  const waiting = list.filter((x) => x.event && !x.ack).length;
+  const f = familyHead('family:unmatched', 'UNMATCHED TRIPS', 'a sender named something this map has not charted',
+    { tripped: 0, unacked: waiting }, sections, list.length);
+  return `<div ${f.box}>${f.head}
+    ${list.slice(0, 8).map((x) => `<div class="gs-trip gs-trip-loose">
+      <span class="gs-trip-line">${esc(x.sensor ? `${x.sensor} — ` : '')}${esc(tripLine(x))}</span>
+      ${x.event && !x.ack && mayWrite()
+        ? `<button class="gs-ack" type="button" data-event="${esc(x.event)}">acknowledge</button>` : ''}
+    </div>`).join('')}</div>`;
+}
+
+const FAMILY = {
+  honeypot: ['HONEYPOTS', 'fake hosts and services that answer'],
+  token: ['CANARY TOKENS', 'files, links and keys that call home when used'],
+};
+
+const note = (n) => esc(n).replace(/`([^`]+)`/g, '<code>$1</code>');
+
+function codeBlock(text, label) {
+  return `<div class="gs-code"><div class="gs-code-head"><span>${esc(label)}</span>
+      <button class="gs-copy" type="button">copy</button></div>
+    <pre>${esc(text)}</pre></div>`;
+}
+
+function setupHTML() {
+  const s = setupData;
+  if (s === false) return '<div class="ldg-note">the setup could not be read. Close it and open it again to ask again.</div>';
+  if (!s) return '<div class="ldg-note">reading the setup…</div>';
+  const parts = [];
+  if (!s.enabled) {
+    parts.push(`<p class="gs-setup-p">The webhook is <b>off</b>. Add these two lines to the
+      container's environment, with a random secret of at least 16 characters
+      (<code>openssl rand -hex 24</code> prints one). If you installed from the guide, that means
+      <code>.env</code>, then <code>docker compose -f compose.public.yaml up -d</code>:</p>`);
+    parts.push(codeBlock(s.enable.join('\n'), 'environment'));
+  }
+  parts.push(`<p class="gs-setup-p">Every sender posts to one address. Its key is derived from
+    the secret; print it inside the container with <code>${esc(s.key_command)}</code>${s.token_command
+      ? `, or mint a site token with <code>${esc(s.token_command)}</code>` : ''}. From the guide's
+    install, put <code>${esc(s.compose_exec)}</code> in front.</p>`);
+  if (s.loopback) {
+    parts.push(`<p class="gs-setup-p"><b>This address only works on this machine.</b> It is the
+      one your browser used, so a sender elsewhere would be calling itself. Open the Atlas through
+      your reverse proxy and come back here, and the blocks below will carry the right address.</p>`);
+  }
+  parts.push(codeBlock(s.url, 'webhook URL'));
+  parts.push(`<div class="gs-family-head">OPENCANARY</div>`);
+  parts.push(codeBlock(s.opencanary.config, 'opencanary.conf — logger'));
+  parts.push(`<ul class="gs-notes">${s.opencanary.notes.map((n) => `<li>${note(n)}</li>`).join('')}</ul>`);
+  parts.push(`<div class="gs-family-head">CANARYTOKENS</div>`);
+  parts.push(codeBlock(s.canarytokens.webhook_url, 'the token\'s webhook URL'));
+  parts.push(`<ul class="gs-notes">${s.canarytokens.notes.map((n) => `<li>${note(n)}</li>`).join('')}</ul>`);
+  parts.push(`<div class="gs-family-head">ANY SCRIPT</div>`);
+  parts.push(codeBlock(s.generic.curl, 'curl'));
+  parts.push(`<div class="gs-family-head">HOW A TRIP FINDS ITS TRIPWIRE</div>
+    <ul class="gs-notes">${s.matching.map((n) => `<li>${note(n)}</li>`).join('')}</ul>
+    <p class="gs-setup-p">The Atlas never plants bait itself, just as it never scans your network:
+    you run the honeypot or mint the token, and chart it here.</p>`);
+  return parts.join('');
+}
+
+function setupBlock(adminRead) {
+  if (!adminRead) return '';
+  const add = mayWrite()
+    ? '<button class="gs-add" type="button">+ add a honeypot or a canary token</button>' : '';
+  return `<div class="gs-setup">
+    <div class="gs-setup-bar">
+      <button class="gs-setup-toggle" type="button" aria-expanded="${setupOpen}">SET UP ${setupOpen ? '▾' : '▸'}</button>
+      ${add}
+    </div>
+    ${setupOpen ? `<div class="gs-setup-body">${setupHTML()}</div>` : ''}
+  </div>`;
+}
+
+function wire() {
+  for (const btn of listEl.querySelectorAll('.gs-ack')) {
+    btn.addEventListener('click', async () => {
+      const note = prompt('What was it? (optional)');
+      if (note === null) return;
+      btn.disabled = true;
+      try {
+        const { Editor } = await import('./editor/index.js');
+        await Editor.ackEvent(Number(btn.dataset.event), note);
+        await refresh(true);
+      } catch (err) {
+        A.showToast?.(`Could not acknowledge: ${err.message || err}`);
+        btn.disabled = false;
+      }
+    });
+  }
+  listEl.querySelector('.gs-setup-toggle')?.addEventListener('click', async () => {
+    setupOpen = !setupOpen;
+    paint();
+    if (setupOpen && !setupData) {
+      if (setupData === false) { setupData = null; paint(); }
+      try {
+        const r = await fetch('api/v2/tripwires/setup', { cache: 'no-store' });
+        setupData = r.ok ? await r.json() : false;
+      } catch { setupData = false; }
+      paint();
+    }
+  });
+  listEl.querySelector('.gs-add')?.addEventListener('click', async () => {
+    const { openDesk } = await import('./editor/panel.js');
+    openDesk('stones');
+  });
+  for (const btn of listEl.querySelectorAll('.gs-copy')) {
+    btn.addEventListener('click', async () => {
+      const text = btn.closest('.gs-code')?.querySelector('pre')?.textContent || '';
+      try { await navigator.clipboard.writeText(text); btn.textContent = 'copied'; }
+      catch {
+        const sel = getSelection(); const range = document.createRange();
+        range.selectNodeContents(btn.closest('.gs-code').querySelector('pre'));
+        sel.removeAllRanges(); sel.addRange(range);
+        btn.textContent = 'selected — copy it';
+      }
+      setTimeout(() => { btn.textContent = 'copy'; }, 1600);
+    });
+  }
+}
+
+function paint() {
+  if (!listEl) return;
+  const ov = A.tripwires || null;
+  const rows = roster({ overview: ov, charted: A.DATA?.stones || [], live: A.signalsFeed?.stones || {} });
+  const sources = ov?.sources || legacySources(A.signalsSources);
+  if (headEl) headEl.innerHTML = headHTML(rows, sources, ov?.counts);
+  const fam = byFamily(rows);
+  const kinds = ['honeypot', 'token'].filter((k) => fam[k].length);
+  const sections = kinds.length + (Array.isArray(ov?.unmatched) && ov.unmatched.length ? 1 : 0);
+  const groups = kinds.map((k) => {
+    const f = familyHead(`family:${k}`, FAMILY[k][0], FAMILY[k][1], tripsLoud(fam[k]), sections, fam[k].length);
+    return `<div ${f.box}>${f.head}${fam[k].map(rowHTML).join('')}</div>`;
+  }).join('');
+  const at = listEl.scrollTop;
+  keepFocus(listEl, () => {
+    listEl.innerHTML = unmatchedHTML(ov?.unmatched, sections) + (groups
+      || `<div class="ldg-note">no ${esc(plural().toLowerCase())} charted yet — add a honeypot or a
+          canary token in the map editor.</div>`)
+      + setupBlock(Boolean(ov));
+  });
+  listEl.scrollTop = at;
+  wire();
+}
+
+let busy = false;
+async function refresh(withSignals = false) {
+  busy = true;
+  try {
+    await Promise.all([A.loadTripwires(),
+                       withSignals ? A.refreshSignals?.().catch(() => {}) : null]);
+  } finally { busy = false; }
+  paint();
+  A.paintDecoys?.();
+}
+
+const scene = makeScene({ id: 'stones', closeId: 'gs-close', build: () => { paint(); refresh(true); } });
+const { open, close } = scene;
+
+A.openStones = open;
+A.closeStones = close;
+A.refreshStonesScene = function refreshStonesScene() {
+  if (!root?.classList.contains('open') || busy) return;
+  refresh();
+};
+
+A.buildStonesScene = function buildStonesScene() {
+  root = scene.mount();
+  if (!root) return;
+  listEl = $('gs-list');
+  headEl = $('gs-head');
+  F.wire(listEl);
+};

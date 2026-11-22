@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-label="Atlas">
+  <rect width="24" height="24" rx="5" fill="#1d1d1b"/>
+  <circle cx="11" cy="13" r="6" fill="none" stroke="#f6f1e3" stroke-width="2.8"
+          pathLength="360" stroke-dasharray="287 56 17 0"/>
+  <circle cx="17.2" cy="6.8" r="2.7" fill="#cc241d"/>
+  <circle cx="21" cy="11.3" r="1.4" fill="#cc241d"/>
+</svg>

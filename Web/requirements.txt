@@ -1,0 +1,15 @@
+# The Atlas's direct dependencies, as ranges. The image installs requirements-lock.txt.
+flask>=3.0,<4
+requests>=2.31,<3
+urllib3>=2,<3
+gunicorn>=22,<24
+prometheus-client>=0.20,<1
+tzdata>=2024.1
+pydantic>=2,<3
+sqlalchemy>=2.0,<3
+alembic>=1.13,<2
+pyotp>=2.9,<3
+qrcode>=7.4,<9
+cryptography>=46.0.7,<51
+ldap3>=2.9,<3
+pillow>=10,<14

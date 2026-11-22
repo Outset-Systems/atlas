@@ -1,0 +1,81 @@
+import hashlib
+import logging
+
+from flask import jsonify, make_response, request
+
+import settings
+from context import atlas
+from redaction import private_no_cache, redact_for_groups
+
+from . import bp
+
+log = logging.getLogger("atlas.api.v2")
+
+
+@bp.route("/lab-data")
+def lab_data():
+    ctx = atlas()
+    try:
+        data, mtime, problems = ctx.dataset()
+    except (OSError, ValueError) as e:
+        log.error("v2 lab-data unreadable: %s", e)
+        return jsonify({"error": f"lab data unreadable: {e}"}), 500
+
+    data, overlay_tag = ctx.with_overlays(data)
+    data, group_tag = redact_for_groups(data)
+
+    resp = make_response(jsonify(data))
+    stamps = "-".join(str(m) for m in ctx.overlay_mtimes())
+    tags = hashlib.sha1((group_tag + overlay_tag).encode("utf-8")).hexdigest()[:8]
+    resp.set_etag(f"{settings.APP_VERSION}-{mtime}-{stamps}-{tags}")
+    private_no_cache(resp)
+    if problems:
+        resp.headers["X-Atlas-Data-Problems"] = str(len(problems))
+    return resp.make_conditional(request)
+
+
+@bp.route("/maps")
+def maps_list():
+    resp = make_response(jsonify({"maps": maps_for_viewer()}))
+    return private_no_cache(resp)
+
+
+def maps_for_viewer():
+    import mapart
+    import theme as theme_mod
+    ctx = atlas()
+    try:
+        data, _, _ = ctx.dataset()
+    except (OSError, ValueError):
+        data = {}
+    meta = data.get("meta") or {}
+    art = {entry.get("name"): entry
+           for entry in (meta.get("map_art") or []) if isinstance(entry, dict)}
+    default = meta.get("map_image") or mapart.DEFAULT
+    zoomed = {r.get("map") for r in data.get("regions") or [] if isinstance(r, dict)}
+    seen = {node.get("id") for node in (redact_for_groups(data)[0].get("nodes") or [])}
+    mine = lambda points: {k: v for k, v in (points or {}).items() if k in seen}
+    out = []
+    for image in mapart.available():
+        name = image["name"]
+        entry = art.get(name) or {}
+        theme = entry.get("theme")
+        sidecar = mapart.style(name)
+        out.append({
+            "name": name,
+            "label": (entry.get("label") or theme_mod.map_label(name)
+                      or sidecar.get("label") or name.rsplit(".", 1)[0]),
+            "url": mapart.url_of(name, image["bundled"]),
+            "default": name == default,
+            "theme": theme if isinstance(theme, dict) else None,
+            "regions": [{**r, **({"places": mine(r["places"])} if "places" in r else {})}
+                        for r in sidecar.get("regions") or []],
+            "bright": sidecar.get("bright") is True,
+            "words": sidecar.get("words") or {},
+            "tripwire": sidecar.get("tripwire") or "bird",
+            "places": mine(sidecar.get("places")),
+            "zones": sidecar.get("zones") or {},
+            "logos": mine(sidecar.get("logos")),
+            "zoom": name in zoomed and name != default,
+        })
+    return out

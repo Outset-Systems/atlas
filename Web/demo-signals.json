@@ -1,0 +1,130 @@
+{
+  "_comment": "Static health for the demo lab. Invented; no network calls.",
+  "nodes": {
+    "router": {
+      "state": "healthy",
+      "uptime_30d": 99.7
+    },
+    "office-switch": {
+      "state": "healthy",
+      "uptime_30d": 99.7
+    },
+    "mini-a": {
+      "state": "healthy",
+      "uptime_30d": 99.7
+    },
+    "files": {
+      "state": "healthy",
+      "uptime_30d": 99.7
+    },
+    "wiki": {
+      "state": "healthy",
+      "uptime_30d": 99.7
+    },
+    "bookings": {
+      "state": "healthy",
+      "uptime_30d": 99.7
+    },
+    "shop-switch": {
+      "state": "healthy",
+      "uptime_30d": 99.7
+    },
+    "mini-b": {
+      "state": "healthy",
+      "uptime_30d": 99.7
+    },
+    "status": {
+      "state": "healthy",
+      "uptime_30d": 99.7
+    },
+    "automation": {
+      "state": "healthy",
+      "uptime_30d": 99.7
+    },
+    "backup-box": {
+      "state": "healthy",
+      "uptime_30d": 99.7
+    },
+    "laser-pc": {
+      "state": "healthy",
+      "uptime_30d": 99.7
+    },
+    "printers": {
+      "state": "degraded",
+      "uptime_30d": 94.1
+    },
+    "door": {
+      "state": "healthy",
+      "uptime_30d": 99.7
+    },
+    "members-ap": {
+      "state": "healthy",
+      "uptime_30d": 99.7
+    },
+    "kiosk": {
+      "state": "maintenance",
+      "uptime_30d": 96.5
+    },
+    "web-box": {
+      "state": "healthy",
+      "uptime_30d": 99.7
+    },
+    "internet": {
+      "state": "healthy"
+    }
+  },
+  "services": {
+    "Router": {
+      "state": "healthy"
+    },
+    "Office switch": {
+      "state": "healthy"
+    },
+    "Mini A": {
+      "state": "healthy"
+    },
+    "Files": {
+      "state": "healthy"
+    },
+    "Wiki": {
+      "state": "healthy"
+    },
+    "Bookings": {
+      "state": "healthy"
+    },
+    "Workshop switch": {
+      "state": "healthy"
+    },
+    "Mini B": {
+      "state": "healthy"
+    },
+    "Status": {
+      "state": "healthy"
+    },
+    "Automations": {
+      "state": "healthy"
+    },
+    "Backup box": {
+      "state": "healthy"
+    },
+    "Print farm": {
+      "state": "degraded"
+    },
+    "Website": {
+      "state": "healthy"
+    },
+    "Newsletter": {
+      "state": "healthy"
+    }
+  },
+  "stones": {
+    "old-printer-share": {
+      "state": "speaking",
+      "last_spoke": "2026-11-11T17:48:00Z"
+    }
+  },
+  "metrics": {
+    "watchfires_up": 13,
+    "watchfires_total": 14
+  }
+}

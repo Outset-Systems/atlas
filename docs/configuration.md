@@ -1,0 +1,561 @@
+# Configuration reference
+
+The Atlas is configured with environment variables. This page lists every
+variable the app in `Web/` reads, grouped by feature. `docs/env-coverage.py`
+checks this page against the code, so a variable added to the app without a
+row here fails CI.
+
+How to read the tables:
+
+- **Default** is what the app uses when the variable is unset. "(unset)" means
+  the feature is off until you set it.
+- **Secret** variables can also be given as a file: set `NAME_FILE` to a path
+  (for example a Docker secret under `/run/secrets/`) instead of `NAME`. When
+  both are set, `NAME` wins. Only variables that list a `_FILE` variant accept
+  one.
+- **Settings screen** says whether an admin can change the value at runtime
+  from the Settings panel in the app. A value saved there is stored in `/data`
+  and **overrides** the environment until it is cleared. The Deployment section
+  of the same panel lists every variable, the layer its value came from
+  (settings file, environment or default) and the value, with secrets shown
+  only as set or unset.
+- Boolean variables are on when set to `1` unless the row says otherwise.
+
+Most values are read once when the app starts, so changing an environment
+variable needs a new container (`docker compose -f compose.public.yaml up -d`
+after editing `.env`). Values changed on the Settings screen apply without a
+restart.
+
+## Core
+
+| Variable | Default | What it does | Secret | Settings screen |
+|---|---|---|---|---|
+| `ATLAS_BRAND` | `The Atlas` | The name shown on pages a visitor sees before signing in (the sign-in page). The map's own name comes from the theme, so the sign-in page does not reveal it. | no | no |
+| `ATLAS_THEME` | `plain` | Which theme file in `Web/themes/` supplies the words and emblems that describe your lab. `plain` names nothing. An unknown name falls back to `plain` and logs a warning. See [Theme](#theme). | no | no |
+| `ATLAS_LOG_LEVEL` | `INFO` | Log level for the whole app (`DEBUG`, `INFO`, `WARNING`, `ERROR`), in any case. A level that does not exist is `INFO`, and the app says so at startup. | no | no |
+| `ATLAS_LOG_LEVELS` | (unset) | Per-layer log levels, comma separated, for example `atlas.data=DEBUG,atlas.auth=WARNING`. Layers: `atlas.web`, `atlas.api`, `atlas.auth`, `atlas.data`, `atlas.io`, `atlas.live`, `atlas.settings`, and any module under them. Bad entries are ignored and logged. | no | no |
+| `ATLAS_DEBUG` | (unset) | `1` turns on Flask debug mode for the development server (`python app.py`). Never set this in a container. | no | no |
+| `ATLAS_HOST` | `0.0.0.0` | Bind address for the development server only. The container runs gunicorn, which binds `0.0.0.0:5006` regardless. | no | no |
+| `ATLAS_PORT` | `5006` | Port for the development server only. In the container, change the published port in compose instead. | no | no |
+| `ATLAS_READONLY` | depends on mode | `1` (or `true`, `yes`, `on`) refuses every write; `0` (or `false`, `no`, `off`) allows writes. A value that is neither is treated as read-only, and the app says so at startup. When unset or empty, `standalone` mode is read-only (it has no sign-in, so anyone who can reach the port would be an admin) unless `ATLAS_ALLOW_INSECURE=1`; `accounts`, `hybrid` and `hub` modes are writable and check admin rights per request. | no | no |
+| `ATLAS_AGENT_LOG_DAYS` | `90` | How long a line of the token read log (`token-reads.jsonl` in the data directory) is kept. Every request an API token makes adds one: when, which token, from which address, the path or MCP tool, and the size and hash of the answer. At least `1`; anything else falls back to 90. | no | no |
+| `ATLAS_AGENT_API` | (unset) | Whether API tokens and the MCP endpoint are served at all. Unset: off until an admin turns it on in Settings, Connections. `0`: off, and that screen cannot turn it on. `1`: on, until an admin turns it off there. While it is off the MCP endpoint answers 404, every token is refused, and none can be created. Tokens are kept, not revoked. | no | yes (Connections), unless `0` |
+| `ATLAS_ALLOW_INSECURE` | (unset) | `1` acknowledges that `standalone` mode serves the whole map with no sign-in. It silences the startup security warning and makes standalone writable. Use only on loopback or a trusted network. Only the exact `1` turns it on: any other value (`true` included) leaves it off, and the app says so at startup. | no | no |
+
+## Data and storage
+
+Everything the app writes lives under the directory that holds the dataset,
+`/data` by default. Mount a volume there. Most paths below default to a file
+beside `ATLAS_DATA` and rarely need changing.
+
+| Variable | Default | What it does | Secret | Settings screen |
+|---|---|---|---|---|
+| `ATLAS_DATA` | `/data/lab-data.json` | The dataset file (file backend). Its directory is the data directory every other default below is relative to, including the accounts store and the key files. | no | no |
+| `ATLAS_DATA_BACKEND` | `file` | `file` keeps the dataset as one JSON file. `db` keeps the same dataset in a SQL database through SQLAlchemy (needed for multiple sites and the relay ingest). `db` is experimental: no deployment runs on it yet. | no | no |
+| `ATLAS_DB_URL` | `sqlite:////data/atlas.db` | SQLAlchemy URL for the `db` backend and for `cli.py`'s dataset and importer commands, which work on this database only. A URL that carries a password is shown masked on the Settings screen. | treat as secret if it holds a password (no `_FILE` variant) | no |
+| `ATLAS_SITE` | `default` | Which site the `db` backend serves, and which site the `relay` signals source reads. | no | no |
+| `ATLAS_FALLBACK` | `empty` | What an instance with no dataset shows. `empty`: an empty map that invites you to start charting. `bundled`: the dataset baked into the image (the public image bundles an invented demo lab, plus a demo status feed that colours it while no source is configured and the instance is unseeded). The first save writes your own copy to `ATLAS_DATA` and silences the demo feed. | no | no |
+| `ATLAS_POSITIONS` | `<data dir>/positions.json` | Hand-placed marker positions, stored over the dataset. | no | no |
+| `ATLAS_RACK` | `<data dir>/rack.json` | Rack layout overlay. | no | no |
+| `ATLAS_TOPOLOGY_LAYOUT` | `<data dir>/topology-layout.json` | Where an admin put each card on the TOPOLOGY canvas, kept beside the dataset like marker positions. Not map data: no revision, no undo. Re-arrange empties it. | no | no |
+| `ATLAS_REVISIONS` | `<data dir>/revisions` | Directory of dataset snapshots written on every change (the change log). | no | no |
+| `ATLAS_OBSERVED` | `<data dir>/observed.json` | What discovery and scans observed, used for drift reports. | no | no |
+| `ATLAS_EVENTS` | `<data dir>/events.json` | The event history (faults, recoveries, acknowledgements). | no | no |
+| `ATLAS_REPORTS` | `<data dir>/reports` | Directory of generated reports the app serves. `/report/security` reads `security-report.md` there (admins only). | no | no |
+| `ATLAS_MAINTENANCE` | `<data dir>/maintenance.json` | Planned maintenance windows. | no | no |
+| `ATLAS_MAPS` | `<data dir>/maps` | Uploaded map images. Images bundled in the image win over uploads with the same name. A `<image>.style.json` beside an image can name that map style and give it zoom regions, see below. | no | no |
+| `ATLAS_ACCOUNTS_DB` | `<data dir>/accounts.db` | The SQLite accounts store (`accounts` and `hybrid` modes): users, password hashes, encrypted TOTP secrets, the sign-in audit log. | no | no |
+| `ATLAS_AUTH_CONFIG` | `<data dir>/auth-config.json` | Where Directory settings saved on the Settings screen are stored. | no | no |
+| `ATLAS_INTEGRATIONS` | `<data dir>/integrations.json` | Where Sources and Realm settings saved on the Settings screen are stored. Secrets in it are encrypted with the master key. | no | no |
+| `ATLAS_SCROLL_ROOT` | (unset) | A path prefix trimmed off document paths (the `scroll` field on a place) when they are displayed. The full path is still copied. | no | yes (Realm) |
+
+### Keys the app generates
+
+Two keys are created on first start if you do not supply them. Both live in
+`<data dir>/secrets/` and must be backed up with the rest of `/data`.
+
+| Variable | Default | What it does | Secret | Settings screen |
+|---|---|---|---|---|
+| `ATLAS_ENCRYPTION_KEY` | generated into `<data dir>/secrets/master.key` | The Fernet master key that encrypts TOTP secrets and the secrets saved on the Settings screen. **If you lose it, every enrolled TOTP secret and every saved integration secret becomes unreadable**: users must re-enroll MFA and you must re-enter the keys. If `ATLAS_ENCRYPTION_KEY_FILE` is set but the file is missing or empty, the app refuses to start rather than generate a different key. | yes, `ATLAS_ENCRYPTION_KEY_FILE` | no |
+| `ATLAS_SECRET_KEY` | generated into `<data dir>/secrets/session.key` | Signs session cookies (`accounts` and `hybrid` modes). Changing it signs everyone out. | yes, `ATLAS_SECRET_KEY_FILE` | no |
+
+## Authentication
+
+`ATLAS_AUTH_MODE` picks one of four modes. The image and `compose.public.yaml`
+default to `accounts`, so a new install always asks for sign-in; `standalone` is
+the default only when you run the code directly from a checkout (development).
+
+| Mode | Who can see the map | Sign-in |
+|---|---|---|
+| `standalone` | Anyone who can reach the port. Read-only unless `ATLAS_ALLOW_INSECURE=1`. | None. Use on loopback or a trusted network only. |
+| `accounts` (image default) | Signed-in users. | The Atlas's own accounts (local passwords, optionally LDAPS), with optional TOTP. |
+| `hub` | Whoever an upstream single-sign-on gateway (the "hub") forwards. | Done by the hub, which sends a signed identity header. The Atlas has no sign-in page in this mode. |
+| `hybrid` | Hub users, plus anyone who signs in with an Atlas account. | Hub identity when the signed header is present, the Atlas sign-in page when it is not. |
+
+| Variable | Default | What it does | Secret | Settings screen |
+|---|---|---|---|---|
+| `ATLAS_AUTH_MODE` | `accounts` in the image, `standalone` from a checkout | `standalone`, `accounts`, `hub` or `hybrid`. Any other value makes every gated request fail with a 500 (fail closed). | no | no |
+| `ATLAS_ADMIN_GROUP` | `atlas-admins` | The group that makes a viewer an Atlas admin when the identity comes from the hub. Also the default for `ATLAS_LDAP_ADMIN_GROUPS`. | no | no |
+| `ATLAS_TRUSTED_PROXIES` | (unset) | Comma-separated IPs or CIDRs of the reverse proxies whose `X-Forwarded-For` header the app believes, for example `172.18.0.2` or `172.18.0.0/16`. Used for the sign-in throttle and the audit log. Unset trusts no proxy and uses the socket peer. A bare number (a hop count) is refused and logged. See [install.md](install.md#put-it-behind-a-reverse-proxy). | no | no |
+| `ATLAS_INSECURE_COOKIES` | (unset) | `1` (or `true`, `yes`) drops the `Secure` flag from the session cookie, for testing over plain http. Without it, most browsers discard the cookie on plain http to anything but `localhost`, and sign-in returns you to the sign-in page. Do not use behind TLS. | no | no |
+
+### Standalone identity
+
+In `standalone` mode there is no sign-in and no identity. Every viewer sees everything, and a change is recorded as made by `standalone`. The two names below are read by the hub gate's own fallback, which no standalone request reaches, so **setting them changes nothing**. They are listed because the code still names them.
+
+| Variable | Default | What it does | Secret | Settings screen |
+|---|---|---|---|---|
+| `ATLAS_STANDALONE_USER` | `local` | Nothing. A standalone change is recorded as `standalone`. | no | no |
+| `ATLAS_STANDALONE_GROUPS` | (empty) | Nothing. A standalone viewer has no groups and sees everything. | no | no |
+
+### Accounts mode (and the sign-in half of hybrid)
+
+| Variable | Default | What it does | Secret | Settings screen |
+|---|---|---|---|---|
+| `ATLAS_BOOTSTRAP_ADMIN_USER` | `admin` when a bootstrap password is set | First run only: while there is no active admin, create this local admin at start (or promote the account if it already exists). Inert once any admin exists, so it is safe to leave set. With no admin and no bootstrap password in `accounts` mode, the log says how to create one. | no | no |
+| `ATLAS_BOOTSTRAP_ADMIN_PASSWORD` | (unset) | The bootstrap admin's password, at least 12 characters. A shorter password is refused: the app logs an error and starts without an admin. Prefer the `_FILE` form. | yes, `ATLAS_BOOTSTRAP_ADMIN_PASSWORD_FILE` | no |
+| `ATLAS_MFA_REQUIRED` | (empty) | Who must enroll TOTP before they can use the map: empty (nobody; anyone may enroll; also `0`, `false`, `no`, `off`), `all` (also `1`, `true`, `yes`, `on`), `admins`, or a sign-in source (`local` or `ldap`). Any other word requires it of everyone and is logged. Read live. | no | no |
+| `ATLAS_LOGIN_MAX_USER` | `5` | Failed sign-ins allowed per user name within the window. | no | no |
+| `ATLAS_LOGIN_MAX_IP` | `20` | Failed sign-ins allowed per client IP within the window. | no | no |
+| `ATLAS_LOGIN_WINDOW_MIN` | `15` | The throttle window, in minutes. | no | no |
+| `ATLAS_SESSION_IDLE_MIN` | `60` | A session ends after this many idle minutes. | no | no |
+| `ATLAS_SESSION_ABS_HOURS` | `12` | A session ends this many hours after sign-in, active or not. | no | no |
+| `ATLAS_AUTH_BACKENDS` | `local` | Sign-in backends in the order tried: `local`, `ldap`, or `local,ldap`. `ldap` is live only when `ATLAS_LDAP_URL` and `ATLAS_LDAP_BASE_DN` are also set. | no | yes (Directory) |
+
+You can also manage accounts from the command line inside the container:
+`python cli.py user-add <name> --admin`, `user-list`, `user-passwd`,
+`user-mod` (promote, deactivate, reset MFA) and `user-del`.
+
+### LDAP (directory sign-in)
+
+The Atlas binds to the directory as the user signing in. There is no service
+account and no stored bind password. Only `ldaps://` is accepted; plain
+`ldap://` is refused.
+
+| Variable | Default | What it does | Secret | Settings screen |
+|---|---|---|---|---|
+| `ATLAS_LDAP_URL` | (unset) | Directory URL, for example `ldaps://dc.home.example:636`. | no | yes (Directory) |
+| `ATLAS_LDAP_BASE_DN` | (unset) | Base DN, for example `DC=home,DC=example`. Group membership is honoured only from under this DN unless `ATLAS_LDAP_GROUP_SCOPE=any`. | no | yes (Directory) |
+| `ATLAS_LDAP_UPN_DOMAIN` | derived from the base DN | The domain appended to a bare user name to form the UPN (`DC=home,DC=example` gives `home.example`). | no | yes (Directory) |
+| `ATLAS_LDAP_CA_FILE` | (unset) | A CA bundle for a private CA. Certificates are always verified; this only chooses which roots. | no | yes (Directory) |
+| `ATLAS_LDAP_ACCESS_GROUPS` | (unset) | Comma-separated groups; when set, a user must be in one of them to sign in. When unset, anyone who can bind may sign in. Use `;` as the separator when entries are full DNs. | no | yes (Directory) |
+| `ATLAS_LDAP_ADMIN_GROUPS` | value of `ATLAS_ADMIN_GROUP` | Groups (bare CN or full DN) whose members are Atlas admins. | no | yes (Directory) |
+| `ATLAS_LDAP_GROUP_SCOPE` | `base` | `base` honours `memberOf` only from under the base DN. `any` honours it from anywhere in the forest, which lets anyone who can create a group with the right name elsewhere become admin. | no | no |
+| `ATLAS_LDAP_TIMEOUT` | `5` | Directory connect and bind timeout, in seconds. | no | yes (Directory) |
+
+### Hub mode (and the hub half of hybrid)
+
+The hub is a reverse proxy that signs each request with a short-lived
+HMAC-SHA256 token carrying the user, email and groups. The format is
+`base64url(json) + "." + base64url(hmac)` with `u`, `e`, `g`, `iat` and `exp`
+claims; `Web/hub_auth/auth.py` has the reference `mint_token`.
+
+| Variable | Default | What it does | Secret | Settings screen |
+|---|---|---|---|---|
+| `ATLAS_HUB_SECRET` | (unset) | The shared secret the hub signs identity tokens with. **Set it.** In `hub` mode without it the app falls back to trusting plaintext `X-Remote-User` / `X-Remote-Email` / `X-Remote-Groups` headers, which is safe only if nothing but the hub can reach the port. In `hybrid` mode without it, hub sign-in is disabled and everyone uses the sign-in page. | yes, `ATLAS_HUB_SECRET_FILE` | no |
+| `ATLAS_HUB_AUTH_HEADER` | `X-Hub-Auth` | The request header that carries the signed token. | no | no |
+| `HUB_URL` | (unset) | Where the hub lives, used for the "sign out at the hub" link. A request's `X-Hub-URL` header takes precedence. | no | yes (Realm) |
+| `ATLAS_HUB_URL` | (unset) | The hub's base URL for the calendar feed: when set, `/api/v2/calendar` asks the hub for the combined day of every app it fronts (signed as a machine identity with `ATLAS_HUB_SECRET`) and falls back to the Atlas's own schedule when the hub does not answer. Separate from `HUB_URL`. | no | no |
+
+## Integrations
+
+Live health comes from optional sources. Each one is off until its URL is set
+and its name is listed in `ATLAS_SIGNALS_SOURCES`. A source that is down or
+misconfigured only removes its markers; the map still draws.
+
+The `unifi` source reports what is connected to a UniFi Network controller
+right now, for places on the map that no Kuma monitor watches. A place the
+controller does not list is unknown, not down: only a UniFi device the
+controller itself shows as offline is marked down. It uses the UniFi
+connection's saved address and credential (`ATLAS_UNIFI_URL` and its API key
+or local user, under Connections).
+
+The `checks` source is Atlas's own monitoring, for whatever nothing else
+watches. It asks only what the map charts: each service URL (not a link that
+names a Kuma monitor), and any check set on a service or a place in the map
+editor: `http` (judged by its status), `tcp` (a port answers), `dns` (a name
+resolves), `keyword` (the page holds some text) or `json` (a JSON answer holds
+a value). Each check has its own interval, retries and timeout (60 s, 1 and
+3 s unless set), and a failing answer changes the state only after its
+retries. It needs no URL or key of its own. It verifies no certificates and
+follows no redirects, so a self-signed service or a sign-in page counts as up,
+and it sends no credentials; an https check keeps the certificate's end date
+so SEALS can show it beside the charted one. A link-local or cloud metadata
+address is never asked.
+
+| Variable | Default | What it does | Secret | Settings screen |
+|---|---|---|---|---|
+| `ATLAS_SIGNALS_SOURCES` | (empty) | Comma-separated list of live sources to poll: `prometheus`, `kuma`, `unifi`, `checks` (built-in checks of the charted service URLs), `deception` (the decoy feed), `relay` (pushes stored by the ingest API, `db` backend), `static` (a JSON file). Empty means a static map, except on the bundled demo (`ATLAS_FALLBACK=bundled`, not yet seeded), which reads the image's demo feed and reports it as the `demo` source. | no | yes (Sources) |
+| `ATLAS_SIGNALS_FILE` | `/data/signals.json` | The JSON file the `static` source reads. | no | no |
+| `ATLAS_PROM_URL` | (unset) | Prometheus base URL, for example `http://prometheus:9090`. Feeds the card vitals, the patch line on a card and the built-in charts. Marker colours come from Kuma, not from here. | no | yes (Sources) |
+| `ATLAS_LOKI_URL` | (unset) | Loki base URL, for example `http://loki:3100`. Feeds the log-derived charts. | no | yes (Sources) |
+| `ATLAS_KUMA_URL` | (unset) | Uptime Kuma base URL, for example `http://uptime-kuma:3001`. The app reads Kuma's `/metrics`. | no | yes (Sources) |
+| `ATLAS_KUMA_API_KEY` | (unset) | A Kuma API key (sent as the HTTP Basic password, as Kuma expects). | yes, `ATLAS_KUMA_API_KEY_FILE` | yes (Sources, stored encrypted) |
+| `ATLAS_DECOYS_URL` | (unset) | Base URL of a decoy (honeypot) service whose JSON feed of tripped decoys the `deception` source reads from `<url>` + `ATLAS_DECOYS_PATH`. One of the [tripwire](#tripwires) sources. | no | yes (Sources) |
+| `ATLAS_DECOYS_PATH` | `/api/tripwires` | The path on `ATLAS_DECOYS_URL` that serves the decoy feed. Must be an absolute path (`/...`) with no host, query or spaces; anything else falls back to the default. | no | yes (Sources) |
+| `ATLAS_DECOYS_KEY` | (unset) | The read key sent to the decoy service. | yes, `ATLAS_DECOYS_KEY_FILE` | yes (Sources, stored encrypted) |
+| `ATLAS_DECOYS_KEY_HEADER` | `X-Api-Key` | The header the decoy read key is sent in. | no | no |
+| `ATLAS_LLM_CONTAINERS` | `.+` | A Loki regex over container names, for the charts that count language-model calls in your logs. The default matches every container. | no | no |
+| `ATLAS_LLM_LOG_TAG` | `llm` | The prefix of the `<tag> ok` / `<tag> FALLBACK` log lines those charts count. | no | no |
+| `ATLAS_CHECKS_POLL` | `5` | Seconds between the background rounds of the `checks` source, which ask only the checks that are due. `0` turns the background rounds off; reading the live feed then asks a round when none has run for 30 seconds. Values under 2 fall back to 5. | no | no |
+| `ATLAS_CHECKS_PER_MINUTE` | `600` | The most checks the `checks` source asks in a minute across the whole map. Past it, every check's interval is stretched evenly and the log says so. Values under 10 fall back to 600. | no | no |
+| `ATLAS_DIAGNOSE_OUTSIDE` | (unset) | The one address outside the map that "Where does it break?" (`POST /api/v2/admin/diagnose`) may ask, as `host:port` (`[2001:db8::1]:443` for an IPv6 address), for its last step: a tcp connection that says whether the internet answers. Unset, the step is absent and Atlas reaches nothing outside the map on its own. A value that is not `host:port`, or names an address no check may ask (link-local, cloud metadata), leaves the step off and the log says so. | no | no |
+| `ATLAS_ANNALS_POLL` | `60` | Seconds between background polls that keep the event history and the scheduled-job checks current while nobody has the map open. `0` disables; values under 15 fall back to 60. | no | no |
+| `NETBOX_TOKEN` | (unset) | NetBox API token, for `python cli.py import-netbox` only. The web app never reads it. | yes, `NETBOX_TOKEN_FILE` | no |
+| `ATLAS_PROXMOX_URL` | (unset) | Proxmox VE base URL, for Settings → Connections. Can also be saved there. | no | yes (Connections) |
+| `ATLAS_PROXMOX_TOKEN` | (unset) | Proxmox API token, `user@pam!name=secret`, with the PVEAuditor role. Encrypted when saved in the app. Or `ATLAS_PROXMOX_TOKEN_FILE`. | yes | yes (Connections) |
+| `ATLAS_PROXMOX_INSECURE` | (unset) | `1` skips the certificate check, for Proxmox's default self-signed certificate. | no | yes (Connections) |
+| `ATLAS_PORTAINER_URL` | (unset) | Portainer base URL, for Settings → Connections. | no | yes (Connections) |
+| `ATLAS_PORTAINER_KEY` | (unset) | Portainer access token. It has its owner's rights, so make it from a read-only user. Or `ATLAS_PORTAINER_KEY_FILE`. | yes | yes (Connections) |
+| `ATLAS_PORTAINER_INSECURE` | (unset) | `1` skips the certificate check. | no | yes (Connections) |
+| `ATLAS_KOMODO_URL` | (unset) | Komodo Core base URL, for Settings → Connections. | no | yes (Connections) |
+| `ATLAS_KOMODO_KEY` | (unset) | Komodo API key, from a user with read access only. Or `ATLAS_KOMODO_KEY_FILE`. | yes | yes (Connections) |
+| `ATLAS_KOMODO_SECRET` | (unset) | The secret that goes with `ATLAS_KOMODO_KEY`. Or `ATLAS_KOMODO_SECRET_FILE`. | yes | yes (Connections) |
+| `ATLAS_KOMODO_INSECURE` | (unset) | `1` skips the certificate check. | no | yes (Connections) |
+| `ATLAS_NETBOX_URL` | (unset) | NetBox base URL, for Settings → Connections. | no | yes (Connections) |
+| `ATLAS_NETBOX_API_TOKEN` | (unset) | NetBox API token with Write enabled off, for the connection test and review. Separate from `NETBOX_TOKEN`, which is the CLI import's. Or `ATLAS_NETBOX_API_TOKEN_FILE`. | yes | yes (Connections) |
+| `ATLAS_NETBOX_INSECURE` | (unset) | `1` skips the certificate check. | no | yes (Connections) |
+| `ATLAS_UNIFI_URL` | (unset) | UniFi Network controller URL, for Settings → Connections: a console on 443, UniFi OS Server on 11443, the older Network Application on 8443. | no | yes (Connections) |
+| `ATLAS_UNIFI_SITE` | `default` | The site's short name, from the controller's own address (`/manage/site/<name>`), not its display name. | no | yes (Connections) |
+| `ATLAS_UNIFI_API_KEY` | (unset) | A UniFi OS API key made by a View Only admin. Sent as `X-API-KEY`. Or `ATLAS_UNIFI_API_KEY_FILE`. | yes | yes (Connections, stored encrypted) |
+| `ATLAS_UNIFI_USERNAME` | (unset) | Instead of a key: a local controller account with the View Only role and no MFA. Works on every controller. Write-only like the password. Or `ATLAS_UNIFI_USERNAME_FILE`. | yes | yes (Connections, stored encrypted) |
+| `ATLAS_UNIFI_PASSWORD` | (unset) | That account's password. Or `ATLAS_UNIFI_PASSWORD_FILE`. | yes | yes (Connections, stored encrypted) |
+| `ATLAS_UNIFI_INSECURE` | (unset) | `1` skips the certificate check, for the controller's default self-signed certificate. | no | yes (Connections) |
+| `ATLAS_KUMA_INSECURE` | (unset) | `1` skips the certificate check when asking Kuma, for both the live markers and the Connections review. | no | yes (Connections) |
+
+A stored credential goes only to the address it was saved with. To point a system at a new
+address, in Settings → Connections or Sources, type its credential again: a blank secret box
+means "keep the stored one", so a test or a save that changes the URL and leaves it blank is
+refused. This keeps a saved secret write-only, even from an admin.
+
+### Reviewing what a system knows
+
+Each system in Settings → Connections has a **Review** button. It reads what the system
+knows with the saved settings, so save first, and lists it beside what the map already has.
+Nothing reaches the map until you tick it and press **Add to the map**. It runs when
+you press it and never in the background, so the map does not change under you.
+
+What you add arrives unreviewed. Each place is stamped with the system it came from, and
+stays marked as unchecked, to people and to API tokens alike, until someone checks it.
+
+To check a place, open it in the Desk and save it, or press ✓ on its row in the list of
+places. The list says how many places nobody has checked. **Show only these** narrows it
+to them, and **Mark the ones shown as checked** does every row on screen after a second
+press to confirm, so search first to check a group at a time. A map charted before Atlas
+kept this record starts with every place unchecked, and this is how to clear it.
+
+The command-line importers stamp what they write the same way: a place added by
+`cli.py import-nmap --promote`, `import-csv`, `import-netbox` or `import-json` starts
+unchecked. When you restore a backup or move a map between backends, add `--keep-stamps`
+to `import-json` so each place keeps the record the file holds.
+
+UniFi is read through the controller's unofficial API, the one its own app uses. Ubiquiti
+does not document it for outside use and can change it in any release, so this connection
+can stop returning data until Atlas catches up. Nothing it does changes your devices.
+
+| System | Places | Other |
+|---|---|---|
+| Proxmox VE | nodes, virtual machines, containers | a guest's host is set as its `parent` |
+| Portainer | environments | stacks, as services on their environment |
+| Komodo | servers | stacks, as services on their server |
+| NetBox | devices, virtual machines | VLANs, as realms, with the subnet of their first prefix |
+| UniFi Network | the gateway, switches, access points and power strips; every client connected now | networks, as realms; each device's ports, with what is on the other end; a power strip's outlets; links between them; cables, port to port, between places already on the map |
+
+- **Already on the map** means the same record was imported before, or the address matches,
+  or the name matches. Those rows cannot be ticked. A tick only adds: an import never
+  changes or removes what is already charted. The one exception is a cable the same
+  connection wrote, below.
+- **Cables** (UniFi, 2026-11-17) are offered for each wire the controller states: a device's
+  uplink, an LLDP neighbour, a wired client's switch port. Only between two places the map
+  already has, so they come at the review after the places land. Each says only what the
+  controller states (ports, speed, PoE draw, untagged VLAN; fibre for an SFP port, wireless
+  for a wireless uplink) and is `confirmed`, `source: "unifi"`. A cable a person drew is never
+  changed: where UniFi reads it otherwise it is listed under **Cables the map has otherwise**,
+  in words ("the map says port 8 on CORE SWITCH, UniFi says port 12"), for you to fix by hand
+  or ignore. A cable UniFi wrote and now reads differently is offered as an update of that
+  cable. A client gets no cable when it shares its port with another client (something
+  uncharted sits between them) or is a hypervisor's guest.
+- **Same name, different address** is listed with a warning. Tick it to add a second place.
+- **What a system adds** lists what it knows about a place or a port the map already has: a
+  MAC address, the networks an access point broadcasts, what is plugged into a port. Tick a
+  row to add it. It fills blanks only. What a person typed is never replaced, and the hardware
+  line is offered only on a place that system imported.
+- **A place is known by its MAC** once it has one, so a machine that changes address is still
+  the same place at the next review.
+- **A gateway** is charted at one of its LAN addresses and matched by any of them. Its WAN
+  address is never read onto the map.
+- **A hypervisor's guests** show on its switch port. Each is listed as a virtual machine with
+  the host as its `parent`, and only the host gets a link to the switch.
+- **A stack needs a host**, so ticking one ticks its host, unless the host is already charted.
+  Its link opens the stack in Portainer or Komodo, because neither says where a stack answers.
+- **Ignore** hides a row from later reviews. Ignored rows stay listed at the foot of the review,
+  where you can bring them back. The list is the same one The Survey uses.
+- **A guest's address** is best effort. Proxmox lists no addresses for guests, so a running
+  container is asked directly, and a virtual machine needs the QEMU guest agent and a role
+  that may read it. A guest that does not say lands with no address.
+- A place whose address falls in no realm's subnet lands in the realm you choose, or in
+  Uncharted, which is created if the map has not got it.
+
+An import is one entry in the change log, with the note `imported from <system>`, and can be
+undone there or with the **Undo** beside the result. The Undo refuses if the map has changed
+since, because undoing restores the whole map as it was. The system is read again at import, so
+what lands is what it says at that moment, and an import of more than 500 changes is refused.
+
+Two more places read a connection, both with the settings saved here and nothing typed again:
+
+- **Guided setup** offers "Read your UniFi controller" as a way to start. It adds the
+  networks, the gear, the machines on a cable and their ports in one import. Wi-Fi clients are
+  counted and left out; add the ones you want from the review above.
+- **The Survey** shows a "Read UniFi Network" button. It files everything connected now beside
+  your scans and lease files, with the MAC and name a ping sweep cannot see. Nothing is charted
+  until you choose it there. A device that is switched off is not seen.
+
+## Embedding (the viewing glass)
+
+The map can open a service's web page in a pane over the map instead of a new
+tab. The browser enforces this through the `frame-src` part of the Content
+Security Policy, which the app builds from these settings.
+
+| Variable | Default | What it does | Secret | Settings screen |
+|---|---|---|---|---|
+| `ATLAS_EMBED_HOSTS` | (empty) | Extra origins the map may frame, space separated, for example `https://grafana.home.example`. | no | yes (Realm) |
+| `ATLAS_EMBED_SERVICES` | `1` | `1` also allows framing the origins your dataset already links to, up to about 24,000 characters of them (some 700; the most linked-to first). A service past that opens in a new tab. `0` limits framing to `ATLAS_EMBED_HOSTS`, and every service button opens a new tab. | no | yes (Realm) |
+| `ATLAS_EMBED_PROBE` | `1` | `1` asks a service whether it allows framing before offering the pane. `0` skips the check and falls back to a tab when the pane stays blank. | no | yes (Realm) |
+| `ATLAS_DEFAULT_STYLE` | (unset) | A map style, by filename, that a browser wears until its viewer picks another. A public demo uses it. If the file is gone the map falls back to its own art. | no | no |
+| `ATLAS_DEMO_TRUST` | (unset) | Path to an **invented** trust map to show every visitor, for a public demo. The trust map is admin-only because a real one says where to aim a forged header, so never point this at one. | no | no |
+| `ATLAS_DEMO_LINK` | (unset) | On a look-only demo, where its "get Atlas" link goes. `https://` only. | no | no |
+| `ATLAS_DEMO_FIGURES` | (unset) | `1` draws the bundled demo lab's **invented** charts in the Sky and the Depths and a CPU and RAM week on its cards, and never asks Prometheus or Loki. Only while the image's bundled dataset is shown (`ATLAS_FALLBACK=bundled`, no dataset of its own on disk). | no | no |
+| `ATLAS_WHOIS` | `1` | `1` lets a viewer ask public whois servers from the Chronicle, 20 questions a minute per client on each worker. `0` removes the pane and refuses the route. Set it to `0` on an Atlas strangers can reach. | no | yes (Realm) |
+
+The policy that lists dataset origins is only sent to signed-in viewers in
+`accounts` and `hybrid` modes; the sign-in page gets `frame-src 'self'`.
+
+## Ingest and heartbeats
+
+| Variable | Default | What it does | Secret | Settings screen |
+|---|---|---|---|---|
+| `ATLAS_INGEST_ENABLED` | (unset) | `1` turns on the relay ingest API (`/api/v2/ingest/{signals,inventory,observed}`), which accepts signals, inventory and observations pushed by the relay agent with a per-site token (`python cli.py token-issue`). Needs `ATLAS_DATA_BACKEND=db`; ignored otherwise. The tripwires webhook beside it has its own switch, `ATLAS_TRIPWIRES_WEBHOOK`. | no | no |
+| `ATLAS_BEAT_TOKEN` | (unset) | Shared token that lets a scheduled job report "I ran" with `POST /api/v2/rites/<key>/beat` (`Authorization: Bearer <token>` or an `X-Atlas-Beat` header). Unset turns the endpoint off (503). In `accounts` and `hybrid` modes the sign-in gate answers before the token is checked, so use the beats directory there. | yes, `ATLAS_BEAT_TOKEN_FILE` | yes (Realm, stored encrypted) |
+| `ATLAS_BEATS` | `<data dir>/heartbeats.json` | Where received heartbeats are stored. | no | no |
+| `ATLAS_BEATS_DIR` | `<data dir>/beats` | Drop directory: a job that cannot reach the app reports by creating a file named after its key here (`touch /data/beats/<key>`). The app picks the file up and deletes it. | no | no |
+
+## Tripwires
+
+[The install guide](install.md#turn-on-tripwires) has the steps to turn this on.
+The rest of this section is the reference.
+
+Tripwires are honeypots and canary tokens charted in the dataset's `stones`
+section. Trips reach the map from the decoy feed above, or from any tool
+through a webhook, `POST /api/v2/ingest/tripwires`, which understands
+OpenCanary's `WebhookHandler`, Canarytokens' webhook, and a generic
+`{"tripwire_id", "at", "kind"}`. Each trip becomes an event in the event
+history (`ATLAS_EVENTS`), on either data backend. Tripwires and their trips are
+shown to admins only. The webhook sits under the ingest prefix, so it bypasses
+the sign-in gate and its credential is the whole boundary:
+
+- `X-Atlas-Signature: sha256=<hex HMAC-SHA256 of the raw body>` keyed with
+  `ATLAS_TRIPWIRES_SECRET`, for scripts that can sign;
+- `Authorization: Bearer <key>` (OpenCanary), or `?key=<key>` on the URL
+  (Canarytokens, which cannot send headers), where `<key>` is the webhook key
+  printed by `python cli.py tripwires-key`. It is derived from the secret, so
+  the secret itself never travels and changing the secret changes the key.
+  A URL key can appear in proxy access logs; prefer the header where the
+  sender supports one.
+- on the `db` backend, a site token minted with
+  `python cli.py token-issue --site <site> --scopes tripwires` also works as
+  the bearer or `key`.
+
+Bodies over 64 KB get 413, more than 60 requests a minute per credential 429.
+Copy-paste configuration for each sender (the OpenCanary logger handler, the
+Canarytokens webhook URL, the generic shape) is under SET UP in the Tripwires
+scene, read from the admin-only `GET /api/v2/tripwires/setup`; secrets are never
+in it.
+
+| Variable | Default | What it does | Secret | Settings screen |
+|---|---|---|---|---|
+| `ATLAS_TRIPWIRES_WEBHOOK` | (unset) | `1` turns the webhook on. It stays off (404) until a credential could be valid: a secret, or the `db` backend for site tokens. | no | no |
+| `ATLAS_TRIPWIRES_SECRET` | (unset) | The webhook secret, at least 16 characters (`python cli.py tripwires-key --new-secret` prints a random one). Signs `X-Atlas-Signature` and derives the webhook key. | yes, `ATLAS_TRIPWIRES_SECRET_FILE` | no |
+| `ATLAS_TRIPWIRES_STATE` | `<events dir>/tripwires.json` | When each sender (OpenCanary, Canarytokens, generic) was last heard and last tripped. Small; one row per sender. | no | no |
+
+## Alerts
+
+Alerts send a short message to ntfy, Gotify, a JSON webhook or Discord when a place, a
+collection or a network changes state and stays in it for as long as a rule says,
+plus an optional daily digest. Each kind of destination is declared once in
+`Web/senders/`; every kind goes through the same checks in `Web/alert_send.py`.
+An admin makes a rule in NODES, from the bell
+beside a place or beside a collection or a network, and sets up where word goes
+(the destinations, the daily digest, and the log of sends) in Settings › Alerts.
+They are **off** until the operator sets both `ATLAS_ALERTS=1`
+and a non-empty `ATLAS_ALERT_HOSTS`. While either is missing nothing is sent,
+and the admin routes that save or test answer 403 with that reason.
+
+A Discord destination is a channel's incoming webhook. Its address stops at the
+webhook's id, `https://discord.com/api/webhooks/<id>` (or on `discordapp.com`,
+`canary.discord.com` or `ptb.discord.com`), and the token after the id is its
+secret: put the token in `ATLAS_ALERT_SECRET_<NAME>` and name `<NAME>` in the
+form. Atlas adds it to the path only when it sends, so it is never in the alerts
+file, on the page or in the log. List `discord.com:443` in `ATLAS_ALERT_HOSTS`
+first. Mentions are off (an `@everyone` or a role in a message pings nobody), so
+is the link preview, and a message is cut to Discord's 2000 characters. Discord's
+`?thread_id=` is not taken: an address may carry no query.
+
+Alerts ride the background poll (`ATLAS_ANNALS_POLL`), after each build of the
+live feed. They add no thread and make no request except the sends. So they
+fire only while that poll runs: not with `ATLAS_ANNALS_POLL=0`, and not under
+the development server. `GET /api/v2/health` says whether the poll runs
+(`annalist.running`, `annalist.last_tick`, for the worker that answered). How
+long a state must last is measured in polls, so a rule's minutes are only as
+fine as the poll interval (60 seconds by default).
+
+What a message may say is what a viewer with no access groups may see. A rule
+on a place, collection or network that viewer cannot see is refused when it is saved.
+A place they cannot see is never named, listed or counted in a message, and a
+rule's own name and note are never sent. A message about a place behind
+another place that is down names that root once and lists what went with it,
+instead of one message per place. A place inside a maintenance window sends
+nothing. Acknowledging an event in the ANNALS stops it sending again. At most 6
+messages a minute go to one destination and 30 an hour in all; anything over
+that is sent as one "and N more changes, see Atlas" message at the next poll.
+
+The daily digest (at an hour the admin picks, in the server's local time)
+lists certificates near lapsing, places nobody has reviewed in a number of
+days, and, if chosen, the monitors the map has not charted. Devices a survey
+saw but the map has not charted are not in it yet: no feed the poll builds
+carries them.
+
+| Variable | Default | What it does | Secret | Settings screen |
+|---|---|---|---|---|
+| `ATLAS_ALERTS` | (unset) | `1` lets alerts send. Off, NODES and Settings › Alerts say how to turn them on and save nothing. | no | no |
+| `ATLAS_ALERT_HOSTS` | (unset) | The hosts a destination may name, as `host:port`, comma separated, for example `ntfy.example.internal:443,gotify.example.internal:8080`. An admin can only send to a host listed here. Loopback, link-local, multicast and unspecified addresses, the cloud metadata addresses (`fd00:ec2::254`, `100.100.100.200`, `192.0.0.192`), Atlas's own address and the addresses this machine's name resolves to are refused even when listed. The name is resolved once per send, given up after 3 seconds, and the connection goes to that address. Empty, nothing is sent. | no | no |
+| `ATLAS_ALERT_SECRET_<NAME>` | (unset) | A destination's key, named in Settings › Alerts by `<NAME>` alone (`NTFY_LAB` reads `ATLAS_ALERT_SECRET_NTFY_LAB`). Sent as `Authorization: Bearer` to ntfy and a webhook, as `X-Gotify-Key` to Gotify, and as the end of a Discord webhook's path (the token). Atlas never stores it, shows it or logs it, and sends it only to the address it was named for: change the address and the admin names the secret again. The prefix the app reads is `ATLAS_ALERT_SECRET_`. | yes, `ATLAS_ALERT_SECRET_<NAME>_FILE` | no |
+| `ATLAS_PUBLIC_URL` | (unset) | The address people reach this Atlas by, for example `https://atlas.example.internal/`. A message links to `<address>?place=<id>`. Atlas cannot know its own address behind a proxy, so unset, messages carry no link. | no | no |
+| `ATLAS_ALERTS_FILE` | `<data dir>/alerts.json` | The rules, the digest and the destinations (secrets by name only). Written from NODES (rules) and Settings › Alerts (the rest). Never exported and never shown to a token. | no | no |
+| `ATLAS_ALERTS_STATE` | `<data dir>/alerts-state.json` | The poll's own record for alerts: the last event handled, rules waiting out their minutes, the rate limit and the last digest day. Written under a lock so two workers send once. | no | no |
+| `ATLAS_ALERT_LOG` | `<data dir>/alert-deliveries.jsonl` | One line per send: when, the rule's id, the destination's name, the events, and how it went (delivered, refused with the HTTP status, unreachable, blocked). Never a message's words or a secret. Mode 0600, kept 90 days, read by admins at `GET /api/v2/admin/alerts/deliveries`. | no | no |
+
+## Metrics
+
+| Variable | Default | What it does | Secret | Settings screen |
+|---|---|---|---|---|
+| `ATLAS_METRICS_TOKEN` | (unset) | Turns on `GET /metrics` (Prometheus format: request counts and latency by route, chart fetches, source health, build info) for scrapers that send `Authorization: Bearer <token>`. Unset, `/metrics` answers 404. | yes, `ATLAS_METRICS_TOKEN_FILE` | no |
+| `PROMETHEUS_MULTIPROC_DIR` | `/tmp/atlas-metrics` (set in the image) | Directory for prometheus_client's multi-process mode, so `/metrics` sums both gunicorn workers. Leave the image's value alone. | no | no |
+
+## Theme
+
+`ATLAS_THEME` (listed under [Core](#core)) picks a JSON file in
+`Web/themes/<name>.json`; names are lowercase letters, digits and dashes. A
+theme only needs the keys it changes; everything else falls back to
+`plain.json`. To use your own theme with the container, mount the file
+read-only at `/app/themes/<name>.json` and set `ATLAS_THEME=<name>`.
+
+## App manifest links
+
+These two only decorate the app's machine-readable manifest
+(`/api/manifest`), which a dashboard or hub can read to draw a card for the
+Atlas.
+
+| Variable | Default | What it does | Secret | Settings screen |
+|---|---|---|---|---|
+| `ATLAS_LAB_URL` | (unset) | The URL of this instance, shown as the card's link. | no | no |
+| `ATLAS_PRODUCTION_URL` | (unset) | A second URL for the card, such as a public demo. | no | no |
+
+## The relay agent (outside `Web/`)
+
+The optional push agent in `relay/` runs on another machine and reads two
+variables of its own. The web app does not read them.
+
+| Variable | Default | What it does | Secret |
+|---|---|---|---|
+| `ATLAS_RELAY_TOKEN` | (unset) | The per-site ingest token, if it is not in the relay's TOML config. | yes |
+| `ATLAS_WEB_DIR` | (unset) | Where to find a checkout of `Web/` when the relay imports shared code from it. | no |
+
+## API tokens and MCP
+
+Settings → Connections issues tokens for scripts, local models and coding harnesses
+(admins only). A token is shown once and stored as a hash. It is read-only, it sees what
+a signed-in viewer with no groups sees, and it reaches only `lab-data`, `maps`, `signals`,
+`rites`, `events`, `places/roster`, `overview` and `openapi.json` under `/api/v2`, plus the MCP endpoint. [The API
+guide](api.md) has each path with an example, and [`openapi.json`](openapi.json) is the
+reference.
+
+```
+POST /api/v2/mcp        Authorization: Bearer <token>
+```
+
+The endpoint speaks MCP over HTTP, both the 2026-07-28 revision and the earlier
+`initialize` handshake, and offers nine read-only tools. [Atlas for AI agents](mcp.md) lists
+them and how an agent should read the answers. Settings shows the setup for each client.
+A cloud tool sends what it reads to its model's vendor, so a token handed to one takes
+this map off your network.
+
+A client that can only start a command gets the same endpoint over stdio:
+`docker exec -i atlas python cli.py mcp --token-file /data/agent.token`. Without
+`--token-file` the command reads the API token from `ATLAS_TOKEN`, which nothing else uses.
+
+If a proxy puts its own sign-in in front of the Atlas, point the tool at the Atlas directly:
+that proxy's login cannot be answered with a token.
+
+## Map styles with their own zoom
+
+A region is a rectangle on one picture, so regions follow the art. The regions in your dataset
+belong to the map's own default image. When a viewer picks another style (under **ATLAS**, **MAP
+EDITOR**, MAP STYLE), the map shows that style's regions instead, or none.
+
+A style brings its regions in a file beside the image, written by you and never uploaded. For
+`island.webp`, that is `island.style.json`:
+
+```json
+{
+  "label": "The Island",
+  "regions": [
+    {"id": "harbour", "name": "The Harbour", "map": "harbour.webp",
+     "x": 40, "y": 55, "w": 20, "h": 15, "auto": true},
+    {"id": "docks", "name": "The Docks", "map": "docks.webp", "parent": "harbour",
+     "x": 10, "y": 30, "w": 50, "h": 40, "auto": true}
+  ]
+}
+```
+
+`x`, `y`, `w` and `h` are percent of the parent map, the same units the map editor uses. `label` is
+the name in the style list, and the map takes that name while the style is chosen. `auto` opens the region when you zoom into it.
+`"hidden": true` starts a region hidden: it has no frame and does not open until a viewer shows it
+under **ATLAS**, **MAP EDITOR**, ZOOM MAPS, which keeps their choice in their own browser. A region
+in your dataset takes the same key. An image a region names
+is left out of the style list, because you reach it by zooming in. A file that cannot be read costs
+the style its zoom, never the map.
+
+A style can also arrange the map to suit its picture. `places` moves markers, by place id, and
+`zones` moves the network names, by network id, in percent of the map. A region takes `places` too,
+in percent of the region's own picture, for where a place sits once you zoom in:
+
+```json
+{
+  "label": "The Island",
+  "places": {"router": {"x": 42, "y": 61}, "nas": {"x": 30, "y": 48}},
+  "zones": {"servers": {"x": 36, "y": 40}}
+}
+```
+
+This changes the picture only, never your data. A place the file does not name stays where it is.
+
+You do not have to write the spots by hand. Choose the style, turn on **Drag places on the map**
+under MOVE PLACES in the map editor's panel (**ATLAS**, **MAP EDITOR**), and drag the places and the network names; open a region to place
+them on its own picture. **Save to map** writes the spots into the style's `.style.json` and leaves
+the rest of the file as it was. An admin can save; a read-only Atlas cannot (the button is drawn
+off there, and says so), so a shared or demo map keeps the layout it was given. A style built into the image cannot be saved this way: copy its
+picture into `ATLAS_MAPS` under another name.
+
+A style can bring its own words too. `words` maps a word the Atlas uses to the one this picture
+uses, in the case it finds it: `{"realm": "kingdom", "realms": "kingdoms", "tripwires": "trip lines"}`.
+Plain words only, up to 40 of them, and they change the Atlas's own labels, never a name in your
+data. A viewer who turns on **Use standard words** in the map editor's panel (in Settings, on a phone) gets standard words on
+every map instead. `"tripwire": "eye"` swaps the symbol that marks a tripwire for an eye.
+
+A style can give a place a sigil. `logos` maps a place id to an icon the Atlas ships in
+`static/icons/` (`{"my-server": "moon"}`): on this picture that place's marker takes the
+icon's shape, in the place's own colour, and its card shows the icon. An emblem a theme lists in
+`scenery_logos` belongs to the theme's own map and stands down on every other style.
+
+`"bright": true` tells the Atlas the picture is a light one. Names then sit on a dark plate, and the
+picture dims while the network layer is up or a place is split into its services.

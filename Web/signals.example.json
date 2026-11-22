@@ -1,0 +1,25 @@
+{
+  "_comment": "Example signals feed. Point ATLAS_SIGNALS_SOURCES=static + ATLAS_SIGNALS_FILE at a copy to light markers without a monitor. Keys are place and service ids from your map.",
+  "nodes": {
+    "router": {
+      "state": "healthy",
+      "uptime_30d": 99.9
+    },
+    "docs-box": {
+      "state": "degraded",
+      "uptime_30d": 97.2
+    },
+    "print-box": {
+      "state": "slumbering"
+    }
+  },
+  "services": {
+    "wiki": {
+      "state": "healthy"
+    }
+  },
+  "metrics": {
+    "watchfires_up": 3,
+    "watchfires_total": 4
+  }
+}

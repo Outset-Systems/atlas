@@ -1,0 +1,3046 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Atlas API",
+    "version": "2.6.0",
+    "description": "What an API token can read from an Atlas. Tokens are issued in Settings, Connections, by an admin, once agent access is turned on there. A token is read-only, sees no more than a signed-in viewer with no groups, and reaches only the paths in this document. A URL reaches it without `user:pass@` or its query string. While agent access is off every path here answers 403 to a token and the MCP endpoint answers 404. A token made for a cloud AI tool reads a reduced view through the MCP endpoint only, and every other path here answers it 403. The rest of `/api/v2` belongs to the page and is not a contract.",
+    "license": {
+      "name": "MIT",
+      "identifier": "MIT"
+    }
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "This Atlas."
+    }
+  ],
+  "security": [
+    {
+      "token": []
+    }
+  ],
+  "paths": {
+    "/api/v2/lab-data": {
+      "get": {
+        "operationId": "getDataset",
+        "summary": "The whole map",
+        "description": "Places, zones, routes, addresses, racks, certificates and scheduled jobs, in one document. Send `If-None-Match` with the last `ETag` to get a 304 when nothing changed.",
+        "responses": {
+          "200": {
+            "description": "The dataset.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Dataset"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Atlas-Data-Problems": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "How many problems the dataset's own check found. Absent when none."
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Off"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooMany"
+          },
+          "500": {
+            "$ref": "#/components/responses/Unreadable"
+          },
+          "304": {
+            "description": "Unchanged since the `ETag` sent."
+          }
+        }
+      }
+    },
+    "/api/v2/maps": {
+      "get": {
+        "operationId": "listMaps",
+        "summary": "The pictures the map can be drawn on",
+        "description": "Each image, with where it seats the places a token may see.",
+        "responses": {
+          "200": {
+            "description": "The pictures.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Maps"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Off"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooMany"
+          }
+        }
+      }
+    },
+    "/api/v2/signals": {
+      "get": {
+        "operationId": "getSignals",
+        "summary": "Live health",
+        "description": "Never fails: a source that does not answer is listed as `silent` and its places have no entry. Reading it can record a state change in the event history.",
+        "responses": {
+          "200": {
+            "description": "The feed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Signals"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Off"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooMany"
+          }
+        }
+      }
+    },
+    "/api/v2/rites": {
+      "get": {
+        "operationId": "listScheduledJobs",
+        "summary": "Scheduled jobs and whether they ran",
+        "description": "Every charted job with its verdict.",
+        "responses": {
+          "200": {
+            "description": "The jobs.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rites"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Off"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooMany"
+          },
+          "500": {
+            "$ref": "#/components/responses/Unreadable"
+          }
+        }
+      }
+    },
+    "/api/v2/events": {
+      "get": {
+        "operationId": "listEvents",
+        "summary": "The event history",
+        "description": "State changes, newest first. Tripwire events are never sent to a token.",
+        "responses": {
+          "200": {
+            "description": "The events.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Events"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Off"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooMany"
+          }
+        },
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 100
+            },
+            "description": "How many to return. The history keeps 2,000."
+          },
+          {
+            "name": "unacked",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            },
+            "description": "`1` returns only events nobody has acknowledged."
+          }
+        ]
+      }
+    },
+    "/api/v2/places/roster": {
+      "get": {
+        "operationId": "getPlacesTable",
+        "summary": "Every place, one row each",
+        "description": "The places this reader may see, each with its live state, network, addresses, review, repair windows, nearest certificate and collections. Made from the map and the live health, cut the same way as those two. Any parameter below filters, sorts and pages the rows by the places table's own rules and adds `total`, `offset` and `limit`; with none, every row comes back. Text sorts in a natural order (numbers as numbers, accents and case after the letters), which a browser's own locale may order differently for some names.",
+        "responses": {
+          "200": {
+            "description": "The table.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Roster"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Off"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooMany"
+          },
+          "500": {
+            "$ref": "#/components/responses/Unreadable"
+          },
+          "400": {
+            "description": "A parameter it cannot use; `error` says which.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Unreadable"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "text",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Every word must appear in the name, id, an address, the role or the network."
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "examples": [
+                "down",
+                "degraded",
+                "maintenance",
+                "slumbering",
+                "healthy",
+                "unknown",
+                "unmanaged"
+              ]
+            }
+          },
+          {
+            "name": "zone",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "A network's id."
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "collection",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "A collection's id."
+          },
+          {
+            "name": "unchecked",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1",
+                "0"
+              ]
+            },
+            "description": "`1`: only places waiting for a person to check them."
+          },
+          {
+            "name": "stale_days",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "description": "Only places nobody has checked in this many days."
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": "name",
+              "enum": [
+                "state",
+                "name",
+                "zone",
+                "kind",
+                "addresses",
+                "services",
+                "confirmed_by",
+                "reviewed",
+                "maintenance",
+                "cert",
+                "collections"
+              ]
+            }
+          },
+          {
+            "name": "dir",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "default": "asc"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2000
+            },
+            "description": "The most rows to return. None: every match."
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          }
+        ]
+      }
+    },
+    "/api/v2/overview": {
+      "get": {
+        "operationId": "getOverview",
+        "summary": "The realm at a glance",
+        "description": "Places by state, what is down and what depends on it, events nobody has acknowledged, repair windows in the next 7 days, certificates lapsing within 30, places unchecked or not reviewed in 90, how many places changed this week and whether every source answered. Made from the map and the live health, cut the same way as those two.",
+        "responses": {
+          "200": {
+            "description": "The tiles.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Overview"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Off"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooMany"
+          },
+          "500": {
+            "$ref": "#/components/responses/Unreadable"
+          }
+        }
+      }
+    },
+    "/api/v2/openapi.json": {
+      "get": {
+        "operationId": "getReference",
+        "summary": "This document",
+        "description": "The same document as `docs/openapi.json` in the repository.",
+        "responses": {
+          "200": {
+            "description": "OpenAPI 3.1.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Off"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooMany"
+          }
+        }
+      }
+    },
+    "/api/v2/mcp": {
+      "post": {
+        "operationId": "mcp",
+        "summary": "The MCP endpoint",
+        "description": "Model Context Protocol over HTTP: JSON-RPC, tools only, read-only, no session and no stream. An MCP client speaks this for you; the tools are `atlas_overview`, `atlas_search`, `atlas_place`, `atlas_impact`, `atlas_health`, `atlas_events`, `atlas_missed_jobs`, `atlas_unreviewed`, `atlas_changes`. A token is the only credential it takes.",
+        "x-mcp-tools": [
+          "atlas_overview",
+          "atlas_search",
+          "atlas_place",
+          "atlas_impact",
+          "atlas_health",
+          "atlas_events",
+          "atlas_missed_jobs",
+          "atlas_unreviewed",
+          "atlas_changes"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RpcRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A JSON-RPC reply. A tool's failure is a reply, not a status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RpcReply"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "A notification was accepted. No body."
+          },
+          "404": {
+            "$ref": "#/components/responses/Off"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Off"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooMany"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "token": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "`Authorization: Bearer atl_...`"
+      }
+    },
+    "schemas": {
+      "Dataset": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "meta": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "title": {
+                "type": "string",
+                "description": "The name of this atlas."
+              },
+              "carry_service_renames": {
+                "type": "boolean",
+                "description": "When a service is renamed (its label, its monitor, or its place's id), the collections, repair windows and alert rules naming it follow the new name. Off, they keep the old one, and Atlas says what was left behind."
+              },
+              "shadow_kuma": {
+                "type": "boolean",
+                "description": "Atlas also asks what a Kuma monitor watches, by the service's own address or check, and NODES shows how often the two agree. Kuma's answer stays the one on the map. For deciding whether Atlas can take over from Kuma."
+              },
+              "map_art": {
+                "description": "`[{\"name\": \"floor-2.webp\", \"label\": \"Second floor\"}]`: what a map image is called in the list of map styles, in place of its file name. Set from the map editor, under Map style, Rename."
+              },
+              "surveyed": {
+                "type": "string",
+                "description": "When the map was last walked, `YYYY-MM-DD`."
+              },
+              "art": {
+                "type": "string",
+                "description": "Which base render is in use — a note to your future self."
+              },
+              "map_image": {
+                "type": "string",
+                "description": "The picture the map is drawn on — a bare filename, e.g. `floor-2.webp`. Blank uses the render the Atlas ships with. Upload your own in the Desk. Places are positioned in fractions of the image, so swapping it keeps every marker where it is."
+              },
+              "tribute": {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                  "total_gb": {
+                    "type": "number",
+                    "description": "How much the hypervisor has in total."
+                  },
+                  "host_reserve_gb": {
+                    "type": "number",
+                    "description": "Held back for the hypervisor itself — free headroom is what's left."
+                  },
+                  "cpu_cores": {
+                    "type": "number",
+                    "description": "Physical cores on the hypervisor. Shown as the iron behind the vCPU count; blank simply hides that line."
+                  },
+                  "cpu_threads": {
+                    "type": "number",
+                    "description": "Logical processors — what a vCPU is actually assigned against. This is the denominator of the vCPU score, so a wrong number here reads as false headroom."
+                  }
+                },
+                "description": "One machine's numbers, from before a place could carry its own (Memory, Cores and Threads on the place). They still stand for a map with one host that declares none: set them on the place instead, and leave these."
+              }
+            },
+            "description": "The atlas settings."
+          },
+          "zones": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "Short unique key, e.g. `monitoring`."
+                },
+                "name": {
+                  "type": "string",
+                  "description": "Display name, e.g. `Monitoring`."
+                },
+                "vlan": {
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean"
+                  ],
+                  "description": "VLAN id. Use `—` for a segment that isn't one."
+                },
+                "subnet": {
+                  "type": "string",
+                  "description": "The realm's primary prefix, e.g. `10.0.20.0/24`. Use `—` for a segment with no addressing."
+                },
+                "hue": {
+                  "type": "string",
+                  "description": "The realm's colour, used everywhere."
+                },
+                "net_hue": {
+                  "type": "string",
+                  "description": "Optional separate colour for this realm's routes on the network layer."
+                },
+                "lore": {
+                  "type": "string",
+                  "description": "The in-world line shown on its card."
+                },
+                "label_x": {
+                  "type": "number",
+                  "description": "Where the realm's name sits on the map, 0–100% across."
+                },
+                "label_y": {
+                  "type": "number",
+                  "description": "…and 0–100% down."
+                },
+                "hide_label": {
+                  "type": "boolean",
+                  "description": "Keep the realm, drop its name from the map."
+                },
+                "origin": {
+                  "type": "string",
+                  "description": "The system and record this came from, set by a connection import, e.g. `netbox:vlan:20`. A later review knows it by this."
+                }
+              }
+            },
+            "description": "The realms."
+          },
+          "regions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "Short unique key, e.g. `server-room`."
+                },
+                "name": {
+                  "type": "string",
+                  "description": "What the frame and the breadcrumb say, e.g. `Server room`."
+                },
+                "map": {
+                  "type": "string",
+                  "description": "The render to draw for this region: a file name from the gallery (upload it there first), e.g. `server-room.webp`."
+                },
+                "parent": {
+                  "type": "string",
+                  "description": "Blank = drawn on the main map. Otherwise the region whose map this one sits on. Names an entry in `regions`."
+                },
+                "x": {
+                  "type": "number",
+                  "description": "The rectangle on the parent map: its left edge, 0–100% across."
+                },
+                "y": {
+                  "type": "number",
+                  "description": "…its top edge, 0–100% down."
+                },
+                "w": {
+                  "type": "number",
+                  "description": "…its width, in % of the parent map's width."
+                },
+                "h": {
+                  "type": "number",
+                  "description": "…its height, in % of the parent map's height."
+                },
+                "auto": {
+                  "type": "boolean",
+                  "description": "Zooming in until the rectangle fills the window opens it. Off = only the frame's button opens it."
+                },
+                "fold": {
+                  "type": "boolean",
+                  "description": "On the map this region sits on, draw only its places that have a route to somewhere outside it. The rest are drawn once you open the region."
+                },
+                "hidden": {
+                  "type": "boolean",
+                  "description": "Not drawn until a viewer shows it (ATLAS, MAP EDITOR, Zoom maps): no frame, no opening by zoom, and no folding. A viewer's own choice is kept in their browser."
+                },
+                "places": {
+                  "description": "`{\"place-id\": {\"x\": 40, \"y\": 62}}` — where a place sits on THIS map. Leave blank when the detailed map is a true enlargement: places are then mapped through the rectangle. Drag them in edit mode to pin."
+                }
+              }
+            },
+            "description": "The regions."
+          },
+          "nodes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "Short unique key, e.g. `app-host`."
+                },
+                "name": {
+                  "type": "string",
+                  "description": "Display name. Shown in UPPERCASE."
+                },
+                "kind": {
+                  "type": "string",
+                  "examples": [
+                    "physical",
+                    "vm",
+                    "network",
+                    "unknown"
+                  ],
+                  "description": "physical = iron · vm = a guest · network = gear or the world beyond · unknown = found by a scan, not yet classified."
+                },
+                "zone": {
+                  "type": "string",
+                  "description": "Which realm it belongs to. Names an entry in `zones`."
+                },
+                "x": {
+                  "type": "number",
+                  "description": "Map position, 0–100% across."
+                },
+                "y": {
+                  "type": "number",
+                  "description": "Map position, 0–100% down. Past 100 puts it in the void below."
+                },
+                "role": {
+                  "type": "string",
+                  "description": "What it does, in a phrase. The part before `·` becomes its epigraph."
+                },
+                "lore": {
+                  "type": "string",
+                  "description": "A line about it, shown on its card."
+                },
+                "ip": {
+                  "type": "string",
+                  "description": "Its address, or `—` for none. A whole prefix is allowed for a place that *is* a network (an overlay's 100.64.0.0/10)."
+                },
+                "hw": {
+                  "type": "string",
+                  "description": "The mono data line: OS · RAM · disks."
+                },
+                "location": {
+                  "type": "string",
+                  "description": "Where it physically stands, e.g. `Home office`, for a machine that is not in a rack: a single-board computer, an access point, a desk machine. What sits in a rack is where the rack is, whatever this says. HARDWARE and RESOURCES list by location; blank is the map's default one."
+                },
+                "ram_gb": {
+                  "type": "number",
+                  "description": "How much memory the machine has. With the three fields below it is what RESOURCES divides among the machine's guests, and what it counts as compute when the machine runs none."
+                },
+                "ram_reserve_gb": {
+                  "type": "number",
+                  "description": "Kept for the machine itself; free headroom is what is left after it."
+                },
+                "cpu_cores": {
+                  "type": "number",
+                  "description": "Physical cores. Shown as the iron behind the thread count."
+                },
+                "cpu_threads": {
+                  "type": "number",
+                  "description": "Logical processors: what a vCPU is assigned against, so this is the denominator of the vCPU count."
+                },
+                "mac": {
+                  "type": "string",
+                  "description": "Its hardware address, e.g. `02:00:5e:10:20:30`. A connection import fills it in; a later review knows the place by it even after its address changes."
+                },
+                "hue": {
+                  "type": "string",
+                  "description": "Override the marker colour. Defaults to the realm's."
+                },
+                "shape": {
+                  "type": "string",
+                  "examples": [
+                    "diamond",
+                    "triangle"
+                  ],
+                  "description": "Marker shape. Blank = the default circle."
+                },
+                "parent": {
+                  "type": "string",
+                  "description": "Its host, if this is a vassal. Draws it as a child in TOPOLOGY, and means its alarms fold into the host's when the host goes dark. Names an entry in `nodes`."
+                },
+                "depends_on": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Places this one cannot work without. When one of them goes dark, this place's alarm folds into theirs instead of adding to the noise. Declare only real needs — a guessed dependency hides a real outage. Names an entry in `nodes`."
+                },
+                "children": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "The reverse of parent — rarely needed, kept for hand-edited maps. Names an entry in `nodes`."
+                },
+                "reaches": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Places it can talk to. Lights the reachability web. Names an entry in `nodes`."
+                },
+                "scroll": {
+                  "type": "string",
+                  "description": "Path to its documentation. Click-to-copy on the card."
+                },
+                "spark": {
+                  "type": "boolean",
+                  "description": "Draw a CPU + RAM gauge on its card (needs node-exporter and LAN HTTP)."
+                },
+                "planned": {
+                  "type": "boolean",
+                  "description": "Charted but not yet built — drawn faint."
+                },
+                "off_map": {
+                  "type": "boolean",
+                  "description": "Charted, but not drawn. Its services still list in THE INDEX; its marker and its routes are skipped. For a place that is decided but not yet laid."
+                },
+                "require_group": {
+                  "type": "string",
+                  "description": "Hide this place from anyone whose Hub groups don't include it."
+                },
+                "unmanaged": {
+                  "type": "boolean",
+                  "description": "Not ours to watch: it stays on the map, greyed, takes no state from any source and raises nothing. (Maintenance is 'expected down, for now'.)"
+                },
+                "check": {
+                  "type": "string",
+                  "examples": [
+                    "http",
+                    "tcp",
+                    "dns",
+                    "keyword",
+                    "json",
+                    "off"
+                  ],
+                  "description": "How Atlas asks this place itself. Blank: no check of its own; it takes the worst of its services. http = a GET judged by its status · tcp = a port answers · dns = a name resolves · keyword = the page holds some text · json = a JSON answer holds a value · off = never asked. Kuma's own monitor, where one is named, wins."
+                },
+                "check_host": {
+                  "type": "string",
+                  "description": "What it asks: an address or a name (tcp, dns), or a full http(s) address (http, keyword, json). Blank: this place's IP."
+                },
+                "check_port": {
+                  "type": "integer",
+                  "description": "The port a tcp check opens. Blank: the address's own port."
+                },
+                "check_expect": {
+                  "type": "string",
+                  "description": "keyword: the text that must be on the page · json: `path=value`, e.g. `status.healthy=true` · dns: an address the name must resolve to · http: the statuses that count as up, e.g. `200-299,401` (blank: below 500)."
+                },
+                "check_every": {
+                  "type": "integer",
+                  "description": "Seconds between checks. Blank: 60."
+                },
+                "check_retries": {
+                  "type": "integer",
+                  "description": "How many times a failing answer is asked again, 20 s apart, before the state changes. Blank: 1."
+                },
+                "check_timeout": {
+                  "type": "number",
+                  "description": "How long one answer may take. Blank: 3."
+                },
+                "links": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "properties": {
+                      "label": {
+                        "type": "string",
+                        "description": "The service name, as shown on the card."
+                      },
+                      "url": {
+                        "type": "string",
+                        "description": "Where the service answers. http:// or https://. A service with nothing to open (a database's port, a name server) may leave it blank when its check is tcp or dns."
+                      },
+                      "desc": {
+                        "type": "string",
+                        "description": "What this service is *for*, in a sentence or two. Shown on its own pane when you open it from a place's card. Leave it blank and the pane falls back to stating where it runs — which the epigraph already said."
+                      },
+                      "hue": {
+                        "type": "string",
+                        "description": "A colour for this service's dot. Defaults to the realm's."
+                      },
+                      "kuma": {
+                        "type": "string",
+                        "description": "The exact Uptime-Kuma monitor NAME that watches this service. Omit it and the service simply shows no health dot."
+                      },
+                      "container": {
+                        "type": "string",
+                        "description": "Docker container name, if cAdvisor scrapes it — powers 'view its metrics'."
+                      },
+                      "kind": {
+                        "type": "string",
+                        "examples": [
+                          "service",
+                          "container"
+                        ],
+                        "description": "What it is in NODES: a container (Docker) or another service. Blank: a container when it names one above, else a service. Neither is a place."
+                      },
+                      "check": {
+                        "type": "string",
+                        "examples": [
+                          "http",
+                          "tcp",
+                          "dns",
+                          "keyword",
+                          "json",
+                          "off"
+                        ],
+                        "description": "How Atlas asks this service itself. Blank: a GET of its address (below 500 is up). http = a GET judged by its status · tcp = a port answers · dns = a name resolves · keyword = the page holds some text · json = a JSON answer holds a value · off = never asked. Kuma's own monitor, where one is named, wins."
+                      },
+                      "check_host": {
+                        "type": "string",
+                        "description": "What it asks: an address or a name (tcp, dns), or a full http(s) address (http, keyword, json). Blank: the service's own address, else its place's IP."
+                      },
+                      "check_port": {
+                        "type": "integer",
+                        "description": "The port a tcp check opens. Blank: the address's own port."
+                      },
+                      "check_expect": {
+                        "type": "string",
+                        "description": "keyword: the text that must be on the page · json: `path=value`, e.g. `status.healthy=true` · dns: an address the name must resolve to · http: the statuses that count as up, e.g. `200-299,401` (blank: below 500)."
+                      },
+                      "check_every": {
+                        "type": "integer",
+                        "description": "Seconds between checks. Blank: 60."
+                      },
+                      "check_retries": {
+                        "type": "integer",
+                        "description": "How many times a failing answer is asked again, 20 s apart, before the state changes. Blank: 1."
+                      },
+                      "check_timeout": {
+                        "type": "number",
+                        "description": "How long one answer may take. Blank: 3."
+                      },
+                      "connects": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "description": "Places this one service talks to. Narrows the reach web in TOPOLOGY. Names an entry in `nodes`."
+                      },
+                      "path": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "description": "The hops its traffic actually takes, IN ORDER, starting from this place — e.g. `router, proxy, internet` for something reached from the internet. Drawn as a chain instead of a star, so the map can say *through*. Every consecutive pair must be a charted route, or the map is drawing a route that isn't there. Names an entry in `nodes`."
+                      },
+                      "open_in": {
+                        "type": "string",
+                        "examples": [
+                          "auto",
+                          "here",
+                          "tab"
+                        ],
+                        "description": "`auto` asks the service whether it allows framing and shows it in THE VIEWING GLASS when it does. `here` insists. `tab` never frames it — for anything that only works with the whole window."
+                      },
+                      "require_group": {
+                        "type": "string",
+                        "description": "Hide this service from anyone whose Hub groups don't include it."
+                      },
+                      "favourite": {
+                        "type": "string",
+                        "examples": [
+                          "internal",
+                          "external"
+                        ],
+                        "description": "Lists this service on OVERVIEW: `internal` for what is used inside the network, `external` for what is reached from outside. Blank: not listed. It needs a URL to be listed."
+                      },
+                      "unmanaged": {
+                        "type": "boolean",
+                        "description": "Not ours to watch: this service takes no state and raises nothing."
+                      }
+                    }
+                  },
+                  "description": "Everything hosted here. Each becomes a card button and an Index row."
+                },
+                "monitors": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "The Uptime Kuma monitors that light this marker, by their exact name. The worst of them wins. A connection review fills this in; `signals.kuma` still works beside it."
+                },
+                "origin": {
+                  "type": "string",
+                  "description": "The system and record this came from, set by a connection import, e.g. `proxmox:qemu/101`. A later review knows it by this."
+                },
+                "provenance": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "description": "When this place was charted and whether a person has checked it. Written by the server at each change. Absent on a place charted before the map kept it: treat that as unknown. The names (who) are kept too and are not sent to a token.",
+                  "properties": {
+                    "charted_at": {
+                      "type": "string",
+                      "description": "UTC, as `2026-11-09T21:14:03Z`."
+                    },
+                    "source": {
+                      "type": "string",
+                      "examples": [
+                        "hand",
+                        "survey",
+                        "unifi"
+                      ],
+                      "description": "`hand`, or the import that wrote it."
+                    },
+                    "changed_at": {
+                      "type": "string",
+                      "description": "UTC, as `2026-11-09T21:14:03Z`."
+                    },
+                    "reviewed": {
+                      "type": "boolean",
+                      "description": "False until a person saves the place by hand."
+                    },
+                    "reviewed_at": {
+                      "type": "string",
+                      "description": "UTC, as `2026-11-09T21:14:03Z`."
+                    },
+                    "changed_since_review": {
+                      "type": "boolean",
+                      "description": "Present and true when the place has changed since a person reviewed it, most often because an import added to it. `reviewed` stays true; what changed is unconfirmed until the next review."
+                    }
+                  }
+                }
+              }
+            },
+            "description": "The places."
+          },
+          "routes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "from": {
+                  "type": "string",
+                  "description": "Names an entry in `nodes`."
+                },
+                "to": {
+                  "type": "string",
+                  "description": "Names an entry in `nodes`."
+                },
+                "kind": {
+                  "type": "string",
+                  "examples": [
+                    "wan",
+                    "edge",
+                    "vlan",
+                    "mesh",
+                    "telemetry"
+                  ],
+                  "description": "wan = the world · edge = the way in · vlan = inside a realm · mesh = an overlay · telemetry = a scrape path."
+                }
+              }
+            },
+            "description": "The routes."
+          },
+          "prefixes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "Short unique key, e.g. `admin-v4`."
+                },
+                "cidr": {
+                  "type": "string",
+                  "description": "Any prefix length, v4 or v6 — `10.0.20.0/24`, `10.0.0.0/8`, `fd00::/64`."
+                },
+                "zone": {
+                  "type": "string",
+                  "description": "The realm this prefix serves, if one. Names an entry in `zones`."
+                },
+                "name": {
+                  "type": "string",
+                  "description": "What it's for, e.g. `Admin VLAN`."
+                },
+                "role": {
+                  "type": "string",
+                  "examples": [
+                    "prefix",
+                    "container",
+                    "reserved"
+                  ],
+                  "description": "container = a supernet holding others · prefix = a real segment · reserved = set aside, never assigned."
+                },
+                "note": {
+                  "type": "string"
+                },
+                "ranges": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "properties": {
+                      "start": {
+                        "type": "string"
+                      },
+                      "end": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "examples": [
+                          "dhcp",
+                          "reserved"
+                        ]
+                      },
+                      "note": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "description": "DHCP pools and reserved ranges inside this prefix."
+                }
+              }
+            },
+            "description": "The prefixes."
+          },
+          "interfaces": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "device": {
+                  "type": "string",
+                  "description": "Which place owns this port. Names an entry in `nodes`."
+                },
+                "name": {
+                  "type": "string",
+                  "description": "Port name or number, e.g. `1` or `eth0`."
+                },
+                "kind": {
+                  "type": "string",
+                  "examples": [
+                    "rj45",
+                    "sfp",
+                    "sfp+",
+                    "console",
+                    "power",
+                    "virtual"
+                  ]
+                },
+                "vlan": {
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean"
+                  ],
+                  "description": "The VLAN on this port; blank for a trunk."
+                },
+                "poe": {
+                  "type": "boolean"
+                },
+                "speed": {
+                  "type": "string",
+                  "description": "e.g. `1G`, `2.5G`, `10G`."
+                },
+                "peer": {
+                  "type": "string",
+                  "description": "What's on the other end, in words."
+                },
+                "note": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The ports."
+          },
+          "cables": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "Short unique key, e.g. `gw-to-switch`. How the cable is named in the change log."
+                },
+                "a": {
+                  "type": "string",
+                  "description": "The place at one end. Leave blank when this end is a stub. Names an entry in `nodes`."
+                },
+                "a_stub": {
+                  "type": "string",
+                  "description": "The stub at this end, when it is not a place. Names an entry in `stubs`."
+                },
+                "a_port": {
+                  "type": "string",
+                  "description": "The port at this end, e.g. `8` or `eth0`. The name of one of the place's ports when it has them; any name is allowed."
+                },
+                "b": {
+                  "type": "string",
+                  "description": "The place at the other end. Leave blank when this end is a stub. Names an entry in `nodes`."
+                },
+                "b_stub": {
+                  "type": "string",
+                  "description": "The stub at this end, when it is not a place. Names an entry in `stubs`."
+                },
+                "b_port": {
+                  "type": "string",
+                  "description": "The port at this end."
+                },
+                "kind": {
+                  "type": "string",
+                  "examples": [
+                    "copper",
+                    "fibre",
+                    "dac",
+                    "wireless",
+                    "virtual"
+                  ],
+                  "description": "copper = an ordinary patch lead · fibre · dac = a direct-attach copper cable · wireless = a radio link · virtual = inside one box."
+                },
+                "vlan": {
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean"
+                  ],
+                  "description": "The VLAN carried untagged, e.g. `10`. Blank for none."
+                },
+                "tagged": {
+                  "description": "The VLANs carried tagged, as a list, e.g. `[10, 20]`. Blank for none. A cable with both is a trunk, drawn `U1 T10,20`."
+                },
+                "poe_w": {
+                  "type": "number",
+                  "description": "Watts of power over the cable, when it carries any."
+                },
+                "speed": {
+                  "type": "string",
+                  "description": "e.g. `1G`, `2.5G`, `10G`."
+                },
+                "state": {
+                  "type": "string",
+                  "examples": [
+                    "confirmed",
+                    "assumed"
+                  ],
+                  "description": "confirmed = someone has seen it · assumed = believed, not checked (drawn dashed)."
+                },
+                "source": {
+                  "type": "string",
+                  "description": "Who says this cable is there: `hand` when a person charted it, or the connection that reported it, e.g. `unifi`."
+                },
+                "note": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The cables."
+          },
+          "stubs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "Short unique key, e.g. `isp-line`."
+                },
+                "name": {
+                  "type": "string",
+                  "description": "What it is called, e.g. `Fibre line in`."
+                },
+                "kind": {
+                  "type": "string",
+                  "examples": [
+                    "internet",
+                    "switch",
+                    "patch",
+                    "outlet",
+                    "other"
+                  ],
+                  "description": "internet = the provider's line · switch = a small switch nobody watches · patch = a patch panel · outlet = a wall jack · other."
+                },
+                "note": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The stubs."
+          },
+          "racks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "Short unique key, e.g. `rack-a`."
+                },
+                "name": {
+                  "type": "string",
+                  "description": "The rack's own name, e.g. `Rack A`."
+                },
+                "location": {
+                  "type": "string",
+                  "description": "Where it stands, e.g. `Home office`. Everything in the rack is there. Blank uses the map's default location."
+                }
+              }
+            },
+            "description": "The racks."
+          },
+          "rack": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "rack": {
+                  "type": "string",
+                  "description": "Which rack it sits in. Blank means the first rack. Names an entry in `racks`."
+                },
+                "u": {
+                  "type": "string",
+                  "description": "`U7` for one unit, `U3–U4` for two. The Rearrange tool writes this too."
+                },
+                "name": {
+                  "type": "string",
+                  "description": "What sits here."
+                },
+                "size": {
+                  "type": "integer",
+                  "description": "How many U it occupies."
+                },
+                "node": {
+                  "type": "string",
+                  "description": "The place this vessel is, if it's charted on the map. Names an entry in `nodes`."
+                },
+                "desc": {
+                  "type": "string",
+                  "description": "What this slot holds, in your words. Shown in the HARDWARE pane for every vessel; for an uncharted one it also stands in for the role."
+                },
+                "kind": {
+                  "type": "string",
+                  "examples": [
+                    "auto",
+                    "compute",
+                    "forge",
+                    "gateway",
+                    "switch",
+                    "storage",
+                    "power",
+                    "enclosure",
+                    "patch"
+                  ],
+                  "description": "Which faceplate it wears. `auto` reads the name and Description."
+                },
+                "depth_mm": {
+                  "type": "integer",
+                  "description": "How deep it runs, for the 3D rack. Blank uses a typical depth for its kind."
+                }
+              }
+            },
+            "description": "The vessels."
+          },
+          "rack_rear": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "rack": {
+                  "type": "string",
+                  "description": "Which rack it hangs behind. Blank means the first rack. Names an entry in `racks`."
+                },
+                "name": {
+                  "type": "string"
+                },
+                "desc": {
+                  "type": "string"
+                },
+                "node": {
+                  "type": "string",
+                  "description": "Names an entry in `nodes`."
+                },
+                "side": {
+                  "type": "string",
+                  "examples": [
+                    "rear",
+                    "inside"
+                  ],
+                  "description": "`rear` hangs behind the rack. `inside` is in the cabinet and on neither face: a shelf, a mini PC on a tray, a power strip on its floor."
+                }
+              }
+            },
+            "description": "The rear fittings."
+          },
+          "vms": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "The charted place this vassal is. Must match a place id. Names an entry in `nodes`."
+                },
+                "host": {
+                  "type": "string",
+                  "description": "The hypervisor carrying it. Names an entry in `nodes`."
+                },
+                "vcpu": {
+                  "type": "integer"
+                },
+                "ram_gb": {
+                  "type": "number"
+                },
+                "demand_gb": {
+                  "type": "number",
+                  "description": "What it actually consumes — draws the fill inside its bar."
+                },
+                "disk_gb": {
+                  "type": "number"
+                },
+                "dynamic": {
+                  "type": "string",
+                  "description": "Dynamic-memory range, e.g. `2–6`."
+                },
+                "state": {
+                  "type": "string",
+                  "examples": [
+                    "on",
+                    "off"
+                  ]
+                }
+              }
+            },
+            "description": "The vassals."
+          },
+          "signals": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "kuma": {
+                "description": "`{\"Monitor Name\": \"place-id\"}` — ties a Kuma monitor to a marker."
+              },
+              "drift_ignore": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Kuma monitors you deliberately don't chart. Keeps the drift chip honest. ⚠ Matched EXACTLY against the monitor name — an entry with a note appended (`Checks [STALE: …]`) silences nothing, because no monitor is called that. Put the reason in the commit, not in the string. Charting a monitor on a link already clears it, so an entry for a charted monitor is redundant too."
+              }
+            },
+            "description": "Which monitor watches which place. Not the live feed."
+          },
+          "chronicle": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "title": {
+                  "type": "string"
+                },
+                "note": {
+                  "type": "string",
+                  "description": "The one-line caption on its button."
+                },
+                "url": {
+                  "type": "string",
+                  "description": "Where `open ›` (or the button) takes you. Optional for a native watching, which needs none."
+                },
+                "embed": {
+                  "type": "string",
+                  "description": "An embeddable URL — makes it a live inline panel."
+                },
+                "chart": {
+                  "type": "string",
+                  "description": "A key from the Atlas's own catalogue (`/api/v2/charts`) — the watching is drawn in the map's ink from Prometheus/Loki instead of framing Grafana. Blank = matched when the embed URL names a panel this catalogue lists."
+                },
+                "range": {
+                  "type": "string",
+                  "description": "Grafana window override, e.g. `now-24h`."
+                },
+                "solo": {
+                  "type": "boolean",
+                  "description": "Render it as one panel, not a full board."
+                },
+                "about": {
+                  "type": "string",
+                  "description": "What am I looking at? Shown behind the ⓘ."
+                },
+                "pane_group": {
+                  "type": "string",
+                  "description": "Watchings with the same group name render together as ONE carousel slide — quarter-panes in a grid, titled by the group name. Blank = its own slide."
+                },
+                "open_in": {
+                  "type": "string",
+                  "examples": [
+                    "auto",
+                    "here",
+                    "tab"
+                  ],
+                  "description": "`auto` asks the dashboard whether it allows framing and shows it in THE VIEWING GLASS when it does. `here` insists. `tab` never frames it — for consoles that refuse the glass."
+                },
+                "broken": {
+                  "type": "boolean",
+                  "description": "Mark it dark and refuse to embed it — for a dashboard that isn't reporting."
+                }
+              }
+            },
+            "description": "The watchings."
+          },
+          "abyss": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "title": {
+                  "type": "string"
+                },
+                "note": {
+                  "type": "string"
+                },
+                "url": {
+                  "type": "string",
+                  "description": "An absolute URL, or a path this app serves like `report/security`. Optional for a native watching, which needs none."
+                },
+                "embed": {
+                  "type": "string"
+                },
+                "chart": {
+                  "type": "string",
+                  "description": "A key from `/api/v2/charts`; blank = matched from the embed URL."
+                },
+                "range": {
+                  "type": "string"
+                },
+                "solo": {
+                  "type": "boolean"
+                },
+                "whois": {
+                  "type": "boolean",
+                  "description": "Put the whois box beside this panel, so an address shown on it can be handed to the registries without leaving the map. Meant for a panel that lists addresses — one row per address."
+                },
+                "about": {
+                  "type": "string"
+                },
+                "pane_group": {
+                  "type": "string"
+                },
+                "open_in": {
+                  "type": "string",
+                  "examples": [
+                    "auto",
+                    "here",
+                    "tab"
+                  ]
+                },
+                "broken": {
+                  "type": "boolean"
+                }
+              }
+            },
+            "description": "The scryings."
+          },
+          "rites": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "cadence": {
+                  "type": "string",
+                  "examples": [
+                    "continuous",
+                    "daily",
+                    "weekly",
+                    "monthly",
+                    "parked"
+                  ]
+                },
+                "when": {
+                  "type": "string",
+                  "description": "When it turns, in words: `Wed 04:40 UTC`."
+                },
+                "host": {
+                  "type": "string",
+                  "description": "Where it runs."
+                },
+                "note": {
+                  "type": "string",
+                  "description": "What it does, in one line."
+                },
+                "key": {
+                  "type": "string",
+                  "description": "The name it reports under. Defaults to the slugified name — set this before renaming a rite, or its history detaches."
+                },
+                "expect_every": {
+                  "type": "string",
+                  "description": "How often it should actually turn: `24h`, `7d`, `15m`. Blank inherits the cadence (daily = 24h, weekly = 7d). This is what makes a missed turning visible."
+                },
+                "grace": {
+                  "type": "string",
+                  "description": "How late it may be before it counts as missed. Blank = a quarter of the interval, never under 15m."
+                },
+                "asks": {
+                  "type": "string",
+                  "description": "The place whose model this rite calls, if it calls one: the GPU box. Naming it puts the rite on that place's calendar. Names an entry in `nodes`."
+                },
+                "model": {
+                  "type": "string",
+                  "description": "What it asks for: `mistral:7b · 8k`. Colours the lane — a very large model is drawn in the warning tone."
+                },
+                "at": {
+                  "type": "string",
+                  "description": "`09:15` to start then; `:10` for an hourly rite. Blank = no clock (on request, or no fixed time) — listed under the day, not drawn."
+                },
+                "days": {
+                  "type": "string",
+                  "description": "`Mon–Fri`, `Sun`, `weekdays`. Blank = every day."
+                },
+                "between": {
+                  "type": "string",
+                  "description": "For an hourly rite, the window it keeps: `20:00–04:00` (wraps past midnight). Blank = all day."
+                },
+                "hold": {
+                  "type": "integer",
+                  "description": "Minutes a run typically keeps the model busy — the width of its block. Blank = 10."
+                }
+              }
+            },
+            "description": "The rites."
+          },
+          "certs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "What it vouches for: `www.example.com`, `nas.corp.example`."
+                },
+                "kind": {
+                  "type": "string",
+                  "examples": [
+                    "tls",
+                    "ssh-host",
+                    "ca"
+                  ]
+                },
+                "issuer": {
+                  "type": "string",
+                  "description": "Who signed it: `Let's Encrypt`, `Example CA`."
+                },
+                "host": {
+                  "type": "string",
+                  "description": "Where it is presented from."
+                },
+                "place": {
+                  "type": "string",
+                  "description": "The place this certificate is for Names an entry in `nodes`."
+                },
+                "expires": {
+                  "type": "string",
+                  "description": "The day it lapses, ISO: `2026-09-02`."
+                },
+                "renews": {
+                  "type": "string",
+                  "description": "What renews it and when. Blank means a human does — which is the thing this section exists to make visible."
+                },
+                "note": {
+                  "type": "string",
+                  "description": "One line."
+                }
+              }
+            },
+            "description": "The certs."
+          },
+          "collections": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "Short unique key, e.g. `storage`."
+                },
+                "name": {
+                  "type": "string",
+                  "description": "What the collection is called, e.g. `Storage`."
+                },
+                "places": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "The places in this collection, by id. Names an entry in `nodes`."
+                },
+                "note": {
+                  "type": "string",
+                  "description": "What the collection is for."
+                },
+                "services": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Services in this collection. By key: a Kuma monitor's name, or `<place id>/<label>` for a built-in check (the key the feed files the service under)."
+                },
+                "unmanaged": {
+                  "type": "boolean",
+                  "description": "Every place and service in it is unmanaged: on the map, greyed, watched by nothing."
+                }
+              }
+            },
+            "description": "The collections."
+          }
+        },
+        "description": "The whole map. No field is promised present: a hand-edited dataset is served as it is, and keys the catalogue does not know are kept. Places a token may not see are removed, with everything that names them."
+      },
+      "Maps": {
+        "type": "object",
+        "properties": {
+          "maps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "The image's file name."
+                },
+                "label": {
+                  "type": "string"
+                },
+                "url": {
+                  "type": "string",
+                  "description": "Where the image is served."
+                },
+                "default": {
+                  "type": "boolean",
+                  "description": "The map's own picture."
+                },
+                "zoom": {
+                  "type": "boolean",
+                  "description": "Art a region zooms into, not a backdrop."
+                },
+                "bright": {
+                  "type": "boolean"
+                },
+                "theme": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "additionalProperties": true
+                },
+                "regions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                },
+                "places": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "description": "Where this picture seats each place, by id."
+                },
+                "zones": {
+                  "type": "object",
+                  "additionalProperties": true
+                },
+                "logos": {
+                  "type": "object",
+                  "additionalProperties": true
+                },
+                "words": {
+                  "type": "object",
+                  "additionalProperties": true
+                },
+                "tripwire": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "Signals": {
+        "type": "object",
+        "additionalProperties": true,
+        "description": "Live health, merged from every source this Atlas is pointed at. A place or service with no entry is unknown, not healthy.",
+        "properties": {
+          "generated": {
+            "type": "number",
+            "description": "When the feed was built, epoch seconds."
+          },
+          "cached": {
+            "type": "boolean",
+            "description": "Served from the 30 second cache."
+          },
+          "sources": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Each source by name: `ok`, or `silent` when it did not answer."
+          },
+          "sources_at": {
+            "type": "object",
+            "additionalProperties": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "description": "Each source by name: when it last answered, UTC, or null if it has not since the server started."
+          },
+          "nodes": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "state": {
+                  "type": "string",
+                  "examples": [
+                    "healthy",
+                    "degraded",
+                    "down",
+                    "slumbering",
+                    "maintenance"
+                  ]
+                }
+              }
+            },
+            "description": "Places by id."
+          },
+          "services": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "state": {
+                  "type": "string",
+                  "examples": [
+                    "healthy",
+                    "degraded",
+                    "down",
+                    "slumbering",
+                    "maintenance"
+                  ]
+                }
+              }
+            },
+            "description": "Services by monitor name."
+          },
+          "rites": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "state": {
+                  "type": "string",
+                  "examples": [
+                    "healthy",
+                    "degraded",
+                    "down",
+                    "slumbering",
+                    "maintenance"
+                  ]
+                }
+              }
+            },
+            "description": "Scheduled jobs that are late, missed or failed, by key."
+          },
+          "causes": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "For a place that is down because another is: which one."
+          },
+          "confirmed_by": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Places by id: the source whose answer gave the place its state in this feed. Absent for a place under repair, whose state comes from the window."
+          },
+          "maintenance": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "unmanaged": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Places by id that are not watched on purpose: they have no state here."
+          },
+          "maintenance_services": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Services by key under a repair window now, their place left watched."
+          },
+          "repairs": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "metrics": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "drift": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "Rites": {
+        "type": "object",
+        "properties": {
+          "rites": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "A scheduled job as charted, with what actually happened to it.",
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "host": {
+                  "type": "string"
+                },
+                "cadence": {
+                  "type": "string",
+                  "examples": [
+                    "continuous",
+                    "daily",
+                    "weekly",
+                    "monthly",
+                    "parked"
+                  ]
+                },
+                "when": {
+                  "type": "string"
+                },
+                "verdict": {
+                  "type": "string",
+                  "examples": [
+                    "kept",
+                    "late",
+                    "missed",
+                    "failed",
+                    "awaited",
+                    "unwatched"
+                  ],
+                  "description": "`awaited`: watched, never reported. `unwatched`: no interval is expected of it."
+                },
+                "expect_every": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "description": "Seconds."
+                },
+                "grace": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "description": "Seconds."
+                },
+                "age_s": {
+                  "type": "number",
+                  "description": "Seconds since it last reported."
+                },
+                "last": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "description": "The last report: `at`, `status`, `duration_s`. What the job wrote about its run and the address it posted from are not sent to a token."
+                },
+                "runs": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "Events": {
+        "type": "object",
+        "properties": {
+          "events": {
+            "type": "array",
+            "description": "Newest first.",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "id": {
+                  "type": "integer"
+                },
+                "at": {
+                  "type": "string",
+                  "description": "When it was first observed, UTC."
+                },
+                "kind": {
+                  "type": "string",
+                  "description": "What changed state: a place, a service, a job."
+                },
+                "target": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "from": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "to": {
+                  "type": "string"
+                },
+                "gravity": {
+                  "type": "string",
+                  "examples": [
+                    "grave",
+                    "warn",
+                    "planned",
+                    "clear",
+                    "consequence"
+                  ]
+                },
+                "cause": {
+                  "type": "string",
+                  "description": "Present when another fault explains this one."
+                },
+                "outlived": {
+                  "type": "boolean",
+                  "description": "Present and true on a place still down after the fault that explained it has cleared: its own outage starts here, so `from` and `to` are both `down`. It names no cause."
+                },
+                "ack": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "additionalProperties": true,
+                  "description": "`at`: when it was acknowledged; null if it was not. Who, and what they wrote, are for admins."
+                }
+              }
+            }
+          },
+          "counts": {
+            "type": "object",
+            "properties": {
+              "total": {
+                "type": "integer"
+              },
+              "unacked": {
+                "type": "integer"
+              },
+              "last_24h": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      },
+      "Roster": {
+        "type": "object",
+        "properties": {
+          "stamp": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The dataset's version, as an editor sends it back."
+          },
+          "generated_at": {
+            "type": "string",
+            "description": "When this answer was made, UTC."
+          },
+          "zones": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "collections": {
+            "type": "array",
+            "description": "Named lists of places. Not access.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "note": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "unmanaged": {
+                  "type": "boolean",
+                  "description": "Every place and service in it is unmanaged."
+                },
+                "services": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Its services by key: a monitor's name, or <place id>/<label>."
+                },
+                "places": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "rows": {
+            "type": "array",
+            "description": "One per place (one page of them, when asked).",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "state": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "examples": [
+                    "healthy",
+                    "degraded",
+                    "down",
+                    "slumbering",
+                    "maintenance"
+                  ],
+                  "description": "The live state. Null is unknown, not healthy."
+                },
+                "cause": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "The place whose fault explains this one's, when one does."
+                },
+                "zone": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "zone_name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "kind": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "examples": [
+                    "physical",
+                    "vm",
+                    "network",
+                    "unknown"
+                  ]
+                },
+                "role": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "addresses": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "The place's `ip` and `mac`, then `ipv6`, `hostname` and `fqdn` when present. Only those with a value."
+                },
+                "services": {
+                  "type": "integer",
+                  "description": "How many services the place lists."
+                },
+                "confirmed_by": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "The source whose answer gave the place its state."
+                },
+                "charted_source": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "`hand`, or the import that wrote the place."
+                },
+                "reviewed": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
+                  "description": "Null for a place charted before the map kept provenance."
+                },
+                "reviewed_at": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "UTC."
+                },
+                "reviewed_by": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Who reviewed it. Sent to an admin only."
+                },
+                "changed_since_review": {
+                  "type": "boolean"
+                },
+                "unchecked": {
+                  "type": "boolean",
+                  "description": "Never reviewed, or reviewed and changed by an import since. False for a place charted before the map kept provenance."
+                },
+                "maintenance": {
+                  "type": "object",
+                  "properties": {
+                    "now": {
+                      "type": "boolean",
+                      "description": "Under repair now."
+                    },
+                    "next": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "When the next window that names it opens, UTC."
+                    },
+                    "mode_since": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "In maintenance mode (on until turned off): when it began, UTC. Null otherwise."
+                    }
+                  }
+                },
+                "cert": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "description": "The certificate tied to this place (its `place`) that lapses first. `days` is whole days left, negative once lapsed, null when its date is not charted.",
+                  "properties": {
+                    "name": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "days": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "expires": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                },
+                "collections": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "The collections this place is in."
+                },
+                "depends_on": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Places this one cannot work without."
+                },
+                "unmanaged": {
+                  "type": "boolean",
+                  "description": "Not watched on purpose (marked so, or in a collection marked so): it has no state and raises nothing."
+                }
+              }
+            }
+          },
+          "total": {
+            "type": "integer",
+            "description": "Asked for a page: how many rows matched in all."
+          },
+          "offset": {
+            "type": "integer",
+            "description": "Asked for a page: where it starts."
+          },
+          "limit": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Asked for a page: its most rows."
+          }
+        }
+      },
+      "Overview": {
+        "type": "object",
+        "properties": {
+          "generated_at": {
+            "type": "string",
+            "description": "When this answer was made, UTC."
+          },
+          "admin": {
+            "type": "boolean",
+            "description": "Whether the reader sees everything. Never true for a token."
+          },
+          "states": {
+            "type": "object",
+            "description": "The reader's places by live state. `unknown` is a place with no state, not a healthy one.",
+            "properties": {
+              "healthy": {
+                "type": "integer"
+              },
+              "degraded": {
+                "type": "integer"
+              },
+              "down": {
+                "type": "integer"
+              },
+              "slumbering": {
+                "type": "integer"
+              },
+              "maintenance": {
+                "type": "integer"
+              },
+              "unknown": {
+                "type": "integer"
+              },
+              "total": {
+                "type": "integer"
+              }
+            }
+          },
+          "down": {
+            "type": "array",
+            "description": "Places down or degraded on their own account, down first, then by name. A place whose fault another visible place explains is that place's fallout and is not listed.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "state": {
+                  "type": "string",
+                  "examples": [
+                    "down",
+                    "degraded"
+                  ]
+                },
+                "cause": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Always null here: a place with a visible cause is not a root."
+                },
+                "downstream": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    }
+                  },
+                  "description": "Every visible place that needs this one, directly or through another, from `parent` and `depends_on` only."
+                },
+                "declared": {
+                  "type": "boolean",
+                  "description": "Whether any visible place declares that it needs this one. False means nothing is declared to depend on it, not that nothing is affected."
+                }
+              }
+            }
+          },
+          "unacked": {
+            "type": "object",
+            "description": "Events nobody has acknowledged, of any gravity.",
+            "properties": {
+              "count": {
+                "type": "integer"
+              },
+              "items": {
+                "type": "array",
+                "description": "Newest first, at most 8.",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "integer"
+                    },
+                    "at": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "string"
+                    },
+                    "target": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "from": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "to": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "critical": {
+            "type": "object",
+            "description": "What went down on its own account in the last 30 days (2026-11-21): every grave event in the annals the reader may see (a place, service or job down, not one explained by another place's fault; a grave trip for an admin only), newest first.",
+            "properties": {
+              "days": {
+                "type": "integer",
+                "description": "How far back it reads: 30."
+              },
+              "count": {
+                "type": "integer",
+                "description": "Every such event in the window."
+              },
+              "since": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "When the annals were trimmed inside the window, their oldest kept event: nothing before it can be said. Null otherwise."
+              },
+              "items": {
+                "type": "array",
+                "description": "Newest first, at most 200.",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "integer"
+                    },
+                    "at": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "string"
+                    },
+                    "target": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "to": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "place": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "description": "The place, for a place or a charted service."
+                    },
+                    "status": {
+                      "type": "string",
+                      "examples": [
+                        "cleared",
+                        "down",
+                        "unknown",
+                        "open",
+                        "acknowledged"
+                      ],
+                      "description": "How it stands now. `unknown`: no longer watched. `open` / `acknowledged`: a trip, which never clears."
+                    },
+                    "cleared_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "When it first left down, UTC."
+                    },
+                    "after": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "The state it left down for."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "maintenance": {
+            "type": "array",
+            "description": "Repair windows open now or opening within 7 days, soonest first, with the reader's places in each. A window that names only places the reader may not see is not listed.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "window": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "reason": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "starts": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "This occurrence's start, UTC."
+                },
+                "ends": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "This occurrence's end, UTC. Null when it has none."
+                },
+                "now": {
+                  "type": "boolean",
+                  "description": "Open now."
+                },
+                "places": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "certs": {
+            "type": "array",
+            "description": "Certificates with 30 days or fewer left, lapsed ones included, soonest first.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "place": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                },
+                "days": {
+                  "type": "integer",
+                  "description": "Whole days left, negative once lapsed."
+                },
+                "expires": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "review": {
+            "type": "object",
+            "properties": {
+              "unchecked": {
+                "type": "integer",
+                "description": "Places an import wrote or changed that no person has checked since."
+              },
+              "stale": {
+                "type": "integer",
+                "description": "Places with no review, or none in 90 days."
+              },
+              "items": {
+                "type": "array",
+                "description": "Never reviewed first, then the oldest review; at most 8.",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "reviewed_at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "changes": {
+            "type": "object",
+            "description": "For an admin, the last 8 entries in the change log. For anyone else, a token included, how many of their places changed in 7 days, with no names.",
+            "properties": {
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "at": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "by": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "summary": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              },
+              "count_7d": {
+                "type": "integer"
+              }
+            }
+          },
+          "sources": {
+            "type": "object",
+            "properties": {
+              "all_ok": {
+                "type": "boolean",
+                "description": "No source was silent on the last build."
+              },
+              "silent": {
+                "type": "integer"
+              },
+              "items": {
+                "type": "array",
+                "description": "Each source, for an admin. Empty for anyone else.",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "last_ok": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "When it last answered, UTC."
+                    },
+                    "url": {
+                      "type": "string",
+                      "description": "Where the source's own console opens. Sent only for a source that has one and whose address is set."
+                    },
+                    "open_in": {
+                      "type": "string",
+                      "examples": [
+                        "auto",
+                        "here",
+                        "tab"
+                      ],
+                      "description": "How `url` opens. `tab` unless the map charts that address."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "favourites": {
+            "type": "object",
+            "description": "The reader's services marked as a favourite (`links[].favourite`), the most opened first, otherwise in the map's order. An address charted on two places is listed once.",
+            "properties": {
+              "internal": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string"
+                    },
+                    "url": {
+                      "type": "string"
+                    },
+                    "open_in": {
+                      "type": "string",
+                      "examples": [
+                        "auto",
+                        "here",
+                        "tab"
+                      ]
+                    },
+                    "place": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      }
+                    },
+                    "opens": {
+                      "type": "integer",
+                      "description": "How often it has been opened from OVERVIEW on this Atlas. 0 on a look-only Atlas, which counts nothing."
+                    }
+                  }
+                }
+              },
+              "external": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string"
+                    },
+                    "url": {
+                      "type": "string"
+                    },
+                    "open_in": {
+                      "type": "string",
+                      "examples": [
+                        "auto",
+                        "here",
+                        "tab"
+                      ]
+                    },
+                    "place": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      }
+                    },
+                    "opens": {
+                      "type": "integer",
+                      "description": "How often it has been opened from OVERVIEW on this Atlas. 0 on a look-only Atlas, which counts nothing."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "drift": {
+            "type": "object",
+            "description": "Monitors the map has not charted. Sent to an admin only.",
+            "properties": {
+              "count": {
+                "type": "integer"
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "Refusal": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "Unreadable": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "RpcRequest": {
+        "type": "object",
+        "required": [
+          "jsonrpc",
+          "method"
+        ],
+        "properties": {
+          "jsonrpc": {
+            "const": "2.0"
+          },
+          "id": {
+            "type": [
+              "string",
+              "integer"
+            ]
+          },
+          "method": {
+            "type": "string",
+            "examples": [
+              "initialize",
+              "ping",
+              "tools/list",
+              "tools/call"
+            ]
+          },
+          "params": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "RpcReply": {
+        "type": "object",
+        "properties": {
+          "jsonrpc": {
+            "const": "2.0"
+          },
+          "id": {
+            "type": [
+              "string",
+              "integer",
+              "null"
+            ]
+          },
+          "result": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "integer"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "responses": {
+      "Unauthorized": {
+        "description": "No token, or one that is not valid or has expired.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Refusal"
+            }
+          }
+        }
+      },
+      "Off": {
+        "description": "Agent access is turned off on this Atlas, the token tried something other than a read, or it is a cloud token asking for a path other than the MCP endpoint.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Refusal"
+            }
+          }
+        }
+      },
+      "TooMany": {
+        "description": "More than 120 requests in a minute on this token.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Refusal"
+            }
+          }
+        },
+        "headers": {
+          "Retry-After": {
+            "schema": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "Unreadable": {
+        "description": "The dataset on disk could not be read.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Unreadable"
+            }
+          }
+        }
+      }
+    }
+  }
+}

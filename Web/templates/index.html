@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ realm_title }}</title>
+<link rel="icon" type="image/svg+xml" href="static/favicon.svg?v={{ v }}">
+<link rel="stylesheet" href="static/fonts.css?v={{ v }}">
+<link rel="stylesheet" href="static/outset-calendar.css?v={{ v }}">
+<link rel="stylesheet" href="static/atlas.css?v={{ v }}">
+<link rel="stylesheet" href="static/desk.css?v={{ v }}">
+<link rel="stylesheet" href="static/views.css?v={{ v }}">
+<link rel="stylesheet" href="static/topology.css?v={{ v }}">
+<link rel="stylesheet" href="static/topology-canvas.css?v={{ v }}">
+<link rel="preload" as="image" href="{{ map_image }}" fetchpriority="high">
+</head>
+<body class="pre" data-editable="{{ '1' if editable else '0' }}" data-seeded="{{ '1' if seeded else '0' }}" data-demo="{{ '1' if demo else '0' }}">
+
+<div id="veil">
+  <div class="veil-inner">
+    <h1 class="veil-title">{{ veil_title }}</h1>
+    <svg class="veil-rule" viewBox="0 0 320 22" aria-hidden="true">
+      <path d="M4,11 C60,2 110,20 160,11 S260,2 316,11 M140,11 l20,-7 l20,7 l-20,7 z"/>
+    </svg>
+  </div>
+</div>
+
+<div id="viewport">
+  <div id="stage">
+    <img id="map-base" src="{{ map_image }}" alt="{{ theme.text.map_alt }}" draggable="false"
+         decoding="async" fetchpriority="high">
+    <div id="depth-map-shade" aria-hidden="true"></div>
+    <div id="sky-map-light" aria-hidden="true"></div>
+    <div id="void-fade" aria-hidden="true"></div>
+    <div id="void" aria-hidden="true"></div>
+    <div id="depths-realm" aria-hidden="true">
+      <div class="depths-glow"></div>
+      <div class="depths-motes"></div>
+      <div class="cloud-bank depths-cloud" aria-hidden="true">
+        <svg class="cloud-svg" preserveAspectRatio="none" viewBox="0 0 1200 320">
+          <defs>
+            <filter id="depthsgen" x="-6%" y="-6%" width="112%" height="112%" color-interpolation-filters="sRGB">
+              <feTurbulence type="fractalNoise" baseFrequency="0.006 0.013" numOctaves="5" seed="11" stitchTiles="stitch" result="n"/>
+              <feColorMatrix in="n" type="matrix" values="0 0 0 0 0.965  0 0 0 0 0.937  0 0 0 0 0.874  0 0 0 2.5 -1.06"/>
+            </filter>
+          </defs>
+          <rect x="0" y="0" width="1200" height="320" filter="url(#depthsgen)"/>
+        </svg>
+      </div>
+    </div>
+    <section id="abyss" aria-label="The abyss watches — security &amp; the outer veil">
+      <div class="abyss-head">{{ theme.text.depths|upper }}</div>
+      <div class="abyss-sub" data-say>security &amp; the outer veil, scried from the deep</div>
+      <div class="chron-viewer">
+        <div class="chron-stage" id="abyss-stage"></div>
+        <button class="chron-arrow chron-prev" id="abyss-prev" title="Previous">‹</button>
+        <button class="chron-arrow chron-next" id="abyss-next" title="Next">›</button>
+      </div>
+      <div class="chron-dots" id="abyss-dots"></div>
+      <div class="abyss-buttons" id="abyss-buttons"></div>
+      <div class="chron-foot" data-say>&mdash; scried from the deep &middot; click any watching to open it &mdash;</div>
+    </section>
+    <div id="sky-realm" aria-label="{{ theme.text.sky[:1]|upper }}{{ theme.text.sky[1:] }} — above the map">
+      <div class="sky-glow" aria-hidden="true"></div>
+      <div class="cloud-bank" aria-hidden="true">
+        <svg class="cloud-svg" preserveAspectRatio="none" viewBox="0 0 1200 320">
+          <defs>
+            <filter id="cloudgen" x="-6%" y="-6%" width="112%" height="112%" color-interpolation-filters="sRGB">
+              <feTurbulence type="fractalNoise" baseFrequency="0.006 0.013" numOctaves="5" seed="11" stitchTiles="stitch" result="n"/>
+              <feColorMatrix in="n" type="matrix" values="0 0 0 0 0.965  0 0 0 0 0.937  0 0 0 0 0.874  0 0 0 2.5 -1.06"/>
+            </filter>
+            <filter id="cloudgen-fine" x="-6%" y="-6%" width="112%" height="112%" color-interpolation-filters="sRGB">
+              <feTurbulence type="fractalNoise" baseFrequency="0.03 0.04" numOctaves="4" seed="4" stitchTiles="stitch" result="n"/>
+              <feColorMatrix in="n" type="matrix" values="0 0 0 0 0.97  0 0 0 0 0.945  0 0 0 0 0.885  0 0 0 2.7 -1.0"/>
+            </filter>
+          </defs>
+          <rect x="0" y="0" width="1200" height="320" filter="url(#cloudgen)"/>
+        </svg>
+      </div>
+    </div>
+    <section id="chronicle" aria-label="{{ theme.text.sky[:1]|upper }}{{ theme.text.sky[1:] }} — the lab's watchings, scried live">
+      <div class="chron-head">{{ theme.text.sky|upper }}</div>
+      <div class="chron-sub">{{ theme.text.sky_sub }}</div>
+      <div class="chron-viewer">
+        <div class="chron-stage" id="chron-stage"></div>
+        <button class="chron-arrow chron-prev" id="chron-prev" title="Previous">‹</button>
+        <button class="chron-arrow chron-next" id="chron-next" title="Next">›</button>
+      </div>
+      <div class="chron-dots" id="chron-dots"></div>
+      <div class="chron-buttons" id="chron-buttons"></div>
+      <div class="chron-foot">{{ theme.text.chronicle_foot }}</div>
+    </section>
+    {% if theme.sky_island %}
+    <div id="sky-shadow" aria-hidden="true"></div>
+    <div id="sky-island" aria-hidden="true">
+      <div id="sky-islet"></div>
+      <svg class="orb-cloud-svg" preserveAspectRatio="none" viewBox="0 0 300 200">
+        <rect x="0" y="0" width="300" height="200" filter="url(#cloudgen-fine)"/>
+      </svg>
+    </div>
+    {% endif %}
+    <svg id="overlay" aria-hidden="true"></svg>
+    <div id="zone-labels"></div>
+    <div id="region-frames"></div>
+    <div id="markers"></div>
+    <div id="satellites"></div>
+  </div>
+  <div class="fog fog-a"></div>
+  <div class="fog fog-b"></div>
+  <div id="vignette"></div>
+</div>
+
+<main class="atlas-view" id="view-overview" data-view="overview" hidden aria-label="{{ theme.text.view_overview|capitalize }}">
+  <div class="view-band view-band-sky" id="overview-sky"></div>
+  <a class="view-edge view-edge-up" href="#overview-sky">↑ {{ theme.text.sky }}</a>
+  <section class="ov-sheet" id="overview-tiles" aria-label="{{ theme.text.view_overview|capitalize }}">
+    <div id="overview-body"></div>
+  </section>
+  <a class="view-edge view-edge-down" href="#overview-charts">{{ theme.text.depths }} ↓</a>
+  <div class="ov-charts view-band view-band-depths" id="overview-charts"></div>
+</main>
+<main class="atlas-view" id="view-nodes" data-view="nodes" hidden aria-label="{{ theme.text.view_nodes|capitalize }}">
+  <section class="nv-sheet" id="nodes-sheet" aria-label="{{ theme.text.view_nodes|capitalize }}"></section>
+  <div class="view-foot" id="nodes-foot"></div>
+</main>
+<main class="atlas-view" id="view-topology" data-view="topology" hidden aria-label="{{ theme.text.view_topology|capitalize }}">
+  <section class="tp-sheet" id="topology-sheet" aria-label="{{ theme.text.view_topology|capitalize }}"></section>
+  <div class="view-foot" id="topology-foot"></div>
+</main>
+<nav class="view-strip" id="view-strip" aria-label="{{ theme.text.views }}">
+  <button type="button" data-view="overview">{{ theme.text.view_overview }}</button>
+  <button type="button" data-view="nodes">{{ theme.text.view_nodes }}</button>
+  <button type="button" data-view="topology">{{ theme.text.view_topology }}</button>
+</nav>
+
+<div class="zoom-stack">
+  <button class="chrome" id="btn-zoom-in" title="Closer (+)" aria-label="Closer"><svg class="ci-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5.5v13M5.5 12h13"/></svg></button>
+  <button class="chrome" id="btn-zoom-out" title="Further (−)" aria-label="Further"><svg class="ci-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.5 12h13"/></svg></button>
+  <button class="chrome ci-net" id="btn-net" title="Show the network layer (N)" aria-label="Network layer">
+    <svg class="ci-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <circle cx="12" cy="5" r="2.3" fill="currentColor" stroke="none"/>
+      <circle cx="5" cy="18.5" r="2.3" fill="currentColor" stroke="none"/>
+      <circle cx="19" cy="18.5" r="2.3" fill="currentColor" stroke="none"/>
+      <path d="M12 7.1 L5.6 16.6 M12 7.1 L18.4 16.6 M7 18.5 L17 18.5"/>
+    </svg>
+  </button>
+</div>
+
+<nav id="scenes-list" aria-label="Scenes">
+  <button class="band-arrow" id="band-prev" aria-label="Earlier sections">‹</button>
+  <div class="band-labels" id="band-labels">
+  <span class="scene-home" id="scene-home">
+    <button class="scene active" data-scene="atlas" title="Back to the whole map">ATLAS</button>
+    <button class="scene-more" id="view-more" type="button" aria-haspopup="menu" aria-expanded="false"
+            aria-controls="view-menu" title="{{ theme.text.views }}" aria-label="{{ theme.text.views }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 10l5 5 5-5"/></svg></button>
+  </span>
+  <button class="scene" data-scene="rack">HARDWARE</button>
+  <button class="scene" data-scene="tribute">RESOURCES</button>
+  <button class="scene" data-scene="path">TOPOLOGY</button>
+  <button class="scene" data-scene="ledger">ADDRESSES</button>
+  <button class="scene" data-scene="calendar" title="Every scheduled job in the lab on one clock">CALENDAR</button>
+  <button class="scene" data-scene="seals" data-say>SEALS</button>
+  <button class="scene" data-scene="stones" data-say>{{ theme.text.stones|upper }}</button>
+  <button class="scene" data-scene="annals" data-say>ANNALS</button>
+  <button class="scene" data-scene="accounts" id="scene-accounts" hidden>ACCOUNTS</button>
+  <button class="scene" data-scene="trust" id="scene-trust" hidden>THE TRUST</button>
+  </div>
+  <button class="band-arrow" id="band-next" aria-label="Later sections">›</button>
+  <span class="band-tail" id="band-tail">
+  <span class="menu-tools" id="menu-tools">
+    <button class="chrome ci-gear" id="btn-menu-settings" data-scene="settings"
+            title="Settings" aria-label="Settings"><svg class="ci-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="5.6"/><circle cx="12" cy="12" r="2.1"/><path stroke-width="3" stroke-linecap="butt" d="M12 3.2v3.2M12 17.6v3.2M3.2 12h3.2M17.6 12h3.2M5.78 5.78l2.26 2.26M15.96 15.96l2.26 2.26M18.22 5.78l-2.26 2.26M8.04 15.96l-2.26 2.26"/></svg></button>
+  </span>
+  <button class="chrome ci-menu" id="btn-menu" title="Menu — the index (M)" aria-label="Menu"><svg class="ci-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 7h15M4.5 12h15M4.5 17h15"/></svg></button>
+  </span>
+</nav>
+
+<div class="view-menu" id="view-menu" role="menu" aria-label="{{ theme.text.views }}">
+  <button type="button" role="menuitem" data-view="overview">{{ theme.text.view_overview }}</button>
+  <button type="button" role="menuitem" data-view="map" aria-controls="map-drawer">{{ theme.text.view_map_editor }}</button>
+  <button type="button" role="menuitem" data-view="nodes">{{ theme.text.view_nodes }}</button>
+  <button type="button" role="menuitem" data-view="topology">{{ theme.text.view_topology }}</button>
+  <button type="button" role="menuitem" id="view-records" data-act="records" hidden>{{ theme.text.view_records }}</button>
+</div>
+
+
+<aside id="index-drawer" aria-hidden="true">
+  <div class="drawer-head">
+    <span class="drawer-title">THE INDEX</span>
+  </div>
+  <div class="drawer-tabs">
+    <button class="dtab active" data-tab="places">PLACES</button>
+    <button class="dtab" data-tab="services">SERVICES</button>
+  </div>
+  <div class="idx-search-wrap" id="idx-search-wrap">
+    <span class="idx-search-glyph" aria-hidden="true">⌕</span>
+    <input id="idx-search" type="text" autocomplete="off" spellcheck="false"
+           placeholder="Search the index…" aria-label="Search the index">
+    <button id="idx-search-clear" class="idx-search-clear" title="Clear" hidden>×</button>
+  </div>
+  <button class="idx-seek" id="idx-seek" hidden>
+    <span class="idx-seek-glyph" aria-hidden="true">◇</span>
+    <span class="idx-seek-t">seek it with <strong>SEARXNG</strong> ›</span>
+  </button>
+  <div id="index-list"></div>
+  <div id="services-list" hidden></div>
+</aside>
+
+<aside id="map-drawer" aria-hidden="true" aria-label="{{ theme.text.view_map_editor|capitalize }}">
+  <div class="drawer-head">
+    <span class="drawer-title">{{ theme.text.view_map_editor }}</span>
+    <button class="ldg-close med-side" id="med-side" type="button" title="Move to the right side" aria-label="Move to the right side"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+  </div>
+  <div class="med-body" id="map-editor-body">
+    <div class="sp-group" data-group="map">
+      <div class="sp-sec" data-sec="table">
+        <button class="sp-sub" type="button">MAP STYLE <span class="sp-sub-plain">· background and tilt</span></button>
+        <div class="sp-sec-body">
+          <div class="sp-maps" id="sp-maps"></div>
+          <div class="sp-hint">Your choice, in this browser only. The default for everyone is set under Every record.
+            A background with a different shape may need its places moved.</div>
+          <label class="sp-row">
+            <span>Tilt the map</span>
+            <input type="checkbox" id="sp-tilt">
+          </label>
+          <div class="sp-hint">Shows the map at an angle.</div>
+        </div>
+      </div>
+      <div class="sp-sec" data-sec="words">
+        <button class="sp-sub" type="button">WORDS <span class="sp-sub-plain">· the map's own or standard</span></button>
+        <div class="sp-sec-body">
+          <label class="sp-row">
+            <span>Use standard words</span>
+            <input type="checkbox" id="sp-words">
+          </label>
+          <div class="sp-hint">Says job for rite, zone for realm and history for annals, on every map. Off, each map keeps its lore. Saved in this browser.</div>
+          <div class="med-names" id="med-names" hidden>
+            <label class="rel-add-field"><span>The sky's name</span>
+              <input id="med-sky" class="dir-input" type="text" maxlength="40" autocomplete="off" spellcheck="false"></label>
+            <label class="rel-add-field"><span>The depths' name</span>
+              <input id="med-depths" class="dir-input" type="text" maxlength="40" autocomplete="off" spellcheck="false"></label>
+            <div class="sp-actions">
+              <button class="sp-btn" id="med-names-save" type="button">Save names</button>
+            </div>
+            <div class="sp-hint" id="med-names-say">For everyone who sees this map: the heading, the map's label and the Index all take the name.</div>
+          </div>
+        </div>
+      </div>
+      <div class="sp-sec" data-sec="survey">
+        <button class="sp-sub" type="button">MOVE PLACES <span class="sp-sub-plain">· drag them on the map</span></button>
+        <div class="sp-sec-body">
+          <label class="sp-row">
+            <span>Drag places on the map</span>
+            <input type="checkbox" id="sp-editmode">
+          </label>
+          <div class="sp-hint" id="sp-edit-hint" hidden>Drag any place to move it. Moves stay in this browser until you save.</div>
+          <div class="sp-actions">
+            <button class="sp-btn sp-btn-go" id="sp-save">Save to map</button>
+            <button class="sp-btn" id="sp-copy">Copy</button>
+            <button class="sp-btn sp-btn-warn" id="sp-reset">Reset</button>
+          </div>
+          <div class="sp-hint" id="sp-save-why" hidden></div>
+          <div class="sp-hint">Save to map keeps your moves for everyone. Copy puts the positions on your clipboard. Reset discards unsaved moves. On a map style the moves, network names included, belong to that style alone.</div>
+        </div>
+      </div>
+      <div class="sp-sec" data-sec="zoom">
+        <button class="sp-sub" type="button">ZOOM MAPS <span class="sp-sub-plain">· parts that open into their own map</span></button>
+        <div class="sp-sec-body">
+          <div class="med-zoom" id="med-zoom"></div>
+          <div class="sp-hint">Shown or hidden for you, in this browser only. A hidden one has no frame and does not open when you zoom in.</div>
+          <label class="sp-row">
+            <span>Move and resize the boxes</span>
+            <input type="checkbox" id="med-resize">
+          </label>
+          <div class="sp-hint" id="med-resize-say">Drag a box to move it, or a corner to resize it. Each change is saved for everyone when you let go.</div>
+          <div class="sp-actions">
+            <button class="sp-btn" id="med-zoom-add" type="button">Add or remove…</button>
+          </div>
+          <div class="sp-hint" id="med-zoom-why" hidden></div>
+        </div>
+      </div>
+      <div class="sp-sec" data-sec="box">
+        <button class="sp-sub" type="button">DRAW A BOX <span class="sp-sub-plain">· a location or a zoom map</span></button>
+        <div class="sp-sec-body">
+          <div class="sp-actions">
+            <button class="sp-btn" id="mbx-draw" type="button">Draw a box</button>
+          </div>
+          <div class="sp-hint" id="mbx-why" hidden></div>
+          <div class="sp-hint">Drag a rectangle over the map, then name it. As a location, the hardware inside it is told where it stands. As a zoom map, the box opens into a detailed map of its own.</div>
+          <div class="mbx-form" id="mbx-form" hidden>
+            <div class="mbx-found" id="mbx-found"></div>
+            <label class="rel-add-field"><span>Name</span>
+              <input id="mbx-name" class="dir-input" type="text" maxlength="60" autocomplete="off"
+                     spellcheck="false" list="mbx-known" placeholder="Server room"></label>
+            <datalist id="mbx-known"></datalist>
+            <label class="sp-row">
+              <span>Make it a location</span>
+              <input type="checkbox" id="mbx-loc">
+            </label>
+            <div class="sp-hint" id="mbx-loc-say"></div>
+            <label class="sp-row">
+              <span>Make it a zoom map</span>
+              <input type="checkbox" id="mbx-zoom">
+            </label>
+            <label class="rel-add-field" id="mbx-map-wrap" hidden><span>Detailed map</span>
+              <select id="mbx-map" class="dir-input"></select></label>
+            <div class="sp-hint" id="mbx-zoom-say"></div>
+            <div class="mbx-msg" id="mbx-msg" role="status"></div>
+            <div class="sp-actions">
+              <button class="sp-btn sp-btn-go" id="mbx-save" type="button">Save</button>
+              <button class="sp-btn" id="mbx-again" type="button">Draw again</button>
+              <button class="sp-btn" id="mbx-cancel" type="button">Cancel</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<div class="view-menu band-menu" id="hardware-menu" role="menu" aria-label="Hardware, by location"></div>
+<div class="view-menu band-menu" id="resources-menu" role="menu" aria-label="Resources, by location"></div>
+<div class="view-menu band-menu" id="topology-menu" role="menu" aria-label="Topology, by location"></div>
+
+<article id="card" class="card-left" aria-hidden="true">
+  <div class="card-medallion" id="card-portrait" aria-hidden="true"></div>
+  <div class="card-sheet">
+    <div class="card-top">
+      <button class="card-out" id="btn-card-out" title="Pull back — stay centred on this place" aria-label="Pull back around this place"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M5 7h4M10.5 10.5L14 14"/></svg></button>
+      <button class="card-close" id="btn-card-close" title="Close (Esc)" aria-label="Close"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+    </div>
+    <div class="card-inner">
+      <div class="card-node">
+        <header class="card-head">
+          <h3 id="card-name">—</h3>
+          <button class="card-parent" id="card-parent" hidden></button>
+        </header>
+        <p class="card-lore" id="card-lore">—</p>
+        <div class="card-strip" id="card-strip"></div>
+        <p class="card-cause" id="card-cause" hidden></p>
+        <p class="card-from-view" id="card-from-view" hidden></p>
+        <div class="card-actions" id="card-actions"></div>
+        <div class="card-drawer" id="card-drawer">
+          <div class="card-panel" id="card-panel" role="tabpanel">
+            <div class="card-pane card-links" id="card-links" data-pane="services" hidden></div>
+            <div class="card-pane card-vitals" id="card-vitals" data-pane="pulse" hidden></div>
+            <div class="card-pane card-data" id="card-data" data-pane="details" hidden></div>
+            <div class="card-pane card-forge" id="card-forge" data-pane="schedule" hidden></div>
+          </div>
+        </div>
+      </div>
+      <div class="card-svc" id="card-svc" hidden></div>
+    </div>
+  </div>
+  <div class="card-tabs" id="card-tabs" role="tablist" aria-label="Card sections"></div>
+</article>
+
+<div id="reliquary" aria-hidden="true">
+  <div class="rel-panel" role="dialog" aria-label="Hardware — the racks and what stands outside them">
+    <div class="rel-head">
+      <span class="rel-title" id="rel-title">HARDWARE</span>
+      <span class="rel-sub">every machine, where it stands</span>
+      <span class="rel-tools">
+        <span class="rel-viewtoggle" id="rel-view" role="group" aria-label="View the rack in 2D or 3D">
+          <button class="rel-seg is-on" id="rel-2d" aria-pressed="true">2D</button>
+          <button class="rel-seg" id="rel-3d-btn" aria-pressed="false">3D</button>
+        </span>
+        <button class="rel-tool" id="rel-records" title="Add, remove or re-describe the rack, in the records" hidden>Records</button>
+        <button class="rel-tool" id="rel-loc" title="Say where the machine shown, or this rack, stands">⌖ Location</button>
+        <button class="rel-tool" id="rel-add" title="Put a device in this rack">+ Add</button>
+        <button class="rel-tool" id="rel-edit" title="Drag vessels to new slots, or take one out">⇅ Rearrange</button>
+        <button class="rel-tool" id="rel-save" hidden>Save</button>
+        <button class="rel-tool" id="rel-reset" hidden>Reset</button>
+      </span>
+      <button class="rel-close" id="rel-close" title="Close (Esc)">×</button>
+    </div>
+    <div class="rel-placebar">
+      <span class="rel-viewtoggle rel-places" id="rel-places" role="group" aria-label="Choose a location" hidden></span>
+      <span class="rel-viewtoggle rel-racks" id="rel-racks" role="group" aria-label="Choose a rack" hidden></span>
+    </div>
+    <div class="rel-addbox" id="rel-addbox" hidden>
+      <span class="rel-add-head">Add to <b id="rel-add-to"></b></span>
+      <label class="rel-add-field"><span>On the map</span><select id="rel-add-what" class="dir-input"></select></label>
+      <label class="rel-add-field"><span>Device</span><select id="rel-add-type" class="dir-input"></select></label>
+      <label class="rel-add-field rel-add-seat"><span>Where</span><select id="rel-add-seat" class="dir-input"></select></label>
+      <label class="rel-add-field" id="rel-add-name-wrap" hidden><span>Its name</span>
+        <input id="rel-add-name" class="dir-input" type="text" maxlength="60" autocomplete="off" spellcheck="false" placeholder="Patch panel"></label>
+      <label class="rel-add-field rel-add-size"><span>Height</span>
+        <select id="rel-add-size" class="dir-input"><option value="1">1U</option><option value="2">2U</option><option value="3">3U</option><option value="4">4U</option><option value="6">6U</option><option value="8">8U</option></select></label>
+      <button class="rel-tool on" id="rel-add-go" type="button">Add</button>
+      <button class="rel-tool" id="rel-add-cancel" type="button">Cancel</button>
+      <span class="rel-add-msg" id="rel-add-msg" role="status"></span>
+    </div>
+    <div class="rel-why" id="rel-why" hidden></div>
+    <div class="rel-body">
+      <div class="rel-rack">
+        <div class="rel-power" aria-hidden="true"><span>{{ theme.text.relay_power }}</span></div>
+        <div id="rel-elevation" role="list"></div>
+        <div id="rel-3d" hidden>
+          <span class="rel-viewtoggle rel-cams" role="group" aria-label="Turn the rack">
+            <button class="rel-seg rel-cam is-on" data-view="corner" aria-pressed="true">Corner</button>
+            <button class="rel-seg rel-cam" data-view="front" aria-pressed="false">Front</button>
+            <button class="rel-seg rel-cam" data-view="side" aria-pressed="false">Side</button>
+            <button class="rel-seg rel-cam" data-view="rear" aria-pressed="false">Rear</button>
+          </span>
+        </div>
+        <div id="rel-3d-legend" class="rel-legend" hidden></div>
+      </div>
+      <aside id="rel-detail" class="rel-detail"></aside>
+    </div>
+  </div>
+</div>
+
+<div id="ledger" aria-hidden="true">
+  <div class="ldg-panel" role="dialog" aria-label="Addresses — IP address map">
+    <div class="ldg-head">
+      <span class="ldg-title">ADDRESSES</span>
+      <span class="ldg-sub">every prefix on the map — charted, reserved, or free ground</span>
+      <button class="ldg-close" id="ldg-close" title="Close (Esc)">×</button>
+    </div>
+    <div class="ldg-list" id="ldg-list"></div>
+  </div>
+</div>
+
+<div id="tribute" aria-hidden="true">
+  <div class="trb-panel" role="dialog" aria-label="Resources — memory and processor allocation">
+    <div class="trb-head">
+      <span class="trb-title">RESOURCES</span>
+      <span class="trb-where" id="trb-where"></span>
+      <span class="trb-sub">{{ theme.text.tribute_sub }}</span>
+      <button class="trb-close" id="trb-close" title="Close (Esc)">×</button>
+    </div>
+    <div class="trb-vessel-wrap">
+      <div class="trb-pickers">
+        <span class="rel-viewtoggle trb-places" id="trb-places" role="group" aria-label="Choose a location" hidden></span>
+        <span class="rel-viewtoggle trb-places" id="trb-racks" role="group" aria-label="Choose a rack" hidden></span>
+        <span class="rel-viewtoggle trb-places" id="trb-by" role="group" aria-label="What the list shows">
+          <button type="button" class="rel-seg is-on" data-by="guests" aria-pressed="true">Guests</button>
+          <button type="button" class="rel-seg" data-by="site" aria-pressed="false">By location</button>
+          <button type="button" class="rel-seg" data-by="rack" aria-pressed="false">By hardware</button>
+        </span>
+      </div>
+      <div class="trb-cap">MEMORY</div>
+      <div class="trb-vessel" id="trb-vessel"></div>
+      <div class="trb-summary" id="trb-summary"></div>
+      <div class="trb-cap trb-cap-2">PROCESSORS</div>
+      <div class="trb-vessel" id="trb-vessel-cpu"></div>
+      <div class="trb-summary" id="trb-summary-cpu"></div>
+      <div class="trb-note" id="trb-note" hidden></div>
+    </div>
+    <div class="trb-list" id="trb-list"></div>
+  </div>
+</div>
+
+<div id="path" aria-hidden="true">
+  <div class="pth-panel" role="dialog" aria-label="Topology — the network, tier by tier">
+    <div class="ldg-head">
+      <span class="ldg-title">TOPOLOGY</span>
+      <span class="trb-where" id="pth-where"></span>
+      <span class="ldg-sub">from the internet to the guests — every route, live</span>
+      <button class="ldg-close" id="pth-close" title="Close (Esc)">×</button>
+    </div>
+    <div class="rel-placebar">
+      <span class="rel-viewtoggle rel-places" id="pth-places" role="group" aria-label="Choose a location" hidden></span>
+      <span class="rel-viewtoggle rel-places" id="pth-racks" role="group" aria-label="Choose a rack" hidden></span>
+    </div>
+    <div class="pth-body"><svg id="pth-svg"></svg><div id="pth-nodes"></div></div>
+    <div class="pth-legend" id="pth-legend"></div>
+  </div>
+</div>
+
+<div id="calendar" aria-hidden="true">
+  <div class="ldg-panel" role="dialog" aria-label="The Calendar — the lab's day">
+    <div class="ldg-head">
+      <span class="ldg-title">CALENDAR</span>
+      <span class="ldg-sub">what the lab does for itself, on one day and one clock</span>
+      <button class="ldg-close" id="cal-close" title="Close (Esc)">×</button>
+    </div>
+    <div class="cal-head" id="cal-head"></div>
+    <div class="ldg-list" id="cal-scroll">
+      <div id="cal-list"></div>
+      <div id="cal-fleet" hidden></div>
+    </div>
+  </div>
+</div>
+<script src="static/js/vendor/outset-calendar.js?v={{ v }}"></script>
+
+
+<div id="seals" aria-hidden="true">
+  <div class="ldg-panel" role="dialog" aria-label="Certificates">
+    <div class="ldg-head">
+      <span class="ldg-title" data-say>SEALS</span>
+      <span class="ldg-sub">what vouches for the lab, and when it lapses</span>
+      <button class="ldg-close" id="sl-close" title="Close (Esc)">&times;</button>
+    </div>
+    <div class="rt-head" id="sl-head"></div>
+    <div class="ldg-list" id="sl-list"></div>
+  </div>
+</div>
+
+
+<div id="stones" aria-hidden="true">
+  <div class="ldg-panel" role="dialog" aria-label="Deception tripwires">
+    <div class="ldg-head">
+      <span class="ldg-title" data-say>{{ theme.text.stones|upper }}</span>
+      <span class="ldg-sub">silent watchers — anything that touches one is an event, not a maybe</span>
+      <button type="button" class="sc-toggle ci-decoys" id="btn-decoys" aria-pressed="false" data-say-title
+              title="Show the {{ theme.text.stones_watch }} — the {{ theme.text.stones }}, where they stand (G)"><span class="vt-lamp"><svg class="ci-glyph tw-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+        <path d="M2.5 11 C 6 6.4, 18 6.4, 21.5 11 C 18 15.6, 6 15.6, 2.5 11 Z"/>
+        <circle cx="12" cy="11" r="3"/>
+        <circle cx="12" cy="11" r="1.1" fill="currentColor" stroke="none"/>
+        <path d="M5.6 7.6 L4.2 5.8 M12 6.1 L12 4 M18.4 7.6 L19.8 5.8"/>
+      </svg>
+      <svg class="ci-glyph tw-bird" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+           stroke-linecap="round" stroke-linejoin="round">
+        <path d="M6 16 C4.5 12 7 7.5 12 7.5 C14.5 7.5 16.2 9 16.6 10.6 L20 11.4 L16.8 12.8 C16.4 16 13.4 18 10 18 C8.4 18 7 17.4 6 16 Z"/>
+        <path d="M8 12.6 C10 11 12.5 11.5 13.5 13.5 C11.5 15 9 14.8 8 12.6 Z"/>
+        <path d="M6 16 L2.6 19 M10.4 18 V21 M13 17.6 V21"/>
+        <circle cx="13.7" cy="10.2" r="0.9" fill="currentColor" stroke="none"/>
+      </svg></span><span>{{ theme.text.stones_on_map }}</span></button>
+      <button class="ldg-close" id="gs-close" title="Close (Esc)">&times;</button>
+    </div>
+    <div class="rt-head" id="gs-head"></div>
+    <div class="ldg-list" id="gs-list"></div>
+  </div>
+</div>
+
+
+<div id="annals" aria-hidden="true">
+  <div class="ldg-panel" role="dialog" aria-label="Event history">
+    <div class="ldg-head">
+      <span class="ldg-title" data-say>ANNALS</span>
+      <span class="ldg-sub">what befell the lab, and when</span>
+      <button class="ldg-close" id="ann-close" title="Close (Esc)">×</button>
+    </div>
+    <div class="ann-bar" id="ann-head"></div>
+    <div class="ldg-list" id="ann-list"></div>
+  </div>
+</div>
+
+<div id="desk" aria-hidden="true">
+  <div class="dsk-panel" role="dialog" aria-label="Map editor">
+    <div class="dsk-head">
+      <span class="dsk-title" id="dsk-title">MAP EDITOR</span>
+      <span class="dsk-sub" id="dsk-sub"></span>
+      <button class="ldg-close" id="dsk-close" title="Close (Esc)">×</button>
+    </div>
+    <div class="dsk-main">
+      <nav class="dsk-side" id="dsk-nav" aria-label="Sections"></nav>
+      <div class="dsk-body" id="dsk-body"></div>
+    </div>
+  </div>
+</div>
+
+<div id="wizard" aria-hidden="true">
+  <div class="wiz-panel" role="dialog" aria-label="The first survey — set up this Atlas">
+    <div class="dsk-head">
+      <span class="dsk-title">GUIDED SETUP</span>
+      <span class="dsk-sub">charting a lab from nothing</span>
+      <button class="ldg-close" id="wiz-close" title="Close (Esc)">×</button>
+    </div>
+    <div class="wiz-steps" id="wiz-steps"></div>
+    <div class="wiz-body" id="wiz-body"></div>
+  </div>
+</div>
+
+<div id="palette" aria-hidden="true">
+  <div class="pal-panel" role="dialog" aria-label="Find a place or service">
+    <div class="pal-input-wrap">
+      <span class="pal-glyph" aria-hidden="true">⌕</span>
+      <input id="pal-input" type="text" autocomplete="off" spellcheck="false"
+             placeholder="Find a place or service…" aria-label="Find a place or service"
+             role="combobox" aria-expanded="true" aria-controls="pal-list">
+      <span class="pal-hint" aria-hidden="true">↑↓ · ↵ · esc</span>
+    </div>
+    <div id="pal-list" role="listbox"></div>
+  </div>
+</div>
+
+<div id="glass" hidden data-state="reaching">
+  <div class="gl-panel" role="dialog" aria-label="The viewing glass">
+    <div class="gl-head">
+      <span class="gl-title" id="gl-title"></span>
+      <span class="gl-sub" id="gl-sub"></span>
+      <span class="gl-tools">
+        <button class="gl-tool" id="gl-reload" title="Draw it again">↻</button>
+        <a class="gl-tool" id="gl-open" href="#" target="_blank" rel="noopener"
+           title="Open it in a new tab">⧉</a>
+      </span>
+      <button class="ldg-close" id="gl-close" title="Close (Esc)">×</button>
+    </div>
+    <div class="gl-body">
+      <div class="chron-scrying" aria-hidden="true"><span></span><span></span><span></span><em>reaching for it…</em></div>
+      <div class="gl-note" id="gl-note"></div>
+      <iframe class="gl-frame" id="gl-frame" title="The viewing glass"
+              referrerpolicy="no-referrer"></iframe>
+    </div>
+    <div class="gl-foot" id="gl-url"></div>
+  </div>
+</div>
+
+<div id="embed-max" hidden>
+  <div id="embed-max-title" aria-live="polite"></div>
+  <button id="embed-max-close" title="Close (Esc)">×</button>
+  <button class="embed-max-arrow" id="embed-max-prev" data-say-title title="Previous watching" hidden>‹</button>
+  <button class="embed-max-arrow" id="embed-max-next" data-say-title title="Next watching" hidden>›</button>
+  <div class="chron-scrying" aria-hidden="true">
+    <span></span><span></span><span></span><em>scrying…</em>
+  </div>
+  <iframe id="embed-max-frame" title="Dashboard"></iframe>
+  <div id="embed-max-native" hidden></div>
+</div>
+
+<button id="drift-note" hidden aria-live="polite" title="Show what the watch sees that the map has not charted">
+  <span class="drift-head">⚠ watched, but not charted — <span id="drift-count"></span></span>
+  <div class="drift-list" id="drift-list" hidden></div>
+</button>
+
+<div id="accounts" aria-hidden="true">
+  <div class="ldg-panel" role="dialog" aria-label="Accounts — who can reach each place">
+    <div class="ldg-head">
+      <span class="ldg-title">ACCOUNTS</span>
+      <span class="ldg-sub">who holds a key to each place, and how far in</span>
+      <button class="ldg-close" id="acc-close" title="Close (Esc)">&times;</button>
+    </div>
+    <div class="rt-head" id="acc-head"></div>
+    <div class="ldg-list" id="acc-list"></div>
+  </div>
+</div>
+
+<div id="trust" aria-hidden="true">
+  <div class="ldg-panel" role="dialog" aria-label="The Trust — who may speak for a client">
+    <div class="ldg-head">
+      <span class="ldg-title">THE TRUST</span>
+      <span class="ldg-sub">whose word each app takes for who you are</span>
+      <button class="ldg-close" id="tr-close" title="Close (Esc)">&times;</button>
+    </div>
+    <div class="tr-about">
+      <p><b>What this is.</b> Behind a proxy, an app learns who you are from a header
+      the proxy adds, and anyone who can reach the app directly could write that
+      header themselves. So each app keeps a list of the proxies it believes. This
+      page sets those lists side by side.</p>
+      <p><b>What goes wrong.</b> Too open, and anything on the network can claim to be
+      anyone. Too strict, and every visitor looks like the proxy, so one lockout
+      locks out everyone. It shows who an app <i>believes</i>, not who can
+      <i>reach</i> it; the map's roads answer that.</p>
+    </div>
+    <div class="rt-head" id="tr-head"></div>
+    <div class="ldg-list" id="tr-list"></div>
+  </div>
+</div>
+
+<div id="settings" aria-hidden="true">
+  <div class="ldg-panel" role="dialog" aria-label="Settings">
+    <div class="ldg-head">
+      <span class="ldg-title">SETTINGS</span>
+      <span class="ldg-sub">your account, the connections and admin</span>
+      <button class="ldg-close" id="set-close" title="Close (Esc)">&times;</button>
+    </div>
+    <div id="settings-panel">
+      <div class="sp-group" data-group="you">
+      <div class="sp-group-name">YOU</div>
+      <div class="sp-account sp-sec" id="sp-account" data-sec="account" hidden></div>
+      <div class="sp-sec sp-fixed" data-sec="colours">
+        <div class="sp-sub">{{ theme.text.colours }} <span class="sp-sub-plain">· {{ theme.text.colours_sub }}</span></div>
+        <div class="sp-sec-body">
+          <div class="sp-scheme" role="radiogroup" aria-label="{{ theme.text.colours|capitalize }}">
+            <label class="sp-scheme-opt"><input type="radio" name="sp-scheme" value="light"> <span>{{ theme.text.scheme_light }}</span></label>
+            <label class="sp-scheme-opt"><input type="radio" name="sp-scheme" value="dark"> <span>{{ theme.text.scheme_dark }}</span></label>
+            <label class="sp-scheme-opt"><input type="radio" name="sp-scheme" value="auto"> <span>{{ theme.text.scheme_auto }}</span></label>
+          </div>
+          <div class="sp-hint">{{ theme.text.scheme_hint }}</div>
+        </div>
+      </div>
+      <div class="sp-sec" data-sec="seeking">
+        <button class="sp-sub" type="button">WEB SEARCH <span class="sp-sub-plain">· when the map has no answer</span></button>
+        <div class="sp-sec-body">
+          <label class="sp-row">
+            <span>Offer a web search with SearXNG</span>
+            <input type="checkbox" id="sp-searxng">
+          </label>
+          <div class="sp-hint">With this on, the map search also offers to send your words to SearXNG. Saved in this browser.</div>
+        </div>
+      </div>
+      </div>
+      <div class="sp-group" data-group="connections">
+      <div class="sp-group-name">CONNECTIONS</div>
+      <div class="sp-sec" id="sp-connections" data-sec="connections" hidden></div>
+      <div class="sp-sec" id="sp-integrations" data-sec="integrations" hidden></div>
+      <div class="sp-sec" id="sp-alerts" data-sec="alerts" hidden></div>
+      <div class="sp-sec" data-sec="watchers">
+        <button class="sp-sub" type="button">SOURCE STATUS <span class="sp-sub-plain">· what is reporting now</span></button>
+        <div class="sp-sec-body">
+          <div class="sp-sources" id="sp-sources"></div>
+        </div>
+      </div>
+      <div class="sp-directory sp-sec" id="sp-directory" data-sec="directory" hidden></div>
+      </div>
+      <div class="sp-group" data-group="admin">
+      <div class="sp-group-name">ADMIN</div>
+      <div class="sp-sec" id="sp-users" data-sec="users" hidden></div>
+      <div class="sp-sec" id="sp-signins" data-sec="signins" hidden></div>
+      <div class="sp-sec" id="sp-realm" data-sec="realm" hidden></div>
+      <div class="sp-sec" id="sp-deployment" data-sec="deployment" hidden></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast" aria-live="polite"></div>
+
+<footer id="colophon">{{ theme.text.colophon }}</footer>
+
+<section id="region-lens" class="region-lens" hidden aria-label="Detailed map">
+  <nav class="rl-crumbs" aria-label="Map levels"></nav>
+  <div class="rl-locator" role="button" tabindex="0" title="Back out (Esc)">
+    <img alt="" draggable="false"><div class="rl-loc-box"></div>
+  </div>
+  <div class="rl-hint" aria-hidden="true"></div>
+</section>
+<div id="region-announce" class="sr-only" aria-live="polite"></div>
+<script type="application/json" id="atlas-config">{{ (client_config or {})|tojson }}</script>
+<script type="module" src="static/js/atlas.js?v={{ v }}"></script>
+</body>
+</html>

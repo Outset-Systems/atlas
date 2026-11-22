@@ -1,0 +1,86 @@
+name: Bug report
+description: Something in the Atlas does not work as documented.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. **A security problem?** Do not file it here; use
+        the private report described in SECURITY.md.
+
+        Logs and screenshots of your map can show your network. Replace real
+        host names, addresses and domains with examples (`home.example`,
+        `192.0.2.10`) before you paste them.
+  - type: input
+    id: version
+    attributes:
+      label: Atlas version
+      description: Shown in Settings, in `/api/v2/health`, or the image tag you run.
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How do you run it?
+      options:
+        - compose.public.yaml
+        - docker run with the published image
+        - my own compose file or orchestrator
+        - from source (python app.py)
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Auth mode (ATLAS_AUTH_MODE)
+      options:
+        - accounts
+        - standalone
+        - hub
+        - hybrid
+    validations:
+      required: true
+  - type: input
+    id: backend
+    attributes:
+      label: Data backend and integrations
+      description: "`file` or `db`, and which of Prometheus, Loki, Uptime Kuma, decoys, LDAP you use."
+      placeholder: "file; prometheus + kuma"
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and OS
+      placeholder: "Firefox 131 on Linux"
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what you saw instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Start with ...
+        2. Open ...
+        3. See ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: "Relevant lines from `docker compose logs atlas` or the browser console, with real names and addresses replaced."
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you submit
+      options:
+        - label: I searched the existing issues.
+          required: true
+        - label: I removed real host names, addresses, domains and secrets from everything above.
+          required: true

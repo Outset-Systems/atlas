@@ -1,0 +1,1378 @@
+{
+  "meta": {
+    "title": "Fernhill Workshop Atlas",
+    "surveyed": "2026-11-22",
+    "art": "demo-lab render (build.py), label-free",
+    "map_image": "demo-lab.webp",
+    "tribute": {
+      "total_gb": 24,
+      "host_reserve_gb": 2,
+      "cpu_cores": 6,
+      "cpu_threads": 12
+    }
+  },
+  "zones": [
+    {
+      "id": "office",
+      "name": "Office",
+      "vlan": 110,
+      "subnet": "172.28.110.0/24",
+      "hue": "#7FB0C4",
+      "net_hue": "#7FB0C4",
+      "label_x": 26.0,
+      "label_y": 14.0,
+      "lore": "The front desk, the paperwork and the machine that runs the members' tools."
+    },
+    {
+      "id": "workshop",
+      "name": "Workshop",
+      "vlan": 120,
+      "subnet": "172.28.120.0/24",
+      "hue": "#C9A554",
+      "net_hue": "#C9A554",
+      "label_x": 74.0,
+      "label_y": 14.0,
+      "lore": "Benches, the laser cutter and the second small server. Dusty, so everything is fanless."
+    },
+    {
+      "id": "machines",
+      "name": "Machines",
+      "vlan": 130,
+      "subnet": "172.28.130.0/24",
+      "hue": "#C06B62",
+      "net_hue": "#C06B62",
+      "label_x": 78.0,
+      "label_y": 84.0,
+      "hide_label": true,
+      "lore": "Printers and the door controller. They answer to the servers and to nobody else."
+    },
+    {
+      "id": "members",
+      "name": "Members",
+      "vlan": 140,
+      "subnet": "172.28.140.0/24",
+      "hue": "#8FB573",
+      "net_hue": "#8FB573",
+      "label_x": 20.0,
+      "label_y": 84.0,
+      "hide_label": true,
+      "lore": "Whatever people bring with them. It reaches the internet and the booking page."
+    },
+    {
+      "id": "hosted",
+      "name": "Hosted",
+      "vlan": "—",
+      "subnet": "203.0.113.0/24",
+      "hue": "#B8C4D6",
+      "net_hue": "#B8C4D6",
+      "label_x": 50.0,
+      "label_y": 92.0,
+      "hide_label": true,
+      "lore": "A rented server elsewhere. The only thing the public can reach."
+    }
+  ],
+  "nodes": [
+    {
+      "id": "router",
+      "name": "ROUTER",
+      "kind": "network",
+      "zone": "office",
+      "shape": "diamond",
+      "spark": true,
+      "x": 38.0,
+      "y": 38.0,
+      "ip": "172.28.110.1",
+      "location": "Front office",
+      "role": "Router + firewall",
+      "lore": "Four networks and one modest rule: members never reach the machines.",
+      "hw": "MikroTik RB5009 · 1 GB",
+      "links": [
+        {
+          "label": "Router",
+          "url": "https://172.28.110.1",
+          "desc": "Networks, leases and firewall rules.",
+          "hue": "#8ec07c",
+          "kuma": "Router",
+          "require_group": "atlas-admins"
+        }
+      ],
+      "reaches": [
+        "office-switch",
+        "shop-switch",
+        "internet"
+      ],
+      "accounts": [
+        {
+          "name": "keyholder",
+          "source": "local",
+          "sudo": "password",
+          "groups": [
+            "full"
+          ],
+          "note": "Two committee members share the safe's key to it."
+        }
+      ]
+    },
+    {
+      "id": "office-switch",
+      "name": "OFFICE SWITCH",
+      "kind": "network",
+      "zone": "office",
+      "shape": "triangle",
+      "x": 24.0,
+      "y": 36.0,
+      "ip": "172.28.110.3",
+      "role": "Switch · 8 ports",
+      "lore": "Under the front desk, behind the biscuits.",
+      "hw": "Zyxel GS1900-8HP · PoE",
+      "links": [
+        {
+          "label": "Office switch",
+          "url": "https://172.28.110.3",
+          "desc": "Ports and PoE.",
+          "hue": "#8ec07c",
+          "kuma": "Office switch"
+        }
+      ],
+      "reaches": [
+        "router"
+      ]
+    },
+    {
+      "id": "mini-a",
+      "name": "MINI A",
+      "kind": "physical",
+      "zone": "office",
+      "spark": true,
+      "x": 28.0,
+      "y": 24.0,
+      "ip": "172.28.110.11",
+      "role": "Small server · three guests",
+      "lore": "A refurbished office PC that became the office.",
+      "hw": "Incus · Core i5-10500T · 6 cores · 24 GB · 1 TB NVMe",
+      "ram_gb": 24,
+      "ram_reserve_gb": 2,
+      "cpu_cores": 6,
+      "cpu_threads": 12,
+      "children": [
+        "files",
+        "wiki",
+        "bookings"
+      ],
+      "links": [
+        {
+          "label": "Incus A",
+          "url": "https://172.28.110.11:8443",
+          "desc": "Guests and snapshots.",
+          "hue": "#8ec07c",
+          "kuma": "Mini A"
+        }
+      ],
+      "reaches": [
+        "router",
+        "backup-box"
+      ],
+      "accounts": [
+        {
+          "name": "keyholder",
+          "source": "local",
+          "sudo": "password",
+          "groups": [
+            "incus-admin"
+          ],
+          "note": ""
+        },
+        {
+          "name": "snapshots",
+          "source": "service",
+          "sudo": "none",
+          "groups": [],
+          "note": "Sends snapshots to the backup box."
+        }
+      ]
+    },
+    {
+      "id": "files",
+      "name": "FILES",
+      "kind": "vm",
+      "zone": "office",
+      "parent": "mini-a",
+      "spark": true,
+      "x": 18.0,
+      "y": 18.0,
+      "ip": "172.28.110.42",
+      "role": "Shared files",
+      "lore": "Drawings, cut files, minutes of meetings nobody reads twice.",
+      "hw": "Alpine 3.22 · 2 vCPU · 4 GB · SFTPGo",
+      "links": [
+        {
+          "label": "Files",
+          "url": "https://files.home.example",
+          "desc": "The shared folders.",
+          "hue": "#8ec07c",
+          "favourite": "internal",
+          "kuma": "Files",
+          "container": "sftpgo"
+        }
+      ],
+      "reaches": [
+        "router",
+        "backup-box"
+      ]
+    },
+    {
+      "id": "wiki",
+      "name": "WIKI",
+      "kind": "vm",
+      "zone": "office",
+      "parent": "mini-a",
+      "spark": true,
+      "x": 34.0,
+      "y": 14.0,
+      "ip": "172.28.110.47",
+      "role": "Handbook + inductions",
+      "lore": "How every machine is used safely, and who has been shown.",
+      "hw": "Alpine 3.22 · 1 vCPU · 2 GB · DokuWiki",
+      "links": [
+        {
+          "label": "Wiki",
+          "url": "https://wiki.home.example",
+          "desc": "Handbooks and induction notes.",
+          "hue": "#8ec07c",
+          "favourite": "internal",
+          "kuma": "Wiki",
+          "container": "dokuwiki"
+        },
+        {
+          "label": "Atlas",
+          "url": "https://atlas.home.example",
+          "desc": "This map.",
+          "hue": "#8ec07c",
+          "container": "atlas",
+          "require_group": "atlas-admins"
+        }
+      ],
+      "reaches": [
+        "router"
+      ]
+    },
+    {
+      "id": "bookings",
+      "name": "BOOKINGS",
+      "kind": "vm",
+      "zone": "office",
+      "parent": "mini-a",
+      "spark": true,
+      "x": 14.0,
+      "y": 28.0,
+      "ip": "172.28.110.53",
+      "role": "Machine bookings",
+      "lore": "Settles arguments about the laser cutter before they start.",
+      "hw": "Alpine 3.22 · 2 vCPU · 3 GB · PostgreSQL",
+      "links": [
+        {
+          "label": "Bookings",
+          "url": "https://book.home.example",
+          "desc": "Book a machine.",
+          "hue": "#8ec07c",
+          "favourite": "internal",
+          "kuma": "Bookings",
+          "container": "bookings"
+        }
+      ],
+      "reaches": [
+        "router",
+        "door"
+      ]
+    },
+    {
+      "id": "shop-switch",
+      "name": "WORKSHOP SWITCH",
+      "kind": "network",
+      "zone": "workshop",
+      "shape": "triangle",
+      "x": 64.0,
+      "y": 36.0,
+      "ip": "172.28.120.3",
+      "role": "Switch · 16 ports",
+      "lore": "On the wall, above the sawdust line.",
+      "hw": "TP-Link SG2218P · PoE",
+      "links": [
+        {
+          "label": "Workshop switch",
+          "url": "https://172.28.120.3",
+          "desc": "Ports and PoE.",
+          "hue": "#8ec07c",
+          "kuma": "Workshop switch"
+        }
+      ],
+      "reaches": [
+        "router"
+      ]
+    },
+    {
+      "id": "mini-b",
+      "name": "MINI B",
+      "kind": "physical",
+      "zone": "workshop",
+      "spark": true,
+      "x": 74.0,
+      "y": 26.0,
+      "ip": "172.28.120.17",
+      "role": "Small server · two guests",
+      "lore": "Watches everything, so it lives in the other room.",
+      "hw": "Incus · Intel N305 · 8 cores · 16 GB · 500 GB NVMe",
+      "ram_gb": 16,
+      "ram_reserve_gb": 1,
+      "cpu_cores": 8,
+      "cpu_threads": 8,
+      "children": [
+        "status",
+        "automation"
+      ],
+      "links": [
+        {
+          "label": "Incus B",
+          "url": "https://172.28.120.17:8443",
+          "desc": "Guests and snapshots.",
+          "hue": "#8ec07c",
+          "kuma": "Mini B"
+        }
+      ],
+      "reaches": [
+        "router",
+        "backup-box"
+      ]
+    },
+    {
+      "id": "status",
+      "name": "STATUS",
+      "kind": "vm",
+      "zone": "workshop",
+      "parent": "mini-b",
+      "spark": true,
+      "x": 66.0,
+      "y": 18.0,
+      "ip": "172.28.120.64",
+      "role": "Monitoring",
+      "lore": "Says what is broken before a member has to.",
+      "hw": "Debian 13 · 2 vCPU · 3 GB · Docker",
+      "links": [
+        {
+          "label": "Status",
+          "url": "https://status.home.example",
+          "desc": "Up or down, for everything here.",
+          "hue": "#8ec07c",
+          "favourite": "internal",
+          "kuma": "Status",
+          "container": "uptime-kuma"
+        },
+        {
+          "label": "Metrics",
+          "url": "http://172.28.120.64:9090",
+          "desc": "Two weeks of numbers.",
+          "hue": "#8ec07c",
+          "container": "prometheus",
+          "require_group": "atlas-admins"
+        }
+      ],
+      "reaches": [
+        "router",
+        "mini-a",
+        "web-box"
+      ]
+    },
+    {
+      "id": "automation",
+      "name": "AUTOMATION",
+      "kind": "vm",
+      "zone": "workshop",
+      "parent": "mini-b",
+      "spark": true,
+      "x": 84.0,
+      "y": 20.0,
+      "ip": "172.28.120.71",
+      "role": "Automations + captions",
+      "lore": "Turns the extractor on with the laser, and captions the induction videos.",
+      "hw": "Debian 13 · 4 vCPU · 6 GB · Node-RED",
+      "links": [
+        {
+          "label": "Automations",
+          "url": "http://172.28.120.71:1880",
+          "desc": "The flows.",
+          "hue": "#8ec07c",
+          "favourite": "internal",
+          "kuma": "Automations",
+          "container": "node-red"
+        }
+      ],
+      "reaches": [
+        "router",
+        "printers",
+        "door"
+      ]
+    },
+    {
+      "id": "backup-box",
+      "name": "BACKUP BOX",
+      "kind": "physical",
+      "zone": "workshop",
+      "spark": true,
+      "x": 82.0,
+      "y": 38.0,
+      "ip": "172.28.120.88",
+      "role": "Backups · 6 TB mirrored",
+      "lore": "Two drives, one job, a padlock.",
+      "hw": "Odroid HC4 · 4 cores · 4 GB · 2× 6 TB",
+      "ram_gb": 4,
+      "cpu_cores": 4,
+      "cpu_threads": 4,
+      "links": [
+        {
+          "label": "Backups",
+          "url": "https://172.28.120.88",
+          "desc": "Snapshots received and checked.",
+          "hue": "#8ec07c",
+          "kuma": "Backup box"
+        }
+      ],
+      "reaches": [
+        "router",
+        "cold-copy"
+      ]
+    },
+    {
+      "id": "laser-pc",
+      "name": "LASER PC",
+      "kind": "physical",
+      "zone": "workshop",
+      "spark": true,
+      "x": 66.0,
+      "y": 28.0,
+      "ip": "172.28.120.93",
+      "role": "Runs the laser cutter",
+      "lore": "Does one thing. Please do not check your email on it.",
+      "hw": "Linux Mint 22 · Core i3-9100 · 4 cores · 8 GB",
+      "ram_gb": 8,
+      "cpu_cores": 4,
+      "cpu_threads": 4,
+      "location": "Workshop",
+      "links": [],
+      "reaches": [
+        "router"
+      ]
+    },
+    {
+      "id": "printers",
+      "name": "PRINT FARM",
+      "kind": "physical",
+      "zone": "machines",
+      "spark": true,
+      "x": 72.0,
+      "y": 72.0,
+      "ip": "172.28.130.24",
+      "role": "Four 3D printers",
+      "lore": "One controller, four printers, and a drawer of failed boats.",
+      "hw": "Orange Pi 5 · 8 cores · 4 GB · Klipper",
+      "location": "Workshop",
+      "ram_gb": 4,
+      "cpu_cores": 8,
+      "cpu_threads": 8,
+      "links": [
+        {
+          "label": "Printers",
+          "url": "http://172.28.130.24",
+          "desc": "Queues and cameras.",
+          "hue": "#8ec07c",
+          "favourite": "internal",
+          "kuma": "Print farm"
+        }
+      ],
+      "reaches": [
+        "router"
+      ]
+    },
+    {
+      "id": "door",
+      "name": "DOOR",
+      "kind": "physical",
+      "zone": "machines",
+      "x": 84.0,
+      "y": 78.0,
+      "ip": "172.28.130.58",
+      "role": "Door controller",
+      "lore": "Opens for a booking and a fob, never for one alone.",
+      "hw": "ESP32 controller · PoE",
+      "location": "Front office",
+      "links": [],
+      "reaches": [
+        "router"
+      ]
+    },
+    {
+      "id": "members-ap",
+      "name": "MEMBERS WI-FI",
+      "kind": "network",
+      "zone": "members",
+      "spark": true,
+      "x": 22.0,
+      "y": 70.0,
+      "ip": "172.28.140.4",
+      "role": "Access point",
+      "lore": "The password is on the kettle.",
+      "hw": "OpenWrt 24.10 · Wi-Fi 6",
+      "links": [],
+      "reaches": [
+        "router"
+      ]
+    },
+    {
+      "id": "kiosk",
+      "name": "KIOSK",
+      "kind": "physical",
+      "zone": "members",
+      "x": 14.0,
+      "y": 76.0,
+      "ip": "172.28.140.90",
+      "role": "Sign-in tablet",
+      "lore": "Who is in the building, for the fire register.",
+      "hw": "Android tablet, locked to one page",
+      "location": "Front office",
+      "links": [],
+      "reaches": [
+        "router"
+      ]
+    },
+    {
+      "id": "web-box",
+      "name": "WEB BOX",
+      "kind": "vm",
+      "zone": "hosted",
+      "spark": true,
+      "x": 50.0,
+      "y": 80.0,
+      "ip": "203.0.113.80",
+      "role": "Rented server · public site",
+      "lore": "The public's whole view of the workshop. Nothing on it can call home.",
+      "hw": "Ubuntu 24.04 · 1 vCPU · 2 GB · Caddy + CrowdSec",
+      "links": [
+        {
+          "label": "Website",
+          "url": "https://www.home.example",
+          "desc": "Opening hours and how to join.",
+          "hue": "#8ec07c",
+          "favourite": "external",
+          "kuma": "Website",
+          "path": [
+            "internet"
+          ],
+          "container": "site"
+        },
+        {
+          "label": "Newsletter",
+          "url": "https://news.home.example",
+          "desc": "The monthly note.",
+          "hue": "#8ec07c",
+          "favourite": "external",
+          "kuma": "Newsletter",
+          "path": [
+            "internet"
+          ],
+          "container": "listmonk"
+        },
+        {
+          "label": "Bans",
+          "url": "http://203.0.113.80:8080",
+          "desc": "Who is blocked.",
+          "hue": "#8ec07c",
+          "container": "crowdsec",
+          "require_group": "atlas-admins"
+        }
+      ],
+      "reaches": [
+        "internet"
+      ],
+      "accounts": [
+        {
+          "name": "keyholder",
+          "source": "local",
+          "sudo": "password",
+          "groups": [
+            "sudo"
+          ],
+          "note": ""
+        },
+        {
+          "name": "publisher",
+          "source": "service",
+          "sudo": "none",
+          "groups": [],
+          "note": "May replace the site's files, nothing else."
+        }
+      ]
+    },
+    {
+      "id": "cold-copy",
+      "name": "COLD COPY",
+      "kind": "network",
+      "zone": "workshop",
+      "off_map": true,
+      "x": 94.0,
+      "y": 8.0,
+      "ip": "—",
+      "role": "Drive at the treasurer's house",
+      "lore": "Swapped on the first Tuesday. Usually.",
+      "hw": "USB drive, encrypted",
+      "links": []
+    },
+    {
+      "id": "spare-mini",
+      "name": "SPARE MINI",
+      "kind": "physical",
+      "zone": "workshop",
+      "planned": true,
+      "x": 76.0,
+      "y": 12.0,
+      "ip": "172.28.120.118",
+      "role": "Planned · spare server",
+      "lore": "Waiting on the next donation.",
+      "hw": "planned",
+      "links": []
+    },
+    {
+      "id": "internet",
+      "name": "THE INTERNET",
+      "kind": "network",
+      "zone": "hosted",
+      "hue": "#B8C4D6",
+      "x": 50.0,
+      "y": 62.0,
+      "ip": "—",
+      "role": "The internet",
+      "lore": "Everything past the router.",
+      "hw": "Fixed wireless · 200 Mb",
+      "links": []
+    }
+  ],
+  "routes": [
+    {
+      "from": "router",
+      "to": "office-switch",
+      "kind": "vlan"
+    },
+    {
+      "from": "router",
+      "to": "shop-switch",
+      "kind": "vlan"
+    },
+    {
+      "from": "router",
+      "to": "members-ap",
+      "kind": "vlan"
+    },
+    {
+      "from": "office-switch",
+      "to": "mini-a",
+      "kind": "vlan"
+    },
+    {
+      "from": "router",
+      "to": "files",
+      "kind": "vlan"
+    },
+    {
+      "from": "router",
+      "to": "wiki",
+      "kind": "vlan"
+    },
+    {
+      "from": "router",
+      "to": "bookings",
+      "kind": "vlan"
+    },
+    {
+      "from": "members-ap",
+      "to": "kiosk",
+      "kind": "vlan"
+    },
+    {
+      "from": "shop-switch",
+      "to": "mini-b",
+      "kind": "vlan"
+    },
+    {
+      "from": "shop-switch",
+      "to": "backup-box",
+      "kind": "vlan"
+    },
+    {
+      "from": "shop-switch",
+      "to": "laser-pc",
+      "kind": "vlan"
+    },
+    {
+      "from": "shop-switch",
+      "to": "status",
+      "kind": "vlan"
+    },
+    {
+      "from": "shop-switch",
+      "to": "automation",
+      "kind": "vlan"
+    },
+    {
+      "from": "shop-switch",
+      "to": "printers",
+      "kind": "vlan"
+    },
+    {
+      "from": "shop-switch",
+      "to": "door",
+      "kind": "vlan"
+    },
+    {
+      "from": "router",
+      "to": "internet",
+      "kind": "wan"
+    },
+    {
+      "from": "web-box",
+      "to": "internet",
+      "kind": "wan"
+    },
+    {
+      "from": "backup-box",
+      "to": "cold-copy",
+      "kind": "wan"
+    },
+    {
+      "from": "status",
+      "to": "mini-a",
+      "kind": "telemetry"
+    },
+    {
+      "from": "status",
+      "to": "web-box",
+      "kind": "telemetry"
+    },
+    {
+      "from": "status",
+      "to": "router",
+      "kind": "telemetry"
+    }
+  ],
+  "cables": [
+    {
+      "id": "wan-in",
+      "a_stub": "roof-dish",
+      "a_port": "lan",
+      "b": "router",
+      "b_port": "ether1",
+      "kind": "copper",
+      "speed": "1G",
+      "state": "confirmed",
+      "source": "hand",
+      "note": "Down from the roof."
+    },
+    {
+      "id": "office-trunk",
+      "a": "router",
+      "a_port": "ether2",
+      "b": "office-switch",
+      "b_port": "1",
+      "kind": "copper",
+      "vlan": 110,
+      "tagged": [
+        130,
+        140
+      ],
+      "speed": "1G",
+      "state": "confirmed",
+      "source": "hand"
+    },
+    {
+      "id": "shop-trunk",
+      "a": "router",
+      "a_port": "sfp1",
+      "b": "shop-switch",
+      "b_port": "sfp17",
+      "kind": "fibre",
+      "vlan": 120,
+      "tagged": [
+        130,
+        140
+      ],
+      "speed": "1G",
+      "state": "confirmed",
+      "source": "hand",
+      "note": "Fibre, because the welder is between them."
+    },
+    {
+      "id": "mini-a-run",
+      "a": "mini-a",
+      "a_port": "eno1",
+      "b": "office-switch",
+      "b_port": "3",
+      "kind": "copper",
+      "vlan": 110,
+      "speed": "1G",
+      "state": "confirmed",
+      "source": "hand"
+    },
+    {
+      "id": "ap-run",
+      "a": "members-ap",
+      "a_port": "wan",
+      "b": "office-switch",
+      "b_port": "6",
+      "kind": "copper",
+      "vlan": 140,
+      "poe_w": 9,
+      "speed": "1G",
+      "state": "confirmed",
+      "source": "hand"
+    },
+    {
+      "id": "mini-b-run",
+      "a": "mini-b",
+      "a_port": "enp2s0",
+      "b": "shop-switch",
+      "b_port": "4",
+      "kind": "copper",
+      "vlan": 120,
+      "speed": "1G",
+      "state": "confirmed",
+      "source": "hand"
+    },
+    {
+      "id": "backup-run",
+      "a": "backup-box",
+      "a_port": "eth0",
+      "b": "shop-switch",
+      "b_port": "11",
+      "kind": "copper",
+      "vlan": 120,
+      "speed": "1G",
+      "state": "confirmed",
+      "source": "hand"
+    },
+    {
+      "id": "door-run",
+      "a": "door",
+      "a_port": "eth",
+      "b": "shop-switch",
+      "b_port": "14",
+      "kind": "copper",
+      "vlan": 130,
+      "poe_w": 4,
+      "speed": "100M",
+      "state": "confirmed",
+      "source": "hand"
+    },
+    {
+      "id": "bench-feed",
+      "a": "shop-switch",
+      "a_port": "2",
+      "b_stub": "bench-switch",
+      "b_port": "5",
+      "kind": "copper",
+      "vlan": 120,
+      "tagged": [
+        130
+      ],
+      "speed": "1G",
+      "state": "confirmed",
+      "source": "hand"
+    },
+    {
+      "id": "laser-bench",
+      "a": "laser-pc",
+      "a_port": "eth0",
+      "b_stub": "bench-switch",
+      "b_port": "1",
+      "kind": "copper",
+      "vlan": 120,
+      "speed": "1G",
+      "state": "confirmed",
+      "source": "hand"
+    },
+    {
+      "id": "printer-bench",
+      "a": "printers",
+      "a_port": "eth0",
+      "b_stub": "bench-switch",
+      "b_port": "3",
+      "kind": "copper",
+      "vlan": 130,
+      "speed": "1G",
+      "state": "assumed",
+      "source": "hand",
+      "note": "Probably port 3. Nobody wants to crawl under there."
+    }
+  ],
+  "stubs": [
+    {
+      "id": "roof-dish",
+      "name": "Roof dish",
+      "kind": "internet",
+      "note": "The provider's radio. Not ours to log into."
+    },
+    {
+      "id": "bench-switch",
+      "name": "Bench switch",
+      "kind": "switch",
+      "note": "Five ports screwed under a bench."
+    }
+  ],
+  "racks": [
+    {
+      "id": "rack-office",
+      "name": "Wall cabinet",
+      "location": "Front office"
+    },
+    {
+      "id": "rack-shop",
+      "name": "Bench rack",
+      "location": "Workshop"
+    }
+  ],
+  "rack": [
+    {
+      "rack": "rack-office",
+      "u": "U6",
+      "size": 1,
+      "name": "Router",
+      "node": "router",
+      "desc": "On a rack ear kit."
+    },
+    {
+      "rack": "rack-office",
+      "u": "U5",
+      "size": 1,
+      "name": "Office Switch",
+      "node": "office-switch",
+      "desc": "Eight ports, four with power."
+    },
+    {
+      "rack": "rack-office",
+      "u": "U3",
+      "size": 1,
+      "name": "Mini A",
+      "node": "mini-a",
+      "desc": "On a shelf with its power brick."
+    },
+    {
+      "rack": "rack-office",
+      "u": "U1",
+      "size": 1,
+      "name": "Cable Tray",
+      "node": "",
+      "desc": "Slack, coiled."
+    },
+    {
+      "rack": "rack-shop",
+      "u": "U7",
+      "size": 1,
+      "name": "Workshop Switch",
+      "node": "shop-switch",
+      "desc": "Sixteen ports and a fibre in."
+    },
+    {
+      "rack": "rack-shop",
+      "u": "U6",
+      "size": 1,
+      "name": "Mini B",
+      "node": "mini-b",
+      "desc": "Fanless, behind a filter."
+    },
+    {
+      "rack": "rack-shop",
+      "u": "U3–4",
+      "size": 2,
+      "name": "Backup Box",
+      "node": "backup-box",
+      "desc": "Two drives in a drawer."
+    },
+    {
+      "rack": "rack-shop",
+      "u": "U1",
+      "size": 1,
+      "name": "Spare Mini",
+      "node": "spare-mini",
+      "desc": "A space saved for it."
+    }
+  ],
+  "vms": [
+    {
+      "id": "files",
+      "host": "mini-a",
+      "vcpu": 2,
+      "ram_gb": 4,
+      "demand_gb": 2.7,
+      "state": "on"
+    },
+    {
+      "id": "wiki",
+      "host": "mini-a",
+      "vcpu": 1,
+      "ram_gb": 2,
+      "demand_gb": 0.7,
+      "state": "on"
+    },
+    {
+      "id": "bookings",
+      "host": "mini-a",
+      "vcpu": 2,
+      "ram_gb": 3,
+      "demand_gb": 1.6,
+      "state": "on"
+    },
+    {
+      "id": "status",
+      "host": "mini-b",
+      "vcpu": 2,
+      "ram_gb": 3,
+      "demand_gb": 1.8,
+      "state": "on"
+    },
+    {
+      "id": "automation",
+      "host": "mini-b",
+      "vcpu": 4,
+      "ram_gb": 6,
+      "demand_gb": 3.4,
+      "state": "on",
+      "dynamic": "3–7"
+    }
+  ],
+  "signals": {
+    "kuma": {
+      "Router": "router",
+      "Office switch": "office-switch",
+      "Mini A": "mini-a",
+      "Files": "files",
+      "Wiki": "wiki",
+      "Bookings": "bookings",
+      "Workshop switch": "shop-switch",
+      "Mini B": "mini-b",
+      "Status": "status",
+      "Automations": "automation",
+      "Backup box": "backup-box",
+      "Print farm": "printers",
+      "Website": "web-box"
+    },
+    "drift_ignore": [
+      "cold-copy",
+      "spare-mini"
+    ]
+  },
+  "rack_rear": [
+    {
+      "name": "Power strip",
+      "node": "",
+      "desc": "Six sockets, surge protected."
+    },
+    {
+      "name": "Battery",
+      "node": "",
+      "desc": "600 VA: long enough to shut down tidily."
+    }
+  ],
+  "chronicle": [
+    {
+      "title": "Uptime board",
+      "url": "report/uptime",
+      "note": "Every place and service, up or not."
+    },
+    {
+      "title": "Traffic",
+      "chart": "hosts.net",
+      "solo": true,
+      "about": "Bytes in and out, per host."
+    },
+    {
+      "title": "Memory by container",
+      "chart": "containers.mem",
+      "solo": true,
+      "url": "https://graphs.home.example/d/containers",
+      "about": "Resident memory per container."
+    },
+    {
+      "title": "Waiting for update evening",
+      "chart": "patch.pending",
+      "solo": true,
+      "url": "https://graphs.home.example/d/updates",
+      "about": "Packages waiting on each host.",
+      "note": "Cleared on Wednesdays."
+    },
+    {
+      "title": "Model calls",
+      "chart": "llm.apps",
+      "solo": true,
+      "about": "Captions, print watching and summaries."
+    }
+  ],
+  "abyss": [
+    {
+      "title": "Security report",
+      "url": "report/security",
+      "about": "The committee's security note.",
+      "note": "Compiled when you open it."
+    },
+    {
+      "title": "What the website answered",
+      "chart": "edge.status",
+      "solo": true,
+      "about": "Status codes from the web box."
+    },
+    {
+      "title": "Paths tried",
+      "chart": "edge.top_probes",
+      "solo": true,
+      "about": "What scanners ask for first."
+    },
+    {
+      "title": "Refused SSH",
+      "chart": "edge.ssh_denied",
+      "solo": true,
+      "about": "Refused sign-ins on the web box."
+    },
+    {
+      "title": "Busiest visitors",
+      "chart": "edge.top_clients",
+      "solo": true,
+      "whois": true,
+      "about": "Who asked the most, with a WHOIS lookup."
+    },
+    {
+      "title": "Blocked per minute",
+      "chart": "edge.bouncer",
+      "solo": true,
+      "pane_group": "at the website",
+      "about": "Requests blocked."
+    },
+    {
+      "title": "Blocked now",
+      "chart": "edge.active_bans",
+      "solo": true,
+      "pane_group": "at the website",
+      "about": "Addresses blocked at the moment."
+    }
+  ],
+  "rites": [
+    {
+      "name": "Guest Snapshots",
+      "host": "MINI A",
+      "when": "23:10",
+      "cadence": "daily",
+      "note": "Incus sends each guest's snapshot to the backup box."
+    },
+    {
+      "name": "Workshop Snapshots",
+      "host": "MINI B",
+      "when": "23:40",
+      "cadence": "daily",
+      "note": "The same, from the other room."
+    },
+    {
+      "name": "Mirror Check",
+      "host": "BACKUP BOX",
+      "when": "every 6 hours",
+      "cadence": "continuous",
+      "note": "Compares the two drives."
+    },
+    {
+      "name": "Update Evening",
+      "host": "all guests",
+      "when": "Wed 20:30 UTC",
+      "cadence": "weekly",
+      "note": "Someone with a key applies updates and waits for the lights.",
+      "key": "update-evening",
+      "expect_every": "7d",
+      "grace": "3d"
+    },
+    {
+      "name": "Printer Clean-up",
+      "host": "PRINT FARM",
+      "when": "18:55",
+      "cadence": "daily",
+      "note": "Deletes finished jobs older than a fortnight."
+    },
+    {
+      "name": "Booking Reminders",
+      "host": "BOOKINGS",
+      "when": "16:40",
+      "cadence": "daily",
+      "note": "Emails tomorrow's bookings."
+    },
+    {
+      "name": "Fob Sync",
+      "host": "DOOR",
+      "when": "every 30 min",
+      "cadence": "continuous",
+      "note": "Copies who may open the door from Bookings."
+    },
+    {
+      "name": "Site Publish",
+      "host": "WEB BOX",
+      "when": "Tue 11:05 UTC",
+      "cadence": "weekly",
+      "note": "Rebuilds the public site from the wiki's public pages."
+    },
+    {
+      "name": "Newsletter",
+      "host": "WEB BOX",
+      "when": "1st, 10:50",
+      "cadence": "monthly",
+      "note": "Sends the monthly note."
+    },
+    {
+      "name": "Drive Swap",
+      "host": "BACKUP BOX",
+      "when": "1st Tue 19:20",
+      "cadence": "monthly",
+      "note": "A person carries a drive to the treasurer's house."
+    },
+    {
+      "name": "Video Captions",
+      "host": "AUTOMATION",
+      "when": "21:30 UTC",
+      "cadence": "daily",
+      "note": "A small model captions new induction videos.",
+      "asks": "mini-b",
+      "model": "whisper:small",
+      "at": "21:30",
+      "hold": 35
+    },
+    {
+      "name": "Print Failure Watch",
+      "host": "PRINT FARM",
+      "when": "hourly at :12, 10:00–18:00 UTC",
+      "cadence": "continuous",
+      "note": "A small model looks for spaghetti in the printer cameras.",
+      "asks": "mini-b",
+      "model": "moondream:latest",
+      "at": ":12",
+      "between": "10:00–18:00",
+      "hold": 3
+    },
+    {
+      "name": "Handbook Summary",
+      "host": "WIKI",
+      "when": "Thu 09:25 UTC",
+      "cadence": "weekly",
+      "note": "A small model lists what changed in the handbook.",
+      "asks": "mini-b",
+      "model": "phi3:mini",
+      "at": "09:25",
+      "days": "Thu",
+      "hold": 8
+    },
+    {
+      "name": "Old Sign-in Sheet",
+      "host": "KIOSK",
+      "when": "—",
+      "cadence": "parked",
+      "note": "Replaced by the fob log."
+    }
+  ],
+  "certs": [
+    {
+      "name": "www.home.example",
+      "kind": "tls",
+      "issuer": "Let's Encrypt",
+      "host": "WEB BOX",
+      "expires": "2026-12-09",
+      "renews": "Caddy",
+      "note": "The public site."
+    },
+    {
+      "name": "news.home.example",
+      "kind": "tls",
+      "issuer": "Let's Encrypt",
+      "host": "WEB BOX",
+      "expires": "2027-01-22",
+      "renews": "Caddy",
+      "note": "The newsletter."
+    },
+    {
+      "name": "Fernhill Workshop CA",
+      "kind": "ca",
+      "issuer": "self-signed on MINI A",
+      "host": "MINI A",
+      "expires": "2031-03-14",
+      "renews": "manual, five years",
+      "note": "Signs the internal names."
+    },
+    {
+      "name": "files.home.example",
+      "kind": "tls",
+      "issuer": "Fernhill Workshop CA",
+      "host": "FILES",
+      "expires": "2026-11-28",
+      "renews": "manual, yearly",
+      "note": "The shared folders."
+    },
+    {
+      "name": "book.home.example",
+      "kind": "tls",
+      "issuer": "Fernhill Workshop CA",
+      "host": "BOOKINGS",
+      "expires": "2027-06-03",
+      "renews": "manual, yearly",
+      "note": "The booking page."
+    }
+  ],
+  "regions": [
+    {
+      "id": "workshop-floor",
+      "name": "Workshop floor",
+      "map": "demo-lab-server-room.webp",
+      "x": 56.0,
+      "y": 8.0,
+      "w": 36.0,
+      "h": 36.0,
+      "auto": true
+    }
+  ],
+  "stones": [
+    {
+      "id": "old-printer-share",
+      "name": "PRINT-OLD",
+      "kind": "honeypot-host",
+      "family": "honeypot",
+      "host": "mini-b",
+      "zone": "internal",
+      "severity": "critical",
+      "sensor": "opencanary-1",
+      "placement": "a tiny guest on the workshop's server, pretending to share files",
+      "mimics": "a print server from three committees ago",
+      "note": "discovery: anyone scanning the workshop network finds it"
+    },
+    {
+      "id": "member-list",
+      "name": "members-full.xlsx",
+      "kind": "doc-msword",
+      "family": "token",
+      "host": "backup-box",
+      "zone": "internal",
+      "severity": "high",
+      "planted": "a folder on the backup box",
+      "mimics": "the list someone nosy would open",
+      "note": "collection: someone browsing the backups"
+    },
+    {
+      "id": "site-deploy-key",
+      "name": "publish.env",
+      "kind": "cloud-key",
+      "family": "token",
+      "host": "web-box",
+      "zone": "internal",
+      "severity": "critical",
+      "planted": "an unused folder on the web box",
+      "expires": "2027-09-30",
+      "mimics": "the key that publishes the site",
+      "note": "credential access: a key that unlocks nothing"
+    }
+  ]
+}

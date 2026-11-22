@@ -1,0 +1,17 @@
+{
+  "_comment": "THE REPAIRS. `windows` is the modern shape: scheduled, self-closing, edited from the Desk. `nodes` is the legacy flat list, still honoured, and means 'under repair until removed'. Copy to /data/maintenance.json or point ATLAS_MAINTENANCE at it.",
+  "nodes": [],
+  "windows": [
+    {
+      "id": "monthly-firmware",
+      "reason": "firmware update",
+      "nodes": [
+        "print-box"
+      ],
+      "starts": "2030-01-09T10:00:00Z",
+      "ends": "2030-01-09T10:30:00Z",
+      "repeat": "weekly",
+      "note": "alarms stay quiet for these places while the window is open"
+    }
+  ]
+}

@@ -1,0 +1,262 @@
+import glob
+import logging
+import os
+import re
+
+from flask import jsonify
+
+import settings
+from context import atlas
+from security import actor
+
+from . import _body, _part, admin
+from .admin import (
+    _probe_allowed, _secret_stays_home, _valid_url, admin_bp,
+)
+from .auth import write_required
+
+log = logging.getLogger("atlas.api.v2")
+
+
+def _hub_state():
+    try:
+        hub = atlas().signals
+        last = hub.last_sources()
+        return {"enabled": list(getattr(hub, "enabled", [])), "last": last}
+    except Exception:
+        return {"enabled": [], "last": {}}
+
+
+def _probe(kind, url, key, path=None, verify=True):
+    import requests
+    base = (url or "").rstrip("/")
+    if not base:
+        return False, "no URL to ask"
+    try:
+        if kind == "prometheus":
+            r = requests.get(base + "/-/ready", timeout=5)
+            r.raise_for_status()
+            q = requests.get(base + "/api/v1/query", params={"query": "count(up == 1)"}, timeout=5)
+            q.raise_for_status()
+            res = q.json().get("data", {}).get("result", [])
+            n = int(float(res[0]["value"][1])) if res else 0
+            return True, f"Prometheus is ready — {n} watchfire{'s' if n != 1 else ''} up"
+        if kind == "loki":
+            r = requests.get(base + "/ready", timeout=5)
+            r.raise_for_status()
+            return True, "Loki is ready"
+        if kind == "kuma":
+            r = requests.get(base + "/metrics", auth=("", key) if key else None, timeout=5,
+                             verify=verify)
+            if r.status_code == 401:
+                return False, "Kuma refused the key"
+            r.raise_for_status()
+            n = sum(1 for line in r.text.splitlines() if line.startswith("monitor_status{"))
+            return True, f"Kuma answers — {n} monitor{'s' if n != 1 else ''}"
+        if kind == "decoys":
+            import envnames
+            import integrations
+            header = envnames.env("ATLAS_DECOYS_KEY_HEADER")
+            r = requests.get(base + (path or integrations.decoys_path()),
+                             headers={header: key or ""}, timeout=5)
+            if r.status_code in (401, 403, 404):
+                return False, "the decoy feed did not admit that key"
+            r.raise_for_status()
+            stones = r.json().get("stones", {})
+            n = len(stones)
+            return True, f"the decoy feed answers — {n} decoy{'s' if n != 1 else ''} charted"
+        return False, f"unknown source {kind!r}"
+    except Exception as e:
+        return False, f"did not answer: {e.__class__.__name__}: {str(e)[:120]}"
+
+
+_PROBE_FIELDS = {"prometheus": ("ATLAS_PROM_URL", None),
+                 "loki": ("ATLAS_LOKI_URL", None),
+                 "kuma": ("ATLAS_KUMA_URL", "ATLAS_KUMA_API_KEY"),
+                 "decoys": ("ATLAS_DECOYS_URL", "ATLAS_DECOYS_KEY")}
+
+
+@admin_bp.route("/integrations")
+def integrations_get():
+    import integrations
+    return jsonify({"settings": integrations.describe(),
+                    "allowed": list(integrations.ALLOWED),
+                    "groups": {k: list(v) for k, v in integrations.GROUPS.items()},
+                    "sources": list(integrations.SOURCES),
+                    "hub": _hub_state()})
+
+
+_SECRETISH = ("KEY", "SECRET", "PASSWORD", "TOKEN")
+
+
+def _known_env_names():
+    import integrations
+    import auth_config
+    names = set()
+    web = os.path.dirname(os.path.abspath(settings.__file__))
+    pattern = re.compile(r'"((?:ATLAS|PROMETHEUS)_[A-Z0-9_]+|HUB_URL)"')
+    for path in glob.glob(os.path.join(web, "*.py")) + glob.glob(os.path.join(web, "api", "**", "*.py"), recursive=True):
+        try:
+            with open(path, encoding="utf-8") as fh:
+                names |= set(pattern.findall(fh.read()))
+        except OSError:
+            pass
+    names |= set(integrations.ALLOWED)
+    names |= set(auth_config.ALLOWED)
+    names |= {"ATLAS_AUTH_MODE", "ATLAS_HUB_SECRET", "ATLAS_HUB_SECRET_FILE",
+              "ATLAS_HUB_AUTH_HEADER", "ATLAS_ADMIN_GROUP", "ATLAS_THEME", "HUB_URL", "ATLAS_METRICS_TOKEN", "ATLAS_METRICS_TOKEN_FILE",
+              "ATLAS_KUMA_URL", "ATLAS_KUMA_API_KEY", "ATLAS_KUMA_API_KEY_FILE",
+              "ATLAS_DECOYS_URL", "ATLAS_DECOYS_KEY", "ATLAS_DECOYS_KEY_FILE",
+              "ATLAS_DECOYS_KEY_HEADER", "ATLAS_DECOYS_PATH",
+              "ATLAS_TRIPWIRES_WEBHOOK", "ATLAS_TRIPWIRES_SECRET", "ATLAS_TRIPWIRES_SECRET_FILE",
+              "ATLAS_TRIPWIRES_STATE",
+              "ATLAS_LOKI_URL", "ATLAS_INTEGRATIONS", "PROMETHEUS_MULTIPROC_DIR"}
+    return sorted(names)
+
+
+@admin_bp.route("/deployment")
+def deployment_view():
+    import auth_config
+    import integrations
+    layer = {"settings": "settings", "deployment": "environment", "unset": "default"}
+    stored = integrations.sources()
+    dir_stored, dir_values = auth_config.sources(), auth_config.effective()
+    from urllib.parse import urlsplit, urlunsplit
+    from flask import current_app
+
+    def shown(name, value, secret):
+        if secret:
+            return "set" if value else "unset"
+        try:
+            u = urlsplit(value)
+            if u.password or u.username:
+                host = u.hostname or ""
+                if u.port:
+                    host += f":{u.port}"
+                return urlunsplit((u.scheme, f"{u.username or ''}:***@{host}", u.path, u.query, u.fragment))
+        except ValueError:
+            pass
+        if "@" in value:
+            scheme, sep, rest = value.partition("://")
+            return (scheme + sep if sep else "") + "***@" + rest.rpartition("@")[2]
+        return value
+
+    rows = []
+    for name in _known_env_names():
+        secret = any(tag in name for tag in _SECRETISH) or name in integrations.SECRETS
+        if name in integrations.ALLOWED:
+            value, source = integrations.get(name), layer[stored[name]]
+        elif name in auth_config.ALLOWED:
+            value, source = dir_values[name], layer[dir_stored[name]]
+        else:
+            import envnames
+            value = os.environ.get(name, "") or (
+                (envnames.env(name) or "") if envnames.is_set(name) else "")
+            source = "environment" if value else "default"
+        rows.append({"name": name, "source": source, "secret": secret,
+                     "value": shown(name, value, secret)})
+    token_set = bool(os.environ.get("ATLAS_METRICS_TOKEN") or os.environ.get("ATLAS_METRICS_TOKEN_FILE"))
+    return jsonify({"version": settings.APP_VERSION, "mode": settings.auth_config().get("mode", ""),
+                    "metrics": bool(current_app.config.get("METRICS_ENABLED")) and token_set,
+                    "metrics_registry": bool(current_app.config.get("METRICS_ENABLED")),
+                    "metrics_token": token_set,
+                    "knobs": rows})
+
+
+@admin_bp.route("/integrations/test", methods=["POST"])
+@write_required
+def integrations_test():
+    if not _probe_allowed(actor()):
+        return jsonify({"ok": False, "error": "Too many tests in a minute — wait a moment."}), 429
+    import integrations
+    body = _body()
+    kind = str(body.get("kind") or "").strip().lower()
+    if kind not in _PROBE_FIELDS:
+        return jsonify({"ok": False, "error": f"not a source that can be tested: {kind!r}"}), 400
+    proposed = _part(body, "settings")
+    unknown = [k for k in proposed if k not in integrations.ALLOWED]
+    if unknown:
+        return jsonify({"ok": False, "error": f"not an integration setting: {unknown[0]}"}), 400
+    url_key, secret_key = _PROBE_FIELDS[kind]
+    url = str(proposed.get(url_key) or "").strip() or integrations.get(url_key)
+    if not url:
+        return jsonify({"ok": False, "error": f"No URL is set for {kind} — nothing to ask."}), 400
+    if not _valid_url(url):
+        return jsonify({"ok": False, "error": "That is not an http(s) URL with a host."}), 400
+    if integrations.moves_secret(url_key, proposed):
+        return jsonify({"ok": False, "error": _secret_stays_home()}), 400
+    key = (str(proposed.get(secret_key) or "").strip() or integrations.get(secret_key)) if secret_key else None
+    path = None
+    if kind == "decoys":
+        path = str(proposed.get("ATLAS_DECOYS_PATH") or "").strip() or None
+        if path and not integrations.valid_decoys_path(path):
+            return jsonify({"ok": False, "error": "ATLAS_DECOYS_PATH must be an absolute "
+                                                  "path like /api/tripwires."}), 400
+    extra = {"path": path} if path else {}
+    if kind == "kuma":
+        ticked = str(proposed.get("ATLAS_KUMA_INSECURE") or "").strip()
+        if (ticked or integrations.get("ATLAS_KUMA_INSECURE").strip()) == "1":
+            extra["verify"] = False
+    ok, detail = admin._probe(kind, url, key, **extra)
+    log.info("v2: source test %s by %s: ok=%s", kind, actor(), ok)
+    return jsonify({"ok": ok, "detail": detail if ok else "", "error": "" if ok else detail})
+
+
+@admin_bp.route("/integrations", methods=["POST"])
+@write_required
+def integrations_save():
+    import integrations
+    proposed = _part(_body(), "settings")
+    unknown = [k for k in proposed if k not in integrations.ALLOWED]
+    if unknown:
+        return jsonify({"error": f"not an integration setting: {unknown[0]}"}), 400
+
+    def in_force(key):
+        given = proposed.get(key)
+        if key in integrations.SECRETS:
+            if given is None and key in proposed:
+                return ""
+            return str(given or "").strip() or integrations.get(key)
+        if key in proposed:
+            return str(given or "").strip() or integrations._env(key)
+        return integrations.get(key)
+
+    for key in integrations.URLS:
+        value = in_force(key)
+        if value and not _valid_url(value):
+            return jsonify({"error": f"{key} must be an http(s) URL with a host."}), 422
+        if integrations.moves_secret(key, proposed, saving=True):
+            return jsonify({"error": _secret_stays_home()}), 422
+    hosts = str(proposed.get("ATLAS_EMBED_HOSTS", "") or "")
+    if ";" in hosts or "\n" in hosts or "\r" in hosts:
+        return jsonify({"error": "ATLAS_EMBED_HOSTS is a space-separated list of origins — no ';' or newlines."}), 422
+    decoys_path = str(proposed.get("ATLAS_DECOYS_PATH", "") or "").strip()
+    if decoys_path and not integrations.valid_decoys_path(decoys_path):
+        return jsonify({"error": "ATLAS_DECOYS_PATH must be an absolute path on the decoy "
+                                 "feed, like /api/tripwires — no scheme, host, query or spaces."}), 422
+    site = str(proposed.get("ATLAS_UNIFI_SITE", "") or "").strip()
+    if site and not integrations.valid_unifi_site(site):
+        return jsonify({"error": "ATLAS_UNIFI_SITE is the site's short name from the controller's "
+                                 "address, like default: letters, digits, - and _ only."}), 422
+    for key in integrations.BOOLS:
+        if key in proposed and str(proposed.get(key) or "").strip() not in ("", "0", "1"):
+            return jsonify({"error": f"{key} must be 1, 0, or blank (the deployment's value)."}), 422
+    wanted = [s.strip().lower() for s in in_force("ATLAS_SIGNALS_SOURCES").split(",") if s.strip()]
+    bad = [s for s in wanted if s not in integrations.SOURCES]
+    if bad:
+        return jsonify({"error": f"unknown signals source: {bad[0]} — one of "
+                                 f"{', '.join(integrations.SOURCES)}"}), 422
+    for src, need in integrations.SOURCE_NEEDS.items():
+        if src in wanted and not in_force(need):
+            return jsonify({"error": f"the {src} source needs {need} before it can be enabled."}), 422
+    try:
+        described = integrations.save(proposed)
+    except Exception as e:
+        log.warning("v2: integration settings save failed: %s", e)
+        return jsonify({"error": f"could not save: {e}"}), 500
+    log.info("v2: integration settings changed by %s", actor())
+    try:
+        atlas().signals.reload()
+    except Exception:
+        pass
+    return jsonify({"ok": True, "settings": described, "hub": _hub_state()})
