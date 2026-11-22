@@ -7,7 +7,7 @@ import integrations
 import watch
 from context import atlas
 from engines.places import service_key
-from redaction import (cleared, hidden_node_ids, no_store, sees_everything, viewer_groups,
+from redaction import (cleared, hidden_node_ids, link_cleared, no_store, sees_everything, viewer_groups,
                        visible_monitors)
 from security import is_admin
 
@@ -52,7 +52,7 @@ def _visible(data, t, groups, hidden, monitors):
         return False
     links = [link for link in (node.get("links") if isinstance(node.get("links"), list) else [])
              if isinstance(link, dict) and service_key(t.place, link) == t.key]
-    return bool(links) and all(cleared(link, groups) for link in links)
+    return bool(links) and all(link_cleared(link, groups) for link in links)
 
 
 def _for_viewer(answer, groups):

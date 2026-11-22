@@ -12,7 +12,7 @@ APP_KEY = "atlas"
 
 APP_NAME = _theme.T["app_name"]
 APP_BRAND = os.environ.get("ATLAS_BRAND", "").strip() or "The Atlas"
-APP_VERSION = "0.2.0-dev.50"
+APP_VERSION = "0.2.0-dev.51"
 ACCENT_COLOR = "#C9A554"
 
 HERE = os.path.dirname(os.path.abspath(__file__))

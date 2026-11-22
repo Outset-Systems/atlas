@@ -96,6 +96,7 @@ the default only when you run the code directly from a checkout (development).
 |---|---|---|---|---|
 | `ATLAS_AUTH_MODE` | `accounts` in the image, `standalone` from a checkout | `standalone`, `accounts`, `hub` or `hybrid`. Any other value makes every gated request fail with a 500 (fail closed). | no | no |
 | `ATLAS_ADMIN_GROUP` | `atlas-admins` | The group that makes a viewer an Atlas admin when the identity comes from the hub. Also the default for `ATLAS_LDAP_ADMIN_GROUPS`. | no | no |
+| `ATLAS_LINK_DEFAULT_GROUP` | (empty) | The group that sees a service link, and its favourite, when the link names no group of its own. Empty: every reader sees it. Places are unaffected and admins see everything. Give a link `*` as its group to show it to everyone. Read at start. | no | no |
 | `ATLAS_TRUSTED_PROXIES` | (unset) | Comma-separated IPs or CIDRs of the reverse proxies whose `X-Forwarded-For` header the app believes, for example `172.18.0.2` or `172.18.0.0/16`. Used for the sign-in throttle and the audit log. Unset trusts no proxy and uses the socket peer. A bare number (a hop count) is refused and logged. See [install.md](install.md#put-it-behind-a-reverse-proxy). | no | no |
 | `ATLAS_INSECURE_COOKIES` | (unset) | `1` (or `true`, `yes`) drops the `Secure` flag from the session cookie, for testing over plain http. Without it, most browsers discard the cookie on plain http to anything but `localhost`, and sign-in returns you to the sign-in page. Do not use behind TLS. | no | no |
 

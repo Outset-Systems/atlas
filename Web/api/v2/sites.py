@@ -5,7 +5,7 @@ from flask import abort, jsonify, make_response, request
 
 import settings
 from context import atlas
-from redaction import (cleared, private_no_cache, redact_for_groups,
+from redaction import (cleared, link_cleared, private_no_cache, redact_for_groups,
                        sees_everything, vary_on_viewer, viewer_groups)
 
 from . import bp
@@ -137,7 +137,7 @@ def site_nodes(slug):
                 "first_seen": _iso(n.first_seen),
                 "last_imported": _iso(n.last_imported),
                 "links": [{"label": l.label, "url": l.url}
-                          for l in n.links if cleared(l.extra_json or {}, groups)],
+                          for l in n.links if link_cleared(l.extra_json or {}, groups)],
             })
     resp = make_response(jsonify({"site": slug, "count": len(out), "nodes": out}))
     return private_no_cache(resp)

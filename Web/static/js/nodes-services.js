@@ -43,7 +43,7 @@ function serviceItem(svc, row, s, rules, flat = '', menu = true) {
   let bell = '';
   if (mayAlert() && rules) {
     const on = panelOn('service', svc.id);
-    const gated = Boolean(linkOf(svc)?.require_group);
+    const gated = ![undefined, null, '', '*'].includes(linkOf(svc)?.require_group);
     const heldBy = s === 'unmanaged' ? 'nodes_bell_unmanaged'
       : (gated || (AlertStore.ALERTS.body?.status?.held || []).includes(row.id)) ? 'nodes_bell_held' : '';
     if (heldBy) {

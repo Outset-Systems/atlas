@@ -942,7 +942,7 @@
                       },
                       "require_group": {
                         "type": "string",
-                        "description": "Hide this service from anyone whose Hub groups don't include it."
+                        "description": "Hide this service from anyone whose Hub groups don't include it. Blank takes ATLAS_LINK_DEFAULT_GROUP where that is set; * shows it to everyone."
                       },
                       "favourite": {
                         "type": "string",

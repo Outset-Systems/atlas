@@ -487,7 +487,7 @@ function showServiceDetail(node, link) {
       'Atlas does not yet know this service\'s own version.';
     updates = `<span class="csv-chip${n > 0 || reboot ? ' warn' : ''}" title="${esc(told)}">${esc(words)}</span>`;
   }
-  const group = link.require_group
+  const group = link.require_group && link.require_group !== '*'
     ? `<span class="csv-chip" title="Only this group may open it">${ICON.lock}${esc(link.require_group)} only</span>` : '';
   const roleShort = (node.role || '').split('·')[0].trim();
   const zone = zoneById(node.zone);

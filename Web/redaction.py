@@ -10,6 +10,8 @@ from hub_auth.auth import get_remote_groups, verify_token
 import envnames
 
 ADMIN_GROUP = envnames.env("ATLAS_ADMIN_GROUP")
+LINK_DEFAULT_GROUP = envnames.env("ATLAS_LINK_DEFAULT_GROUP", "").strip()
+EVERYONE = "*"
 SIGNED_HEADER = auth.SIGNED_HEADER
 
 
@@ -65,6 +67,19 @@ def cleared(entry, groups):
     if not required:
         return True
     return isinstance(required, str) and required in groups
+
+
+def link_cleared(link, groups):
+    if sees_everything(groups):
+        return True
+    if not isinstance(link, dict):
+        return False
+    required = link.get("require_group")
+    if required == EVERYONE:
+        return True
+    if not required and LINK_DEFAULT_GROUP:
+        return LINK_DEFAULT_GROUP in groups
+    return cleared(link, groups)
 
 
 def group_key(groups):
@@ -529,31 +544,70 @@ def visible_monitors(data, groups):
     from engines.base import monitor_map
     from engines.places import service_key
     out = set()
+    withheld = set()
     for node in data.get("nodes", []):
         if not isinstance(node, dict) or not cleared(node, groups):
             continue
         links = node.get("links") if isinstance(node.get("links"), list) else []
         for link in links:
-            if isinstance(link, dict) and cleared(link, groups):
-                out.add(service_key(node.get("id"), link))
+            if not isinstance(link, dict):
+                continue
+            key = service_key(node.get("id"), link)
+            (out if link_cleared(link, groups) else withheld).add(key)
     hidden = hidden_node_ids(data, groups)
     visible = {n.get("id") for n in data.get("nodes", [])
                if isinstance(n, dict) and isinstance(n.get("id"), str) and cleared(n, groups)}
+    withheld -= out
     for monitor, node_id in monitor_map(data).items():
-        if (node_id in visible) if hidden else True:
+        if monitor not in withheld and ((node_id in visible) if hidden else True):
             out.add(monitor)
     return out
 
 
+_REPORT_DOOR = re.compile(r"^(?:\./|/)?report/([^/?#]+)")
+
+
+def _drop_report_doors(d):
+    import demoreports
+    import reports
+    open_to_all = demoreports.NAMES if demoreports.enabled() else ()
+
+    def staged(value):
+        found = _REPORT_DOOR.match(value.strip()) if isinstance(value, str) else None
+        return bool(found) and found[1] in reports.REPORTS and found[1] not in open_to_all
+
+    for section in ("chronicle", "abyss"):
+        if not isinstance(d.get(section), list):
+            continue
+        kept = []
+        for entry in d[section]:
+            doors = [k for k in ("url", "embed") if isinstance(entry, dict) and staged(entry.get(k))]
+            if doors and not entry.get("chart"):
+                continue
+            if doors:
+                entry = {k: v for k, v in entry.items() if k not in doors}
+            kept.append(entry)
+        d[section] = kept
+
+
 def redact_for_groups(data):
     import api_tokens
-    return redact(data, viewer_groups(), bool(api_tokens.current()))
+    groups = viewer_groups()
+    out, key = redact(data, groups, bool(api_tokens.current()))
+    if groups is None:
+        import security
+        if not security.is_admin():
+            out = dict(out)
+            _drop_report_doors(out)
+            key += "+no-admin"
+    return out, key
 
 
 def clearance_key(groups, token=False):
     if sees_everything(groups):
         return ""
-    return group_key(groups) + ("+token" if token else "")
+    links = f"+links:{LINK_DEFAULT_GROUP}" if LINK_DEFAULT_GROUP else ""
+    return group_key(groups) + links + ("+token" if token else "")
 
 
 def redact(data, groups, token=False):
@@ -564,6 +618,7 @@ def redact(data, groups, token=False):
         d["signals"].pop("drift_ignore", None)
     schema.upgrade(d)
     d.pop("stones", None)
+    _drop_report_doors(d)
     hidden = hidden_node_ids(d, groups)
     names = hidden_words(d, groups)
     slugs = hidden_slugs(d, groups)
@@ -594,7 +649,7 @@ def redact(data, groups, token=False):
     for n in d["nodes"]:
         if n.get("links"):
             links = n["links"] if isinstance(n["links"], list) else []
-            n["links"] = [l for l in links if isinstance(l, dict) and cleared(l, groups)]
+            n["links"] = [l for l in links if isinstance(l, dict) and link_cleared(l, groups)]
         n.pop("accounts", None)
     if hidden:
         visible = set()

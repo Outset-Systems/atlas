@@ -141,7 +141,9 @@ LINK_FIELDS = [
            "THE VIEWING GLASS when it does. `here` insists. `tab` never frames "
            "it — for anything that only works with the whole window."),
     f("require_group", "text", label="Requires group",
-      help="Hide this service from anyone whose Hub groups don't include it."),
+      help="Hide this service from anyone whose Hub groups don't include it. "
+           "Blank takes ATLAS_LINK_DEFAULT_GROUP where that is set; * shows it "
+           "to everyone."),
     f("favourite", "select", options=FAVOURITES, default="", label="Favourite",
       help="Lists this service on OVERVIEW: `internal` for what is used inside "
            "the network, `external` for what is reached from outside. Blank: "
