@@ -206,9 +206,20 @@ other. Each row holds:
   left (negative once lapsed). Only a certificate whose `place` names the
   place counts; one that names it only in `host` is not guessed at.
 - `collections`: the collections it is in, and `depends_on`.
+- `premise`: the premise it stands in (its own `premise`, its rack's, its
+  host's, or the one premise its older `location` text names), or null;
+  `premise_path`, that premise's ids from the site down; `device`, what it is
+  as a device (`laptop`, `printer` …) or null.
 
 Beside the rows: `zones`, `collections` (named lists of places; a collection
-is not an access group) and `stamp`, the map's version. Before 2026-11-14
+is not an access group), `premises` (every premise: `id`, `name`, `level`,
+`parent`) and `stamp`, the map's version. `?premise=<id>` keeps the places in
+that premise or under it, and `?device=<word>` one kind of device.
+
+The map's `premises` section (2026-11-22) is where things physically stand:
+`site`, `building`, `floor`, `room`, `desk`, each with a `parent` of a broader
+level. A premise named after a place a reader may not see is not sent to
+them, and a site's `lat` and `lon` are sent to admins only. Before 2026-11-14
 the two `collections` keys were called `sets`; a map file that still has a
 `sets` section is read as collections and saved back under the new name.
 

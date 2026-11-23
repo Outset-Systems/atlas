@@ -1,6 +1,7 @@
 
-import { A, $, esc, canAdminWrite } from './config.js';
+import { A, $, esc, canAdminWrite, themeText } from './config.js';
 import { setZoomMapShown, zoomMaps } from './regions.js';
+import { LEVELS, fromLocations, premiseIndex } from './premises-model.js';
 
 const drawer = $('map-drawer');
 const zoomList = $('med-zoom');
@@ -17,6 +18,7 @@ export function toggleMapEditor(open) {
     A.buildCartographer?.();
     drawZoomMaps();
     drawNames();
+    drawPremises();
   }
   drawer.classList.toggle('open', will);
   drawer.setAttribute('aria-hidden', String(!will));
@@ -72,6 +74,50 @@ $('med-zoom-add')?.addEventListener('click', async () => {
   openDesk('regions');
 });
 addEventListener('atlas:zoom-maps', () => { if (mapEditorOpen()) drawZoomMaps(); });
+
+const LEVEL_WORDS = { site: 'site', building: 'building', floor: 'floor', room: 'room', desk: 'desk' };
+function drawPremises() {
+  const count = $('med-prem-count');
+  if (!count) return;
+  const ix = premiseIndex(A.DATA);
+  const tally = LEVELS.map((l) => [l, [...ix.byId.values()].filter((p) => p.level === l).length])
+    .filter(([, n]) => n);
+  count.textContent = tally.length
+    ? tally.map(([l, n]) => `${n} ${LEVEL_WORDS[l]}${n === 1 ? '' : 's'}`).join(' · ')
+    : 'This map has no premises yet.';
+  const can = canAdminWrite() && Boolean(A.editorReady?.());
+  const offer = can && fromLocations(A.DATA, 'Home', themeText('rack_location', '')).length > 0;
+  $('med-prem-from').hidden = !offer;
+  $('med-prem-edit').disabled = !can;
+  $('med-prem-why').textContent = can ? '' : WHY;
+  $('med-prem-why').hidden = can;
+}
+$('med-prem-make')?.addEventListener('click', async () => {
+  const go = $('med-prem-make');
+  const site = $('med-prem-site').value.trim().replace(/\s+/g, ' ');
+  if (!site) { $('med-prem-site').focus(); return; }
+  go.disabled = true;
+  try {
+    const { Editor } = await import('./editor/index.js');
+    await Editor.load();
+    const ops = fromLocations(Editor.data, site, themeText('rack_location', ''));
+    if (!ops.length) { A.showToast?.('Nothing to make: the map already has premises, or names no location.'); return; }
+    await Editor.apply(ops, 'premises made from the locations (MAP EDITOR)');
+    A.showToast?.(`Made ${ops.filter((o) => o.section === 'premises').length} premises.`);
+  } catch (err) {
+    A.showToast?.(`Not saved: ${err.message || err}`);
+  } finally {
+    go.disabled = false;
+    drawPremises();
+  }
+});
+$('med-prem-edit')?.addEventListener('click', async () => {
+  if ($('med-prem-edit').disabled) return;
+  const { openDesk } = await import('./editor/panel.js');
+  toggleMapEditor(false);
+  openDesk('premises');
+});
+addEventListener('atlas:data', () => { if (mapEditorOpen()) drawPremises(); });
 
 
 function paintWrites() {

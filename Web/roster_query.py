@@ -9,7 +9,7 @@ DAY_MS = 86_400_000
 OLD_KEYS = {"sets": "collections", "set": "collection"}
 MAX_LIMIT = 2000
 PARAMS = ("text", "state", "zone", "kind", "collection", "set", "unchecked", "stale_days",
-          "sort", "dir", "limit", "offset")
+          "premise", "device", "sort", "dir", "limit", "offset")
 
 
 class QueryError(ValueError):
@@ -108,7 +108,7 @@ def row_state(row):
 
 def haystack(row):
     parts = [row.get("name"), row.get("id"), *(row.get("addresses") or []), row.get("role"),
-             row.get("zone_name")]
+             row.get("zone_name"), row.get("device")]
     return " ".join(_js_str(v) for v in parts if not _blank(v)).lower()
 
 
@@ -128,6 +128,10 @@ def filter_rows(rows, f, now_ms):
         if f.get("kind") and row.get("kind") != f["kind"]:
             continue
         if f.get("collection") and f["collection"] not in (row.get("collections") or []):
+            continue
+        if f.get("premise") and f["premise"] not in (row.get("premise_path") or []):
+            continue
+        if f.get("device") and row.get("device") != f["device"]:
             continue
         if f.get("unchecked") and not row_waiting(row):
             continue
@@ -291,6 +295,8 @@ def parse(args):
             "zone": args.get("zone") or "",
             "kind": args.get("kind") or "",
             "collection": args.get("collection") or args.get("set") or "",
+            "premise": args.get("premise") or "",
+            "device": args.get("device") or "",
             "unchecked": unchecked in ("1", "true"),
             "stale_days": _int(args, "stale_days", 0, 0),
         },

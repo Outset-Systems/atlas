@@ -273,6 +273,9 @@ def _apply_upsert(data, op, s, entries):
                 note = (f" (and {carried} thing{'s' if carried != 1 else ''} that pointed "
                         "at it, carried to the new id)")
         return f"changed {s['noun']} {label}{note}"
+    if (section_key == "nodes" and body.get("device") in schema.ENDPOINT_DEVICES
+            and "unmanaged" not in body):
+        body = {**body, "unmanaged": True}
     entries.append(body)
     return f"added {s['noun']} {label}"
 

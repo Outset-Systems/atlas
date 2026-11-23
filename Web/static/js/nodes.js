@@ -37,6 +37,7 @@ function normalise(body) {
     stamp: b.stamp || null,
     zones: list(b.zones),
     collections: list(b.collections),
+    premises: list(b.premises),
     rows: list(b.rows).filter((r) => r && typeof r.id === 'string'),
   };
 }
@@ -512,6 +513,10 @@ AlertStore.listen((changed) => {
 
 addEventListener('atlas:view', (e) => { if (e.detail?.view === 'nodes') show(); });
 let drewWithoutMap = false;
+addEventListener('atlas:premise', (e) => {
+  const id = typeof e.detail?.id === 'string' ? e.detail.id : '';
+  if ((S.filter.premise || '') !== id) setFilter({ premise: id });
+});
 addEventListener('atlas:data', () => { if (drewWithoutMap && A.VIEW === 'nodes' && el.sheet) draw(); });
 addEventListener('DOMContentLoaded', hookRefresh, { once: true });
 if (A.VIEW === 'nodes' || document.body.dataset.view === 'nodes') show();

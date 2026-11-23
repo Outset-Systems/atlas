@@ -1,6 +1,7 @@
 
 import { A, CFG, canAdminWrite, esc } from './config.js';
 import { knownLocations, locationOps, locationTarget } from './location-set-model.js';
+import { premiseScope } from './premises.js';
 
 export const mayLocate = () => canAdminWrite() && document.body.dataset.editable === '1';
 export const LOCATE_WHY = 'Off here: setting a location needs an admin, on an Atlas that takes changes.';
@@ -119,7 +120,7 @@ export async function setLocation(ask) {
   q('loc-note').hidden = !note;
   q('loc-name').value = target.written;
   q('loc-name').placeholder = fallback() || 'Home office';
-  q('loc-known').innerHTML = knownLocations(store.data, fallback())
+  q('loc-known').innerHTML = knownLocations(store.data, fallback(), premiseScope())
     .map((n) => `<option value="${esc(n)}"></option>`).join('');
   q('loc-msg').textContent = '';
   const asked = new Promise((resolve) => { done = resolve; });

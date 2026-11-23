@@ -3,6 +3,7 @@ import io
 import ipaddress
 from datetime import datetime, timezone
 
+import schema
 from sqlalchemy import select
 
 from store.labdata import get_site
@@ -13,7 +14,9 @@ from .common import (
     UNKNOWN_ZONE_FIELDS, ensure_uncharted, heal_revived, slugify, subnet_index, zone_for_ip,
 )
 
-KNOWN_HEADERS = ("name", "ip", "kind", "zone", "role", "url", "url_label", "notes")
+KNOWN_HEADERS = ("name", "ip", "kind", "zone", "role", "url", "url_label", "notes",
+                 "premise", "device", "serial")
+PREMISE_HEADERS = ("premise", "device", "serial")
 REQUIRED_HEADERS = ("name",)
 KINDS = ("physical", "vm", "network", "unknown")
 DEFAULT_KIND = "physical"
@@ -67,11 +70,22 @@ def parse_csv(text):
         if url and not url.startswith(("http://", "https://")):
             errors.append(f"line {line}: url must start with http:// or https:// (got {url!r})")
 
+        device = (row.get("device", "") or "").lower()
+        if device and device not in schema.DEVICE_KINDS:
+            errors.append(f"line {line}: unknown device {device!r} — one of "
+                          f"{[d for d in schema.DEVICE_KINDS if d]}")
+        premise = row.get("premise", "") or ""
+        if len([s for s in premise.replace("›", "/").split("/") if s.strip()]) > len(schema.PREMISE_LEVELS):
+            errors.append(f"line {line}: a premise path has at most {len(schema.PREMISE_LEVELS)} parts "
+                          "(site/building/floor/room/desk)")
+
         rows.append({
             "line": line, "name": name, "ip": ip or None, "kind": kind or DEFAULT_KIND,
             "zone": row.get("zone", "") or None, "role": row.get("role", "") or None,
             "url": url or None, "url_label": row.get("url_label", "") or None,
             "notes": row.get("notes", "") or None,
+            "premise": premise or None, "device": device or None,
+            "serial": row.get("serial", "") or None,
         })
 
     seen = {}
@@ -84,8 +98,10 @@ def parse_csv(text):
     return rows, errors
 
 
-def node_drafts(rows, data):
+def node_drafts(rows, data, made=None):
     import discovery
+    import premises
+    made = made if made is not None else []
     taken = {n.get("id") for n in data.get("nodes", []) or []}
     zones = {z.get("id") for z in data.get("zones", []) or []}
     fallback = next(iter(zones), "uncharted")
@@ -103,12 +119,28 @@ def node_drafts(rows, data):
             node["zone"] = row["zone"] if row["zone"] in zones else fallback
         if row["url"]:
             node["links"] = [{"label": row["url_label"] or "Service", "url": row["url"]}]
+        if row.get("premise"):
+            try:
+                node["premise"], _ = premises.resolve_path(data, row["premise"], made)
+            except ValueError as err:
+                raise CsvError(f"line {row['line']}: {err}") from None
+        if row.get("device"):
+            node["device"] = row["device"]
+            if row["device"] in schema.ENDPOINT_DEVICES:
+                node["unmanaged"] = True
+            if not row["role"]:
+                node["role"] = row["device"].replace("-", " ").capitalize()
+        if row.get("serial"):
+            node["serial"] = row["serial"]
         taken.add(node["id"])
         drafts.append(node)
     return drafts
 
 
 def import_rows(session, rows, site_slug, retire_missing=False):
+    if any(r.get(h) for r in rows for h in PREMISE_HEADERS):
+        raise CsvError("the premise, device and serial columns are read by the Desk's import "
+                       "(Every record › import a list); this command does not write them yet")
     now = datetime.now(timezone.utc)
     stats = {"created": 0, "updated": 0, "zones_created": 0,
              "links_added": 0, "retired": 0, "placed": 0}

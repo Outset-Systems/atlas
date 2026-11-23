@@ -279,6 +279,7 @@
           <div class="sp-hint" id="med-zoom-why" hidden></div>
         </div>
       </div>
+      </div>
       <div class="sp-sec" data-sec="box">
         <button class="sp-sub" type="button">DRAW A BOX <span class="sp-sub-plain">· a location or a zoom map</span></button>
         <div class="sp-sec-body">
@@ -298,6 +299,13 @@
               <input type="checkbox" id="mbx-loc">
             </label>
             <div class="sp-hint" id="mbx-loc-say"></div>
+            <label class="sp-row" id="mbx-room-row" hidden>
+              <span>Make it a room on this plan</span>
+              <input type="checkbox" id="mbx-room">
+            </label>
+            <label class="rel-add-field" id="mbx-room-wrap" hidden><span>It is a</span>
+              <select id="mbx-room-level" class="dir-input"><option value="room">Room</option><option value="desk">Desk</option></select></label>
+            <div class="sp-hint" id="mbx-room-say" hidden></div>
             <label class="sp-row">
               <span>Make it a zoom map</span>
               <input type="checkbox" id="mbx-zoom">
@@ -314,6 +322,25 @@
           </div>
         </div>
       </div>
+      <div class="sp-sec" data-sec="premises">
+        <button class="sp-sub" type="button">PREMISES <span class="sp-sub-plain">· sites, buildings, floors, rooms</span></button>
+        <div class="sp-sec-body">
+          <div class="sp-hint" id="med-prem-count"></div>
+          <div id="med-prem-from" hidden>
+            <label class="sp-row">
+              <span>Site name</span>
+              <input type="text" id="med-prem-site" class="dsk-input" value="Home" autocomplete="off">
+            </label>
+            <div class="sp-hint">Makes one site, and a room in it for each location your racks and places already name. Each rack and place is pointed at its room. The locations' text is kept.</div>
+            <div class="sp-actions">
+              <button class="sp-btn sp-btn-go" id="med-prem-make" type="button">Make premises from your locations</button>
+            </div>
+          </div>
+          <div class="sp-actions">
+            <button class="sp-btn" id="med-prem-edit" type="button">Add or edit premises…</button>
+          </div>
+          <div class="sp-hint" id="med-prem-why" hidden></div>
+        </div>
     </div>
   </div>
 </aside>
@@ -719,6 +746,9 @@
   <div class="rl-hint" aria-hidden="true"></div>
 </section>
 <div id="region-announce" class="sr-only" aria-live="polite"></div>
+<nav id="premise-bar" class="premise-bar rl-crumbs" aria-label="Premises" hidden></nav>
+<section id="premise-sheet" class="premise-sheet" aria-label="Premise" hidden></section>
+<div id="premise-announce" class="sr-only" aria-live="polite"></div>
 <script type="application/json" id="atlas-config">{{ (client_config or {})|tojson }}</script>
 <script type="module" src="static/js/atlas.js?v={{ v }}"></script>
 </body>

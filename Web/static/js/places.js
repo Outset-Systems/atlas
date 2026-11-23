@@ -1,4 +1,5 @@
 
+import { hiddenByPremise } from './premises.js';
 import { A, DRAG_END, postJSON } from './config.js';
 import { unproject } from './project.js';
 
@@ -37,7 +38,7 @@ export function applyOverrides() {
     n._home = { x: home.x, y: home.y };
     n._realOff ??= Boolean(n.off_map);
     const at = level ? level[n.id] : drafted[n.id] || A.stylePlaces?.[n.id];
-    n.off_map = n._realOff || Boolean(level && !at);
+    n.off_map = n._realOff || Boolean(level && !at) || hiddenByPremise(n);
     n._folded = false;
     const to = at || n._home;
     n.x = to.x; n.y = to.y;

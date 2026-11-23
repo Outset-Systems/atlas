@@ -159,6 +159,8 @@ export const NODES_TEXT = {
   nodes_rail_collections: 'Collections',
   nodes_rail_networks: 'Networks',
   nodes_rail_kinds: 'Kinds',
+  nodes_rail_premises: 'Premises',
+  nodes_rail_devices: 'Devices',
   nodes_rail_saved: 'Saved filters',
   nodes_rail_empty_collections: 'No collection yet.',
   nodes_rail_empty_saved: 'None yet. Filter the table, then save the filter.',

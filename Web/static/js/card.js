@@ -1,5 +1,8 @@
 
 import { A, CFG, $, esc, host, glassAttrs, svcKey, zoneById, nodeById, FALLBACK_HUE, canAdminWrite, themeText } from './config.js';
+import { lineage, premiseIndex, premiseOf } from './premises-model.js';
+import { openPremise } from './premises.js';
+import { mayLocate, setLocation } from './location-set.js';
 import { say } from './words.js';
 import { calendarPointerHTML } from './calendar.js';
 import * as M from './card-model.js';
@@ -334,10 +337,36 @@ function fillServices(n, entries) {
   A.paintServiceHealth?.(card);
 }
 
+const ENDPOINT = new Set(['laptop', 'desktop', 'phone']);
+let standsRead = { data: null, ix: null, where: null };
+function premiseLine(id) {
+  if (standsRead.data !== A.DATA) {
+    const ix = premiseIndex(A.DATA);
+    standsRead = { data: A.DATA, ix, where: ix.size ? premiseOf(A.DATA, ix) : new Map() };
+  }
+  const at = standsRead.where.get(id);
+  if (!at) return null;
+  return { id: at, names: lineage(standsRead.ix, at).map((pid) => standsRead.ix.byId.get(pid)?.name || pid) };
+}
+
 function fillDetails(n, zone, patchLine) {
   const facts = [];
   if (n.ip && n.ip !== '—') facts.push(`<dt>Address</dt><dd class="mono">${esc(n.ip)}</dd>`);
   if (n.hw) facts.push(`<dt>Hardware</dt><dd>${esc(n.hw)}</dd>`);
+  if (n.device) {
+    const word = String(n.device).replace(/-/g, ' ');
+    const inv = ENDPOINT.has(n.device) && n.unmanaged === true ? ' · inventory, not watched' : '';
+    facts.push(`<dt>Device</dt><dd>${esc(word.charAt(0).toUpperCase() + word.slice(1))}${esc(inv)}</dd>`);
+  }
+  const stands = premiseLine(n.id);
+  const move = mayLocate() ? ' <button type="button" class="cd-premise cd-move">Move…</button>' : '';
+  if (stands) {
+    facts.push(`<dt>Stands in</dt><dd><button type="button" class="cd-premise" data-premise="${esc(stands.id)}">` +
+      `${esc(stands.names.join(' › '))}</button>${move}</dd>`);
+  } else if (move && premiseIndex(A.DATA).size) {
+    facts.push(`<dt>Stands in</dt><dd>—${move}</dd>`);
+  }
+  if (n.serial) facts.push(`<dt>Serial</dt><dd class="mono">${esc(n.serial)}</dd>`);
   if (patchLine) facts.push(patchLine);
   if (n.scroll) {
     const root = CFG.SCROLL_ROOT.toLowerCase();
@@ -348,6 +377,15 @@ function fillDetails(n, zone, patchLine) {
   $('card-data').innerHTML = `<p class="cp-head">Details</p>` +
     (zoneLine ? `<p class="cd-zone">${esc(zoneLine)}</p>` : '') +
     (facts.length ? `<dl class="cd-facts">${facts.join('')}</dl>` : '');
+  $('card-data').querySelector('.cd-premise[data-premise]')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    A.closeCard?.();
+    openPremise(e.currentTarget.dataset.premise);
+  });
+  $('card-data').querySelector('.cd-move')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setLocation({ node: n.id });
+  });
   addTab('details');
 }
 

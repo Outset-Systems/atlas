@@ -167,12 +167,18 @@ async function draftReview(keys) {
     say('Check those, give them names and realms now, or later.'));
 }
 
-function drawDrafts(nodes, headline, caveat) {
+function drawDrafts(nodes, headline, caveat, premises = []) {
   desk.setHead('CHART THESE PLACES', 'nothing is written until you say so');
   desk.body.innerHTML = '';
   if (!nodes.length) { desk.body.append(notice('Nothing to chart.')); return; }
   desk.body.append(el('div', 'dsk-bar', `<span class="dsk-bar-sub">${esc(headline)}. ` +
     (caveat || 'Correct anything that came through wrong, then chart them.') + `</span>`));
+  const made = new Set(premises.map((p) => p.id));
+  if (premises.length) {
+    desk.body.append(el('div', 'dsk-bar', `<span class="dsk-bar-sub">${premises.length} new ` +
+      `premise${premises.length === 1 ? '' : 's'} made with them: ` +
+      `${esc(premises.slice(0, 8).map((p) => p.name).join(', '))}${premises.length > 8 ? ' …' : ''}.</span>`));
+  }
 
   const forms = nodes.map((node) => {
     const wrap = el('details', 'dsk-draft');
@@ -193,7 +199,15 @@ function drawDrafts(nodes, headline, caveat) {
     errors.innerHTML = '';
     let ops;
     try {
-      ops = forms.map((f) => ({ op: 'insert', section: 'nodes', body: f.read() }));
+      ops = [
+        ...premises.map((p) => ({ op: 'insert', section: 'premises', body: p })),
+        ...forms.map((f, i) => {
+          const body = f.read();
+          if (!body.premise && made.has(nodes[i].premise)) body.premise = nodes[i].premise;
+          if (['laptop', 'desktop', 'phone'].includes(body.device) && body.unmanaged !== true) body.unmanaged = false;
+          return { op: 'insert', section: 'nodes', body };
+        }),
+      ];
     } catch (err) { errors.append(notice(err.message, 'bad')); return; }
     go.disabled = true;
     try {
@@ -209,9 +223,9 @@ function drawDrafts(nodes, headline, caveat) {
 }
 
 export async function reviewCsv(text) {
-  const { nodes } = await Editor.importCsv(text);
+  const { nodes, premises = [] } = await Editor.importCsv(text);
   await desk.open();
   drawDrafts(nodes, `${nodes.length} place${nodes.length === 1 ? '' : 's'} from your list`,
     'Positions default to the middle of the map — drag them where they belong afterwards, ' +
-    'or set them here.');
+    'or set them here.', premises);
 }

@@ -163,6 +163,8 @@ def validate(data, strict=False):
     _check_cables(problems, data, strict)
     import names
     problems.extend(names.problems(data))
+    import premises
+    problems.extend(premises.problems(data))
     return problems
 
 

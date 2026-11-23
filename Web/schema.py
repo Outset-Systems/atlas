@@ -51,6 +51,13 @@ RACK_KINDS = ["auto", "compute", "forge", "gateway", "switch", "storage",
 REAR_SIDES = ["rear", "inside"]
 PREFIX_ROLES = ["prefix", "container", "reserved"]
 RANGE_KINDS = ["dhcp", "reserved"]
+PREMISE_LEVELS = ["site", "building", "floor", "room", "desk"]
+PREMISE_KINDS = ["", "office", "cubicle", "conference", "idf", "mdf", "server-room",
+                 "print", "storage", "other"]
+DEVICE_KINDS = ["", "server", "switch", "router", "firewall", "ap", "storage", "laptop",
+                "desktop", "kiosk", "printer", "scanner", "mfp", "phone", "display",
+                "room-system", "camera", "iot", "other"]
+ENDPOINT_DEVICES = ("laptop", "desktop", "phone")
 NAME_EXPOSURES = ["", "public", "internal", "vpn"]
 OPEN_IN = ["auto", "here", "tab"]
 LINK_KINDS = ["", "service", "container"]
@@ -249,6 +256,43 @@ SECTIONS = {
               help="`{\"place-id\": {\"x\": 40, \"y\": 62}}` — where a place sits on THIS "
                    "map. Leave blank when the detailed map is a true enlargement: places "
                    "are then mapped through the rectangle. Drag them in edit mode to pin."),
+            f("standalone", "bool", label="Opened only from its premise",
+              help="A premise's plan whose parent has no picture: drawn as no frame on any "
+                   "map, opened only from the premise (its tile, a menu, the breadcrumb)."),
+        ]),
+
+    "premises": section(
+        "premises", "premise", "premises", noun="premise",
+        lore="where the iron and the desks stand: site, building, floor, room",
+        subtitle="Sites, buildings, floors, rooms and desks. A place or a rack names the "
+                 "one it is in; every scene can be narrowed to one.",
+        fields=[
+            f("id", "slug", required=True, help="Short unique key, e.g. `hq-b2-f3`."),
+            f("name", "text", required=True,
+              help="What the breadcrumb and the menus say, e.g. `Floor 3`, `IDF 3A`."),
+            f("level", "select", options=PREMISE_LEVELS, required=True, default="room",
+              help="site › building › floor › room › desk. A level may be skipped: a site "
+                   "may hold a floor directly."),
+            f("parent", "ref", ref="premises", label="Inside",
+              help="Blank only for a site. Otherwise a premise of a broader level."),
+            f("kind", "select", options=PREMISE_KINDS, default="",
+              help="For a room or a desk: a conference room, a cubicle, an IDF …"),
+            f("region", "ref", ref="regions", label="Plan",
+              help="The zoom map that is this premise's plan (a site plan, a floor plan)."),
+            f("x", "percent", label="Left",
+              help="Where its box sits on its parent's plan: left edge, 0–100%. Blank = "
+                   "listed, not drawn. Ignored when it owns a plan: the plan's frame is "
+                   "its box."),
+            f("y", "percent", label="Top"),
+            f("w", "percent", label="Width"),
+            f("h", "percent", label="Height"),
+            f("order", "int", min=-999, max=9999,
+              help="Floors in building order (B1 = -1, 1, 2 …). Others list by name."),
+            f("address", "text", help="A site's street address."),
+            f("lat", "number", label="Latitude", min=-90, max=90,
+              help="A site's position, kept for a world map later. Admins only."),
+            f("lon", "number", label="Longitude", min=-180, max=180),
+            f("note", "longtext", help="A line about it."),
         ]),
 
     "nodes": section(
@@ -290,6 +334,15 @@ SECTIONS = {
             f("cpu_threads", "number", label="Threads", min=0,
               help="Logical processors: what a vCPU is assigned against, so this is "
                    "the denominator of the vCPU count."),
+            f("premise", "ref", ref="premises", label="Premise",
+              help="Where it stands: a room, a desk, a floor. A machine in a rack is where "
+                   "the rack is; a guest is where its host is. Replaces Location, which is "
+                   "still read when this is blank."),
+            f("device", "select", options=DEVICE_KINDS, default="",
+              help="What it is as a device. A laptop, desktop or phone is inventory: "
+                   "listed and placed, never probed (it sleeps and travels)."),
+            f("serial", "text", label="Serial",
+              help="Its serial number, what a device manager knows it by."),
             f("mac", "text", label="MAC",
               help="Its hardware address, e.g. `02:00:5e:10:20:30`. A connection import "
                    "fills it in; a later review knows the place by it even after its "
@@ -450,6 +503,9 @@ SECTIONS = {
             f("location", "text",
               help="Where it stands, e.g. `Home office`. Everything in the rack is there. "
                    "Blank uses the map's default location."),
+            f("premise", "ref", ref="premises", label="Premise",
+              help="The room it stands in. Everything in the rack is there. Replaces "
+                   "Location, which is still read when this is blank."),
         ]),
 
     "rack": section(
@@ -814,9 +870,12 @@ HIDING_KINDS = frozenset({"safe", "ref", "words", "slug", "url", "keys", "pins",
 HIDING = {
     "zones": {"id": "safe", "name": "safe", "vlan": "safe", "lore": "words", "origin": "words"},
     "regions": {"id": "safe", "name": "safe", "map": "safe", "parent": "safe", "places": "pins"},
+    "premises": {"id": "slug", "name": "words", "parent": "safe", "region": "safe",
+                 "address": "words", "note": "words", "lat": "admin", "lon": "admin"},
     "nodes": {
         "id": "safe", "name": "safe", "zone": "safe", "role": "words", "lore": "words",
         "hw": "words", "location": "words", "mac": "safe", "scroll": "safe",
+        "premise": "safe", "serial": "safe",
         "require_group": "safe",
         "check_host": "words", "check_expect": "safe", "monitors": "words",
         "origin": "words", "accounts": "admin",
@@ -833,7 +892,7 @@ HIDING = {
                  "ranges": {"note": "words"}},
     "interfaces": {"name": "words", "vlan": "safe", "speed": "safe", "peer": "words",
                    "note": "words"},
-    "racks": {"id": "safe", "name": "safe", "location": "words"},
+    "racks": {"id": "safe", "name": "safe", "location": "words", "premise": "safe"},
     "rack": {"rack": "safe", "u": "safe", "name": "words", "desc": "words"},
     "rack_rear": {"rack": "safe", "name": "words", "desc": "words", "side": "safe"},
     "vms": {"dynamic": "safe"},
@@ -856,7 +915,7 @@ HIDING = {
 }
 
 WORDS_DROP_ENTRY = frozenset({"cables", "stubs", "interfaces", "rack", "rack_rear", "vms",
-                              "certs", "rites", "collections", "maintenance", "names"})
+                              "certs", "rites", "collections", "maintenance", "names", "premises"})
 
 
 def hiding(section_key, field_name, sub_name=None):
@@ -891,11 +950,11 @@ def hiding(section_key, field_name, sub_name=None):
     return None
 
 
-SECTION_ORDER = ["nodes", "zones", "regions", "prefixes", "routes", "interfaces",
+SECTION_ORDER = ["nodes", "zones", "regions", "premises", "prefixes", "routes", "interfaces",
                  "cables", "stubs", "racks", "rack", "rack_rear", "vms", "rites", "certs", "collections", "names",
                  "stones", "maintenance", "chronicle", "abyss", "meta"]
 
-FILE_ORDER = ("meta", "zones", "regions", "nodes", "routes", "prefixes", "interfaces",
+FILE_ORDER = ("meta", "zones", "regions", "premises", "nodes", "routes", "prefixes", "interfaces",
               "cables", "stubs", "racks", "rack", "rack_rear", "vms", "signals", "chronicle", "abyss", "rites",
               "certs", "collections", "names", "stones")
 

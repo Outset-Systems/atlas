@@ -177,12 +177,21 @@ def _roster_schema():
         "unmanaged": {"type": "boolean", "description": (
             "Not watched on purpose (marked so, or in a collection marked so): it has no "
             "state and raises nothing.")},
+        "premise": {**text, "description": (
+            "The premise it stands in: its own, its rack's, its host's, or the one its older "
+            "location text names. Null when it stands in none.")},
+        "premise_path": {**ids, "description": "That premise's ids from the site down, itself last."},
+        "device": {**text, "examples": [d for d in schema.DEVICE_KINDS if d]},
     }
     return {"type": "object", "properties": {
         "stamp": {**text, "description": "The dataset's version, as an editor sends it back."},
         "generated_at": {"type": "string", "description": "When this answer was made, UTC."},
         "zones": {"type": "array", "items": {"type": "object", "properties": {
             "id": {"type": "string"}, "name": text}}},
+        "premises": {"type": "array", "description": (
+            "Every premise on the map: site, building, floor, room, desk."),
+            "items": {"type": "object", "properties": {
+                "id": {"type": "string"}, "name": text, "level": text, "parent": text}}},
         "collections": {"type": "array", "description": "Named lists of places. Not access.",
                         "items": {"type": "object", "properties": {
                             "id": {"type": "string"}, "name": text, "note": text,
@@ -476,6 +485,10 @@ def _paths():
                 {"name": "state", "in": "query", "schema": {"type": "string", "examples": [
                     "down", "degraded", "maintenance", "slumbering", "healthy", "unknown", "unmanaged"]}},
                 {"name": "zone", "in": "query", "schema": {"type": "string"}, "description": "A network's id."},
+                {"name": "premise", "in": "query", "schema": {"type": "string"},
+                 "description": "A premise's id: the places standing in it or anywhere under it."},
+                {"name": "device", "in": "query", "schema": {"type": "string"},
+                 "description": "A device word, e.g. `laptop`."},
                 {"name": "kind", "in": "query", "schema": {"type": "string"}},
                 {"name": "collection", "in": "query", "schema": {"type": "string"},
                  "description": "A collection's id."},

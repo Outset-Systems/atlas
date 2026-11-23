@@ -15,9 +15,17 @@ function bandMenu(scene, menuId) {
     const at = button.dataset.place || '';
     const offer = A.DATA ? offerFor(scene, at) : [];
     if (offer.length < 2) { menu.innerHTML = ''; return; }
-    menu.innerHTML = offer.map(({ loc }) =>
-      `<button type="button" role="menuitem" data-place="${esc(loc.key)}"${loc.key === at ? ' aria-current="true"' : ''}>`
-      + `${esc(placeName(loc))}</button>`).join('');
+    const pathOf = (loc) => (Array.isArray(loc.path) ? loc.path.join(' › ') : '');
+    const order = offer.map((o, i) => ({ ...o, i, path: pathOf(o.loc), premise: Boolean(o.loc.premise) }))
+      .sort((a, b) => (a.premise !== b.premise ? (a.premise ? -1 : 1)
+        : a.path.localeCompare(b.path, undefined, { numeric: true, sensitivity: 'base' }) || a.i - b.i));
+    let last = null;
+    menu.innerHTML = order.map(({ loc, path, premise }) => {
+      const head = premise && path && path !== last ? `<div class="band-menu-head" aria-hidden="true">${esc(path)}</div>` : '';
+      last = premise ? path : null;
+      return head + `<button type="button" role="menuitem" data-place="${esc(loc.key)}"${premise ? ' data-premise' : ''}`
+        + `${loc.key === at ? ' aria-current="true"' : ''}>${esc(placeName(loc))}</button>`;
+    }).join('');
   }
   function paint() {
     button.setAttribute('aria-expanded', String(shown()));

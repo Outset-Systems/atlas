@@ -50,7 +50,8 @@ function railRows(section, list, admin) {
       : '';
     const kind = section === 'collections' ? 'collection' : section === 'networks' ? 'network' : '';
     const bell = kind ? railBell(kind, g) : '';
-    const row = `<li class="nv-rail-li"><button type="button" class="idx-item nv-rail-row${on ? ' on' : ''}" ` +
+    const depth = section === 'premises' && g.depth ? ` style="--nv-depth:${Math.min(g.depth, 6)}"` : '';
+    const row = `<li class="nv-rail-li"${depth}><button type="button" class="idx-item nv-rail-row${on ? ' on' : ''}" ` +
       `data-sec="${section}" data-id="${esc(g.id)}" aria-pressed="${on}" title="${esc(title)}${trouble ? ` · ${esc(trouble)}` : ''}">` +
       `${dot}<span class="nv-rail-name">${esc(g.name)}</span><span class="nv-rail-n">${g.count}</span></button>${bell}${menu}</li>`;
     return row + (section === 'collections' && admin ? railTools(g) : '');
@@ -126,7 +127,8 @@ export function drawRail() {
   const kept = typing ? { which: typing.dataset.input, value: typing.value, focus: document.activeElement === typing,
     start: typing.selectionStart, end: typing.selectionEnd } : null;
 
-  const groups = S.roster ? R.railGroups(S.roster) : { collections: [], networks: [], kinds: [] };
+  const groups = S.roster ? R.railGroups(S.roster)
+    : { collections: [], networks: [], kinds: [], premises: [], devices: [] };
   const admin = mayWrite() && !phone();
   const list = (section, items, empty = '') => (items.length
     ? `<ul class="nv-rail-list">${railRows(section, items, admin)}</ul>`
@@ -144,9 +146,11 @@ export function drawRail() {
   el.rail.innerHTML =
     railSection('collections', t('nodes_rail_collections'),
       list('collections', groups.collections, S.roster ? t('nodes_rail_empty_collections') : '') + foot) +
+    (groups.premises.length ? railSection('premises', t('nodes_rail_premises'), list('premises', groups.premises)) : '') +
     railSection('networks', t('nodes_rail_networks'), list('networks', groups.networks)) +
     railSection('kinds', t('nodes_rail_kinds'), list('kinds', groups.kinds) +
       list('things', S.roster ? R.thingGroups(thingList()).map((g) => ({ ...g, name: t(`nodes_kind_${g.id}`) })) : [])) +
+    (groups.devices.length ? railSection('devices', t('nodes_rail_devices'), list('devices', groups.devices)) : '') +
     railSection('saved', t('nodes_rail_saved'), S.saved.length
       ? `<div class="nv-saved">${hooks.savedChips()}</div>`
       : `<p class="nv-rail-empty">${esc(t('nodes_rail_empty_saved'))}</p>`);

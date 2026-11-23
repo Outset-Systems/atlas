@@ -198,7 +198,7 @@ export function sortRows(rows, key = 'name', dir = 'asc', collections = []) {
 }
 
 
-export const haystack = (row) => [row.name, row.id, ...(row.addresses || []), row.role, row.zone_name]
+export const haystack = (row) => [row.name, row.id, ...(row.addresses || []), row.role, row.zone_name, row.device]
   .filter((v) => !blank(v)).join(' ').toLowerCase();
 
 export function staleFor(row, days, now = Date.now()) {
@@ -210,6 +210,8 @@ export function staleFor(row, days, now = Date.now()) {
 export const NO_FILTER = Object.freeze({
   text: '', state: '', zone: '', kind: '', collection: '', unchecked: false, staleDays: 0,
   things: '',
+  premise: '',
+  device: '',
 });
 
 export function rowState(row) {
@@ -227,6 +229,8 @@ export function filterRows(rows, filter = {}, now = Date.now()) {
     if (f.zone && row.zone !== f.zone) return false;
     if (f.kind && row.kind !== f.kind) return false;
     if (f.collection && !(row.collections || []).includes(f.collection)) return false;
+    if (f.premise && !(row.premise_path || []).includes(f.premise)) return false;
+    if (f.device && row.device !== f.device) return false;
     if (f.unchecked && !rowWaiting(row)) return false;
     if (stale > 0 && !staleFor(row, stale, now)) return false;
     return true;
@@ -236,7 +240,7 @@ export function filterRows(rows, filter = {}, now = Date.now()) {
 export const isEmptyFilter = (filter) => {
   const f = { ...NO_FILTER, ...(filter || {}) };
   return !String(f.text).trim() && !f.state && !f.zone && !f.kind && !f.collection
-    && !f.unchecked && !Number(f.staleDays) && !f.things;
+    && !f.unchecked && !Number(f.staleDays) && !f.things && !f.premise && !f.device;
 };
 
 export function cleanFilter(raw) {
@@ -248,6 +252,7 @@ export function cleanFilter(raw) {
     unchecked: f.unchecked === true,
     staleDays: Number.isFinite(Number(f.staleDays)) && Number(f.staleDays) > 0 ? Math.floor(Number(f.staleDays)) : 0,
     things: THING_KINDS.includes(f.things) ? f.things : '',
+    premise: str(f.premise), device: str(f.device),
   };
 }
 
@@ -282,19 +287,49 @@ export function railGroups(roster) {
     .map((z) => group(z.id, z.name, byZone.get(z.id)));
   const kinds = [...byKind.keys()].sort((a, b) => String(a).localeCompare(String(b)))
     .map((k) => group(k, k, byKind.get(k)));
-  return { collections, networks, kinds };
+  const holding = new Map();
+  const byDevice = new Map();
+  for (const x of rows) {
+    for (const id of Array.isArray(x.premise_path) ? x.premise_path : []) {
+      if (!holding.has(id)) holding.set(id, []);
+      holding.get(id).push(x);
+    }
+    if (!blank(x.device)) { if (!byDevice.has(x.device)) byDevice.set(x.device, []); byDevice.get(x.device).push(x); }
+  }
+  const listed = (Array.isArray(r.premises) ? r.premises : []).filter((p) => p && typeof p.id === 'string');
+  const kids = new Map();
+  const known = new Set(listed.map((p) => p.id));
+  for (const p of listed) {
+    const up = p.parent && known.has(p.parent) && p.parent !== p.id ? p.parent : '';
+    if (!kids.has(up)) kids.set(up, []);
+    kids.get(up).push(p);
+  }
+  const premises = [];
+  const walk = (up, depth) => {
+    for (const p of kids.get(up) || []) {
+      if (depth > 8 || p.level === 'desk' || !holding.has(p.id)) continue;
+      premises.push({ ...group(p.id, p.name, holding.get(p.id)), depth, level: p.level || '' });
+      walk(p.id, depth + 1);
+    }
+  };
+  walk('', 0);
+  const devices = [...byDevice.keys()].sort((a, b) => String(a).localeCompare(String(b)))
+    .map((k) => group(k, k, byDevice.get(k)));
+  return { collections, networks, kinds, premises, devices };
 }
 
 export function filterGroups(roster) {
   const groups = railGroups(roster);
   const zones = Array.isArray(roster?.zones) ? roster.zones : [];
-  return { ...groups, networks: zones.filter((z) => z && typeof z.id === 'string') };
+  const premises = (Array.isArray(roster?.premises) ? roster.premises : []).filter((p) => p && typeof p.id === 'string');
+  return { ...groups, networks: zones.filter((z) => z && typeof z.id === 'string'), premises };
 }
 
 export const memberList = (places) => (Array.isArray(places) ? places
   : (typeof places === 'string' && places ? [places] : []));
 
-export const RAIL_FIELDS = Object.freeze({ collections: 'collection', networks: 'zone', kinds: 'kind', things: 'things' });
+export const RAIL_FIELDS = Object.freeze({ collections: 'collection', premises: 'premise', networks: 'zone',
+  kinds: 'kind', devices: 'device', things: 'things' });
 
 export function railPress(filter, section, id) {
   const field = RAIL_FIELDS[section];
@@ -312,7 +347,7 @@ export function dropUnknown(filter, groups) {
 }
 
 export const RAIL_KEY = 'atlas.nodes.rail';
-export const RAIL_SECTIONS = Object.freeze(['collections', 'networks', 'kinds', 'saved']);
+export const RAIL_SECTIONS = Object.freeze(['collections', 'premises', 'networks', 'kinds', 'devices', 'saved']);
 
 export function readRail(storage) {
   const raw = readJSON(storage, RAIL_KEY);

@@ -1,5 +1,6 @@
 
 import { A, REDUCED, $, esc, canAdminWrite, DRAG_END } from './config.js';
+import { planFor, regionChanged, premiseBoxes, paintPremiseBoxes, useRegions } from './premises.js';
 import * as M from './region-model.js';
 import { regionKey, describe } from './keys-model.js';
 import { chosenStyle, refreshStyle, styleName } from './table.js';
@@ -46,10 +47,23 @@ function shownOf(list) {
   }
   return shownList;
 }
+let plansFrom = null, plansList = [];
+const plans = () => {
+  const all = datasetRegions();
+  if (all !== plansFrom) { plansFrom = all; plansList = all.filter((r) => r && r.standalone === true); }
+  return plansList;
+};
+let styledFrom = null, styledPlans = null, styledList = [];
 const regions = () => {
   if (!onOtherStyle()) return shownOf(datasetRegions());
   const drafted = A.styleDraft?.().regions || {};
-  const list = shownOf(styleRegions.get(chosenStyle()) || []);
+  let list = shownOf(styleRegions.get(chosenStyle()) || []);
+  if (plans().length) {
+    if (styledFrom !== list || styledPlans !== plans()) {
+      styledFrom = list; styledPlans = plans(); styledList = [...list, ...styledPlans];
+    }
+    list = styledList;
+  }
   if (!Object.keys(drafted).length) return list;
   return list.map((r) =>
     (drafted[r.id] ? { ...r, places: { ...(r.places || {}), ...drafted[r.id] } } : r));
@@ -165,12 +179,16 @@ function paintFolds() {
     tab.setAttribute('aria-label',
       `${open}. ${count} ${s.count === 1 ? 'waits' : 'wait'} inside${ills.length ? ', ' + ills.join(', ') : ''}.`);
   }
+  paintPremiseBoxes(framesEl);
 }
 A.paintFolds = paintFolds;
 
 function buildFrames() {
   framesEl.innerHTML = '';
-  for (const r of M.childrenOf(regions(), level?.id ?? null)) framesEl.appendChild(frameEl(r));
+  for (const r of M.childrenOf(regions(), level?.id ?? null)) {
+    if (r.standalone !== true) framesEl.appendChild(frameEl(r));
+  }
+  for (const el of premiseBoxes(level?.id ?? null)) framesEl.appendChild(el);
   paintFolds();
   syncFrames();
 }
@@ -240,12 +258,15 @@ function onMainMove(userMove) {
   if (!userMove || !zoomingIn) return;
   settleTimer = setTimeout(() => {
     if (busy || document.body.classList.contains('scene-open') || A.editMode) return;
-    const pick = M.autoCandidate(regions(), here, viewOfMain(), (id) => !disarmed.has(id));
+    const pick = M.autoCandidate(regions().filter((r) => r.standalone !== true), here, viewOfMain(),
+      (id) => !disarmed.has(id));
     if (pick) enter(pick.id, { auto: true });
   }, SETTLE_MS);
 }
 
 function placesFor(r) {
+  const plan = planFor(r.id, r.places || {});
+  if (plan) return plan;
   const out = M.standingOn(regions(), r.id, mainSpots());
   for (const id of foldedHere(out, r.id)) delete out[id];
   return out;
@@ -349,6 +370,7 @@ function wear(r, art) {
   lens.hidden = false;
   lens.setAttribute('aria-label', `${r.name}, detailed map`);
   writeHash(r.id);
+  regionChanged(r.id, null);
   A.buildWorld();
   A.measureWorld();
   buildCrumbs(r);
@@ -359,6 +381,7 @@ function wear(r, art) {
 function closeLens() {
   if (!level) return;
   const was = home;
+  const left = level.id;
   level = null;
   home = null;
   A.levelPlaces = null;
@@ -366,10 +389,15 @@ function closeLens() {
   document.body.classList.remove('region-open');
   lens.hidden = true;
   writeHash(null);
+  regionChanged(null, left);
   A.buildWorld();
   A.measureWorld();
 }
 A.leaveRegion = closeLens;
+
+export function openRegion(id) { return goTo(id || null); }
+export const regionOpen = () => level?.id || '';
+useRegions({ open: openRegion, current: regionOpen });
 
 async function enter(id, { auto = false } = {}) {
   const r = regionById(id);
@@ -493,7 +521,7 @@ async function reveal(id) {
     if (drawn) return true;
     const { x, y } = A.mainPlace(n);
     const inside = M.childrenOf(regions(), level?.id ?? null)
-      .find((c) => M.placeOn(regions(), c.id, { id, x, y }));
+      .find((c) => c.standalone !== true && M.placeOn(regions(), c.id, { id, x, y }));
     if (inside) await enter(inside.id);
     else if (level) await leaveTo(level.parent || null);
     else return true;

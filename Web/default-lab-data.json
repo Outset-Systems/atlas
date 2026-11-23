@@ -71,6 +71,88 @@
       "lore": "A rented server elsewhere. The only thing the public can reach."
     }
   ],
+  "premises": [
+    {
+      "id": "fernhill",
+      "name": "Fernhill Workshop",
+      "level": "site",
+      "address": "12 Example Lane"
+    },
+    {
+      "id": "fh-main",
+      "name": "Main building",
+      "level": "building",
+      "parent": "fernhill"
+    },
+    {
+      "id": "fh-ground",
+      "name": "Ground floor",
+      "level": "floor",
+      "parent": "fh-main",
+      "order": 0
+    },
+    {
+      "id": "fh-office",
+      "name": "Front office",
+      "level": "room",
+      "kind": "office",
+      "parent": "fh-ground"
+    },
+    {
+      "id": "fh-shop",
+      "name": "Workshop",
+      "level": "room",
+      "kind": "other",
+      "parent": "fh-ground"
+    },
+    {
+      "id": "fh-upstairs",
+      "name": "Upstairs",
+      "level": "floor",
+      "parent": "fh-main",
+      "order": 1
+    },
+    {
+      "id": "fh-meeting",
+      "name": "Meeting room",
+      "level": "room",
+      "kind": "conference",
+      "parent": "fh-upstairs"
+    },
+    {
+      "id": "fh-desk-1",
+      "name": "Desk 1",
+      "level": "desk",
+      "kind": "cubicle",
+      "parent": "fh-upstairs"
+    },
+    {
+      "id": "fh-desk-2",
+      "name": "Desk 2",
+      "level": "desk",
+      "kind": "cubicle",
+      "parent": "fh-upstairs"
+    },
+    {
+      "id": "fh-annex",
+      "name": "Annex",
+      "level": "building",
+      "parent": "fernhill"
+    },
+    {
+      "id": "fh-annex-floor",
+      "name": "Annex floor",
+      "level": "floor",
+      "parent": "fh-annex"
+    },
+    {
+      "id": "fh-store",
+      "name": "Store room",
+      "level": "room",
+      "kind": "storage",
+      "parent": "fh-annex-floor"
+    }
+  ],
   "nodes": [
     {
       "id": "router",
@@ -111,7 +193,8 @@
           ],
           "note": "Two committee members share the safe's key to it."
         }
-      ]
+      ],
+      "device": "router"
     },
     {
       "id": "office-switch",
@@ -136,7 +219,8 @@
       ],
       "reaches": [
         "router"
-      ]
+      ],
+      "device": "switch"
     },
     {
       "id": "mini-a",
@@ -524,7 +608,8 @@
       "links": [],
       "reaches": [
         "router"
-      ]
+      ],
+      "device": "ap"
     },
     {
       "id": "kiosk",
@@ -652,6 +737,100 @@
       "lore": "Everything past the router.",
       "hw": "Fixed wireless · 200 Mb",
       "links": []
+    },
+    {
+      "id": "staff-laptop-1",
+      "name": "STAFF LAPTOP 1",
+      "kind": "physical",
+      "zone": "office",
+      "x": 30.0,
+      "y": 30.0,
+      "ip": "172.28.110.151",
+      "role": "Laptop",
+      "device": "laptop",
+      "premise": "fh-desk-1",
+      "serial": "FH-L-0001",
+      "unmanaged": true,
+      "lore": "The bookings laptop. It goes home on Fridays.",
+      "links": []
+    },
+    {
+      "id": "staff-laptop-2",
+      "name": "STAFF LAPTOP 2",
+      "kind": "physical",
+      "zone": "office",
+      "x": 31.0,
+      "y": 31.0,
+      "ip": "172.28.110.152",
+      "role": "Laptop",
+      "device": "laptop",
+      "premise": "fh-desk-2",
+      "serial": "FH-L-0002",
+      "unmanaged": true,
+      "lore": "The accounts laptop.",
+      "links": []
+    },
+    {
+      "id": "office-printer",
+      "name": "OFFICE PRINTER",
+      "kind": "physical",
+      "zone": "machines",
+      "x": 32.0,
+      "y": 40.0,
+      "ip": "172.28.130.40",
+      "role": "Printer · scans to the files",
+      "device": "mfp",
+      "premise": "fh-office",
+      "lore": "Out of cyan since the spring.",
+      "links": [],
+      "reaches": [
+        "router"
+      ]
+    },
+    {
+      "id": "meeting-screen",
+      "name": "MEETING SCREEN",
+      "kind": "physical",
+      "zone": "office",
+      "x": 34.0,
+      "y": 32.0,
+      "ip": "172.28.110.160",
+      "role": "Display",
+      "device": "display",
+      "premise": "fh-meeting",
+      "lore": "Shows whatever the last person left on it.",
+      "links": []
+    },
+    {
+      "id": "meeting-codec",
+      "name": "MEETING CODEC",
+      "kind": "physical",
+      "zone": "office",
+      "x": 35.0,
+      "y": 33.0,
+      "ip": "172.28.110.161",
+      "role": "Room system · camera and speakerphone",
+      "device": "room-system",
+      "premise": "fh-meeting",
+      "lore": "Mutes itself, often.",
+      "links": []
+    },
+    {
+      "id": "store-camera",
+      "name": "STORE CAMERA",
+      "kind": "physical",
+      "zone": "machines",
+      "x": 80.0,
+      "y": 60.0,
+      "ip": "172.28.130.77",
+      "role": "Camera",
+      "device": "camera",
+      "premise": "fh-store",
+      "lore": "Watches the timber.",
+      "links": [],
+      "reaches": [
+        "router"
+      ]
     }
   ],
   "routes": [

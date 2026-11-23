@@ -26,6 +26,7 @@ import './trust.js';
 import './whois.js';
 import './decoys.js';
 import './regions.js';
+import './premises.js';
 import { applyOverrides } from './places.js';
 import './map-editor.js';
 import './location-set.js';

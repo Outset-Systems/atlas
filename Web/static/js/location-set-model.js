@@ -1,5 +1,6 @@
 
 import { whereabouts } from './locations-model.js';
+import { premiseNamed, premisePaths } from './premises-model.js';
 import { rackList } from './rack-model.js';
 
 const clean = (name) => String(name ?? '').trim().replace(/\s+/g, ' ');
@@ -7,8 +8,9 @@ const listOf = (v) => (Array.isArray(v) ? v : []);
 
 export const IMPLIED_RACK = { id: 'rack-a', name: 'Rack A' };
 
-export function knownLocations(data, fallback = '') {
-  return whereabouts(data, fallback).list.map((l) => l.name).filter(Boolean);
+export function knownLocations(data, fallback = '', within = '') {
+  const named = whereabouts(data, fallback).list.filter((l) => !l.premise).map((l) => l.name).filter(Boolean);
+  return [...premisePaths(data, within), ...named];
 }
 
 export function locationTarget(data, fallback, ask) {
@@ -60,11 +62,14 @@ export function locationOps(data, target, name) {
   if (!target || target.kind === 'none') return [];
   const said = clean(name);
   if (said === target.written) return [];
+  const meant = Array.isArray(data?.premises) && data.premises.length ? premiseNamed(data, said) : null;
+  const body = meant ? { premise: meant, location: null }
+    : { location: said || null, ...(Array.isArray(data?.premises) && data.premises.length ? { premise: null } : {}) };
   if (target.kind === 'place') {
-    return [{ op: 'upsert', section: 'nodes', id: target.id, body: { location: said || null } }];
+    return [{ op: 'upsert', section: 'nodes', id: target.id, body }];
   }
   if (!target.implied) {
-    return [{ op: 'upsert', section: 'racks', id: target.id, body: { location: said || null } }];
+    return [{ op: 'upsert', section: 'racks', id: target.id, body }];
   }
   if (!said) return [];
   const taken = new Set(listOf(data?.racks).map((r) => r?.id));

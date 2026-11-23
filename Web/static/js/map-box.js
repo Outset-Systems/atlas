@@ -1,5 +1,6 @@
 
 import { A, CFG, $, esc, canAdminWrite } from './config.js';
+import { premiseIndex, premiseOfPlan, roomOps } from './premises-model.js';
 import { unproject } from './project.js';
 import { clampRect } from './region-model.js';
 import { boxContext } from './regions.js';
@@ -123,6 +124,17 @@ function showForm() {
   $('mbx-zoom-say').textContent = off || (box.level
     ? `The box opens into the detailed map you pick. It sits on ${box.level.name}.`
     : 'The box opens into the detailed map you pick when you zoom into it.');
+  const owner = box.level ? premiseOfPlan(premiseIndex(box.store.data), box.level.id) : '';
+  box.owner = owner;
+  $('mbx-room-row').hidden = !owner;
+  $('mbx-room').checked = Boolean(owner);
+  $('mbx-room-say').hidden = !owner;
+  if (owner) {
+    const p = premiseIndex(box.store.data).byId.get(owner);
+    $('mbx-room-say').textContent = `A room (or a desk) in ${p?.name || owner}, with this box on its plan.` +
+      (box.targets.length ? ` ${touchWords(box.targets)} inside ${box.targets.length === 1 ? 'is' : 'are'} put in it.` : '');
+    $('mbx-loc').checked = false;
+  }
   paintChoice();
   say('');
   form.hidden = false;
@@ -132,6 +144,8 @@ function showForm() {
 function paintChoice() {
   const wrap = $('mbx-map-wrap');
   if (wrap) wrap.hidden = !$('mbx-zoom')?.checked;
+  const room = $('mbx-room-wrap');
+  if (room) room.hidden = !($('mbx-room')?.checked && !$('mbx-room-row').hidden);
 }
 
 async function save() {
@@ -139,7 +153,8 @@ async function save() {
   const name = $('mbx-name').value.trim().replace(/\s+/g, ' ');
   const asLoc = $('mbx-loc').checked && !$('mbx-loc').disabled;
   const asZoom = $('mbx-zoom').checked && !$('mbx-zoom').disabled;
-  if (!asLoc && !asZoom) { say('Choose what the box is: a location, a zoom map, or both.'); return; }
+  const asRoom = Boolean(box.owner) && $('mbx-room').checked;
+  if (!asLoc && !asZoom && !asRoom) { say('Choose what the box is: a location, a zoom map, a room, or more than one.'); return; }
   if (!name) { say('Give it a name first.'); $('mbx-name').focus(); return; }
   const { store, rect, level } = box;
   const ops = asLoc ? boxOps(store.data, box.targets, name) : [];
@@ -150,11 +165,12 @@ async function save() {
       x: rect.x, y: rect.y, w: rect.w, h: rect.h, auto: true,
     } });
   }
+  if (asRoom) ops.push(...roomOps(store.data, box.owner, name, $('mbx-room-level').value, rect, box.targets));
   if (!ops.length) { say(`Everything in the box is already at ${name}.`); return; }
   const go = $('mbx-save');
   go.disabled = true;
   try {
-    const made = [asLoc && 'location', asZoom && 'zoom map'].filter(Boolean).join(' and ');
+    const made = [asLoc && 'location', asZoom && 'zoom map', asRoom && $('mbx-room-level').value].filter(Boolean).join(' and ');
     await store.apply(ops, `${name}: a ${made} from a box drawn on the map (MAP EDITOR)`);
     stop();
     A.showToast?.(`${name} is on the map as a ${made}.`);
@@ -204,6 +220,7 @@ $('mbx-save')?.addEventListener('click', save);
 $('mbx-again')?.addEventListener('click', () => { hideForm(); if (rectEl) rectEl.hidden = true; hint(DRAG_HINT); });
 $('mbx-cancel')?.addEventListener('click', stop);
 $('mbx-zoom')?.addEventListener('change', paintChoice);
+$('mbx-room')?.addEventListener('change', paintChoice);
 $('mbx-form')?.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && e.target.id === 'mbx-name') { e.preventDefault(); save(); }
 });

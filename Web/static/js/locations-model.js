@@ -1,5 +1,6 @@
 
 import { inRack, isEmpty, rackList } from './rack-model.js';
+import { lineage, premiseIndex, premiseOf, rackPremises } from './premises-model.js';
 
 export const locKey = (name) => String(name ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
 const clean = (name) => String(name ?? '').trim().replace(/\s+/g, ' ');
@@ -10,6 +11,20 @@ export function whereabouts(data, fallback = '') {
   const base = clean(fallback);
   const list = [];
   const byKey = new Map();
+  const ix = premiseIndex(d);
+  const inPremise = ix.size ? premiseOf(d, ix) : new Map();
+  const rackIn = ix.size ? rackPremises(d, ix) : new Map();
+  const atPremise = (pid) => {
+    const key = `@${pid}`;
+    if (!byKey.has(key)) {
+      const line = lineage(ix, pid);
+      const entry = { key, name: clean(ix.byId.get(pid)?.name) || pid, racks: [], loose: [], premise: pid,
+        path: line.slice(0, -1).map((id) => clean(ix.byId.get(id)?.name) || id) };
+      byKey.set(key, entry);
+      list.push(entry);
+    }
+    return byKey.get(key);
+  };
   const at = (name) => {
     const shown = clean(name) || base;
     const key = locKey(shown);
@@ -24,7 +39,7 @@ export function whereabouts(data, fallback = '') {
   const racks = rackList(d.racks, base);
   const rackAt = new Map();
   for (const r of racks) {
-    const entry = at(r.location);
+    const entry = rackIn.has(r.id) ? atPremise(rackIn.get(r.id)) : at(r.location);
     entry.racks.push(r);
     rackAt.set(r.id, entry.key);
   }
@@ -52,6 +67,12 @@ export function whereabouts(data, fallback = '') {
   for (const n of nodes) {
     if (guests.has(n.id) || racked.has(n.id)) continue;
     const said = clean(n.location);
+    if (inPremise.has(n.id)) {
+      const entry = atPremise(inPremise.get(n.id));
+      entry.loose.push(n);
+      ofNode.set(n.id, entry.key);
+      continue;
+    }
     if (n.kind !== 'physical' && !said) continue;
     const entry = at(said);
     entry.loose.push(n);
@@ -101,7 +122,8 @@ export function holdsPlaces(where) {
 
 export function locationByKey(where, key) {
   if (key === null || key === undefined || key === '') return null;
-  return where.list.find((l) => l.key === locKey(key)) || null;
+  const k = String(key).startsWith('@') ? String(key) : locKey(key);
+  return where.list.find((l) => l.key === k) || null;
 }
 
 export function racksAt(where, loc) {

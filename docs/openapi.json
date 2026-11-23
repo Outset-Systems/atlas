@@ -279,6 +279,22 @@
             "description": "A network's id."
           },
           {
+            "name": "premise",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "A premise's id: the places standing in it or anywhere under it."
+          },
+          {
+            "name": "device",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "A device word, e.g. `laptop`."
+          },
+          {
             "name": "kind",
             "in": "query",
             "schema": {
@@ -665,10 +681,98 @@
                 },
                 "places": {
                   "description": "`{\"place-id\": {\"x\": 40, \"y\": 62}}` — where a place sits on THIS map. Leave blank when the detailed map is a true enlargement: places are then mapped through the rectangle. Drag them in edit mode to pin."
+                },
+                "standalone": {
+                  "type": "boolean",
+                  "description": "A premise's plan whose parent has no picture: drawn as no frame on any map, opened only from the premise (its tile, a menu, the breadcrumb)."
                 }
               }
             },
             "description": "The regions."
+          },
+          "premises": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "Short unique key, e.g. `hq-b2-f3`."
+                },
+                "name": {
+                  "type": "string",
+                  "description": "What the breadcrumb and the menus say, e.g. `Floor 3`, `IDF 3A`."
+                },
+                "level": {
+                  "type": "string",
+                  "examples": [
+                    "site",
+                    "building",
+                    "floor",
+                    "room",
+                    "desk"
+                  ],
+                  "description": "site › building › floor › room › desk. A level may be skipped: a site may hold a floor directly."
+                },
+                "parent": {
+                  "type": "string",
+                  "description": "Blank only for a site. Otherwise a premise of a broader level. Names an entry in `premises`."
+                },
+                "kind": {
+                  "type": "string",
+                  "examples": [
+                    "office",
+                    "cubicle",
+                    "conference",
+                    "idf",
+                    "mdf",
+                    "server-room",
+                    "print",
+                    "storage",
+                    "other"
+                  ],
+                  "description": "For a room or a desk: a conference room, a cubicle, an IDF …"
+                },
+                "region": {
+                  "type": "string",
+                  "description": "The zoom map that is this premise's plan (a site plan, a floor plan). Names an entry in `regions`."
+                },
+                "x": {
+                  "type": "number",
+                  "description": "Where its box sits on its parent's plan: left edge, 0–100%. Blank = listed, not drawn. Ignored when it owns a plan: the plan's frame is its box."
+                },
+                "y": {
+                  "type": "number"
+                },
+                "w": {
+                  "type": "number"
+                },
+                "h": {
+                  "type": "number"
+                },
+                "order": {
+                  "type": "integer",
+                  "description": "Floors in building order (B1 = -1, 1, 2 …). Others list by name."
+                },
+                "address": {
+                  "type": "string",
+                  "description": "A site's street address."
+                },
+                "lat": {
+                  "type": "number",
+                  "description": "A site's position, kept for a world map later. Admins only."
+                },
+                "lon": {
+                  "type": "number"
+                },
+                "note": {
+                  "type": "string",
+                  "description": "A line about it."
+                }
+              }
+            },
+            "description": "The premises."
           },
           "nodes": {
             "type": "array",
@@ -741,6 +845,38 @@
                 "cpu_threads": {
                   "type": "number",
                   "description": "Logical processors: what a vCPU is assigned against, so this is the denominator of the vCPU count."
+                },
+                "premise": {
+                  "type": "string",
+                  "description": "Where it stands: a room, a desk, a floor. A machine in a rack is where the rack is; a guest is where its host is. Replaces Location, which is still read when this is blank. Names an entry in `premises`."
+                },
+                "device": {
+                  "type": "string",
+                  "examples": [
+                    "server",
+                    "switch",
+                    "router",
+                    "firewall",
+                    "ap",
+                    "storage",
+                    "laptop",
+                    "desktop",
+                    "kiosk",
+                    "printer",
+                    "scanner",
+                    "mfp",
+                    "phone",
+                    "display",
+                    "room-system",
+                    "camera",
+                    "iot",
+                    "other"
+                  ],
+                  "description": "What it is as a device. A laptop, desktop or phone is inventory: listed and placed, never probed (it sleeps and travels)."
+                },
+                "serial": {
+                  "type": "string",
+                  "description": "Its serial number, what a device manager knows it by."
                 },
                 "mac": {
                   "type": "string",
@@ -1287,6 +1423,10 @@
                 "location": {
                   "type": "string",
                   "description": "Where it stands, e.g. `Home office`. Everything in the rack is there. Blank uses the map's default location."
+                },
+                "premise": {
+                  "type": "string",
+                  "description": "The room it stands in. Everything in the rack is there. Replaces Location, which is still read when this is blank. Names an entry in `premises`."
                 }
               }
             },
@@ -2106,6 +2246,36 @@
               }
             }
           },
+          "premises": {
+            "type": "array",
+            "description": "Every premise on the map: site, building, floor, room, desk.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "level": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "parent": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
           "collections": {
             "type": "array",
             "description": "Named lists of places. Not access.",
@@ -2334,6 +2504,46 @@
                 "unmanaged": {
                   "type": "boolean",
                   "description": "Not watched on purpose (marked so, or in a collection marked so): it has no state and raises nothing."
+                },
+                "premise": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "The premise it stands in: its own, its rack's, its host's, or the one its older location text names. Null when it stands in none."
+                },
+                "premise_path": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "That premise's ids from the site down, itself last."
+                },
+                "device": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "examples": [
+                    "server",
+                    "switch",
+                    "router",
+                    "firewall",
+                    "ap",
+                    "storage",
+                    "laptop",
+                    "desktop",
+                    "kiosk",
+                    "printer",
+                    "scanner",
+                    "mfp",
+                    "phone",
+                    "display",
+                    "room-system",
+                    "camera",
+                    "iot",
+                    "other"
+                  ]
                 }
               }
             }

@@ -265,6 +265,7 @@ function buildMarkers() {
     mk.className = 'mk' + (kin ? ' depths-kin' : '') + (n.planned ? ' mk-planned' : '');
     mk.dataset.id = n.id;
     mk.dataset.kind = n.kind || 'vm';
+    if (n.device) mk.dataset.device = n.device;
     mk.dataset.shape = n.shape || ({ physical: 'square', network: 'square' }[n.kind] || 'circle');
     mk.dataset.hue = hue;
     mk.style.left = n.x + '%';

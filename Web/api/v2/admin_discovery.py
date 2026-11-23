@@ -143,12 +143,17 @@ def import_csv():
     text = body.get("csv") or ""
     if not isinstance(text, str) or not text.strip():
         return jsonify({"error": "send {csv: 'name,ip,kind,...'}"}), 400
-    from importers.csv_import import node_drafts, parse_csv
+    from importers.csv_import import CsvError, node_drafts, parse_csv
     rows, errors = parse_csv(text)
     if errors:
         return jsonify({"error": "that list has problems", "problems": errors}), 422
     data, _, refusal = _read(atlas())
     if refusal:
         return refusal
-    drafts = node_drafts(rows, data)
-    return jsonify({"nodes": discovery.place_drafts(data, drafts), "count": len(drafts)})
+    made = []
+    try:
+        drafts = node_drafts(rows, data, made)
+    except CsvError as err:
+        return jsonify({"error": "that list has problems", "problems": [str(err)]}), 422
+    return jsonify({"nodes": discovery.place_drafts(data, drafts), "count": len(drafts),
+                    "premises": made})

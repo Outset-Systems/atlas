@@ -109,8 +109,10 @@ export function watcherWords(by) {
   return Object.prototype.hasOwnProperty.call(NODES_TEXT, key) ? t(key) : String(by);
 }
 
-export const kindCell = (row) => (blank(row.kind) && blank(row.role) ? dim
-  : esc([row.kind, row.role].filter((v) => !blank(v)).join(' · ')));
+const deviceWord = (row) => (blank(row.device) || String(row.role || '').toLowerCase()
+  .includes(String(row.device).replace(/-/g, ' ')) ? '' : String(row.device).replace(/-/g, ' '));
+export const kindCell = (row) => (blank(row.kind) && blank(row.role) && blank(row.device) ? dim
+  : esc([row.kind, deviceWord(row), row.role].filter((v) => !blank(v)).join(' · ')));
 export const addressCell = (row) => ((row.addresses || []).length
   ? `<span class="nv-mono">${esc(row.addresses.join(', '))}</span>` : dim);
 export const servicesLine = (n) => (n === 1 ? t('nodes_services_one') : t('nodes_services_many', { n }));

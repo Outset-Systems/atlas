@@ -97,6 +97,13 @@ def build(data, feed, admin, stamp, now=None):
     windows = maintenance.annotated()
     upcoming = _upcoming(windows, data)
     mode_since = _mode_since(windows, data)
+    import premises as premises_mod
+    stands = premises_mod.where_each(data)
+    paths = {}
+    premise_rows = [{"id": p.get("id"), "name": p.get("name"), "level": p.get("level"),
+                     "parent": p.get("parent") if isinstance(p.get("parent"), str) else None}
+                    for p in _section(data, "premises")
+                    if isinstance(p, dict) and isinstance(p.get("id"), str)]
     nearest_cert = certs.nearest_by_place([c for c in _section(data, "certs") if isinstance(c, dict)], now)
 
     rows = []
@@ -133,13 +140,17 @@ def build(data, feed, admin, stamp, now=None):
             "cert": nearest_cert.get(nid),
             "collections": member_of.get(nid, []),
             "depends_on": _ids(node.get("depends_on")),
+            "premise": stands.get(nid),
+            "premise_path": (paths.setdefault(stands[nid], premises_mod.lineage(data, stands[nid]))
+                             if nid in stands else []),
+            "device": node.get("device") if isinstance(node.get("device"), str) else None,
         }
         if admin:
             by = mark.get("reviewed_by")
             row["reviewed_by"] = by if isinstance(by, str) else None
         rows.append(row)
     return {"stamp": stamp, "generated_at": iso_utc(), "zones": zones, "collections": collections,
-            "rows": rows}
+            "premises": premise_rows, "rows": rows}
 
 
 @bp.route(ROSTER_PATH)
