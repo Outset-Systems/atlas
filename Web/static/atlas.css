@@ -2512,6 +2512,25 @@ body.pre #scenes-list { opacity: 0; pointer-events: none; }
 .ldg-host-name { display: inline-flex; align-items: center; gap: 6px; font-family: 'Alegreya Sans', sans-serif; font-size: 0.86rem; font-weight: 500; }
 .ldg-host-role { font-size: 0.72rem; color: var(--text-dim); white-space: nowrap; }
 
+.ldg-names { display: grid; grid-template-columns: 1fr; gap: 2px; margin-top: 10px; }
+.ldg-name {
+  display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) auto auto;
+  align-items: center; gap: 10px; padding: 3px 6px; text-align: left; color: var(--text);
+}
+.ldg-name-host { font-family: 'JetBrains Mono', monospace; font-size: 0.74rem; overflow-wrap: anywhere; }
+.ldg-name-uses { overflow: hidden; text-overflow: ellipsis; }
+.ldg-name-cert { font-family: 'JetBrains Mono', monospace; font-size: 0.66rem; color: var(--text-dim); white-space: nowrap; }
+.ldg-name-cert.soon { color: var(--sem-warn); }
+.ldg-name-cert.lapsed { color: var(--sem-down); }
+.ldg-intent { white-space: nowrap; }
+.ldg-i-public .ldg-intent { border-color: var(--sem-warn); color: var(--sem-warn); }
+.ldg-i-internal .ldg-intent, .ldg-i-vpn .ldg-intent { border-color: var(--sem-info); color: var(--sem-info); }
+.ldg-i-outside .ldg-intent { opacity: 0.7; }
+@media (max-width: 640px) {
+  .ldg-name { grid-template-columns: minmax(0, 1fr) auto; row-gap: 2px; }
+  .ldg-name-uses, .ldg-name-cert { grid-column: 1; }
+}
+
 .mk.net-selected .mk-dot { transform: scale(1.5); }
 .mk.net-selected .mk-ring {
   animation: mk-beacon 1.8s linear infinite;

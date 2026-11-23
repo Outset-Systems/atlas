@@ -128,6 +128,7 @@ One JSON document. The sections you will use most:
   hidden from you a cable's `note` is not sent either.
 - `prefixes`, `interfaces`, `racks`, `certs`, `rites`: addresses, ports, the
   rack, certificates and scheduled jobs.
+- `names` (what each name is meant to be) is never sent to a token.
 
 No field is promised present. Atlas serves a hand-edited dataset as it is and
 keeps keys it does not know, so read defensively.
@@ -337,6 +338,18 @@ The TOPOLOGY view's Connections CSV button (2026-11-17). Any signed-in viewer ma
 | Route | What it does |
 |---|---|
 | `GET /api/v2/topology/connections.csv` | One row per place, and per stub that has a cable, sorted by name. The columns are Device, Connected to, Port, Far port, VLAN, PoE (W) and Path to the head: the cable the device hangs from on its way up to the head of the network, its own port and the port at the other end, the cable's VLANs as the canvas writes them (`U10`, `U1 T10,20`), its watts, and the names from the device up to the head joined with ` › `. A device that hangs by no cable (a head, or one joined only by a route or a host) has those columns blank: never a guess. A cell that starts with `=`, `+`, `-`, `@`, a tab or a carriage return is written with a `'` before it, so a spreadsheet does not run it. UTF-8 with a byte-order mark, CRLF lines, `Content-Disposition: attachment; filename="<map>-connections-<YYYY-MM-DD>.csv"` (the server's own day), `Cache-Control: no-store`. |
+
+## THE NAMES: the page's, never a token
+
+Every name the map uses, and what it is meant to be (2026-11-22). The map's
+`names` section says it, by name or by domain: `{"name": "*.example.com",
+"exposure": "internal"}` covers the domain and every name under it, an exact
+name wins over a rule, and `exposure` is `public`, `internal`, `vpn`, or blank
+on a rule ("not decided yet"). A token is sent neither the section nor the list.
+
+| Route | What it does |
+|---|---|
+| `GET /api/v2/names` | For any signed-in viewer, built from their own map: `{generated_at, names, counts}`. One row per name a service's URL, a check or a certificate uses: `name`, `intent` (`public`, `internal`, `vpn`, `unset`, or `outside` when no entry covers it), `rule` (the entry that decided), `wildcard`, `in_use` (a URL or a check uses it, not only a certificate), `found` (`url`, `check`, `cert`), `uses` (`{place, place_name, service, via}`: `service` is null for a place's own check, `via` says `url` and/or `check`) and `cert` (the nearest certificate that vouches for it: `{name, expires, days}`, or null). `counts` has one number per intent and the `total`. An address and a single-label host are not names. Never stored. |
 
 ## Errors
 

@@ -26,7 +26,7 @@ TYPE_MAP = {
     "object": None,
 }
 
-HIDDEN_SECTIONS = frozenset({"stones"})
+HIDDEN_SECTIONS = frozenset({"stones", "names"})
 HIDDEN_FIELDS = {"nodes": frozenset({"accounts"})}
 
 _ANY_OBJECT = {"type": "object", "additionalProperties": True}

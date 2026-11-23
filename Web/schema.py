@@ -51,6 +51,7 @@ RACK_KINDS = ["auto", "compute", "forge", "gateway", "switch", "storage",
 REAR_SIDES = ["rear", "inside"]
 PREFIX_ROLES = ["prefix", "container", "reserved"]
 RANGE_KINDS = ["dhcp", "reserved"]
+NAME_EXPOSURES = ["", "public", "internal", "vpn"]
 OPEN_IN = ["auto", "here", "tab"]
 LINK_KINDS = ["", "service", "container"]
 CHECK_TYPES = ["", "http", "tcp", "dns", "keyword", "json", "off"]
@@ -643,6 +644,23 @@ SECTIONS = {
               help="Every place and service in it is unmanaged: on the map, greyed, watched by nothing."),
         ]),
 
+    "names": section(
+        "names", "name", "names", noun="name",
+        id_field="name", title_field="name",
+        lore="what each name in the realm is meant to answer to",
+        subtitle="What each name is meant to be: reached from the internet, only "
+                 "inside, or over a VPN. A rule like *.example.com covers the domain "
+                 "and every name under it; an exact name wins over a rule.",
+        fields=[
+            f("name", "text", required=True,
+              help="A name, `cloud.example.com`, or a rule for a whole domain, "
+                   "`*.example.com`."),
+            f("exposure", "select", options=NAME_EXPOSURES, default="",
+              help="`public`: meant to answer from the internet. `internal`: only "
+                   "inside. `vpn`: over a VPN. Blank, on a rule only: not decided yet."),
+            f("note", "longtext", help="Why, in a line."),
+        ]),
+
     "chronicle": section(
         "chronicle", "watching", "watchings", noun="watching",
         id_field=None, title_field="title",
@@ -826,6 +844,7 @@ HIDING = {
               "at": "safe", "days": "safe", "between": "safe"},
     "stones": "admin",
     "collections": {"id": "slug", "name": "words", "note": "words", "services": "keys"},
+    "names": {"name": "words", "note": "words"},
     "chronicle": {"title": "safe", "note": "words", "url": "url", "embed": "url",
                   "chart": "safe", "range": "safe", "about": "words", "pane_group": "safe"},
     "abyss": {"title": "safe", "note": "words", "url": "url", "embed": "url",
@@ -837,7 +856,7 @@ HIDING = {
 }
 
 WORDS_DROP_ENTRY = frozenset({"cables", "stubs", "interfaces", "rack", "rack_rear", "vms",
-                              "certs", "rites", "collections", "maintenance"})
+                              "certs", "rites", "collections", "maintenance", "names"})
 
 
 def hiding(section_key, field_name, sub_name=None):
@@ -873,12 +892,12 @@ def hiding(section_key, field_name, sub_name=None):
 
 
 SECTION_ORDER = ["nodes", "zones", "regions", "prefixes", "routes", "interfaces",
-                 "cables", "stubs", "racks", "rack", "rack_rear", "vms", "rites", "certs", "collections", "stones",
-                 "maintenance", "chronicle", "abyss", "meta"]
+                 "cables", "stubs", "racks", "rack", "rack_rear", "vms", "rites", "certs", "collections", "names",
+                 "stones", "maintenance", "chronicle", "abyss", "meta"]
 
 FILE_ORDER = ("meta", "zones", "regions", "nodes", "routes", "prefixes", "interfaces",
               "cables", "stubs", "racks", "rack", "rack_rear", "vms", "signals", "chronicle", "abyss", "rites",
-              "certs", "collections", "stones")
+              "certs", "collections", "names", "stones")
 
 
 RENAMED_SECTIONS = {"sets": "collections"}

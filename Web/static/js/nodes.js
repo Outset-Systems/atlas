@@ -9,6 +9,7 @@ import { keepFocus } from './alert-forms.js';
 import { NODES_TEXT, t } from './nodes-text.js';
 import { STATES, DOT, store, S, el, shared, hooks, mayWrite, blank } from './nodes-state.js';
 import { mayAlert } from './nodes-cells.js';
+import { serviceIntents } from './names-model.js';
 import {
   drawResults, CARDS, showRow, openCard, onResultsClick, onResultsChange,
 } from './nodes-table.js';
@@ -56,6 +57,7 @@ function refresh() {
     } while (again);
     inflight = null;
     readEvents();
+    readNames();
     readShadow();
     hookRefresh();
     const known = new Set((S.roster?.rows || []).map((r) => r.id));
@@ -64,6 +66,22 @@ function refresh() {
     if (mayAlert()) AlertStore.read();
   })();
   return inflight;
+}
+
+let namesInflight = null;
+function readNames() {
+  if (namesInflight) return namesInflight;
+  namesInflight = (async () => {
+    try {
+      const intents = serviceIntents(await getJSON('api/v2/names'));
+      const changed = intents.size !== S.intents.size
+        || [...intents].some(([k, v]) => S.intents.get(k)?.intent !== v.intent || S.intents.get(k)?.name !== v.name);
+      S.intents = intents;
+      if (changed && el.sheet) draw();
+    } catch {   }
+    namesInflight = null;
+  })();
+  return namesInflight;
 }
 
 let eventsInflight = null;

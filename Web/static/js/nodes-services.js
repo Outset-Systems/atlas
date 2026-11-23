@@ -12,6 +12,7 @@ import {
   tell, drawBulk, ready, busy, applyOps, onDiskCollections, ensureRepairs,
 } from './nodes-forms.js';
 import { placeMenu, closeMenu } from './nodes-menu.js';
+import { intentMark, serviceKey } from './names-model.js';
 
 
 const mapNode = (id) => (A.DATA?.nodes || []).find((x) => x && x.id === id) || null;
@@ -65,12 +66,21 @@ function serviceItem(svc, row, s, rules, flat = '', menu = true) {
     `<span class="nv-state"><span class="svc-health ${DOT[s] || ''}" aria-hidden="true"></span>${esc(t(`nodes_state_${s}`))}</span>` +
     `<span class="nv-svc-name" title="${esc(t('nodes_svc_key', { key: svc.id }))}">${esc(svc.label)}` +
     `<span class="nv-svc-by"> · ${esc(serviceWatcher(svc))}</span></span>` +
+    intentCell(svc) +
     flat +
     `<span class="nv-dim nv-svc-cols">${cols.length ? esc(t('nodes_svc_in', { names: cols.join(', ') })) : ''}</span>` +
     bell + (!menu ? '</li>' :
     `<button type="button" class="nv-rail-more" data-svcmenu="${esc(svc.id)}" aria-haspopup="menu" ` +
     `aria-expanded="${menuOn('service', svc.id)}" aria-label="${esc(t('nodes_menu', { name: svc.name }))}" ` +
     `title="${esc(t('nodes_menu', { name: svc.name }))}">⋯</button></li>`);
+}
+
+function intentCell(svc) {
+  const entry = S.intents.get(serviceKey(svc.place, svc.label));
+  const mark = intentMark(entry);
+  return `<span class="nv-svc-intent${entry ? ` ldg-i-${esc(entry.intent)}` : ''}">` +
+    (mark ? `<span class="ldg-legend-item ldg-intent" title="${esc(mark.title)}">${esc(mark.word)}</span>` : '') +
+    '</span>';
 }
 
 export function servicesRow(row, span, index = 0) {

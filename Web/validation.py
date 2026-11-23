@@ -161,6 +161,8 @@ def validate(data, strict=False):
     _check_tripwire_sensors(problems, data)
     _check_watch(problems, data)
     _check_cables(problems, data, strict)
+    import names
+    problems.extend(names.problems(data))
     return problems
 
 

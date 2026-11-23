@@ -88,6 +88,7 @@ from . import writes
 from . import topology_layout
 from . import feeds
 from . import roster
+from . import names
 from . import overview
 from . import favourites
 from . import topology_sheet

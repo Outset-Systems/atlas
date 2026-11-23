@@ -19,6 +19,7 @@ try { store = localStorage; } catch {   }
 
 export const S = {
   roster: null,
+  intents: new Map(),
   error: '',
   filter: { ...R.NO_FILTER },
   sort: R.readSort(store),

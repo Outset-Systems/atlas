@@ -1,7 +1,10 @@
 
-import { A, CFG, $, esc, zoneById, nodeById, FALLBACK_HUE } from './config.js';
+import { A, CFG, $, esc, zoneById, nodeById, FALLBACK_HUE, getJSON } from './config.js';
 import { say } from './words.js';
 import { makeScene } from './scene.js';
+import {
+  INTENT_SAYS, INTENT_WORD, certLabel, certTone, namesCount, namesNote, usersTitle, usesLabel,
+} from './names-model.js';
 import {
   GRID_LIMIT, chartedAddresses, countLabel, drawable, formatAddress, freeV4,
   looseAddresses, nextFree, occupancy, prefixesOf, rangeAt, sharersOf, usableRange,
@@ -148,6 +151,82 @@ function gridHTML(prefix, charted) {
   return `<div class="ldg-grid">${cells}</div>`;
 }
 
+function nameRowHTML(row) {
+  const place = row.uses?.[0]?.place;
+  const cert = certLabel(row.cert);
+  const tone = certTone(row.cert);
+  const inner =
+    `<span class="ldg-name-host">${esc(row.name)}</span>` +
+    `<span class="ldg-host-role ldg-name-uses" title="${esc(usersTitle(row))}">${esc(usesLabel(row))}</span>` +
+    `<span class="ldg-name-cert${tone ? ` ${tone}` : ''}"${row.cert ? ` title="${esc(row.cert.name)} · ${esc(row.cert.expires)}"` : ''}>` +
+      `${esc(cert)}</span>` +
+    `<span class="ldg-legend-item ldg-intent" title="${esc(INTENT_SAYS[row.intent] || '')}${row.rule ? ` · by ${esc(row.rule)}` : ''}">` +
+      `${esc(INTENT_WORD[row.intent] || row.intent)}</span>`;
+  const cls = `ldg-name ldg-i-${esc(row.intent)}`;
+  return place
+    ? `<button class="ldg-host ${cls}" data-id="${esc(place)}">${inner}</button>`
+    : `<div class="${cls}">${inner}</div>`;
+}
+
+const NOTES = {
+  empty: 'no names on the map: every service is reached by its address.',
+  undecided: 'nothing says yet what these names are meant to be. Add a rule like ' +
+    '<code>*.example.com</code> under <em>names</em> in the map editor, and an exact name for each exception.',
+};
+
+function namesHTML(body) {
+  const rows = body?.names || [];
+  const counts = body?.counts || {};
+  const said = namesNote(body);
+  const note = said ? `<div class="ldg-note">${NOTES[said]}</div>` : '';
+  return `<div class="ldg-block ldg-names-block" style="--z-hue:var(--sem-info)">
+    <div class="ldg-zhead" role="button" tabindex="0" aria-expanded="true" title="Fold this ground">
+      <span class="ldg-fold" aria-hidden="true">▾</span>
+      <span class="ldg-zname">NAMES</span>
+      <span class="ldg-zsub">every name the map uses, and what it is meant to be</span>
+      <span class="ldg-zcount">${esc(namesCount(counts))}</span>
+    </div>
+    ${note}
+    <div class="ldg-names">${rows.map(nameRowHTML).join('')}</div>
+  </div>`;
+}
+
+function foldable(head) {
+  const toggle = () => {
+    const block = head.closest('.ldg-block');
+    const nowFolded = block.classList.toggle('ldg-folded');
+    head.setAttribute('aria-expanded', String(!nowFolded));
+    head.title = `${nowFolded ? 'Unfold' : 'Fold'} this ground`;
+  };
+  head.addEventListener('click', toggle);
+  head.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+  });
+}
+
+let namesAsked = 0;
+async function drawNames(goTo) {
+  const asked = ++namesAsked;
+  const slot = document.createElement('div');
+  slot.className = 'ldg-names-slot';
+  listEl.append(slot);
+  let body;
+  try {
+    body = await getJSON('api/v2/names');
+  } catch (e) {
+    if (asked === namesAsked) {
+      slot.innerHTML = `<div class="ldg-note">the names could not be read: ${esc(e.message)}</div>`;
+    }
+    return;
+  }
+  if (asked !== namesAsked || !slot.isConnected) return;
+  slot.innerHTML = namesHTML(body);
+  for (const row of slot.querySelectorAll('.ldg-name[data-id]')) {
+    row.addEventListener('click', () => goTo(row.dataset.id));
+  }
+  for (const head of slot.querySelectorAll('.ldg-zhead[role="button"]')) foldable(head);
+}
+
 function build() {
   const charted = chartedAddresses(A.DATA);
   const prefixes = prefixesOf(A.DATA);
@@ -183,18 +262,9 @@ function build() {
     c.addEventListener('click', () => goTo(c.dataset.id));
   }
 
-  for (const head of listEl.querySelectorAll('.ldg-zhead[role="button"]')) {
-    const toggle = () => {
-      const block = head.closest('.ldg-block');
-      const nowFolded = block.classList.toggle('ldg-folded');
-      head.setAttribute('aria-expanded', String(!nowFolded));
-      head.title = `${nowFolded ? 'Unfold' : 'Fold'} this ground`;
-    };
-    head.addEventListener('click', toggle);
-    head.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
-    });
-  }
+  for (const head of listEl.querySelectorAll('.ldg-zhead[role="button"]')) foldable(head);
+
+  drawNames(goTo);
 }
 
 const scene = makeScene({ id: 'ledger', closeId: 'ldg-close', build: () => build() });

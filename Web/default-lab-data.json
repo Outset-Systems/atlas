@@ -1323,6 +1323,23 @@
       "note": "The booking page."
     }
   ],
+  "names": [
+    {
+      "name": "*.home.example",
+      "exposure": "internal",
+      "note": "Ours, and only from inside the workshop."
+    },
+    {
+      "name": "www.home.example",
+      "exposure": "public",
+      "note": "The public site."
+    },
+    {
+      "name": "news.home.example",
+      "exposure": "public",
+      "note": "The newsletter."
+    }
+  ],
   "regions": [
     {
       "id": "workshop-floor",

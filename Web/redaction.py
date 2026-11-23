@@ -687,6 +687,12 @@ def redact(data, groups, token=False):
                 r["places"] = {k: v for k, v in pins.items() if k not in unseen}
             elif isinstance(r, dict) and "places" in r:
                 r.pop("places")
+    if "names" in d:
+        if token:
+            d.pop("names")
+        else:
+            import names as names_mod
+            d["names"] = names_mod.visible_entries(d["names"], d)
     if token:
         return bare_urls(d), clearance_key(groups, token)
     return d, clearance_key(groups, token)

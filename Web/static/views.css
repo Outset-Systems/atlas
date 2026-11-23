@@ -263,7 +263,7 @@ body.phone .nv-card-more[aria-expanded="true"] { z-index: 61; }
 .nv-svc-row > td { padding: 4px 8px 10px 46px; background: rgba(var(--shade-rgb), calc(0.12 * var(--shade-k))); }
 .nv-svc-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .nv-svc {
-  display: grid; grid-template-columns: 9.5rem minmax(8rem, 16rem) minmax(0, 16rem) auto auto;
+  display: grid; grid-template-columns: 9.5rem minmax(8rem, 16rem) 6rem minmax(0, 16rem) auto auto;
   justify-content: start; align-items: center; gap: 10px;
   padding: 3px 0; border-bottom: 1px solid color-mix(in srgb, var(--ink-line) 40%, transparent);
 }
@@ -272,8 +272,9 @@ body.phone .nv-card-more[aria-expanded="true"] { z-index: 61; }
 .nv-svc-cols { font-size: 0.82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nv-svc.nv-unmanaged > :not(.nv-rail-more):not(.nv-bell) { opacity: 0.5; }
 .nv-svc.nv-thing {
-  grid-template-columns: 9.5rem minmax(8rem, 16rem) minmax(6rem, 12rem) minmax(0, 11rem) minmax(0, 14rem) auto auto;
+  grid-template-columns: 9.5rem minmax(8rem, 16rem) 6rem minmax(6rem, 12rem) minmax(0, 11rem) minmax(0, 14rem) auto auto;
 }
+.nv-svc-intent { display: inline-flex; }
 .nv-svc-host {
   padding: 0; border: 0; background: none; cursor: pointer; text-align: left; font: inherit;
   font-size: 0.86rem; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -281,7 +282,7 @@ body.phone .nv-card-more[aria-expanded="true"] { z-index: 61; }
 .nv-svc-host:is(:hover, :focus-visible) { color: var(--gilt); }
 .nv-svc-ctr { font-size: 0.74rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 body.phone .nv-svc.nv-thing { grid-template-columns: 6.5rem minmax(0, 1fr) auto auto; }
-body.phone .nv-svc.nv-thing > :is(.nv-svc-ctr, .nv-svc-cols) { display: none; }
+body.phone .nv-svc.nv-thing > :is(.nv-svc-ctr, .nv-svc-cols, .nv-svc-intent) { display: none; }
 body.phone .nv-svc.nv-thing > .nv-svc-host { grid-column: 2; grid-row: 2; }
 
 .nv-row.nv-unmanaged > td:not(.dsk-td-pick):not(.nv-td-alerts) { opacity: 0.5; }
