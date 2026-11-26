@@ -60,6 +60,10 @@ def api_user_admin(username):
         return jsonify({"ok": False, "error":
                         "Directory accounts get admin from ATLAS_LDAP_ADMIN_GROUPS — "
                         "change the AD group, not this flag."}), 400
+    if acc and acc.get("source") == "oidc":
+        return jsonify({"ok": False, "error":
+                        "Single sign-on accounts get admin from ATLAS_OIDC_ADMIN_GROUPS — "
+                        "change the group at the identity provider, not this flag."}), 400
     blocked = _admin_target_guard(username, demoting=not on)
     if blocked:
         return blocked

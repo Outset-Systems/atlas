@@ -120,7 +120,7 @@ def establish_session(acc):
     session["_seen"] = now
 
 
-MFA_SOURCES = ("local", "ldap")
+MFA_SOURCES = ("local", "ldap", "oidc")
 _mfa_policy_warned = set()
 
 
@@ -142,10 +142,38 @@ def mfa_policy_applies(acc):
     return True
 
 
+def finish_primary_login(acc, source, ip, idp_mfa=False):
+    """The one place a first factor turns into a session, for every backend.
+
+    Returns "mfa" (an Atlas TOTP code is still owed), "enroll" (policy demands
+    a second factor the account does not have yet) or "ok".
+    idp_mfa: the identity provider vouched for a second factor, which stands
+    in for forced enrollment only; an account that enrolled TOTP is still asked.
+    """
+    import accounts
+    username = acc["username"]
+    if acc.get("mfa_enabled"):
+        session.clear()
+        session["_mfa_user"] = username
+        session["_mfa_started"] = time.time()
+        return "mfa"
+    accounts.clear_failures(username)
+    if mfa_policy_applies(acc) and not idp_mfa:
+        establish_session(acc)
+        session["_mfa_enroll"] = 1
+        accounts.audit("login_ok", username, ip, source + " (enrollment forced)")
+        return "enroll"
+    establish_session(acc)
+    accounts.touch_login(username)
+    accounts.audit("login_ok", username, ip, source + (" (provider mfa)" if idp_mfa else ""))
+    return "ok"
+
+
 def require_atlas_auth(exempt_paths=None, exempt_prefixes=None):
     exact = set(DEFAULT_EXEMPT) | set(exempt_paths or []) | {"/auth/login"}
     prefixes = list(exempt_prefixes or ["/static/"])
     prefixes.append("/api/v2/auth/")
+    prefixes.append("/auth/oidc/")
     base_check = require_hub_or_standalone(
         exempt_paths=exempt_paths, exempt_prefixes=exempt_prefixes)
 
