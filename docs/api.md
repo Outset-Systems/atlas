@@ -93,10 +93,8 @@ curl -s -H "Authorization: Bearer $TOKEN" "$ATLAS/api/v2/lab-data"
 If a proxy puts its own sign-in in front of Atlas, point the script at Atlas
 directly. That proxy's login cannot be answered with a token.
 
-Do that only where Atlas checks who is asking: `accounts` or `hybrid` mode, or
-`hub` mode with `ATLAS_HUB_SECRET` set. In `hub` mode without that secret Atlas
-believes a plain header, so anyone who can reach its port can claim to be an
-admin. Atlas refuses tokens in that mode, so that nobody opens the port for one.
+Atlas checks who is asking in every mode that has sign-in: `accounts`, and
+`hub` or `hybrid` (both refuse to start without `ATLAS_HUB_SECRET`).
 
 ## The paths
 

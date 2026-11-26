@@ -60,7 +60,7 @@ demo-lab/             the invented demo lab
 flowchart LR
     B[Browser] -->|https| P[Reverse proxy<br/>TLS, X-Forwarded-*]
     P -->|http :5006| G[gunicorn<br/>2 workers x 4 threads]
-    G --> PF[ProxyFix<br/>X-Forwarded-Proto only]
+    G --> PF[TrustedProxyFix<br/>X-Forwarded-Proto,<br/>named proxies only]
     PF --> M[metrics hooks<br/>/metrics, bearer token]
     M --> GATE{atlas_auth gate<br/>by ATLAS_AUTH_MODE}
     GATE -->|exempt: /api/status,<br/>/api/v2/health, /static/,<br/>/api/v2/ingest/| R
@@ -79,10 +79,13 @@ flowchart LR
 1. **gunicorn** runs `app:app` with two workers and four threads each
    (the Dockerfile's `public` stage sets this). `gunicorn.conf.py` starts the background
    poller in each worker and tells prometheus_client when a worker exits.
-2. **ProxyFix** trusts `X-Forwarded-Proto` only, so `request.host_url`
-   knows the browser is on https. It deliberately does not rewrite the client
-   address; that is `atlas_auth.client_ip()`, which believes
-   `X-Forwarded-For` only from the proxies named in `ATLAS_TRUSTED_PROXIES`.
+2. **TrustedProxyFix** (`trusted_proxy.py`) applies werkzeug's ProxyFix
+   for `X-Forwarded-Proto` only, and only when the socket peer is one of the
+   proxies named in `ATLAS_TRUSTED_PROXIES`, so `request.host_url` knows the
+   browser is on https. From any other peer every `X-Forwarded-*` and
+   `Forwarded` header is dropped before the app sees it. It deliberately does
+   not rewrite the client address; that is `atlas_auth.client_ip()`, which
+   believes `X-Forwarded-For` only from the same named proxies.
 3. **metrics.py** wraps every request to count it, and serves `/metrics` to
    a bearer token (404 without one).
 4. **The gate**, `atlas_auth.require_atlas_auth`, runs before every request.
@@ -246,12 +249,13 @@ drop directory), `maintenance.py` (planned windows), `discovery.py` and
 | Mode | What the gate accepts |
 |---|---|
 | `standalone` | Everything. There is no identity: the viewer sees everything, and a change is recorded as `standalone`. Writes are refused unless `ATLAS_ALLOW_INSECURE=1`. |
-| `hub` | A valid signed token in the `ATLAS_HUB_AUTH_HEADER` header (`hub_auth/auth.py`, HMAC-SHA256 with `ATLAS_HUB_SECRET`, short expiry). Without a secret: the plaintext `X-Remote-User` header (legacy; only safe when nothing else can reach the port). No sign-in page. |
+| `hub` | A valid signed token in the `ATLAS_HUB_AUTH_HEADER` header (`hub_auth/auth.py`, HMAC-SHA256 with `ATLAS_HUB_SECRET`, short expiry). `ATLAS_HUB_SECRET` (or `ATLAS_HUB_SECRET_FILE`) is required: without it the app refuses to start. Plain `X-Remote-*` headers are never believed. No sign-in page. |
 | `accounts` | A Flask session for an account that still exists, is active, carries the account's current session epoch (bumped on password change), is inside the idle and absolute lifetimes, and is not halfway through MFA. Otherwise 401 for the API and a redirect to `/auth/login` for pages. |
-| `hybrid` | A verified hub token if present, else an `accounts` session. Unsigned `X-Remote-*` headers are never accepted here; without `ATLAS_HUB_SECRET` the hub path is off and everyone uses the sign-in page. |
+| `hybrid` | A verified hub token if present, else an `accounts` session. Unsigned `X-Remote-*` headers are never accepted. Like `hub`, it refuses to start without `ATLAS_HUB_SECRET`; use `accounts` for sign-in only. |
 
 Sign-in (`api/v2/accounts_v2.py`) tries the backends in
-`ATLAS_AUTH_BACKENDS` order: `accounts.py` checks a PBKDF2 hash, and
+`ATLAS_AUTH_BACKENDS` order: `accounts.py` checks a werkzeug password hash
+(scrypt, werkzeug's default; older `pbkdf2:` hashes still verify), and
 `ldap_backend.py` binds to the directory as the user over LDAPS and mirrors
 the identity into `accounts.db`. A throttle limits failures per user and per
 client IP. TOTP secrets are encrypted with the master key; the MFA policy is

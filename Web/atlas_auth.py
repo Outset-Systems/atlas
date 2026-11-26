@@ -1,4 +1,3 @@
-import ipaddress
 import logging
 import time
 
@@ -8,6 +7,7 @@ from hub_auth import require_hub_or_standalone
 from hub_auth.auth import DEFAULT_EXEMPT
 
 import settings
+import trusted_proxy
 
 log = logging.getLogger("atlas.auth.gate")
 
@@ -72,13 +72,7 @@ def session_source():
 
 
 def _is_trusted(host):
-    if not settings.TRUSTED_PROXIES or not host:
-        return False
-    try:
-        addr = ipaddress.ip_address(host)
-    except ValueError:
-        return False
-    return any(addr in net for net in settings.TRUSTED_PROXIES)
+    return trusted_proxy.is_trusted(host, settings.TRUSTED_PROXIES)
 
 
 def client_ip():

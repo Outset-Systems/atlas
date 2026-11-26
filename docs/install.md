@@ -209,9 +209,10 @@ server {
 
 ### Trusted proxy setting
 
-The sign-in throttle and the audit log key on the client's address. Behind a
-proxy, every request comes from the proxy, so tell the Atlas which address
-that is and it will read the real client from `X-Forwarded-For`:
+The Atlas believes `X-Forwarded-Proto` and `X-Forwarded-For` only from the
+proxies you name. Without this setting it cannot tell the browser is on https,
+and the sign-in throttle and the audit log see every request as coming from the
+proxy. Tell the Atlas which address the proxy connects from:
 
 ```sh
 # in .env
@@ -233,7 +234,9 @@ always the proxy's own address:
 You can list several addresses or CIDRs, comma separated. A hop count (a bare
 number) is refused. Leave it blank when nothing is in front of the app; a
 header from an address not on the list is ignored, so a wrong value fails
-safe (every client looks like the proxy) rather than open.
+safe (every client looks like the proxy, and the app sees plain http) rather
+than open. The app logs a warning the first time it ignores an
+`X-Forwarded-Proto` header.
 
 ## Backups
 

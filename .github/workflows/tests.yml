@@ -26,11 +26,15 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: Web/requirements-lock.txt
+          cache-dependency-path: |
+            Web/requirements-lock.txt
+            Web/requirements-test.txt
       - name: Install dependencies
-        run: pip install --require-hashes -r Web/requirements-lock.txt
+        run: pip install --require-hashes -r Web/requirements-lock.txt -r Web/requirements-test.txt
       - name: Every file compiles
         run: python -m compileall -q Web relay docs
+      - name: Unit tests
+        run: python -m pytest Web/tests -q -p no:cacheprovider
       - name: The app boots on the demo lab and refuses a write
         working-directory: Web
         env:
