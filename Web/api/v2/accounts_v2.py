@@ -95,6 +95,8 @@ def _reauth_refusal(acc, data):
         if not accounts.verify_mfa_code(username, code):
             accounts.record_failure(username, ip)
             return jsonify({"ok": False, "error": "Incorrect code."}), 403
+    if acc.get("source") == "oidc":
+        return _fresh_sso_refusal()
     current = _text(data, "current")
     if not current:
         return jsonify({"ok": False, "error": "Current password is required."}), 400
@@ -106,6 +108,19 @@ def _reauth_refusal(acc, data):
         accounts.record_failure(username, ip)
         return jsonify({"ok": False, "error": "Current password is wrong."}), 401
     return None
+
+
+SSO_REAUTH_S = 5 * 60
+
+
+def _fresh_sso_refusal():
+    """Single sign-on accounts have no password here: a recent sign-in stands in."""
+    if time.time() - session.get("_start", 0) <= SSO_REAUTH_S:
+        return None
+    return jsonify({"ok": False, "reauth": True,
+                    "reauth_url": "/auth/oidc/start?reauth=1&next=/",
+                    "error": "Sign in again with single sign-on to confirm it is you, "
+                             "then try this again within five minutes."}), 401
 
 
 def _try_backends(username, password):
@@ -157,20 +172,11 @@ def api_login():
                        "inactive" if acc else "bad credentials")
         return jsonify({"ok": False, "error": _GENERIC_FAIL}), 401
 
-    if acc.get("mfa_enabled"):
-        session.clear()
-        session["_mfa_user"] = acc["username"]
-        session["_mfa_started"] = time.time()
+    outcome = atlas_auth.finish_primary_login(acc, source, ip)
+    if outcome == "mfa":
         return jsonify({"ok": True, "mfa_required": True})
-    accounts.clear_failures(username)
-    if atlas_auth.mfa_policy_applies(acc):
-        atlas_auth.establish_session(acc)
-        session["_mfa_enroll"] = 1
-        accounts.audit("login_ok", acc["username"], ip, source + " (enrollment forced)")
+    if outcome == "enroll":
         return jsonify({"ok": True, "mfa_setup_required": True})
-    atlas_auth.establish_session(acc)
-    accounts.touch_login(acc["username"])
-    accounts.audit("login_ok", acc["username"], ip, source)
     return jsonify({"ok": True, "mfa_required": False,
                     "is_admin": bool(acc.get("is_admin"))})
 

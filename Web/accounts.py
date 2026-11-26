@@ -73,6 +73,7 @@ def init_db():
                 mfa_last_step INTEGER,
                 session_epoch INTEGER NOT NULL DEFAULT 0,
                 emblem        TEXT NOT NULL DEFAULT '',
+                external_id   TEXT,
                 created       TEXT NOT NULL,
                 last_login    TEXT
             )
@@ -105,6 +106,8 @@ def init_db():
             )
         """)
         _migrate(conn)
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_external_id "
+                     "ON users (external_id) WHERE external_id IS NOT NULL")
         conn.commit()
     _ensured_paths.add(path)
 
@@ -121,6 +124,8 @@ def _migrate(conn):
         conn.execute("ALTER TABLE users ADD COLUMN emblem TEXT NOT NULL DEFAULT ''")
     if "mfa_last_step" not in cols:
         conn.execute("ALTER TABLE users ADD COLUMN mfa_last_step INTEGER")
+    if "external_id" not in cols:
+        conn.execute("ALTER TABLE users ADD COLUMN external_id TEXT")
     _backfill_utc_stamps(conn)
     _migrated = True
 
@@ -280,6 +285,65 @@ def upsert_ldap_user(username, *, display_name="", email="", groups=(), is_admin
             f"{username!r} could not be mirrored: a non-directory account of "
             f"that name exists.")
     return fresh
+
+
+def get_user_by_external_id(external_id):
+    init_db()
+    with _connect() as conn:
+        row = conn.execute("SELECT * FROM users WHERE external_id = ?",
+                           (external_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def upsert_oidc_user(username, *, external_id, display_name="", email="",
+                     groups=(), is_admin=False):
+    """Mirror an OpenID Connect identity, keyed on its issuer and subject.
+
+    The user name is fixed at first sign-in. A later sign-in by the same
+    subject keeps that name even if the provider's claim changed; a different
+    subject arriving with a name already held is refused.
+    """
+    if not external_id:
+        raise ValueError("an OIDC identity needs an issuer and subject")
+    username = _norm(username)
+    init_db()
+    groups_csv = ",".join(
+        g for g in (g.strip() for g in groups) if g and g != RESERVED_ADMIN_GROUP)
+    bound = get_user_by_external_id(external_id)
+    if bound:
+        if (bound.get("source") or "") != "oidc":
+            raise SourceConflict(f"{bound['username']!r} holds this identity but is not "
+                                 f"a single sign-on account.")
+        if bound["username"] != username:
+            log.info("oidc: %r now arrives as %r; keeping the account name %r",
+                     bound["username"], username, bound["username"])
+        with _connect() as conn:
+            conn.execute(
+                "UPDATE users SET display_name = ?, email = ?, groups_csv = ?, "
+                "is_admin = ?, last_login = ? WHERE external_id = ? AND source = 'oidc'",
+                (display_name or bound["username"], email, groups_csv,
+                 1 if is_admin else 0, _now(), external_id))
+            conn.commit()
+        return get_user_by_external_id(external_id)
+    existing = get_user(username)
+    if existing:
+        if (existing.get("source") or "") != "oidc":
+            raise SourceConflict(
+                f"{username!r} already exists as a {existing.get('source') or 'local'} "
+                f"account; the single sign-on identity of the same name was refused. "
+                f"Rename or remove one of them.")
+        raise SourceConflict(
+            f"{username!r} belongs to a different single sign-on identity; the new "
+            f"one was refused. Remove the old account if the name has moved on.")
+    with _connect() as conn:
+        conn.execute(
+            "INSERT INTO users (username, display_name, email, source, password_hash, "
+            "groups_csv, is_admin, created, last_login, session_epoch, external_id) "
+            "VALUES (?, ?, ?, 'oidc', NULL, ?, ?, ?, ?, ?, ?)",
+            (username, display_name or username, email, groups_csv,
+             1 if is_admin else 0, _now(), _now(), _first_epoch(), external_id))
+        conn.commit()
+    return get_user_by_external_id(external_id)
 
 
 _DECOY = {}

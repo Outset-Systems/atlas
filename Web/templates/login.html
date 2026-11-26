@@ -65,10 +65,20 @@
   button:not(:disabled):hover { background:var(--gilt); color:var(--abyss); }
   button:disabled { opacity:.5; cursor:default; }
   .err {
-    display:none; margin-bottom:4px; padding:9px 12px;
+    display:none; margin-bottom:14px; padding:9px 12px;
     border:1px solid var(--sem-down); border-radius:4px;
     color:var(--sem-down); font-size:0.9rem;
   }
+  .sso {
+    display:block; width:100%; padding:11px; text-align:center; text-decoration:none;
+    background:var(--gilt); border:1px solid var(--gilt); border-radius:4px;
+    color:var(--abyss); font-family:'Cinzel', serif; font-weight:600;
+    font-size:0.8rem; letter-spacing:0.16em; text-transform:uppercase;
+  }
+  .sso:hover, .sso:focus { background:var(--gilt-bright); outline:none; }
+  .or { display:flex; align-items:center; gap:10px; margin:20px 0 4px;
+    color:var(--text-dim); font-size:0.85rem; }
+  .or::before, .or::after { content:''; flex:1; border-top:1px solid var(--ink-line); }
   .stage { display:none; }
   .stage.lit { display:block; }
   .hint { color:var(--text-dim); font-size:0.88rem; margin-top:14px; }
@@ -89,16 +99,22 @@
     <div class="lore">None may read the map unnamed.</div>
   </div>
   <div class="card">
-    <div class="err" id="err"></div>
+    <div class="err" id="err"{% if error %} style="display:block"{% endif %}>{{ error }}</div>
 
     <div class="stage lit" id="stage-login">
+      {% if sso %}
+      <a class="sso" id="b-sso" href="oidc/start?next={{ next | urlencode }}">Sign in with {{ sso_label }}</a>
+      {% endif %}
+      {% if sso and passwords %}<div class="or"><span>or</span></div>{% endif %}
+      {% if passwords %}
       <form id="f-login">
         <label for="u">Name</label>
-        <input id="u" name="username" autocomplete="username" autofocus required>
+        <input id="u" name="username" autocomplete="username"{% if not sso %} autofocus{% endif %} required>
         <label for="p">Password</label>
         <input id="p" name="password" type="password" autocomplete="current-password" required>
         <button type="submit" id="b-login">Enter the realm</button>
       </form>
+      {% endif %}
     </div>
 
     <div class="stage" id="stage-mfa">
@@ -135,7 +151,7 @@
   </div>
 </div>
 
-<script type="application/json" id="login-config">{{ {"next": next} | tojson }}</script>
+<script type="application/json" id="login-config">{{ {"next": next, "step": step} | tojson }}</script>
 <script src="{{ url_for('static', filename='js/login.js') }}?v={{ v }}"></script>
 </body>
 </html>

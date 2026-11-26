@@ -1,7 +1,8 @@
 
 try {
   if (localStorage.getItem('atlas-words') === 'standard') {
-    document.getElementById('b-login').textContent = 'Sign in';
+    var _bl = document.getElementById('b-login');
+    if (_bl) _bl.textContent = 'Sign in';
   }
 } catch (e) {   }
 
@@ -23,6 +24,11 @@ function show(stage) {
 }
 function fail(msg) { err.textContent = msg; err.style.display = 'block'; }
 
+function enableLogin() {
+  var b = document.getElementById('b-login');
+  if (b) b.disabled = false;
+}
+
 var ROOT = window.location.pathname.replace(/\/auth\/login\/?$/, '');
 NEXT = ROOT + NEXT;
 try {
@@ -43,7 +49,8 @@ function post(path, body) {
 
 var NO_ANSWER = 'The gate did not answer.';
 
-document.getElementById('f-login').addEventListener('submit', function (e) {
+var loginForm = document.getElementById('f-login');
+if (loginForm) loginForm.addEventListener('submit', function (e) {
   e.preventDefault();
   var btn = document.getElementById('b-login');
   btn.disabled = true;
@@ -68,7 +75,7 @@ document.getElementById('f-mfa').addEventListener('submit', function (e) {
 });
 
 function startEnroll() {
-  var again = function (msg) { document.getElementById('b-login').disabled = false; fail(msg); };
+  var again = function (msg) { enableLogin(); fail(msg); };
   post('/api/v2/auth/mfa/setup').then(function (r) {
     if (!r.body.ok) return again(r.body.error || 'Could not begin enrollment.');
     document.getElementById('qr').innerHTML = r.body.qr_svg;
@@ -94,3 +101,6 @@ document.getElementById('f-enroll').addEventListener('submit', function (e) {
 document.getElementById('b-done').addEventListener('click', function () {
   window.location = NEXT;
 });
+
+if (_cfg.step === 'mfa') show('mfa');
+else if (_cfg.step === 'enroll') startEnroll();
