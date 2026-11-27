@@ -245,7 +245,7 @@ whole volume. The files that matter:
 | `lab-data.json` | The dataset: your places, services, networks, racks. |
 | `positions.json`, `rack.json` | Hand-placed marker positions and rack layout. |
 | `revisions/` | Snapshots of the dataset after every change. |
-| `events.json`, `heartbeats.json`, `maintenance.json`, `observed.json` | Event history, job heartbeats, maintenance windows, discovery results. |
+| `events.json`, `heartbeats.json`, `maintenance.json`, `observed.json`, `relayed.json` | Event history, job heartbeats, maintenance windows, discovery results, the last Hyper-V snapshot a relay sent. |
 | `tripwires.json`, `api-tokens.json`, `beats/` | When each tripwire sender was last heard, API tokens, job drop files. |
 | `maps/`, `reports/` | Uploaded map images and generated reports. |
 | `accounts.db` | Users, password hashes, encrypted TOTP secrets, sign-in audit. |

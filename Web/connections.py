@@ -1,16 +1,20 @@
 import requests
 
 import integrations
-from importers import komodo, kuma, netbox, portainer, proxmox, unifi
+from importers import hyperv, komodo, kuma, netbox, portainer, proxmox, unifi
 from importers.wire import Refused as _Refused
 
-CONNECTORS = (proxmox, portainer, komodo, netbox, unifi, kuma)
+CONNECTORS = (proxmox, hyperv, portainer, komodo, netbox, unifi, kuma)
 
 SYSTEMS = tuple(m.SYSTEM for m in CONNECTORS)
 _BY_KEY = {s["key"]: s for s in SYSTEMS}
 _PROBES = {m.SYSTEM["key"]: m.probe for m in CONNECTORS}
 _SURVEYS = {m.SYSTEM["key"]: m.survey for m in CONNECTORS}
 _OBSERVERS = {m.SYSTEM["key"]: m.observe for m in CONNECTORS if hasattr(m, "observe")}
+# A relayed system is one Atlas cannot reach: a relay on its network reads it and
+# pushes a snapshot. It has no URL and no credential here, and its probe and
+# survey take no arguments: they read what the relay last sent.
+_RELAYED = {m.SYSTEM["key"]: m for m in CONNECTORS if m.SYSTEM.get("relay")}
 
 
 def describe():
@@ -26,12 +30,18 @@ def describe():
         out.append({"key": system["key"], "name": system["name"], "about": system["about"],
                     "credential": system["credential"], "fields": fields,
                     "observes": system["key"] in _OBSERVERS,
-                    "configured": any(f["kind"] == "url" and f["value"] for f in fields)})
+                    "relay": system["key"] in _RELAYED,
+                    "configured": (_RELAYED[system["key"]].reported() if system["key"] in _RELAYED
+                                   else any(f["kind"] == "url" and f["value"] for f in fields))})
     return out
 
 
 def known(key):
     return key in _BY_KEY
+
+
+def relayed(key):
+    return key in _RELAYED
 
 
 def field(key, kind):
@@ -53,6 +63,8 @@ def ready(key, creds):
 
 
 def saved(key):
+    if key in _RELAYED:
+        return "", [], False
     return (integrations.get(field(key, "url")[0]), credentials(key, integrations.get),
             insecure(key, integrations.get))
 
@@ -94,11 +106,26 @@ def _asking(key, url, creds, ask):
         return False, "It answered, but not in a way this Atlas understands. Is that the right URL?"
 
 
+def _reported(ask):
+    try:
+        return True, ask()
+    except _Refused as e:
+        return False, str(e)
+    except (ValueError, AttributeError, TypeError, KeyError):
+        return False, "The relay's last report could not be read. Wait for its next one."
+
+
 def probe(key, url, creds, insecure=False):
+    if key in _RELAYED:
+        return _reported(_RELAYED[key].probe)
     return _asking(key, url, creds, lambda base: _PROBES[key](base, creds, not insecure))
 
 
 def survey(key, url, creds, insecure=False):
+    if key in _RELAYED:
+        ok, answer = _reported(_RELAYED[key].survey)
+        return (True, _with_monitors(*answer)) if ok else (False, answer)
+
     def ask(base):
         rows, notes = _SURVEYS[key](base, creds, not insecure)
         return (rows, notes) if key == "kuma" else _with_monitors(rows, notes)

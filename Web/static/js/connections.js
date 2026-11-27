@@ -109,15 +109,19 @@ function systemCard(sys) {
                value="${secret ? '' : esc(f.value)}" placeholder="${esc(hint)}" spellcheck="false">
       </label>`;
   }).join('');
+  // a relayed system has nothing to save here: a relay on its network reads it and reports
+  const state = sys.relay ? (sys.configured ? 'reported by a relay' : 'no relay has reported')
+    : (sys.configured ? 'set up' : 'not set up');
+  const idle = sys.relay ? 'A relay has to report first' : 'Save a URL and credential first';
   return `<details class="con-system" data-system="${esc(sys.key)}"${sys.configured ? ' open' : ''}>
       <summary><span class="con-name">${esc(sys.name)}</span>
-        <span class="con-meta">${sys.configured ? 'set up' : 'not set up'} · ${esc(sys.about)}</span></summary>
+        <span class="con-meta">${state} · ${esc(sys.about)}</span></summary>
       <div class="acct-note">${esc(sys.credential)}</div>
       ${rows}
       <div class="sp-actions">
-        <button class="sp-btn" type="button" data-sys-test="${esc(sys.key)}">Test</button>
-        <button class="sp-btn" type="button" data-sys-review="${esc(sys.key)}"${sys.configured ? '' : ' disabled title="Save a URL and credential first"'}>Review</button>
-        <button class="sp-btn sp-btn-go" type="button" data-sys-save="${esc(sys.key)}">Save</button>
+        <button class="sp-btn" type="button" data-sys-test="${esc(sys.key)}">${sys.relay ? 'Check' : 'Test'}</button>
+        <button class="sp-btn" type="button" data-sys-review="${esc(sys.key)}"${sys.configured ? '' : ` disabled title="${idle}"`}>Review</button>
+        ${sys.relay ? '' : `<button class="sp-btn sp-btn-go" type="button" data-sys-save="${esc(sys.key)}">Save</button>`}
       </div>
       <div class="dir-result" data-sys-result="${esc(sys.key)}"></div>
       <div class="con-review" data-review="${esc(sys.key)}" hidden></div>
@@ -311,7 +315,7 @@ export async function renderConnections() {
     const key = card.dataset.system;
     const box = card.querySelector('[data-sys-result]');
     card.querySelector('[data-sys-test]').addEventListener('click', (e) => testSystem(key, card, box, e.target));
-    card.querySelector('[data-sys-save]').addEventListener('click', (e) => saveSystem(card, box, e.target));
+    card.querySelector('[data-sys-save]')?.addEventListener('click', (e) => saveSystem(card, box, e.target));
     card.querySelector('[data-sys-review]').addEventListener('click', (e) => reviewSystem(key, card, box, e.target));
   }
   A.applySettingsFolds?.();

@@ -260,6 +260,33 @@ def cmd_token_issue(args):
     return 0
 
 
+def cmd_hyperv_load(args):
+    """A relay's Hyper-V snapshot from a file, for an Atlas the relay cannot push to."""
+    import json
+
+    import relayed
+    from importers import hyperv
+    try:
+        with open(args.path, encoding="utf-8") as f:
+            payload = json.load(f)
+    except (OSError, ValueError) as e:
+        print(f"error: cannot read snapshot: {e}", file=sys.stderr)
+        return 2
+    if not isinstance(payload, dict):
+        print("error: expected a JSON object", file=sys.stderr)
+        return 2
+    try:
+        snapshot = hyperv.checked(payload)
+    except ValueError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
+    import settings
+    relayed.put(hyperv.KEY, args.site or settings.SITE_SLUG, snapshot)
+    print(f"kept for review: {len(snapshot['hosts'])} host(s), {len(snapshot['vms'])} vm(s). "
+          "Open Settings, Connections, Hyper-V, Review.")
+    return 0
+
+
 def cmd_token_list(args):
     from store.tokens import list_tokens
     st = _store()
@@ -503,6 +530,13 @@ def _add_token_commands(sub):
     p.add_argument("--scopes", default="ingest",
                    help="comma list: ingest (relay), tripwires (the TRIPWIRES webhook)")
     p.set_defaults(fn=cmd_token_issue)
+
+    p = sub.add_parser("hyperv-load",
+                       help="keep a relay's Hyper-V snapshot file for review "
+                            "(atlas_relay.py --dry-run --dump DIR writes one)")
+    p.add_argument("path", help="hyperv.json as the relay wrote it")
+    p.add_argument("--site", default=None, help="site slug (default: ATLAS_SITE)")
+    p.set_defaults(fn=cmd_hyperv_load)
 
     p = sub.add_parser("token-list", help="list relay tokens")
     p.add_argument("--site")
