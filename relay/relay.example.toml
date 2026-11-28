@@ -58,3 +58,38 @@ nmap_args = ["-sn"]
 # nmap_binary = "/usr/bin/nmap"
 # promote = false   # true = discovered devices become real map nodes automatically
 timeout = 600
+
+# ── Hyper-V ──────────────────────────────────────────────────────────────────
+# Reads hosts and virtual machines over WinRM and pushes one snapshot. The
+# server keeps it for review: nothing lands on the map until an admin ticks it
+# in Settings → Connections → Hyper-V. The Windows account never leaves this
+# machine. Needs the pypsrp package (pip install pypsrp).
+#
+# The account: not an administrator. Add it to "Hyper-V Administrators" and
+# "Remote Management Users" on each host. Hyper-V has no read-only role, so
+# that account could also change virtual machines: keep its password here only.
+[hyperv]
+enabled = false
+interval = 21600
+mode = "standalone"                 # each host is listed below and asked itself
+hosts = ["hv1.home.example"]
+
+# kerberos: domain-joined hosts, named by FQDN. Works over http (5985, the
+#           messages are encrypted) or https. pip install "pypsrp[kerberos]".
+# ntlm:     workgroup hosts, or hosts named by IP. NTLM cannot prove which
+#           host answered, so it needs https (5986) and a certificate this
+#           relay checks. negotiate is treated like ntlm.
+# basic and credssp are refused: both hand the password to the host.
+auth = "kerberos"
+username = "atlas-read@HOME.EXAMPLE"   # ntlm: "HV1\\atlas-read" or "atlas-read"
+password_file = "/etc/atlas-relay/hyperv-password"   # chmod 600
+transport = "https"
+verify_tls = true
+# ca_file = "/etc/atlas-relay/hyperv-ca.pem"   # the CA (or the host's own
+#                                               # self-signed certificate)
+# port = 5986
+# timeout = 60
+
+# A lab only: lets ntlm run over http, or over https without checking the
+# certificate. The traffic is still encrypted, but an impostor could answer.
+# allow_unverified_ntlm = false

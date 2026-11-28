@@ -103,6 +103,9 @@ def connections_test():
     key = str(body.get("key") or "").strip().lower()
     if not connections.known(key):
         return jsonify({"ok": False, "error": "not a system that can be tested"}), 400
+    if connections.relayed(key):
+        ok, detail = connections.probe(key, "", [], False)
+        return jsonify({"ok": ok, "detail": detail if ok else "", "error": "" if ok else detail})
     typed = _part(body, "settings")
 
     def value(name):

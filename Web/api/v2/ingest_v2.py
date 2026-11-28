@@ -99,6 +99,27 @@ def ingest_inventory():
     return jsonify({"ok": True, "site": g.site_slug, "stats": stats})
 
 
+@ingest_bp.route("/hyperv", methods=["POST"])
+def ingest_hyperv():
+    """Keeps the relay's Hyper-V snapshot for an admin to review. Writes nothing to
+    the map: Settings, Connections, Hyper-V, Review does, row by ticked row."""
+    import relayed
+    from importers import hyperv
+
+    payload, err = ingest.body()
+    if err:
+        return err
+    try:
+        snapshot = hyperv.checked(payload)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 422
+    relayed.put(hyperv.KEY, g.site_slug, snapshot)
+    stats = {"hosts": len(snapshot["hosts"]), "vms": len(snapshot["vms"]),
+             "silent": len(snapshot["silent"])}
+    log.info("ingest hyperv: site=%s %s", g.site_slug, stats)
+    return jsonify({"ok": True, "site": g.site_slug, "stats": stats})
+
+
 @ingest_bp.route("/observed", methods=["POST"])
 def ingest_observed():
     from importers.nmap import import_observations

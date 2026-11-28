@@ -332,6 +332,7 @@ can stop returning data until Atlas catches up. Nothing it does changes your dev
 | System | Places | Other |
 |---|---|---|
 | Proxmox VE | nodes, virtual machines, containers | a guest's host is set as its `parent` |
+| Hyper-V | hosts, virtual machines | a virtual machine's host is set as its `parent`; read by the relay, see below |
 | Portainer | environments | stacks, as services on their environment |
 | Komodo | servers | stacks, as services on their server |
 | NetBox | devices, virtual machines | VLANs, as realms, with the subnet of their first prefix |
@@ -366,6 +367,14 @@ can stop returning data until Atlas catches up. Nothing it does changes your dev
   Its link opens the stack in Portainer or Komodo, because neither says where a stack answers.
 - **Ignore** hides a row from later reviews. Ignored rows stay listed at the foot of the review,
   where you can bring them back. The list is the same one The Survey uses.
+- **Hyper-V is read by the relay** (2026-11-27), not by Atlas: WinRM is not something to open
+  to a hosted Atlas, and the Windows account should not leave your network. The relay's
+  `[hyperv]` task (`relay/README.md`) pushes a snapshot to `/api/v2/ingest/hyperv`, Atlas keeps
+  the last one, and Review lists it with how old it is. So this connection has no URL and no
+  credential to save, and its button says Check, not Test. Standalone hosts only: failover
+  clusters and SCVMM are not built. A virtual machine is known by its Hyper-V id, so a rename
+  does not make a second place; a replica is left out. On an Atlas that cannot take relay
+  pushes, `python cli.py hyperv-load hyperv.json` keeps a snapshot file the relay wrote.
 - **A guest's address** is best effort. Proxmox lists no addresses for guests, so a running
   container is asked directly, and a virtual machine needs the QEMU guest agent and a role
   that may read it. A guest that does not say lands with no address.
@@ -410,7 +419,7 @@ The policy that lists dataset origins is only sent to signed-in viewers in
 
 | Variable | Default | What it does | Secret | Settings screen |
 |---|---|---|---|---|
-| `ATLAS_INGEST_ENABLED` | (unset) | `1` turns on the relay ingest API (`/api/v2/ingest/{signals,inventory,observed}`), which accepts signals, inventory and observations pushed by the relay agent with a per-site token (`python cli.py token-issue`). Needs `ATLAS_DATA_BACKEND=db`; ignored otherwise. The tripwires webhook beside it has its own switch, `ATLAS_TRIPWIRES_WEBHOOK`. | no | no |
+| `ATLAS_INGEST_ENABLED` | (unset) | `1` turns on the relay ingest API (`/api/v2/ingest/{signals,inventory,observed,hyperv}`), which accepts signals, inventory, observations and Hyper-V snapshots pushed by the relay agent with a per-site token (`python cli.py token-issue`). Needs `ATLAS_DATA_BACKEND=db`; ignored otherwise. The tripwires webhook beside it has its own switch, `ATLAS_TRIPWIRES_WEBHOOK`. | no | no |
 | `ATLAS_BEAT_TOKEN` | (unset) | Shared token that lets a scheduled job report "I ran" with `POST /api/v2/rites/<key>/beat` (`Authorization: Bearer <token>` or an `X-Atlas-Beat` header). Unset turns the endpoint off (503). In `accounts` and `hybrid` modes the sign-in gate answers before the token is checked, so use the beats directory there. | yes, `ATLAS_BEAT_TOKEN_FILE` | yes (Realm, stored encrypted) |
 | `ATLAS_BEATS` | `<data dir>/heartbeats.json` | Where received heartbeats are stored. | no | no |
 | `ATLAS_BEATS_DIR` | `<data dir>/beats` | Drop directory: a job that cannot reach the app reports by creating a file named after its key here (`touch /data/beats/<key>`). The app picks the file up and deletes it. | no | no |
