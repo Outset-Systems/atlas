@@ -18,13 +18,15 @@ from .admin import (
 def auth_settings():
     import auth_config
     import ldap_backend
+    import oidc_backend
     return jsonify({
         "settings": auth_config.effective(),
         "sources": auth_config.sources(),
         "allowed": list(auth_config.ALLOWED),
         "mode": settings.auth_mode(),
         "ldap_ready": ldap_backend.enabled(),
-        "backends": ldap_backend.backends(),
+        "oidc_ready": oidc_backend.enabled(),
+        "backends": ldap_backend.backends() + (["oidc"] if oidc_backend.enabled() else []),
         "local_admin_exists": _local_admin_exists(),
     })
 
@@ -85,8 +87,16 @@ def auth_settings_save():
                 or os.environ.get(key, "") or "").strip()
 
     backends = ldap_backend._order(in_force("ATLAS_AUTH_BACKENDS") or "local")
+    if not any(b in ("local", "ldap", "oidc") for b in backends):
+        return jsonify({"error": "At least one sign-in backend (local, ldap or oidc) must stay enabled."}), 422
     if not any(b in ("local", "ldap") for b in backends):
-        return jsonify({"error": "At least one sign-in backend (local or ldap) must stay enabled."}), 422
+        import atlas_auth
+        import oidc_backend
+        me = atlas_auth.current_account() or {}
+        if not (oidc_backend.configured() and me.get("source") == "oidc" and me.get("is_admin")):
+            return jsonify({"error": "Single sign-on can be the only way in once you are "
+                                     "signed in through it as an admin. Sign in with single "
+                                     "sign-on first, so an admin is proven to get back in."}), 422
     url = in_force("ATLAS_LDAP_URL")
     if "ldap" in backends:
         if not url or not in_force("ATLAS_LDAP_BASE_DN"):
@@ -95,7 +105,7 @@ def auth_settings_save():
             return jsonify({"error": "Only ldaps:// is accepted — a plaintext bind "
                                      "would put every password on the wire."}), 422
 
-    if "local" not in backends and not _has_ldap_admin_proof():
+    if "local" not in backends and "ldap" in backends and not _has_ldap_admin_proof():
         return jsonify({
             "error": "Test the directory with an admin account first. Saving a "
                      "directory-only sign-in without proving an admin can get "

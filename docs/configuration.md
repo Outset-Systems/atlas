@@ -88,14 +88,14 @@ the default only when you run the code directly from a checkout (development).
 | Mode | Who can see the map | Sign-in |
 |---|---|---|
 | `standalone` | Anyone who can reach the port. Read-only unless `ATLAS_ALLOW_INSECURE=1`. | None. Use on loopback or a trusted network only. |
-| `accounts` (image default) | Signed-in users. | The Atlas's own accounts (local passwords, optionally LDAPS), with optional TOTP. |
+| `accounts` (image default) | Signed-in users. | The Atlas's own accounts (local passwords, optionally LDAPS and OpenID Connect single sign-on), with optional TOTP. |
 | `hub` | Whoever an upstream single-sign-on gateway (the "hub") forwards. | Done by the hub, which sends a signed identity header. The Atlas has no sign-in page in this mode. |
 | `hybrid` | Hub users, plus anyone who signs in with an Atlas account. | Hub identity when the signed header is present, the Atlas sign-in page when it is not. |
 
 | Variable | Default | What it does | Secret | Settings screen |
 |---|---|---|---|---|
 | `ATLAS_AUTH_MODE` | `accounts` in the image, `standalone` from a checkout | `standalone`, `accounts`, `hub` or `hybrid`. Any other value makes every gated request fail with a 500 (fail closed). | no | no |
-| `ATLAS_ADMIN_GROUP` | `atlas-admins` | The group that makes a viewer an Atlas admin when the identity comes from the hub. Also the default for `ATLAS_LDAP_ADMIN_GROUPS`. | no | no |
+| `ATLAS_ADMIN_GROUP` | `atlas-admins` | The group that makes a viewer an Atlas admin when the identity comes from the hub. Also the default for `ATLAS_LDAP_ADMIN_GROUPS` and `ATLAS_OIDC_ADMIN_GROUPS`. | no | no |
 | `ATLAS_LINK_DEFAULT_GROUP` | (empty) | The group that sees a service link, and its favourite, when the link names no group of its own. Empty: every reader sees it. Places are unaffected and admins see everything. Give a link `*` as its group to show it to everyone. Read at start. | no | no |
 | `ATLAS_TRUSTED_PROXIES` | (unset) | Comma-separated IPs or CIDRs of the reverse proxies whose `X-Forwarded-Proto` and `X-Forwarded-For` headers the app believes, for example `172.18.0.2` or `172.18.0.0/16`. `X-Forwarded-Proto` tells the app the browser is on https; `X-Forwarded-For` feeds the sign-in throttle, token network checks and the audit log. Unset trusts no proxy: forwarded headers are dropped and the socket peer is used. A bare number (a hop count) is refused and logged. See [install.md](install.md#put-it-behind-a-reverse-proxy). | no | no |
 | `ATLAS_INSECURE_COOKIES` | (unset) | `1` (or `true`, `yes`) drops the `Secure` flag from the session cookie, for testing over plain http. Without it, most browsers discard the cookie on plain http to anything but `localhost`, and sign-in returns you to the sign-in page. Do not use behind TLS. | no | no |
@@ -115,13 +115,13 @@ In `standalone` mode there is no sign-in and no identity. Every viewer sees ever
 |---|---|---|---|---|
 | `ATLAS_BOOTSTRAP_ADMIN_USER` | `admin` when a bootstrap password is set | First run only: while there is no active admin, create this local admin at start (or promote the account if it already exists). Inert once any admin exists, so it is safe to leave set. With no admin and no bootstrap password in `accounts` mode, the log says how to create one. | no | no |
 | `ATLAS_BOOTSTRAP_ADMIN_PASSWORD` | (unset) | The bootstrap admin's password, at least 12 characters. A shorter password is refused: the app logs an error and starts without an admin. Prefer the `_FILE` form. | yes, `ATLAS_BOOTSTRAP_ADMIN_PASSWORD_FILE` | no |
-| `ATLAS_MFA_REQUIRED` | (empty) | Who must enroll TOTP before they can use the map: empty (nobody; anyone may enroll; also `0`, `false`, `no`, `off`), `all` (also `1`, `true`, `yes`, `on`), `admins`, or a sign-in source (`local` or `ldap`). Any other word requires it of everyone and is logged. Read live. | no | no |
+| `ATLAS_MFA_REQUIRED` | (empty) | Who must enroll TOTP before they can use the map: empty (nobody; anyone may enroll; also `0`, `false`, `no`, `off`), `all` (also `1`, `true`, `yes`, `on`), `admins`, or a sign-in source (`local`, `ldap` or `oidc`). Any other word requires it of everyone and is logged. Read live. | no | no |
 | `ATLAS_LOGIN_MAX_USER` | `5` | Failed sign-ins allowed per user name within the window. | no | no |
 | `ATLAS_LOGIN_MAX_IP` | `20` | Failed sign-ins allowed per client IP within the window. | no | no |
 | `ATLAS_LOGIN_WINDOW_MIN` | `15` | The throttle window, in minutes. | no | no |
 | `ATLAS_SESSION_IDLE_MIN` | `60` | A session ends after this many idle minutes. | no | no |
 | `ATLAS_SESSION_ABS_HOURS` | `12` | A session ends this many hours after sign-in, active or not. | no | no |
-| `ATLAS_AUTH_BACKENDS` | `local` | Sign-in backends in the order tried: `local`, `ldap`, or `local,ldap`. `ldap` is live only when `ATLAS_LDAP_URL` and `ATLAS_LDAP_BASE_DN` are also set. | no | yes (Directory) |
+| `ATLAS_AUTH_BACKENDS` | `local` | Sign-in backends: `local`, `ldap` and `oidc`, comma-separated, for example `local,oidc`. Passwords are tried against `local` and `ldap` in the order given. `ldap` is live only when `ATLAS_LDAP_URL` and `ATLAS_LDAP_BASE_DN` are also set; `oidc` adds a single sign-on button and is live only when `ATLAS_OIDC_ISSUER` and `ATLAS_OIDC_CLIENT_ID` are set. With `oidc` alone the password form is hidden. The settings screen saves an `oidc`-only list only while you are signed in through single sign-on as an admin. | no | yes (Directory) |
 
 You can also manage accounts from the command line inside the container:
 `python cli.py user-add <name> --admin`, `user-list`, `user-passwd`,
@@ -143,6 +143,81 @@ account and no stored bind password. Only `ldaps://` is accepted; plain
 | `ATLAS_LDAP_ADMIN_GROUPS` | value of `ATLAS_ADMIN_GROUP` | Groups (bare CN or full DN) whose members are Atlas admins. | no | yes (Directory) |
 | `ATLAS_LDAP_GROUP_SCOPE` | `base` | `base` honours `memberOf` only from under the base DN. `any` honours it from anywhere in the forest, which lets anyone who can create a group with the right name elsewhere become admin. | no | no |
 | `ATLAS_LDAP_TIMEOUT` | `5` | Directory connect and bind timeout, in seconds. | no | yes (Directory) |
+
+### OpenID Connect (single sign-on)
+
+Add `oidc` to `ATLAS_AUTH_BACKENDS` and the sign-in page gets a "Sign in with
+..." button. It works with any OpenID Connect provider (Keycloak, Authentik,
+Authelia, Entra ID, Okta, Google, Zitadel, Kanidm and so on). The Atlas uses
+the authorization code flow with PKCE (S256), checks `state` and `nonce`, and
+validates the ID token's signature (asymmetric algorithms only, keys from the
+provider's JWKS), issuer, audience, `azp` and expiry. The provider is found by
+discovery at `<issuer>/.well-known/openid-configuration`. These settings come
+from the deployment only, so the client secret is never written to the data
+directory.
+
+Register the Atlas at the provider as a web application with the redirect URI
+`https://<your atlas>/auth/oidc/callback` (from `ATLAS_PUBLIC_URL`, or set
+`ATLAS_OIDC_REDIRECT_URI`), grant type authorization code, and the scopes
+`openid profile email`. Have the provider put group names in the ID token
+(or the userinfo response) under the claim named by `ATLAS_OIDC_GROUPS_CLAIM`.
+
+How an identity becomes an Atlas account:
+
+- The account is bound to the provider's issuer and subject (`iss` + `sub`),
+  not to its user name. The name is taken from `ATLAS_OIDC_USERNAME_CLAIM` at
+  the first sign-in and kept. A later sign-in by the same person keeps the
+  name even if the provider renames them; a different person arriving with a
+  name that is already taken is refused. A single sign-on identity never takes
+  over a local or LDAP account of the same name.
+- Groups are refreshed at every sign-in. Members of `ATLAS_OIDC_ADMIN_GROUPS`
+  are admins; remove someone from the group and they lose admin at their next
+  sign-in. Admin cannot be granted by hand on these accounts. Group names are
+  compared without case, and a leading `/` (Keycloak group paths) is ignored.
+- Sessions follow the same rules as every other account
+  (`ATLAS_SESSION_IDLE_MIN`, `ATLAS_SESSION_ABS_HOURS`), blocking an account
+  in the Atlas keeps it out, and every sign-in is in the audit log.
+- Two-factor: `ATLAS_MFA_REQUIRED` applies to these accounts too (`oidc`
+  names them). An account that enrolled Atlas TOTP is always asked for it. If
+  your provider already enforces a second factor, set
+  `ATLAS_OIDC_TRUST_IDP_MFA=1` so a sign-in the provider marks as multi-factor
+  (`amr` contains `mfa`, or `acr` is one of `ATLAS_OIDC_MFA_ACR`) is not made
+  to enroll Atlas TOTP as well.
+- Changing your own second factor normally asks for your password. These
+  accounts have none, so the Atlas instead asks for a sign-in through the
+  provider in the last five minutes.
+- Signing out ends the Atlas session only, not the session at the provider.
+
+| Variable | Default | What it does | Secret | Settings screen |
+|---|---|---|---|---|
+| `ATLAS_OIDC_ISSUER` | (unset) | The provider's issuer URL, exactly as its discovery document gives it, for example `https://auth.home.example/realms/home`. Must be `https://` (`http://` is accepted for `localhost` only). | no | no |
+| `ATLAS_OIDC_CLIENT_ID` | (unset) | The client ID the provider gave the Atlas. | no | no |
+| `ATLAS_OIDC_CLIENT_SECRET` | (unset) | The client secret, sent with HTTP Basic (or in the form body when the provider only accepts that). Leave unset for a public client; PKCE is used either way. | yes, `ATLAS_OIDC_CLIENT_SECRET_FILE` | no |
+| `ATLAS_OIDC_REDIRECT_URI` | `ATLAS_PUBLIC_URL` + `/auth/oidc/callback` | The redirect URI registered at the provider. Without either, it is built from the request, which is only right when the proxy forwards the host and scheme. | no | no |
+| `ATLAS_OIDC_SCOPES` | `openid profile email` | Scopes to ask for. `openid` is always added. Some providers need an extra scope (for example `groups`) before they send group claims. | no | no |
+| `ATLAS_OIDC_USERNAME_CLAIM` | `preferred_username` | The claim used as the Atlas user name at first sign-in. A dotted path reaches into nested claims. When it is `email`, an address the provider marks unverified is refused. The value must be a valid Atlas user name (lowercase letters, digits, `.` `_` `@` `-`). | no | no |
+| `ATLAS_OIDC_GROUPS_CLAIM` | `groups` | The claim that lists the user's groups or roles, for example `roles` or `realm_access.roles`. Read from the ID token, or from userinfo when the ID token lacks it. | no | no |
+| `ATLAS_OIDC_ADMIN_GROUPS` | value of `ATLAS_ADMIN_GROUP` | Comma-separated groups whose members are Atlas admins. | no | no |
+| `ATLAS_OIDC_ACCESS_GROUPS` | (unset) | Comma-separated groups; when set, a user must be in one of them to sign in. When unset, anyone the provider signs in for this client gets in, so restrict the client at the provider or set this. | no | no |
+| `ATLAS_OIDC_LABEL` | `single sign-on` | The provider's name on the button ("Sign in with ..."). | no | no |
+| `ATLAS_OIDC_TRUST_IDP_MFA` | (unset) | `1` lets a multi-factor sign-in at the provider satisfy `ATLAS_MFA_REQUIRED` without Atlas TOTP. | no | no |
+| `ATLAS_OIDC_MFA_ACR` | (unset) | Comma-separated `acr` values that count as multi-factor when `ATLAS_OIDC_TRUST_IDP_MFA=1`, for providers that do not send `amr`. | no | no |
+| `ATLAS_OIDC_CA_FILE` | (unset) | A CA bundle for a provider behind a private CA. Certificates are always verified. | no | no |
+| `ATLAS_OIDC_TIMEOUT` | `5` | Timeout for calls to the provider, in seconds. | no | no |
+
+Provider notes:
+
+- **Entra ID**: by default the `groups` claim carries group object IDs, not
+  names, so put the IDs in `ATLAS_OIDC_ADMIN_GROUPS` (or configure the app's
+  token to emit group names). A user in more than about 200 groups
+  gets no `groups` claim at all (group overage); the Atlas then treats them as
+  in no groups and logs a warning. Assign groups to the application and emit
+  only those. Use `ATLAS_OIDC_USERNAME_CLAIM=preferred_username` (the UPN).
+- **Keycloak**: add a "Group Membership" mapper to the client (turn off "Full
+  group path" or keep it; a leading `/` is ignored), or use realm roles with
+  `ATLAS_OIDC_GROUPS_CLAIM=realm_access.roles`.
+- **Authentik / Authelia**: the default `groups` claim works once the scope
+  that carries it is granted.
 
 ### Hub mode (and the hub half of hybrid)
 

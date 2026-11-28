@@ -11,6 +11,7 @@ function renderAccount() {
   const who = esc(a.user || 'unknown');
   const via = a.session === 'hub' ? 'VIA THE HUB'
             : a.source === 'ldap' ? 'VIA AD'
+            : a.source === 'oidc' ? 'VIA SSO'
             : a.source === 'local' ? 'LOCAL ACCOUNT'
             : '';
   const badges = [
@@ -147,12 +148,12 @@ async function loadUsers() {
   const rows = users.map((u) => {
     const chips =
       (u.is_admin ? `<span class="acct-badge">ADMIN</span>` : '') +
-      `<span class="acct-badge acct-badge-quiet">${u.source === 'ldap' ? 'AD' : 'LOCAL'}</span>` +
+      `<span class="acct-badge acct-badge-quiet">${u.source === 'ldap' ? 'AD' : u.source === 'oidc' ? 'SSO' : 'LOCAL'}</span>` +
       (u.mfa_enabled ? `<span class="acct-badge acct-badge-quiet">MFA</span>` : '');
     const self = u.username === me;
     const acts = self ? `<span class="usr-self">you</span>` :
       `<button class="sp-btn usr-act" data-u="${esc(u.username)}" data-act="active" data-on="${u.active ? 0 : 1}">${u.active ? 'Block' : 'Unblock'}</button>` +
-      (u.source === 'ldap' ? '' :
+      (u.source === 'ldap' || u.source === 'oidc' ? '' :
         `<button class="sp-btn usr-act" data-u="${esc(u.username)}" data-act="admin" data-on="${u.is_admin ? 0 : 1}">${u.is_admin ? 'Demote' : 'Make admin'}</button>`) +
       (u.mfa_enabled ? `<button class="sp-btn usr-act" data-u="${esc(u.username)}" data-act="reset-mfa">Reset MFA</button>` : '');
     return `<div class="usr-row${u.active ? '' : ' usr-blocked'}">` +

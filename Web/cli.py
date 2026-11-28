@@ -395,6 +395,10 @@ def cmd_user_mod(args):
             print("error: directory accounts get admin from ATLAS_LDAP_ADMIN_GROUPS",
                   file=sys.stderr)
             return 2
+        if acc["source"] == "oidc":
+            print("error: single sign-on accounts get admin from ATLAS_OIDC_ADMIN_GROUPS",
+                  file=sys.stderr)
+            return 2
         try:
             accounts.set_admin(args.username, args.set_admin)
         except accounts.LastAdminError as e:
