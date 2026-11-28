@@ -557,6 +557,10 @@ def main(argv=None):
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s %(levelname)s atlas-relay %(message)s",
     )
+    # --verbose is for the relay's own lines. The WinRM libraries log every packet
+    # at DEBUG, sign-in exchange included, and that does not belong in a log.
+    for noisy in ("pypsrp", "spnego", "urllib3", "requests"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
     try:
         cfg = read_config(args.config)
         atlas = load_atlas_modules((cfg.get("server") or {}).get("web_dir"))
