@@ -105,10 +105,9 @@ a file only the container reads. `ATLAS_TOKEN` in the environment works too,
 but a token typed on a command line stays in your shell history.
 
 If a proxy puts its own sign-in in front of Atlas, point the client at Atlas
-directly. That proxy's login cannot be answered with a token. Do that only in
-`accounts` or `hybrid` mode, or in `hub` mode with `ATLAS_HUB_SECRET` set: in
-`hub` mode without that secret Atlas believes a plain header, anyone who can
-reach its port can claim to be an admin, and Atlas refuses tokens.
+directly. That proxy's login cannot be answered with a token. `hub` and
+`hybrid` modes refuse to start without `ATLAS_HUB_SECRET`, so Atlas always
+checks who is asking.
 
 ## The tools
 

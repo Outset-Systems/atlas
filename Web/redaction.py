@@ -36,7 +36,7 @@ def viewer_groups():
     return {g for g in get_remote_groups() if g}
 
 
-VIEWER_VARY = f"Cookie, {SIGNED_HEADER}, X-Remote-User, X-Remote-Groups"
+VIEWER_VARY = f"Cookie, {SIGNED_HEADER}"
 
 
 def vary_on_viewer(resp):

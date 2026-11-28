@@ -39,6 +39,36 @@ def _load_auth_secret() -> bytes | None:
 AUTH_SECRET = _load_auth_secret()
 SECRET_LOST = AUTH_SECRET is None and bool(envnames.env("ATLAS_HUB_SECRET_FILE"))
 
+SIGNED_MODES = ("hub", "hybrid")
+
+
+class HubSecretMissing(RuntimeError):
+    """Raised at startup when a mode that trusts the hub has no secret to check it with."""
+
+
+def secret_problem(mode, secret=_UNSET, lost=_UNSET):
+    """Why `mode` cannot run with the configured hub secret, or None if it can."""
+    mode = (mode or "").lower().strip()
+    if mode not in SIGNED_MODES:
+        return None
+    secret = AUTH_SECRET if secret is _UNSET else secret
+    lost = SECRET_LOST if lost is _UNSET else lost
+    if secret:
+        return None
+    if lost:
+        return (f"ATLAS_AUTH_MODE={mode} but ATLAS_HUB_SECRET_FILE is missing or empty. "
+                "Fix the file, or set ATLAS_HUB_SECRET.")
+    return (f"ATLAS_AUTH_MODE={mode} needs ATLAS_HUB_SECRET (or ATLAS_HUB_SECRET_FILE) so the "
+            "Hub's signed identity can be checked. Atlas no longer trusts a plain "
+            "X-Remote-User header. Set the secret, or use ATLAS_AUTH_MODE=accounts.")
+
+
+def require_secret(mode):
+    """Refuse to start a hub or hybrid Atlas that has no hub secret."""
+    problem = secret_problem(mode)
+    if problem:
+        raise HubSecretMissing(problem)
+
 
 def _b64d(s: str) -> bytes:
     return base64.urlsafe_b64decode(s + "=" * (-len(s) % 4))
@@ -123,15 +153,13 @@ def require_hub_or_standalone(exempt_paths=None, exempt_prefixes=None):
             return None
 
         if AUTH_MODE == "hub":
-            if AUTH_SECRET:
-                if _claims() is None:
-                    return _forbidden(path, f"valid {SIGNED_HEADER} token required")
-                return None
-            if SECRET_LOST:
+            if not AUTH_SECRET:
+                # create_app refuses to start like this; fail closed if something
+                # imported the gate without going through it.
                 return jsonify({"error": "Server misconfigured",
-                                "reason": "ATLAS_HUB_SECRET_FILE is missing or empty"}), 500
-            if not request.headers.get("X-Remote-User"):
-                return _forbidden(path, "X-Remote-User header required (hub mode)")
+                                "reason": secret_problem("hub")}), 500
+            if _claims() is None:
+                return _forbidden(path, f"valid {SIGNED_HEADER} token required")
             return None
 
         return jsonify({"error": "Server misconfigured",
@@ -145,20 +173,19 @@ def get_remote_user() -> str:
         claims = _claims()
         if claims is not None:
             return str(claims.get("u", ""))
-        return "" if SECRET_LOST else request.headers.get("X-Remote-User", "")
+        return ""
     return envnames.env("ATLAS_STANDALONE_USER", "local")
 
 
 def get_remote_groups() -> list:
     if AUTH_MODE == "hub":
         claims = _claims()
-        if claims is not None:
-            g_claim = claims.get("g", [])
-            if isinstance(g_claim, list):
-                return [str(x).strip() for x in g_claim if str(x).strip()]
-            g_claim = str(g_claim)
-        else:
-            g_claim = "" if SECRET_LOST else request.headers.get("X-Remote-Groups", "")
+        if claims is None:
+            return []
+        g_claim = claims.get("g", [])
+        if isinstance(g_claim, list):
+            return [str(x).strip() for x in g_claim if str(x).strip()]
+        g_claim = str(g_claim)
         return [g.strip() for g in g_claim.split(",") if g.strip()]
     raw = envnames.env("ATLAS_STANDALONE_GROUPS", "")
     return [g.strip() for g in raw.split(",") if g.strip()]

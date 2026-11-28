@@ -52,8 +52,6 @@ Out of scope:
   integration at a URL). Admins are trusted.
 - Problems that need the hub secret, the master key or shell access to the
   host or container.
-- `hub` mode without `ATLAS_HUB_SECRET` when the port is reachable by
-  something other than the hub. The documentation says to set the secret.
 - Vulnerabilities in Prometheus, Loki, Uptime Kuma, a decoy service, a
   directory server or your reverse proxy, unless the Atlas makes them worse.
 - Denial of service by sending a lot of traffic.
@@ -81,6 +79,18 @@ key kept in `/data/secrets/`, so a backup of `/data` is as sensitive as the
 running instance.
 
 ## Hardening log
+
+### 2026-11-26
+
+- `hub` and `hybrid` modes refuse to start without `ATLAS_HUB_SECRET` (or with
+  an `ATLAS_HUB_SECRET_FILE` that is missing or empty). Hub mode no longer
+  falls back to believing a plain `X-Remote-User` / `X-Remote-Groups` header,
+  which anyone able to reach the port could set to become an admin.
+- `X-Forwarded-Proto` is believed only from the proxies named in
+  `ATLAS_TRUSTED_PROXIES`. From any other peer every forwarded header is
+  dropped, so a client cannot make the app think it is on https.
+- The architecture notes said passwords are stored as PBKDF2 hashes. Werkzeug
+  3 uses scrypt; older PBKDF2 hashes still verify.
 
 ### 2026-11-11
 

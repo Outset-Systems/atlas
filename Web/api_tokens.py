@@ -366,8 +366,8 @@ def gate():
         return _refuse(404 if path == MCP_PATH else 403, OFF_REASON)
     if _plain_hub():
         return _refuse(403, "API tokens need Atlas to do its own sign-in (accounts mode) or the "
-                            "Hub to sign each request (ATLAS_HUB_SECRET). This Atlas trusts a "
-                            "plain header, so its port must stay closed to everything but the Hub.")
+                            "Hub to sign each request (ATLAS_HUB_SECRET). This Atlas is in hub "
+                            "mode with no secret, so it is misconfigured.")
     ip = _client()
     if _missed_too_often(ip):
         resp = _refuse(429, "too many requests without a valid token from this address, wait a minute")

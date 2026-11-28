@@ -109,9 +109,18 @@ def _configure_sessions(app):
     app.config["SESSION_COOKIE_SECURE"] = not settings.INSECURE_COOKIES
 
 
+def _require_hub_secret():
+    import hub_auth.auth as hub
+    try:
+        hub.require_secret(settings.auth_mode())
+    except hub.HubSecretMissing as e:
+        log.critical("refusing to start: %s", e)
+        raise
+
+
 def _install_proxy_and_limits(app):
-    from werkzeug.middleware.proxy_fix import ProxyFix
-    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=0, x_proto=1)
+    from trusted_proxy import TrustedProxyFix
+    app.wsgi_app = TrustedProxyFix(app.wsgi_app, settings.TRUSTED_PROXIES)
     app.config["MAX_CONTENT_LENGTH"] = mapart.MAX_BYTES + 1024 * 1024
 
     @app.errorhandler(413)
@@ -247,6 +256,7 @@ def _install_security_headers(app):
 
 
 def create_app():
+    _require_hub_secret()
     app = Flask(__name__)
     _install_proxy_and_limits(app)
     context = app.extensions["atlas"] = _build_context()
